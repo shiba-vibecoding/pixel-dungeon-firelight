@@ -185,6 +185,8 @@ export type Effect =
   /** Scrolls burnt up and meat cooked on a heap; a hero's scroll or meat caught fire in the pack. */
   | { type: 'heapBurnt'; depth: number; pos: number }
   | { type: 'burntUp'; hero: string; kind: ItemKind }
+  /** Lloyd's beacon set, or used to return. */
+  | { type: 'beacon'; hero: string; mode: 'set' | 'return' }
   /** A bomb went off. */
   | { type: 'exploded'; depth: number; pos: number }
   /** A weapon balanced with a weightstone. */

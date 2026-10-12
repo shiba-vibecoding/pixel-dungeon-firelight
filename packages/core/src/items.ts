@@ -16,7 +16,7 @@ import type { RunState } from './run';
 
 export type ItemCategory =
   | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
-  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone';
+  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone' | 'beacon';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -153,6 +153,8 @@ export const ITEMS = {
   'food.overpriced': { category: 'food', sprite: 115, energy: 100 },
   /** Thrown, it blows up where it lands (Bomb). */
   bomb: { category: 'bomb', sprite: 124 },
+  /** Goo's legacy now and then: takes its bearer back to a place set beforehand (LloydsBeacon). */
+  beacon: { category: 'beacon', sprite: 85 },
   /** Balances a melee weapon for speed or for accuracy (Weightstone). */
   weightstone: { category: 'weightstone', sprite: 123 },
   /** Shaken from tall grass; heals whoever picks it up. */
@@ -206,6 +208,8 @@ export interface Item {
   cursed?: boolean;
   /** Class armour: the armour it was made from, whose protection it keeps. */
   base?: ItemKind;
+  /** Lloyd's beacon: where it was set, if it was. */
+  returnTo?: { depth: number; pos: number };
   /** Melee weapons: balanced with a weightstone, for speed or for accuracy (Weapon.imbue). */
   imbue?: 'speed' | 'accuracy';
 }

@@ -1,5 +1,5 @@
 import {
-  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, type ItemRef, maxExp, type MobKind,
+  type Action, BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, type ItemRef, maxExp, type MobKind,
   SUBCLASSES, wandMaxCharges, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
@@ -512,7 +512,7 @@ function slot(world: World, item: Item | undefined, onClick?: () => void, label?
 export interface BackpackOptions {
   world: World;
   hero: Hero;
-  onAction(action: InventoryAction): void;
+  onAction(action: Action): void;
   /** Throw or zap the item at a cell the player picks next. */
   onAim(index: number, kind: 'throw' | 'zap' | 'special'): void;
   onClose(): void;
@@ -565,7 +565,7 @@ interface ItemOptions extends BackpackOptions {
 function showItem(options: ItemOptions): void {
   const { world, hero, item, index } = options;
   const category = itemDef(item.kind).category;
-  const act = (action: InventoryAction): void => {
+  const act = (action: Action): void => {
     options.onAction(action);
     options.onClose();
   };
@@ -628,6 +628,11 @@ function showItem(options: ItemOptions): void {
     }
     if (category === 'weapon' || category === 'armor' || category === 'ring') {
       actions.push(button(category === 'ring' ? t.putOn : t.equip, () => act({ type: 'equip', item: index }), 'primary'));
+    }
+    if (category === 'beacon') {
+      // LloydsBeacon: set it here, or go back to where it was set.
+      actions.push(button(t.beaconSet, () => act({ type: 'beacon', item: index, mode: 'set' }), 'primary'));
+      if (item.returnTo) actions.push(button(t.beaconReturn, () => act({ type: 'beacon', item: index, mode: 'return' }), 'primary'));
     }
     if (category === 'weightstone' && hero.weapon) {
       // Weightstone.WndBalance: the weapon in hand, balanced the way it is not yet.

@@ -701,6 +701,10 @@ export class View {
             this.flashes.push({ cell: effect.pos, start: now, duration: 400 });
           }
           break;
+        case 'beacon':
+          audio.play(effect.mode === 'set' ? 'beacon' : 'teleport');
+          if (effect.hero === myId && effect.mode === 'set') this.say(t.beaconDone, COLORS.default, now);
+          break;
         case 'balanced':
           audio.play('miss');
           if (effect.hero === myId && effect.item.imbue) this.say(t.balanced[effect.item.imbue], COLORS.positive, now);

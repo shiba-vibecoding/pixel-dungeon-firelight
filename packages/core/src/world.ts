@@ -58,6 +58,8 @@ export type Action =
   | { type: 'reforge'; first: ItemRef; second: ItemRef }
   /** The old wandmaker's reward: a battle wand or a useful one. */
   | { type: 'wandReward'; choice: 'battle' | 'utility' }
+  /** Lloyd's beacon: set it where the hero stands, or return to where it was set. */
+  | { type: 'beacon'; item: number; mode: 'set' | 'return' }
   | InventoryAction;
 
 export type ActionResult = { ok: true; effects: Effect[] } | { ok: false; reason: string };
@@ -96,6 +98,8 @@ export const DEEPEST_AVAILABLE = 26;
 const TIME_TO_REST = 1;
 /** Blacksmith.upgrade: the hero waits while the troll works. */
 const TIME_TO_REFORGE = 2;
+/** LloydsBeacon.TIME_TO_USE: setting it takes a moment; returning, none. */
+const TIME_TO_USE_BEACON = 1;
 const TIME_TO_SEARCH = 2;
 /** How far a deliberate search reaches; the original only checked adjacent cells. */
 const SEARCH_RADIUS = 2;
@@ -229,6 +233,8 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       return reforgeProblem(world, hero, action.first, action.second);
     case 'descend':
       return hero.pos === level.exit ? null : 'not on the stairs';
+    case 'beacon':
+      return beaconProblem(world, hero, action.item, action.mode);
     case 'jump':
       if (hero.rooted > 0) return 'you are rooted';
       if ((hero.levitating ?? 0) > 0) return 'you are floating';
@@ -628,6 +634,26 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
     case 'ascend':
       changeDepth(world, hero, hero.depth - 1, 'exit');
       break;
+
+    case 'beacon': {
+      const beacon = hero.items[action.item]!;
+      ctx.effects.push({ type: 'beacon', hero: hero.id, mode: action.mode });
+      if (action.mode === 'set') {
+        beacon.returnTo = { depth: hero.depth, pos: hero.pos };
+        spend(ctx, hero, TIME_TO_USE_BEACON);
+        break;
+      }
+      // LloydsBeacon.execute: back to the spot, at once, and the beacon is cleared.
+      const { depth, pos } = beacon.returnTo!;
+      delete beacon.returnTo;
+      leaveCell(world, level, hero.depth, hero.pos);
+      hero.depth = depth;
+      place(world, hero, levelAt(world, depth), pos);
+      ctx.effects.push({ type: 'teleported', hero: hero.id });
+      const there = levelAt(world, depth);
+      if (depth === ctx.depth && trapAt(there.map[hero.pos]!) && !(hero.levitating ?? 0)) triggerTrap(ctx, hero, hero.pos);
+      break;
+    }
   }
   if (isAlive(hero)) observe(world, hero);
 }
@@ -858,6 +884,21 @@ function search(ctx: Ctx, hero: Hero, intentional: boolean): boolean {
     }
   }
   return found;
+}
+
+/**
+ * LloydsBeacon.execute: it will not work on a boss's level, nor with a monster
+ * right next to the hero (whose psychic aura gets in the way; companions do not).
+ */
+function beaconProblem(world: World, hero: Hero, index: number, mode: unknown): string | null {
+  const beacon = Number.isInteger(index) ? hero.items[index] : undefined;
+  if (beacon?.kind !== 'beacon') return 'that is no beacon';
+  if (mode !== 'set' && mode !== 'return') return 'bad choice';
+  if (mode === 'return' && !beacon.returnTo) return 'the beacon is not set';
+  if (isBossDepth(hero.depth)) return 'a strong force prevents the beacon from working here';
+  const mobs = floorAt(world, hero.depth).mobs;
+  if (NEIGHBOURS8.some((n) => mobs.some((mob) => mob.pos === hero.pos + n))) return 'creatures nearby prevent the beacon from working';
+  return null;
 }
 
 function changeDepth(world: World, hero: Hero, depth: number, arrival: 'entrance' | 'exit'): void {

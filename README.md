@@ -75,7 +75,8 @@ Yendor on depth 26:
   (and the wandmaker's rotberry), which grow where they are thrown; bombs;
   weightstones to balance a weapon for speed or accuracy; rations, pasties,
   overpriced rations and mystery meat, which fire chargrills and frost turns
-  into carpaccio.
+  into carpaccio; Lloyd's beacon (Goo's, now and then), which takes its
+  bearer back to where it was set, from any depth.
 - Four hero classes with their original starting kits and perks, and their
   subclasses: Tengu leaves a Tome of Mastery for each hero, to become a
   gladiator or berserker, battlemage or warlock, freerunner or assassin, sniper
@@ -105,7 +106,7 @@ doors, thin out a little every turn, and act on whoever breathes them.
 Not ported yet: bags (seed
 pouch, scroll holder, wand holster, keyring); the dew vial; the honeypot and
 its bees; wraiths rising from cursed remains; the ghost's other errand (the
-fetid rat); the Rat King; Lloyd's beacon.
+fetid rat); the Rat King.
 
 ## How co-op works
 

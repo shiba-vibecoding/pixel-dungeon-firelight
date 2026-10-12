@@ -395,6 +395,8 @@ function dropLoot(ctx: Ctx, mob: Mob): Item | null {
       return rng.float() < 0.01 ? randomRing(rng, 'ring.haggler') : null;
     case 'dm300':
       return rng.float() < 0.333 ? randomRing(rng, 'ring.thorns') : null;
+    case 'goo':
+      return rng.float() < 0.333 ? createItem('beacon') : null;
     case 'spinner':
       return rng.float() < 0.125 ? createItem('food.meat') : null;
     case 'elemental':

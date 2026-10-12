@@ -273,6 +273,7 @@ const en = {
     'food.overpriced': 'overpriced food ration',
     bomb: 'bomb',
     weightstone: 'weightstone',
+    beacon: "lloyd's beacon",
     dew: 'dewdrop',
   } as Record<ItemKind, string>,
   itemInfo: {
@@ -358,6 +359,7 @@ const en = {
     'food.overpriced': 'It looks exactly like a standard ration of food, but smaller.',
     bomb: 'A relatively small bomb, filled with black powder. Conveniently, its fuse is lit automatically when the bomb is thrown.',
     weightstone: 'With a weightstone, you can balance the weapon in your hands to make it faster or more accurate.',
+    beacon: "Lloyd's beacon is an intricate magic device that lets you return to a place you have already been.",
   } as Partial<Record<ItemKind, string>>,
   ghost: {
     intro:
@@ -423,6 +425,10 @@ const en = {
   imbueInfo: { speed: 'It is balanced for speed.', accuracy: 'It is balanced for accuracy.' },
   burntUp: (name: string) => `Your ${name} burns up!`,
   ateOk: 'That food tasted ok.',
+  beaconSet: 'Set the beacon here',
+  beaconReturn: 'Return',
+  beaconSetAt: (depth: number) => `It is set somewhere on depth ${depth}.`,
+  beaconDone: 'The beacon is set at your current location: now you can return here at any time.',
   specialUsed: { leap: 'You leap, and slam down!', moltenEarth: 'The earth around your foes turns molten!', smokeBomb: 'In a puff of smoke, you are elsewhere!', blades: 'A fan of spectral blades flies out!' } as Record<string, string>,
   /** Why the game refused an action, where that is worth telling (keyed by the core's reason). */
   reasons: {
@@ -433,6 +439,8 @@ const en = {
     'the pickaxe cannot be improved': 'The pickaxe is a tool: no scroll can improve it.',
     'you hold no weapon': 'You hold no weapon.',
     'it is balanced that way already': 'Your weapon is balanced that way already.',
+    'a strong force prevents the beacon from working here': 'A strong magic aura of this place prevents you from using the beacon!',
+    'creatures nearby prevent the beacon from working': 'The psychic aura of creatures nearby does not let you use the beacon now.',
     'you are floating': 'Floating as you are, you cannot jump.',
     'you have no pickaxe': 'You have no pickaxe.',
     'there is no dark gold here': 'There is no dark gold here.',
@@ -914,6 +922,7 @@ const ru: Strings = {
     'food.overpriced': 'дорогой паёк',
     bomb: 'бомба',
     weightstone: 'грузило',
+    beacon: 'маяк Ллойда',
     dew: 'капля росы',
   },
   itemInfo: {
@@ -999,6 +1008,7 @@ const ru: Strings = {
     'food.overpriced': 'Выглядит точь-в-точь как обычный паёк, только поменьше.',
     bomb: 'Небольшая бомба, начинённая чёрным порохом. Фитиль поджигается сам, когда её бросают.',
     weightstone: 'Грузилом можно сбалансировать оружие в руках: сделать его быстрее или точнее.',
+    beacon: 'Маяк Ллойда — хитроумное магическое устройство, которое позволяет вернуться туда, где вы уже побывали.',
   },
   // From the Russian localisation of the original.
   ghost: {
@@ -1064,6 +1074,10 @@ const ru: Strings = {
   imbueInfo: { speed: 'Сбалансировано для скорости.', accuracy: 'Сбалансировано для точности.' },
   burntUp: (name) => `Сгорает: ${name}!`,
   ateOk: 'На вкус неплохо.',
+  beaconSet: 'Установить маяк здесь',
+  beaconReturn: 'Вернуться',
+  beaconSetAt: (depth) => `Он установлен где-то на глубине ${depth}.`,
+  beaconDone: 'Маяк установлен здесь: теперь вы можете вернуться сюда в любой момент.',
   specialUsed: { leap: 'Вы прыгаете и обрушиваетесь на землю!', moltenEarth: 'Земля под врагами плавится!', smokeBomb: 'В клубах дыма вы оказываетесь в другом месте!', blades: 'Веер призрачных клинков летит во врагов!' },
   reasons: {
     'it is cursed: you cannot take it off': 'Вещь проклята: надетую, её не снять.',
@@ -1073,6 +1087,8 @@ const ru: Strings = {
     'the pickaxe cannot be improved': 'Кирка — инструмент: никакой свиток её не улучшит.',
     'you hold no weapon': 'У вас в руках нет оружия.',
     'it is balanced that way already': 'Оружие уже так сбалансировано.',
+    'a strong force prevents the beacon from working here': 'Сильная магическая аура этого места не даёт воспользоваться маяком!',
+    'creatures nearby prevent the beacon from working': 'Психическая аура существ рядом не даёт воспользоваться маяком.',
     'you are floating': 'Паря в воздухе, прыгнуть нельзя.',
     'you have no pickaxe': 'У вас нет кирки.',
     'there is no dark gold here': 'Здесь нет тёмного золота.',
