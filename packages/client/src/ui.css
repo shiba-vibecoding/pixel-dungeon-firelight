@@ -1155,3 +1155,75 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 .pd-set-row:has(> .pd-steps) { flex-wrap: nowrap; column-gap: var(--space-1); }
 .pd-set-row:has(> .pd-steps) .pd-set-label { flex: 1 1 auto; }
 .pd-set-row:has(> .pd-steps) .pd-info { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Рюкзак одним окном ----------
+   Сверху надетое (оружие, броня, 2 кольца, ключи) и сетка 5×4 крупных ячеек (предмет ×3), под ней панель выбранного предмета.
+   На экране от 880 px панель справа, ячейки 72 px, предмет ×4. Окно на телефоне — во всю высоту, прокручивается только панель. */
+.pd-window.bag { --cell: 62px; height: 100%; gap: var(--space-2); }
+.pd-bag-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.pd-bag-side { display: flex; flex-direction: column; gap: var(--space-2); flex: none; }
+.pd-bag-equip, .pd-bag-grid { display: grid; grid-template-columns: repeat(5, var(--cell)); gap: 4px; justify-content: center; }
+.pd-bag-equip { padding-bottom: var(--space-2); border-bottom: var(--u) solid var(--stone-500); }
+:is(.pd-bag-equip, .pd-bag-grid) .pd-slot { --slot: var(--cell); }
+:is(.pd-bag-equip, .pd-bag-grid) .pd-slot .pd-item { --u: 3px; }
+.pd-bag-equip .pd-slot.keys .pd-icon { width: 68%; height: 68%; }
+.pd-bag-filter .pd-tab { flex: 1 1 auto; padding: 0 6px; }
+
+/* фильтр и выбор цели: лишнее тускнеет, но остаётся на своём месте — сетка не перестраивается */
+.pd-slot.dim { background: var(--stone-900); box-shadow: inset var(--u) var(--u) 0 var(--void); }
+.pd-slot.dim > * { opacity: .28; filter: grayscale(1); }
+.pd-window.bag.targeting .pd-slot.dim { pointer-events: none; }
+.pd-window.bag.targeting .pd-slot.can { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void); animation: pd-can 1s steps(1) infinite; }
+@keyframes pd-can { 50% { box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 0 4px var(--void); } }
+@media (prefers-reduced-motion: reduce) { .pd-window.bag.targeting .pd-slot.can { animation: none; } }
+.pd-bag-target { display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap-min, 44px); padding: 0 0 0 var(--space-2); background: var(--stone-800); clip-path: var(--notch); box-shadow: inset 0 0 0 var(--u) var(--gold-deep); }
+.pd-bag-target .pd-item { flex: none; }
+.pd-bag-target span { flex: 1; min-width: 0; font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--gold); }
+.pd-bag-target .pd-button.quiet { flex: none; }
+
+/* удержание ячейки — быстрое действие: золотое кольцо ступенями и подпись над ячейкой */
+.pd-slot.holding { box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 0 4px var(--void); background: var(--stone-700); }
+.pd-hold-label { position: absolute; z-index: 3; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); padding: 0 8px; white-space: nowrap; font: var(--text-caption, 400 15px/22px var(--font-small)); color: var(--gold); background: var(--void); clip-path: var(--notch); pointer-events: none; }
+
+/* панель выбранного предмета */
+.pd-pick { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-1); }
+.pd-pick-head { display: flex; align-items: center; gap: var(--space-3); }
+.pd-pick-head .pd-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pd-pick-head .pd-heading { font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--gold); }
+.pd-pick-head .pd-chip { align-self: flex-start; }
+.pd-pick .pd-info { margin: 0; }
+.pd-pick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.pd-pick-actions > .pd-button { min-width: 0; padding-left: 4px; padding-right: 4px; }
+.pd-pick-actions > .primary, .pd-pick-actions > .wide { grid-column: 1 / -1; }
+.pd-pick-actions > .primary .pd-btn-sub { font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink); opacity: .9; }
+.pd-pick-head .pd-pick-dropbtn { flex: none; align-self: flex-start; min-height: var(--tap-min, 44px); padding: 0 var(--space-2); } /* «Выбросить» отдельно: в углу панели, подальше от главной кнопки */
+.pd-pick-actions > .primary .pd-btn-sub { display: none; }
+.pd-pick.empty { justify-content: center; align-items: center; text-align: center; gap: var(--space-3); padding: var(--space-3) var(--space-2); }
+.pd-pick.empty .pd-info { color: var(--ink-muted); }
+.pd-hold-hint { display: flex; align-items: center; gap: var(--space-2); text-align: left; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+.pd-hold-hint b { font-weight: 400; color: var(--ink); }
+.pd-hold-demo { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.pd-hold-demo .pd-slot { --slot: 44px; }
+.pd-hold-demo .pd-hold-label { position: static; transform: none; }
+
+@container pd-screen (min-width: 880px) {
+  .pd-window.bag { --cell: 72px; --window-max: 860px; height: auto; }
+  :is(.pd-bag-equip, .pd-bag-grid) .pd-slot .pd-item { --u: 4px; }
+  .pd-bag-body { flex-direction: row; align-items: stretch; gap: var(--space-4); }
+  .pd-pick { flex: 1 1 0; padding: 0 0 0 var(--space-4); border-left: var(--u) solid var(--stone-500); }
+  .pd-pick-head .pd-heading { font: var(--text-title, 400 24px/28px var(--font-ui)); }
+  .pd-pick-actions > .primary .pd-btn-sub { display: block; }
+}
+/* узкие и низкие экраны: ячейки сжимаются по ширине (до 56 px на 360), на высоте ниже 700 — 48 px и предмет ×2 */
+.pd-bag-equip, .pd-bag-grid { grid-template-columns: repeat(5, minmax(0, var(--cell))); }
+:is(.pd-bag-equip, .pd-bag-grid) .pd-slot { width: 100%; height: auto; aspect-ratio: 1; }
+.pd-pick-actions > .pd-button { white-space: normal; line-height: 20px; height: auto; padding-top: 4px; padding-bottom: 4px; }
+@media (max-height: 700px) {
+  .pd-window.bag { --cell: 48px; }
+  :is(.pd-bag-equip, .pd-bag-grid) .pd-slot .pd-item { --u: 2px; }
+  .pd-window.bag .pd-bag-equip { padding-bottom: var(--space-1); }
+}
+/* кнопки панели прилипают к низу: на низком экране прокручивается описание, а главное действие всегда видно */
+.pd-pick-actions { position: sticky; bottom: 0; z-index: 1; margin-top: auto; padding-top: var(--space-2); background: var(--stone-700); }
+.pd-pick-head .pd-pick-dropbtn { font: var(--text-caption, 400 15px/20px var(--font-small)); padding: 0 6px; }
+.pd-pick-head .pd-heading { overflow-wrap: normal; word-break: normal; }

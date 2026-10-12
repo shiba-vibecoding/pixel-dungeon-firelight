@@ -1,4 +1,4 @@
-<!-- @dsCard group="Настройки и об игре" height=860 width=1280 page subtitle="Широкий экран 1280×800 (Telegram Desktop во весь экран, планшет): настройки в две колонки, журнал шире, остальные окна — те же 400 px по центру" -->
+<!-- @dsCard group="Настройки и об игре" height=860 width=1280 page subtitle="Широкий экран 1280×800 (Telegram Desktop во весь экран, планшет): настройки в две колонки, журнал шире, рюкзак — сетка слева и панель предмета справа, остальные окна — те же 400 px по центру" -->
 <!doctype html>
 <html>
 <head><meta charset="utf-8"><title>Широкий экран</title>
@@ -14,14 +14,14 @@
   <div class="screen" id="s"></div>
 </div>
 <script>
-  var STATES = [['title', 'Титул'], ['settings', 'Настройки'], ['about', 'Об игре'], ['challenges', 'Испытания'], ['journal', 'Журнал'], ['catalog', 'Каталог'], ['intro', 'Вступление']];
+  var STATES = [['title', 'Титул'], ['settings', 'Настройки'], ['about', 'Об игре'], ['challenges', 'Испытания'], ['journal', 'Журнал'], ['catalog', 'Каталог'], ['intro', 'Вступление'], ['bag', 'Рюкзак'], ['bag-potion', 'Рюкзак: зелья'], ['bag-equipped', 'Надетое'], ['bag-cursed', 'Проклятое'], ['bag-target', 'Цель свитка']];
   var q = new URLSearchParams(location.search), state = q.get('s') || 'settings', lang = q.get('lang') || 'ru', SW = +(q.get('w') || 1280), SH = +(q.get('h') || 800);
   var scr = document.getElementById('s'); scr.style.width = SW + 'px'; scr.style.height = SH + 'px'; if (SW < 880) scr.style.setProperty('--safe-b', '34px');
   var REG = { ru: 'Тюрьма', en: 'Prison' }, DEPTH = { ru: 'Глубина 6', en: 'Depth 6' };
   function render() {
     document.getElementById('tabs').innerHTML = STATES.map(function (x) { return '<button class="pd-tab" role="tab" data-s="' + x[0] + '" aria-selected="' + (x[0] === state) + '">' + x[1] + '</button>'; }).join('');
     var s = document.getElementById('s'), W = PD.demo.win;
-    var inGame = state === 'journal' || state === 'catalog' || state === 'intro';
+    var inGame = state === 'journal' || state === 'catalog' || state === 'intro' || state.indexOf('bag') === 0;
     if (inGame) PD.demo.game(s, { depth: 6, mates: false, after: state === 'intro' ? intro : null }); else PD.demo.title(s, { en: lang === 'en', challenges: state === 'locked' ? 0 : 2 });
     if (state === 'settings') PD.demo.overlay(s, W.settings(lang));
     if (state === 'reset') PD.demo.overlay(s, W.reset(lang));
@@ -30,6 +30,7 @@
     if (state === 'challenges') PD.demo.overlay(s, W.challenges(lang, { on: [0, 5] }));
     if (state === 'journal') PD.demo.overlay(s, W.journal(lang));
     if (state === 'catalog') PD.demo.overlay(s, W.journal(lang, { catalog: true, sel: 6 }));
+    if (state.indexOf('bag') === 0) { var bs = state.split('-')[1] || 'empty'; PD.demo.overlay(s, W.bag(lang, { state: bs, filter: bs === 'potion' ? 'potion' : 'all' })); }
     PD.sprite(s);
   }
   function intro() {

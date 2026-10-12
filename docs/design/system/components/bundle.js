@@ -567,6 +567,81 @@
       return '<section class="pd-window wide" role="dialog" aria-label="' + L.jT + '">' + head(L.jT) + tabs + '<div class="pd-scroll" style="display:flex;flex-direction:column;gap:var(--space-2)">' + body + '</div></section>';
     }
   };
+  /* Рюкзак одним окном для макетов. o.state: 'empty' | 'potion' | 'equipped' | 'cursed' | 'target'; o.filter: 'all' | 'potion' | 'scroll' | 'gear' */
+  var BT = {
+    ru: { title: 'Рюкзак', str: 'Сила', filters: [['all', 'Всё'], ['potion', 'Зелья'], ['scroll', 'Свитки'], ['gear', 'Снаряжение']], equipped: 'надето', keys: 'Ключи: 2',
+      hint: 'Коснитесь предмета, чтобы узнать, что это и что с ним сделать.', hold: '<b>Удерживайте ячейку</b> — быстрое действие: выпить, прочитать, надеть, съесть.', holdSub: 'или удерживайте ячейку', holdLabel: 'Выпить',
+      drop: 'Выбросить', throwIt: 'Метнуть', quick: 'Быстрый слот', target: 'Что улучшить?', cancel: 'Отмена', targetInfo: 'Коснитесь оружия, доспеха, кольца или палочки — остальное сейчас недоступно.', targetNote: 'Если отменить, свиток всё равно пропадёт.',
+      items: [
+        { i: 31, n: 'Дротик', q: 8, quick: 1, t: 'gear', d: ['Лёгкий метательный дротик. Попав, теряется; промахнувшись, падает на пол.'], a: ['Метнуть', 'Быстрый слот'] },
+        { i: 57, n: 'Зелье Исцеления', q: 2, t: 'potion', d: ['Полностью восстанавливает здоровье и смывает слизь.'], a: ['Выпить', 'Метнуть', 'Быстрый слот'] },
+        { i: 60, n: 'Золотое зелье', unk: 1, t: 'potion', d: ['Вы ещё не знаете, что это. Используйте — и узнаете.'], a: ['Выпить', 'Метнуть', 'Быстрый слот'] },
+        { i: 44, n: 'Свиток Улучшения', t: 'scroll', d: ['Улучшает оружие или доспех на один уровень.'], a: ['Прочитать', 'Быстрый слот'] },
+        { i: 45, n: 'Свиток «РАЙДО»', unk: 1, t: 'scroll', d: ['Вы ещё не знаете, что это. Используйте — и узнаете.'], a: ['Прочитать', 'Быстрый слот'] },
+        { i: 50, n: 'Палочка Молнии', tag: '3/3', t: 'gear', up: 1, d: ['Обрушивает молнию на существо; она перескакивает на тех, кто рядом, и страшнее для стоящих в воде.'], a: ['Применить', 'Быстрый слот'] },
+        { i: 34, n: 'Кольцо Уклонения', lvl: '−1', cursed: 1, t: 'gear', up: 1, d: ['Вы реже уклоняетесь от ударов.'], warn: 'Вещь проклята: надетую, её не снять, пока проклятие не снято.', a: [null, 'Надеть', 'Метнуть'] },
+        { i: 112, n: 'Паёк', t: 'other', d: ['Ничего особенного: вяленое мясо, сухари и всё в таком духе. Надолго утоляет голод.'], a: ['Съесть', 'Метнуть'] },
+        { i: 124, n: 'Бомба', q: 2, t: 'other', d: ['Фитиль загорается, когда её бросают. Взрывается через пару ходов.'], a: ['Метнуть', 'Быстрый слот'] },
+        { i: 20, n: 'Меч', lvl: '+2', tag: '14', tagBad: 1, t: 'gear', up: 1, d: ['Урон 4–19. Нужна сила 14.'], bad: 'Слишком тяжело для вас: будете неуклюжи.', a: ['Надеть', 'Метнуть'] },
+        { i: 92, n: 'Семя солнечной травы', q: 3, t: 'other', d: ['Посаженная, лечит раны, пока вы стоите на ней.'], a: ['Посадить', 'Метнуть'] },
+        { i: 120, n: 'Фляга для росы', tag: '3/20', t: 'other', d: ['Собирает росу из травы. Полная — спасёт от смерти.'], a: ['Выпить', 'Быстрый слот'] }
+      ],
+      equip: [
+        { i: 2, n: 'Короткий меч', lvl: '+1', t: 'gear', up: 1, d: ['Урон 2–12. Нужна сила 11.', 'Лёгкий и быстрый клинок новичка.'], a: ['Снять', 'Метнуть'] },
+        { i: 25, n: 'Кожаный доспех', t: 'gear', up: 1, d: ['Поглощает до 4 урона. Нужна сила 11.'], a: ['Снять', 'Метнуть'] },
+        { i: 37, n: 'Кольцо Скорости', t: 'gear', up: 1, d: ['Вы двигаетесь быстрее.'], a: ['Снять', 'Метнуть'] }
+      ] },
+    en: { title: 'Backpack', str: 'Strength', filters: [['all', 'All'], ['potion', 'Potions'], ['scroll', 'Scrolls'], ['gear', 'Gear']], equipped: 'equipped', keys: 'Keys: 2',
+      hint: 'Tap an item to see what it is and what you can do with it.', hold: '<b>Hold a cell</b> for its quick action: drink, read, equip, eat.', holdSub: 'or hold the cell', holdLabel: 'Drink',
+      drop: 'Drop', throwIt: 'Throw', quick: 'Quickslot', target: 'Upgrade what?', cancel: 'Cancel', targetInfo: 'Tap a weapon, armour, ring or wand — nothing else can be picked now.', targetNote: 'If you cancel, the scroll is lost anyway.',
+      items: [
+        { i: 31, n: 'Dart', q: 8, quick: 1, t: 'gear', d: ['A light throwing dart. Lost when it hits, left on the floor when it misses.'], a: ['Throw', 'Quickslot'] },
+        { i: 57, n: 'Potion of Healing', q: 2, t: 'potion', d: ['Restores all health and washes off ooze.'], a: ['Drink', 'Throw', 'Quickslot'] },
+        { i: 60, n: 'Golden potion', unk: 1, t: 'potion', d: ['You do not know what it does yet. Use it to find out.'], a: ['Drink', 'Throw', 'Quickslot'] },
+        { i: 44, n: 'Scroll of Upgrade', t: 'scroll', d: ['Improves your weapon or armour by one level.'], a: ['Read', 'Quickslot'] },
+        { i: 45, n: 'Scroll "RAIDO"', unk: 1, t: 'scroll', d: ['You do not know what it does yet. Use it to find out.'], a: ['Read', 'Quickslot'] },
+        { i: 50, n: 'Wand of Lightning', tag: '3/3', t: 'gear', up: 1, d: ['Calls down lightning on a creature; it leaps on to others close by, and is worse for those standing in water.'], a: ['Zap', 'Quickslot'] },
+        { i: 34, n: 'Ring of Evasion', lvl: '−1', cursed: 1, t: 'gear', up: 1, d: ['You dodge blows less often.'], warn: 'It is cursed: once worn, it will not come off until the curse is lifted.', a: [null, 'Equip', 'Throw'] },
+        { i: 112, n: 'Ration of food', t: 'other', d: ['Nothing fancy here: dried meat, some biscuits - things like that. Keeps hunger away for a good while.'], a: ['Eat', 'Throw'] },
+        { i: 124, n: 'Bomb', q: 2, t: 'other', d: ['The fuse lights when it is thrown. It goes off a couple of turns later.'], a: ['Throw', 'Quickslot'] },
+        { i: 20, n: 'Sword', lvl: '+2', tag: '14', tagBad: 1, t: 'gear', up: 1, d: ['Damage 4–19. Needs 14 strength.'], bad: 'It is too heavy for you: you will be clumsy with it.', a: ['Equip', 'Throw'] },
+        { i: 92, n: 'Seed of sungrass', q: 3, t: 'other', d: ['Planted, it heals your wounds while you stand on it.'], a: ['Plant', 'Throw'] },
+        { i: 120, n: 'Dew vial', tag: '3/20', t: 'other', d: ['Gathers dew from the grass. Full, it saves you from death.'], a: ['Drink', 'Quickslot'] }
+      ],
+      equip: [
+        { i: 2, n: 'Short sword', lvl: '+1', t: 'gear', up: 1, d: ['Damage 2–12. Needs 11 strength.', "A light, quick blade for a beginner."], a: ['Take off', 'Throw'] },
+        { i: 25, n: 'Leather armor', t: 'gear', up: 1, d: ['Absorbs up to 4 damage. Needs 11 strength.'], a: ['Take off', 'Throw'] },
+        { i: 37, n: 'Ring of Haste', t: 'gear', up: 1, d: ['You move faster.'], a: ['Take off', 'Throw'] }
+      ] }
+  };
+  function bagSlot(it, cls, inner) { return '<button class="pd-slot' + cls + '" aria-label="' + it.n + '"><i class="pd-item" data-i="' + it.i + '"></i>' + (it.q ? '<span class="pd-qty">' + it.q + '</span>' : '') + (it.lvl ? '<span class="pd-lvl ' + (it.lvl[0] === '+' ? 'up' : 'down') + '">' + it.lvl + '</span>' : '') + (it.tag ? '<span class="pd-tag' + (it.tagBad ? ' bad' : '') + '">' + it.tag + '</span>' : '') + (it.unk ? '<span class="pd-tag unknown">?</span>' : '') + (it.cursed ? '<span class="pd-mark curse"></span>' : '') + (it.quick ? '<span class="pd-mark quick"></span>' : '') + (inner || '') + '</button>'; }
+  PD.demo.win.bag = function (lang, o) {
+    var L = BT[lang || 'ru']; o = o || {}; var st = o.state || 'empty', filter = o.filter || 'all', tgt = st === 'target';
+    var sel = st === 'potion' ? L.items[1] : st === 'equipped' ? L.equip[0] : st === 'cursed' ? L.items[6] : st === 'target' ? L.items[3] : null;
+    function dimmed(it) { if (tgt) return !it.up; return filter !== 'all' && it.t !== filter; }
+    function cls(it, base) { var c = base || ''; if (it.cursed) c += ' cursed'; if (sel === it && !tgt) c += ' selected'; if (dimmed(it)) c += ' dim'; else if (tgt) c += ' can'; return c; }
+    var head = '<header class="pd-bag-head"><h2 class="pd-heading">' + L.title + '</h2><span class="pd-stat gold"><i class="pd-icon" style="width:16px;height:14px;background-image:var(--spr-coin)"></i>132</span><span class="pd-stat"><span class="pd-stat-label">' + L.str + '</span>11</span><button class="pd-close" aria-label="×"></button></header>';
+    var bar = tgt ? '<div class="pd-bag-target" role="status"><i class="pd-item" data-i="44"></i><span>' + L.target + '</span><button class="pd-button quiet">' + L.cancel + '</button></div>'
+      : '<div class="pd-tabs compact pd-bag-filter" role="tablist">' + L.filters.map(function (f) { return '<button class="pd-tab" role="tab" aria-selected="' + (f[0] === filter) + '">' + f[1] + '</button>'; }).join('') + '</div>';
+    var eq = L.equip.map(function (it) { return bagSlot(it, cls(it, ' equipped')); }).join('') + '<div class="pd-slot placeholder' + (tgt || filter !== 'all' ? ' dim' : '') + '"><i class="pd-item" data-i="7"></i></div>' +
+      '<button class="pd-slot keys' + (tgt || filter !== 'all' ? ' dim' : '') + '" aria-label="' + L.keys + '"><i class="pd-icon" style="background-image:var(--spr-keyring)"></i><span class="pd-qty">2</span></button>';
+    var grid = L.items.map(function (it) { return bagSlot(it, cls(it), ''); }).join('');
+    for (var e = L.items.length; e < 20; e++) grid += '<div class="pd-slot empty' + (tgt || filter !== 'all' ? ' dim' : '') + '"></div>';
+    var pick;
+    if (!sel) pick = '<div class="pd-pick empty"><p class="pd-info">' + L.hint + '</p><div class="pd-hold-hint"><span class="pd-hold-demo"><span class="pd-hold-label">' + L.holdLabel + '</span><span class="pd-slot holding"><i class="pd-item" data-i="57"></i></span></span><span>' + L.hold + '</span></div></div>';
+    else if (tgt) pick = '<div class="pd-pick"><div class="pd-pick-head"><div class="pd-slot"><i class="pd-item" data-i="44"></i></div><div class="pd-titles"><h3 class="pd-heading">' + sel.n + '</h3></div></div><p class="pd-info">' + L.targetInfo + '</p><p class="pd-note">' + L.targetNote + '</p></div>';
+    else {
+      var a = sel.a, acts = '';
+      if (a[0]) acts += '<button class="pd-button primary stacked">' + a[0] + '<span class="pd-btn-sub">' + L.holdSub + '</span></button>';
+      var rest = a.slice(1); rest.forEach(function (x, k) { acts += '<button class="pd-button' + (rest.length % 2 && k === rest.length - 1 ? ' wide' : '') + '">' + x + '</button>'; });
+      pick = '<div class="pd-pick"><div class="pd-pick-head">' + bagSlot(sel, sel.cursed ? ' cursed' : (L.equip.indexOf(sel) >= 0 ? ' equipped' : '')).replace('<button', '<div').replace('</button>', '</div>') + '<div class="pd-titles"><h3 class="pd-heading">' + sel.n + (sel.lvl ? ' <span class="' + (sel.lvl[0] === '+' ? 'pd-good' : 'pd-bad') + '">' + sel.lvl + '</span>' : '') + '</h3>' + (L.equip.indexOf(sel) >= 0 ? '<span class="pd-chip">' + L.equipped + '</span>' : '') + '</div><button class="pd-button danger pd-pick-dropbtn">' + L.drop + '</button></div>' +
+        sel.d.map(function (x) { return '<p class="pd-info">' + x + '</p>'; }).join('') + (sel.warn ? '<p class="pd-callout cursed">' + sel.warn + '</p>' : '') + (sel.bad ? '<p class="pd-callout bad">' + sel.bad + '</p>' : '') +
+        '<div class="pd-pick-actions">' + acts + '</div></div>';
+    }
+    return '<section class="pd-window bag' + (tgt ? ' targeting' : '') + '" role="dialog" aria-label="' + L.title + '">' + head + bar + '<div class="pd-bag-body"><div class="pd-bag-side"><div class="pd-bag-equip">' + eq + '</div><div class="pd-bag-grid">' + grid + '</div></div>' + pick + '</div></section>';
+  };
+  PD.demo.win.bagT = BT;
+
   /* окно поверх экрана макета: box — .phone; html — строка окна */
   PD.demo.overlay = function (box, html) { var o = document.createElement('div'); o.className = 'pd-overlay static'; o.innerHTML = html; box.appendChild(o); PD.sprite(o); return o; };
 

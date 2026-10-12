@@ -1,0 +1,20 @@
+<!-- @dsCard group="Макеты 390×844" height=844 width=1218 page subtitle="Рюкзак одним окном: надетое и сетка 5×4 ячеек 62 px (предмет ×3), под ними панель выбранного. Слева — ничего не выбрано, с подсказкой про удержание; в середине — надетый меч; справа — известный проклятый предмет" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Рюкзак одним окном</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .row { display: flex; gap: 24px; width: 1218px; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; --safe-t: 0px; --safe-b: 34px; flex: none; }
+</style></head>
+<body>
+<div class="pd-root row" id="row"></div>
+<script>
+  'empty,equipped,cursed'.split(',').forEach(function (st) {
+    var p = document.createElement('div'); p.className = 'phone'; document.getElementById('row').appendChild(p);
+    PD.demo.game(p, { mates: false }); PD.demo.overlay(p, PD.demo.win.bag('ru', { state: st, filter: st === 'potion' ? 'potion' : 'all' }));
+  });
+  PD.sprite(document.body);
+</script>
+</body>
+</html>

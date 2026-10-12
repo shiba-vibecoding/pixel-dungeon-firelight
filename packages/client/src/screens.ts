@@ -1082,12 +1082,15 @@ export interface BackpackOptions {
 /** What is chosen in the backpack: an item in the pack (by slot) or one worn. */
 type BagChoice = { index: number } | { worn: 'weapon' | 'armor' } | { ring: number };
 
-/** The backpack open now and what is chosen in it, so it can be drawn again as the world changes. */
-let openBag: { options: BackpackOptions; choice: BagChoice | null } | null = null;
+/** The backpack's filters (design system v10): the rest dims but stays where it is. */
+type BagFilter = 'all' | 'potions' | 'scrolls' | 'gear';
+
+/** The backpack open now, what is chosen in it and how it is filtered, so it can be drawn again as the world changes. */
+let openBag: { options: BackpackOptions; choice: BagChoice | null; filter: BagFilter } | null = null;
 
 /** Draws the open backpack again (after an action that keeps it open, or anything that changed the pack). */
 export function refreshBackpack(world: World, hero: Hero): void {
-  if (!openBag || !overlayOpen() || !root.querySelector('.pd-bag-sheet')) {
+  if (!openBag || !overlayOpen() || !root.querySelector('.pd-window.bag')) {
     openBag = null;
     return;
   }
@@ -1102,17 +1105,27 @@ function chosenItem(hero: Hero, choice: BagChoice | null): Item | undefined {
   return choice.worn === 'weapon' ? hero.weapon ?? undefined : hero.armor;
 }
 
+/** Whether an item passes a filter: «gear» is weapons, armour, rings, wands and thrown weapons. */
+function passes(filter: BagFilter, item: Item): boolean {
+  const category = itemDef(item.kind).category;
+  if (filter === 'potions') return category === 'potion';
+  if (filter === 'scrolls') return category === 'scroll';
+  if (filter === 'gear') return ['weapon', 'armor', 'ring', 'wand', 'missile'].includes(category);
+  return true;
+}
+
 /**
- * The backpack (WndBag), as one sheet: the worn things and the pack above, and below them
- * the chosen item — what it is and what can be done with it — without leaving the backpack.
- * Putting on, taking off, dropping or setting a quick slot keeps it open; drinking, eating,
- * reading, throwing and zapping close it, for the dungeon to answer. A long press on an item
- * does its first action at once.
+ * The backpack (WndBag) as one window (design system v10): the worn things and the key ring in
+ * a row, the pack in a 5×4 grid, and the chosen item's panel — what it is, what can be done with
+ * it — below (beside, on a wide screen), without leaving the backpack. Putting on, taking off,
+ * dropping or setting a quick slot keeps it open; drinking, eating, reading, throwing and zapping
+ * close it, for the dungeon to answer. Holding an item does its first action on release.
  */
 export function showBackpack(options: BackpackOptions, choice: BagChoice | null = null): void {
   const { world, hero, pick } = options;
   const targets = new Set((pick?.targets ?? []).map(String));
-  if (!pick) openBag = { options, choice };
+  const filter: BagFilter = !pick && openBag && openBag.options.hero === hero ? openBag.filter : 'all';
+  if (!pick) openBag = { options, choice, filter };
   // A choice that no longer holds (the item went) is forgotten.
   if (!chosenItem(hero, choice)) choice = null;
   const choose = (next: BagChoice): void => {
@@ -1124,76 +1137,139 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
     showBackpack(options, next);
   };
   const same = (a: BagChoice | null, b: BagChoice): boolean => JSON.stringify(a) === JSON.stringify(b);
-  /** In the selector, what cannot be chosen is dimmed; the chosen item is framed in gold. */
-  const mark = (node: HTMLElement, ref: ItemRef, here: BagChoice): HTMLElement => {
-    if (pick && !targets.has(String(ref)) && node.tagName === 'BUTTON') node.classList.add('disabled');
-    if (!pick && same(choice, here)) node.classList.add('selected');
-    if (!pick && node.tagName === 'BUTTON') longPress(node, () => firstAction({ ...options, item: chosenItem(hero, here)!, ...where(here) }));
+  /** The chosen item framed in gold; filtered out or no target, dimmed; a target, blinking. */
+  const mark = (node: HTMLElement, ref: ItemRef, here: BagChoice, item: Item): HTMLElement => {
+    if (node.tagName !== 'BUTTON') return node;
+    if (pick) node.classList.add(targets.has(String(ref)) ? 'can' : 'dim');
+    else {
+      if (same(choice, here)) node.classList.add('selected');
+      if (!passes(filter, item)) node.classList.add('dim');
+      const opts = { ...options, item, ...where(here) };
+      holdToUse(node, () => firstActionName(opts), () => firstAction(opts));
+    }
     return node;
   };
-  // The backpack's own slots, then whatever lies in bags or on the key ring.
+  // The backpack's own slots; keys go on the key ring, and other bags' contents in a row below.
   const entries = hero.items.map((item, index) => ({ item, index, bagged: inBag(hero, item) }));
+  const keys = entries.filter((entry) => itemDef(entry.item.kind).category === 'key');
   const loose = entries.filter((entry) => !entry.bagged);
-  const bagged = entries.filter((entry) => entry.bagged);
-  const grid = el('div', { className: 'pd-grid' });
+  const bagged = entries.filter((entry) => entry.bagged && itemDef(entry.item.kind).category !== 'key');
+  const grid = el('div', { className: 'pd-bag-grid' });
   for (let i = 0; i < Math.max(BACKPACK_SIZE, loose.length); i++) {
     const entry = loose[i];
-    const node = slot(world, entry?.item, entry ? { hero, onClick: () => choose({ index: entry.index }) } : {});
-    grid.append(entry ? mark(node, entry.index, { index: entry.index }) : node);
+    if (!entry) {
+      grid.append(el('div', { className: 'pd-slot empty' }));
+      continue;
+    }
+    grid.append(mark(slot(world, entry.item, { hero, onClick: () => choose({ index: entry.index }) }), entry.index, { index: entry.index }, entry.item));
   }
   const coin = picture('coin', 16, 14);
-  const head = el(
-    'header',
-    { className: 'pd-bag-head' },
-    el('h2', { className: 'pd-heading', textContent: pick?.title ?? t.backpack }),
-    el('span', { className: 'pd-stat gold' }, coin, String(hero.gold)),
-    el('span', { className: 'pd-stat' }, el('span', { className: 'pd-stat-label', textContent: t.strength }), String(hero.str)),
-  );
-  const worn = (item: Item | undefined, placeholder: number, ref: ItemRef, here: BagChoice): HTMLElement =>
-    item
-      ? mark(slot(world, item, { hero, equipped: true, onClick: () => choose(here) }), ref, here)
-      : slot(world, undefined, { hero, equipped: true, placeholder });
-  const equip = el(
-    'div',
-    { className: 'pd-equip' },
-    // Bare-handed after a monk's blow: the weapon's silhouette.
-    worn(hero.weapon ?? undefined, 5, 'weapon', { worn: 'weapon' }),
-    worn(hero.armor, 6, 'armor', { worn: 'armor' }),
-    ...[0, 1].map((i) => worn(hero.rings[i], 7, i === 0 ? 'ring0' : 'ring1', { ring: i })),
-  );
   const close = pick ? pick.onCancel : (): void => {
     openBag = null;
     options.onClose();
   };
-  const item = chosenItem(hero, choice);
-  const detail = pick
-    ? info(t.pickTarget, 'pd-note center')
-    : item && choice
-      ? itemDetail({ ...options, item, ...where(choice) })
-      : info(t.bagHint, 'pd-note center pd-bag-hint');
-  const box = el(
-    'section',
-    { className: 'pd-window pd-bag-sheet' },
-    head,
-    el(
-      'div',
-      { className: 'pd-scroll pd-bag-items' },
-      equip,
-      grid,
-      ...(bagged.length > 0
-        ? [
-            el('div', { className: 'pd-bagrow-title' }, info(t.inBags, 'pd-note')),
-            el('div', { className: 'pd-bagrow' }, ...bagged.map(({ item: bagItem, index }) => mark(slot(world, bagItem, { hero, onClick: () => choose({ index }) }), index, { index }))),
-          ]
-        : []),
-    ),
-    el('div', { className: 'pd-bag-detail' }, detail),
+  const head = el(
+    'header',
+    { className: 'pd-bag-head' },
+    el('h2', { className: 'pd-heading', textContent: t.backpack }),
+    el('span', { className: 'pd-stat gold' }, coin, String(hero.gold)),
+    el('span', { className: 'pd-stat' }, el('span', { className: 'pd-stat-label', textContent: t.strength }), String(hero.str)),
     closeButton(close),
   );
+  // Filters, or in a scroll's choice the question and «cancel».
+  const bar = pick
+    ? el(
+      'div',
+      { className: 'pd-bag-target' },
+      el('span', { textContent: pick.title }),
+      button(t.cancel, pick.onCancel, 'quiet'),
+    )
+    : bagFilters(filter, (next) => {
+      if (openBag) openBag.filter = next;
+      showBackpack(options, choice);
+    });
+  if (pick) bar.setAttribute('role', 'status');
+  const worn = (item: Item | undefined, placeholder: number, ref: ItemRef, here: BagChoice): HTMLElement =>
+    item
+      ? mark(slot(world, item, { hero, equipped: true, onClick: () => choose(here) }), ref, here, item)
+      : slot(world, undefined, { hero, equipped: true, placeholder });
+  // The key ring: how many keys there are; what they open is said on the map.
+  const keyCount = keys.reduce((sum, entry) => sum + entry.item.qty, 0);
+  const keyring = el(
+    'div',
+    { className: `pd-slot keys${keyCount ? '' : ' placeholder'}`, ariaLabel: t.keysCount(keyCount) },
+    keyringIcon(),
+    keyCount > 0 && el('span', { className: 'pd-qty', textContent: String(keyCount) }),
+  );
+  const equip = el(
+    'div',
+    { className: 'pd-bag-equip' },
+    // Bare-handed after a monk's blow: the weapon's silhouette.
+    worn(hero.weapon ?? undefined, 5, 'weapon', { worn: 'weapon' }),
+    worn(hero.armor, 6, 'armor', { worn: 'armor' }),
+    ...[0, 1].map((i) => worn(hero.rings[i], 7, i === 0 ? 'ring0' : 'ring1', { ring: i })),
+    keyring,
+  );
+  const item = chosenItem(hero, choice);
+  const panel = pick
+    ? el('div', { className: 'pd-pick empty' }, info(t.pickTarget))
+    : item && choice
+      ? itemDetail({ ...options, item, ...where(choice) })
+      : el(
+        'div',
+        { className: 'pd-pick empty' },
+        info(t.bagHint),
+        el(
+          'div',
+          { className: 'pd-hold-hint' },
+          el('span', { className: 'pd-hold-demo' }, el('span', { className: 'pd-hold-label', textContent: t.drink }), el('span', { className: 'pd-slot holding' }, itemIconAt(57))),
+          el('span', {}, el('b', { textContent: t.holdTitle }), ` ${t.holdText}`),
+        ),
+      );
+  const side = el(
+    'div',
+    { className: 'pd-bag-side' },
+    equip,
+    grid,
+    ...(bagged.length > 0
+      ? [
+          el('div', { className: 'pd-bagrow-title' }, info(t.inBags, 'pd-note')),
+          el('div', { className: 'pd-bagrow' }, ...bagged.map(({ item: bagItem, index }) => mark(slot(world, bagItem, { hero, onClick: () => choose({ index }) }), index, { index }, bagItem))),
+        ]
+      : []),
+  );
+  const box = el('section', { className: `pd-window bag${pick ? ' targeting' : ''}` }, head, bar, el('div', { className: 'pd-bag-body' }, side, panel));
   box.setAttribute('role', 'dialog');
   // Drawn again over itself (a choice, an action), it does not come in again.
-  if (root.querySelector('.pd-bag-sheet')) box.classList.add('still');
+  if (root.querySelector('.pd-window.bag')) box.classList.add('still');
   show(box, close);
+}
+
+/** The filter tabs: All, Potions, Scrolls, Gear. */
+function bagFilters(current: BagFilter, onChange: (filter: BagFilter) => void): HTMLElement {
+  const tabs = el('div', { className: 'pd-tabs compact pd-bag-filter' });
+  tabs.setAttribute('role', 'tablist');
+  for (const [id, label] of [['all', t.bagAll], ['potions', t.bagPotions], ['scrolls', t.bagScrolls], ['gear', t.bagGear]] as const) {
+    const tab = el('button', { className: 'pd-tab', textContent: label, onclick: () => (audio.play('click'), onChange(id)) });
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', String(id === current));
+    tabs.append(tab);
+  }
+  return tabs;
+}
+
+/** The key ring's picture. */
+function keyringIcon(): HTMLElement {
+  const icon = el('i', { className: 'pd-icon' });
+  icon.style.cssText = 'width:30px;height:30px;background-image:var(--spr-keyring)';
+  return icon;
+}
+
+/** An items.png sprite on its own. */
+function itemIconAt(sprite: number): HTMLElement {
+  const icon = el('i', { className: 'pd-item' });
+  icon.dataset.i = String(sprite);
+  return icon;
 }
 
 /** Where a choice sits, as the item window's options say it. */
@@ -1201,26 +1277,50 @@ function where(choice: BagChoice): { index: number | null; ring?: number } {
   return 'index' in choice ? { index: choice.index } : 'ring' in choice ? { index: null, ring: choice.ring } : { index: null };
 }
 
-/** A long press (half a second, without moving) does `act` instead of the tap. */
-function longPress(node: HTMLElement, act: () => void): void {
+/**
+ * Holding a slot (design system v10): after 0.4 s it lifts (`.holding`) with the action's name
+ * above it; let go on it and the action is done, slide off and it is not. A short tap only chooses.
+ */
+function holdToUse(node: HTMLElement, name: () => string | null, act: () => void): void {
   let timer = 0;
-  let fired = false;
-  const cancel = (): void => window.clearTimeout(timer);
+  let held = false;
+  let label: HTMLElement | null = null;
+  const reset = (): void => {
+    window.clearTimeout(timer);
+    node.classList.remove('holding');
+    label?.remove();
+    label = null;
+  };
   node.addEventListener('pointerdown', () => {
-    fired = false;
-    cancel();
+    held = false;
+    reset();
+    const what = name();
+    if (!what) return;
     timer = window.setTimeout(() => {
-      fired = true;
-      audio.play('click');
-      act();
-    }, 500);
+      held = true;
+      node.classList.add('holding');
+      label = el('span', { className: 'pd-hold-label', textContent: what });
+      node.append(label);
+    }, 400);
   });
-  for (const type of ['pointerup', 'pointerleave', 'pointercancel']) node.addEventListener(type, cancel);
-  // The click that ends a long press is not a tap.
+  node.addEventListener('pointerleave', () => {
+    held = false;
+    reset();
+  });
+  node.addEventListener('pointercancel', () => {
+    held = false;
+    reset();
+  });
+  // The click that ends a hold does the action instead of choosing.
   node.addEventListener('click', (event) => {
-    if (!fired) return;
+    const was = held;
+    held = false;
+    reset();
+    if (!was) return;
     event.stopImmediatePropagation();
     event.preventDefault();
+    audio.play('click');
+    act();
   }, { capture: true });
 }
 
@@ -1232,25 +1332,43 @@ interface ItemOptions extends BackpackOptions {
   ring?: number;
 }
 
-/** The chosen item's panel: its picture and name, what it is, and its actions. */
+/** The chosen item's panel: its picture and name («worn»), what it is, «drop» in the corner, and its actions. */
 function itemDetail(options: ItemOptions): HTMLElement {
   const { world, hero, item, index } = options;
   const { main, more, danger } = itemActions(options);
-  const title = el('div', { className: 'pd-titles' }, el('h2', { className: 'pd-heading', textContent: capitalize(itemName(world, item)) }));
+  // A cursed thing one knows about: nothing urges putting it on (the callout says why).
+  const knownCurse = Boolean(item.cursed) && isKnown(world, item) && index !== null;
+  if (knownCurse) main[0]?.classList.remove('primary');
+  if (main[0]?.classList.contains('primary')) main[0].append(el('span', { className: 'pd-btn-sub', textContent: t.orHold }));
+  const all = [...main, ...more];
+  if (all.length % 2 === (main[0]?.classList.contains('primary') ? 0 : 1) && all.length > 0) all[all.length - 1]!.classList.add('wide');
+  const title = el(
+    'div',
+    { className: 'pd-titles' },
+    el('h3', { className: 'pd-heading', textContent: capitalize(itemName(world, item)) }),
+    index === null && el('span', { className: 'pd-chip', textContent: t.wornChip }),
+  );
+  const drop = danger[0];
+  drop?.classList.add('pd-pick-dropbtn');
   const box = el(
     'div',
-    { className: 'pd-bag-chosen' },
-    el('header', { className: 'pd-window-head' }, slot(world, item, { hero, equipped: index === null }), title),
-    el('div', { className: 'pd-bag-text' }, ...describedItem(world, hero, item)),
-    (main.length > 0 || more.length > 0 || danger.length > 0) && actions(main, more, danger),
+    { className: 'pd-pick' },
+    el('div', { className: 'pd-pick-head' }, slot(world, item, { hero, equipped: index === null }), title, drop),
+    ...describedItem(world, hero, item),
+    all.length > 0 && el('div', { className: 'pd-pick-actions' }, ...all),
   );
+  box.setAttribute('aria-live', 'polite');
   titleFor(world, item, box);
   return box;
 }
 
-/** A long press: the item's first action (drink, eat, read, put on...), if it has one. */
+/** The name of an item's first action (drink, eat, read, put on...), if it has one. */
+function firstActionName(options: ItemOptions): string | null {
+  return itemActions(options).main[0]?.textContent ?? null;
+}
+
+/** Holding an item: its first action, done. */
 function firstAction(options: ItemOptions): void {
-  if (!options.item) return;
   const first = itemActions(options).main[0];
   if (first instanceof HTMLButtonElement) first.click();
 }
@@ -1342,7 +1460,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'honeypot') use(t.shatterPot, () => act({ type: 'use', item: index }));
     // QuickSlot: any item with a use can be kept one tap away.
     if (quickUse(item.kind) && !inQuickslot(hero, item)) {
-      more.push(button(t.toQuickslot, () => {
+      more.push(button(t.quickslotShort, () => {
         chooseQuickslot(item.kind);
         refreshBackpack(world, hero);
       }));

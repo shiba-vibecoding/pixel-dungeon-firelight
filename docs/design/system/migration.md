@@ -776,3 +776,68 @@ PD.seg(langSeg, lang, (v) => setLanguage(v));
 | `.pd-challenges(.locked)`, `.pd-challenge`, `.pd-ch-icon`, `.pd-lockplate`, `.pd-ch-n` | «Испытания» |
 | `.pd-window.wide`, `.pd-journal`, `.pd-jrow(.here/.done)`, `.pd-jicon`, `.pd-empty` | «Журнал» |
 | `.pd-catalog`, `.pd-slot.unknown`, `.pd-item.silhouette`, `.pd-cat-detail`, `.pd-cat-count` | «Каталог» |
+
+### Рюкзак одним окном
+
+```html
+<section class="pd-window bag" role="dialog" aria-labelledby="bag-t">          <!-- .targeting в режиме выбора цели -->
+  <header class="pd-bag-head"><h2 class="pd-heading" id="bag-t">Рюкзак</h2><span class="pd-stat gold">…132</span><span class="pd-stat"><span class="pd-stat-label">Сила</span>11</span><button class="pd-close" aria-label="Закрыть"></button></header>
+  <div class="pd-tabs compact pd-bag-filter" role="tablist">
+    <button class="pd-tab" role="tab" aria-selected="true">Всё</button><button class="pd-tab" role="tab" aria-selected="false">Зелья</button>
+    <button class="pd-tab" role="tab" aria-selected="false">Свитки</button><button class="pd-tab" role="tab" aria-selected="false">Снаряжение</button>
+  </div>
+  <!-- режим цели вместо фильтров: <div class="pd-bag-target" role="status"><i class="pd-item" data-i="44"></i><span>Что улучшить?</span><button class="pd-button quiet">Отмена</button></div> -->
+  <div class="pd-bag-body">
+    <div class="pd-bag-side">
+      <div class="pd-bag-equip">
+        <button class="pd-slot equipped" aria-label="Короткий меч +1"><i class="pd-item" data-i="2"></i><span class="pd-lvl up">+1</span></button>
+        <button class="pd-slot equipped">…броня</button><button class="pd-slot equipped">…кольцо</button>
+        <div class="pd-slot placeholder"><i class="pd-item" data-i="7"></i></div>
+        <button class="pd-slot keys" aria-label="Ключи: 2"><i class="pd-icon" style="background-image:var(--spr-keyring)"></i><span class="pd-qty">2</span></button>
+      </div>
+      <div class="pd-bag-grid">
+        <button class="pd-slot selected"><i class="pd-item" data-i="57"></i><span class="pd-qty">2</span></button>
+        <button class="pd-slot dim">…</button>      <!-- не подходит под фильтр или цель -->
+        <div class="pd-slot empty"></div>            <!-- всего 20 -->
+      </div>
+    </div>
+    <div class="pd-pick" aria-live="polite">
+      <div class="pd-pick-head">
+        <div class="pd-slot"><i class="pd-item" data-i="57"></i></div>
+        <div class="pd-titles"><h3 class="pd-heading">Зелье Исцеления</h3><!-- <span class="pd-chip">надето</span> --></div>
+        <button class="pd-button danger pd-pick-dropbtn">Выбросить</button>
+      </div>
+      <p class="pd-info">Полностью восстанавливает здоровье и смывает слизь.</p>
+      <!-- <p class="pd-callout cursed">…</p> / <p class="pd-callout bad">…</p> -->
+      <div class="pd-pick-actions">
+        <button class="pd-button primary stacked">Выпить<span class="pd-btn-sub">или удерживайте ячейку</span></button>
+        <button class="pd-button">Метнуть</button><button class="pd-button">Быстрый слот</button>
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+- **Ничего не выбрано:**
+
+  ```html
+  <div class="pd-pick empty">
+    <p class="pd-info">Коснитесь предмета…</p>
+    <div class="pd-hold-hint"><span class="pd-hold-demo"><span class="pd-hold-label">Выпить</span><span class="pd-slot holding"><i class="pd-item" data-i="57"></i></span></span><span><b>Удерживайте ячейку</b> — быстрое действие…</span></div>
+  </div>
+  ```
+
+- **Удержание:** через 400 мс ячейка получает `.holding`, над ней появляется `.pd-hold-label` с названием действия. Отпустили — действие выполняется и окно закрывается. Если увели палец с ячейки, действие отменяется. Короткое касание только выбирает.
+- **Кнопки по числу действий.** Главное действие — `.primary` на всю ширину. Остальные идут по две в ряд; если их нечётное число, последняя получает `.wide`. У известного проклятого предмета `.primary` нет.
+- **Фильтр** ставит `.dim` на ячейки других типов; сетка не перестраивается. «Снаряжение» — оружие, броня, кольца, палочки, метательное. Еда, бомбы, семена и фляга видны только во «Всём».
+- **Цель:** окну ставится `.targeting`, полоса `.pd-bag-target` встаёт вместо фильтров, подходящим ячейкам — `.can`, остальным — `.dim` (они не нажимаются). «Отмена» по правилам оригинала спрашивает подтверждение: свиток всё равно сгорит.
+- **Подписи кнопок.** «В быстрый слот» в ряду по две на 360 px не помещается, в рюкзаке пишите «Быстрый слот». Для английского — «Quickslot».
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-window.bag(.targeting)` | рюкзак одним окном |
+| `.pd-bag-filter`, `.pd-bag-target` | фильтры; полоса выбора цели |
+| `.pd-bag-body`, `.pd-bag-side`, `.pd-bag-equip`, `.pd-bag-grid` | раскладка; ряд надетого и сетка с ячейками `--cell` |
+| `.pd-slot.dim`, `.pd-slot.can`, `.pd-slot.holding`, `.pd-slot.keys` | тусклая, подходящая для цели, удерживаемая, связка ключей |
+| `.pd-pick(.empty)`, `.pd-pick-head`, `.pd-pick-dropbtn`, `.pd-pick-actions` (`.wide`) | панель выбранного предмета |
+| `.pd-hold-hint`, `.pd-hold-demo`, `.pd-hold-label` | подсказка и подпись удержания |
