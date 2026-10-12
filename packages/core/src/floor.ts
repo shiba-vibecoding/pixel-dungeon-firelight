@@ -195,6 +195,10 @@ export type Effect =
   | { type: 'wraiths'; depth: number; pos: number }
   /** A honeypot broke at rom, and a golden bee flew out to pos. */
   | { type: 'bee'; depth: number; pos: number; from: number }
+  /** Dew kept in the dew vial; the vial drunk from; a full vial emptied to save its bearer from death. */
+  | { type: 'dewCollected'; hero: string; full: boolean }
+  | { type: 'vial'; hero: string; amount: number }
+  | { type: 'vialSaved'; hero: string }
   /** A bomb went off. */
   | { type: 'exploded'; depth: number; pos: number }
   /** A weapon balanced with a weightstone. */

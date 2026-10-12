@@ -701,6 +701,17 @@ export class View {
             this.flashes.push({ cell: effect.pos, start: now, duration: 400 });
           }
           break;
+        case 'dewCollected':
+          audio.play('dewdrop');
+          if (effect.hero === myId) this.say(effect.full ? t.vialFull : t.dewCollected, effect.full ? COLORS.positive : COLORS.default, now);
+          break;
+        case 'vial':
+          audio.play('drink');
+          if (effect.amount > 0) this.float(effect.hero, `+${effect.amount}`, COLORS.positive, now);
+          break;
+        case 'vialSaved':
+          if (effect.hero === myId) this.say(t.vialSaved, COLORS.warning, now);
+          break;
         case 'bee':
           if (effect.depth === this.depth) {
             audio.play('shatter');

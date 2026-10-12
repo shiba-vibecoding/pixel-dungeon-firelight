@@ -13,6 +13,7 @@ import { earthrootAbsorbs } from './plants';
 import { impQuestKill } from './imp';
 import { curseBroken, questKill } from './quest';
 import { seedGas } from './gas';
+import { DEW_VIAL_VOLUME, drinkFromVial } from './vial';
 import { T } from './level/terrain';
 import { isBossDepth } from './level/builder';
 
@@ -456,6 +457,13 @@ function explode(ctx: Ctx, skeleton: Mob): void {
 }
 
 function heroDied(ctx: Ctx, hero: Hero): void {
+  // DewVial.autoDrink: a full dew vial is emptied to heal the hero's wounds at the last moment.
+  const vial = hero.items.find((item) => item.kind === 'vial' && (item.volume ?? 0) >= DEW_VIAL_VOLUME);
+  if (vial) {
+    drinkFromVial(ctx, hero, vial);
+    ctx.effects.push({ type: 'vialSaved', hero: hero.id });
+    if (isAlive(hero)) return;
+  }
   if (hero.items.some((item) => item.kind === 'ankh')) {
     resurrect(ctx, hero);
     return;

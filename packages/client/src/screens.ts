@@ -649,6 +649,7 @@ function showItem(options: ItemOptions): void {
         actions.push(button(t.balanceFor[imbue], () => act({ type: 'balance', item: index, imbue }), 'primary'));
       }
     }
+    if (category === 'vial' && item.volume) actions.push(button(t.drink, () => act({ type: 'use', item: index }), 'primary'));
     if (category === 'honeypot') actions.push(button(t.shatterPot, () => act({ type: 'use', item: index })));
     if (category === 'missile' || category === 'wand' || category === 'bomb' || category === 'honeypot') {
       const kind = category === 'wand' ? 'zap' : 'throw';

@@ -17,6 +17,7 @@ export function isKnown(world: World, item: Item): boolean {
 export function itemName(world: World, item: Item): string {
   const category = itemDef(item.kind).category;
   if (category === 'gold') return `${item.qty} ${t.goldShort}`;
+  if (category === 'vial') return `${t.items[item.kind]} (${item.volume ?? 0}/10)`;
   if (!isKnown(world, item)) {
     const label = world.run.labels[item.kind] ?? 0;
     if (category === 'wand') return t.unknownWand(t.woods[label]!);

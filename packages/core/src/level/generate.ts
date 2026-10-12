@@ -99,6 +99,7 @@ export function generateLevel(run: RunState, depth: number): Level {
   }
 
   const rng = Rng.seeded(deriveSeed(run.seed, Stream.LAYOUT, depth));
+  const DEW_VIAL_STREAM = 7;
   const feeling = rollFeeling(rng, depth);
   const pitNeeded = depth > 1 && run.weakFloorCreated;
   const boss = isBossDepth(depth);
@@ -125,6 +126,11 @@ export function generateLevel(run: RunState, depth: number): Level {
     }
     run.weakFloorCreated = level.weakFloorCreated;
     if (level.blacksmithPlaced) run.blacksmithSpawned = true;
+    // SewerLevel.createItems: the dew vial turns up somewhere in the first three depths.
+    if (depth <= 3 && !run.dewVialSpawned && Rng.seeded(deriveSeed(run.seed, Stream.LAYOUT, depth, DEW_VIAL_STREAM)).int(4 - depth) === 0) {
+      level.toSpawn.push({ roll: 'kind', kind: 'vial' });
+      run.dewVialSpawned = true;
+    }
 
     return {
       depth,

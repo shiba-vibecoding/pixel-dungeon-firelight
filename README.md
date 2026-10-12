@@ -110,8 +110,12 @@ Goo's lair. Opening a tomb raises wraiths around the hero; a skeleton with
 something cursed among its belongings takes half the health of whoever
 disturbs it.
 
-Not ported yet: bags (seed pouch, scroll holder, wand holster, keyring); the
-dew vial.
+The dew vial, found somewhere in the first three depths, keeps the dew an
+unhurt hero shakes from the grass; drunk, it heals the more the fuller it
+is, and a full one saves its bearer from death once (a well of health fills
+it, too).
+
+Not ported yet: bags (seed pouch, scroll holder, wand holster, keyring).
 
 ## How co-op works
 

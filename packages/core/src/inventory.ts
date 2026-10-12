@@ -21,6 +21,7 @@ import { plant, SEED_PLANTS } from './plants';
 import { zapWand } from './wands';
 import { mine, mineProblem, TIME_TO_MINE } from './smith';
 import { transmute } from './transmute';
+import { DEW_VIAL_VOLUME, drinkFromVial } from './vial';
 import { applyArmorKit, CLASS_ARMOR, CLASS_ARMOR_OF, classSpecial, specialProblem, TIME_TO_APPLY_KIT } from './classArmor';
 import type { World } from './world';
 
@@ -121,10 +122,11 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (category !== 'potion' && category !== 'scroll' && category !== 'food' && category !== 'torch' && category !== 'kit' && category !== 'honeypot') {
+      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial'].includes(category)) {
         return 'that cannot be used';
       }
       if (category === 'kit' && CLASS_ARMOR.includes(hero.armor.kind)) return 'your armour is already a class armour';
+      if (category === 'vial' && !item.volume) return 'your dew vial is empty';
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
       // The blacksmith's pickaxe is a tool: no scroll improves it.
       if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
@@ -195,6 +197,10 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         eat(ctx, hero, action.item);
         return TIME_TO_EAT;
       }
+      if (itemDef(hero.items[action.item]!.kind).category === 'vial') {
+        drinkFromVial(ctx, hero, hero.items[action.item]!);
+        return TIME_TO_USE;
+      }
       if (itemDef(hero.items[action.item]!.kind).category === 'honeypot') {
         // Honeypot.execute: shattered right where the hero stands.
         const pot = hero.items[action.item]!;
@@ -259,6 +265,16 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         ctx.level.map[hero.pos] = T.EMPTY_WELL;
         dropItem(ctx.floor, hero.pos, changed);
         ctx.effects.push({ type: 'transmuted', hero: hero.id, from: item, to: changed });
+        return TIME_TO_DROP;
+      }
+      // DewVial into a well of health (WaterOfHealth.affectItem): it comes out full, and the well runs dry.
+      const healing = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'health');
+      if (item.kind === 'vial' && (item.volume ?? 0) < DEW_VIAL_VOLUME && healing >= 0 && ctx.level.map[hero.pos] === T.WELL) {
+        item.volume = DEW_VIAL_VOLUME;
+        ctx.level.wells.splice(healing, 1);
+        ctx.level.map[hero.pos] = T.EMPTY_WELL;
+        dropItem(ctx.floor, hero.pos, item);
+        ctx.effects.push({ type: 'dewCollected', hero: hero.id, full: true });
         return TIME_TO_DROP;
       }
       // Floating over a chasm, it falls through.
@@ -697,6 +713,13 @@ function rotberryRoar(ctx: Ctx, hero: Hero): void {
 
 /** Dewdrop.doPickUp: a little health, more for the huntress; wasted on the unhurt. */
 function drinkDew(ctx: Ctx, hero: Hero, dew: Item): void {
+  // Dewdrop.doPickUp: unhurt, a hero with a dew vial that is not full keeps the dew for later.
+  const vial = hero.items.find((item) => item.kind === 'vial');
+  if (vial && hero.hp >= hero.ht && (vial.volume ?? 0) < DEW_VIAL_VOLUME) {
+    vial.volume = Math.min(DEW_VIAL_VOLUME, (vial.volume ?? 0) + dew.qty);
+    ctx.effects.push({ type: 'dewCollected', hero: hero.id, full: vial.volume >= DEW_VIAL_VOLUME });
+    return;
+  }
   const value = 1 + Math.trunc((ctx.depth - 1) / 5) + (hero.heroClass === 'huntress' ? 1 : 0);
   const amount = Math.max(0, Math.min(hero.ht - hero.hp, value * dew.qty));
   hero.hp += amount;
