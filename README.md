@@ -64,13 +64,13 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: the rotberry and the ring of herbalism; the wands of amok, reach, flock and
-regrowth; hero subclasses (the Tome of Mastery); the ankh; the blacksmith's
-and the imp's quests and the wandmaker's rotberry errand; the remaining special
-rooms (pool, statue, laboratory, vault, weak floor) and chasms you can
-fall through; dwarf monks disarming; the rare monster variants (albino rats,
-bandits, fetid rats); and gas clouds (gas acts at once on everyone within reach
-instead).
+Not ported yet: hero subclasses (the Tome of Mastery); weapon enchantments and
+armour glyphs; the ankh; the wands of amok, reach, flock and regrowth; the
+rotberry and the ring of herbalism; the blacksmith's and the imp's quests and
+the wandmaker's rotberry errand; the remaining special rooms (pool, statue,
+vault, weak floor) and chasms you can fall through; dwarf monks disarming; the
+rare monster variants (albino rats, bandits, fetid rats); and gas clouds (gas
+acts at once on everyone within reach instead).
 
 ## How co-op works
 
