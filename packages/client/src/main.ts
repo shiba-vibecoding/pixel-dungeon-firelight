@@ -126,11 +126,23 @@ function enterGame(next: Session, roomId: string | null): void {
 /** The current run is the daily dungeon, whose results go to the leaderboard. */
 let dailyRun = false;
 
+/** Today's daily run has its own save slot, so a reload of the Mini App does not lose it. */
+const dailySlot = (): string => `pd-daily-${new Date().toISOString().slice(0, 10)}`;
+
+// Runs of past days are of no use any more.
+try {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('pd-daily-') && key !== dailySlot()) localStorage.removeItem(key);
+  }
+} catch {
+  // Storage unavailable: nothing to clean.
+}
+
 function startSolo(mode: 'continue' | 'new' | 'daily'): void {
   if (mode === 'new') forgetSolo(SOLO_SLOT);
   const daily = mode === 'daily';
   const seed = daily ? dailySeed() : randomSeed();
-  enterGame(soloSession(daily ? null : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed())), null);
+  enterGame(soloSession(daily ? dailySlot() : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed())), null);
   dailyRun = daily;
 }
 
