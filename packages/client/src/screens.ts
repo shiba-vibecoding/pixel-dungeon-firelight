@@ -1146,7 +1146,10 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
       if (!passes(filter, item)) node.classList.add('dim');
       const opts = { ...options, item, ...where(here) };
       holdToUse(node, () => firstActionName(opts), () => firstAction(opts));
+      // What can be dragged: anything in the pack, and a worn ring (to take it off).
+      if ('index' in here || 'ring' in here) node.dataset.from = JSON.stringify(here);
     }
+    node.dataset.drop = String(ref);
     return node;
   };
   // The backpack's own slots; keys go on the key ring, and other bags' contents in a row below.
@@ -1158,7 +1161,9 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   for (let i = 0; i < Math.max(BACKPACK_SIZE, loose.length); i++) {
     const entry = loose[i];
     if (!entry) {
-      grid.append(el('div', { className: 'pd-slot empty' }));
+      const empty = el('div', { className: 'pd-slot empty' });
+      empty.dataset.drop = 'pack';
+      grid.append(empty);
       continue;
     }
     grid.append(mark(slot(world, entry.item, { hero, onClick: () => choose({ index: entry.index }) }), entry.index, { index: entry.index }, entry.item));
@@ -1192,7 +1197,7 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   const worn = (item: Item | undefined, placeholder: number, ref: ItemRef, here: BagChoice): HTMLElement =>
     item
       ? mark(slot(world, item, { hero, equipped: true, onClick: () => choose(here) }), ref, here, item)
-      : slot(world, undefined, { hero, equipped: true, placeholder });
+      : withDrop(slot(world, undefined, { hero, equipped: true, placeholder }), String(ref));
   // The key ring: how many keys there are; what they open is said on the map.
   const keyCount = keys.reduce((sum, entry) => sum + entry.item.qty, 0);
   const keyring = el(
@@ -1238,11 +1243,128 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
         ]
       : []),
   );
-  const box = el('section', { className: `pd-window bag${pick ? ' targeting' : ''}` }, head, bar, el('div', { className: 'pd-bag-body' }, side, panel));
+  // Where a dragged item is let go of to drop it on the floor (shown only while dragging).
+  const away = el('div', { className: 'pd-bag-away', textContent: t.dragToDrop });
+  away.dataset.drop = 'away';
+  const box = el('section', { className: `pd-window bag${pick ? ' targeting' : ''}` }, head, bar, el('div', { className: 'pd-bag-body' }, side, panel), away);
   box.setAttribute('role', 'dialog');
+  if (!pick) dragAndDrop(box, options);
   // Drawn again over itself (a choice, an action), it does not come in again.
   if (root.querySelector('.pd-window.bag')) box.classList.add('still');
   show(box, close);
+}
+
+/** Marks an empty place as somewhere a dragged item can be let go of. */
+function withDrop(node: HTMLElement, key: string): HTMLElement {
+  node.dataset.drop = key;
+  return node;
+}
+
+/**
+ * Dragging in the backpack: a weapon, armour or ring onto its place among the worn things puts
+ * it on; a worn ring back into the pack takes it off; a known scroll of upgrade, enchantment or
+ * identify onto an item reads it on that item; anything onto the strip at the bottom drops it.
+ * While dragging, every place that would take the item is lit. A drag starts once the finger
+ * has moved a little, so a tap still chooses and a hold still uses.
+ */
+function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
+  const { world, hero } = options;
+  const SLOP = 8;
+  let drag: { from: BagChoice; item: Item; node: HTMLElement; x: number; y: number; ghost: HTMLElement | null; ok: Map<string, Action> } | null = null;
+  /** What letting go of `from` on each place would do. */
+  const dropsFor = (from: BagChoice, item: Item): Map<string, Action> => {
+    const drops = new Map<string, Action>();
+    if ('ring' in from) {
+      drops.set('pack', { type: 'remove', ring: from.ring });
+      hero.items.forEach((_, i) => drops.set(String(i), { type: 'remove', ring: from.ring }));
+      return drops;
+    }
+    if (!('index' in from)) return drops;
+    const index = from.index;
+    const category = itemDef(item.kind).category;
+    if (category === 'weapon') drops.set('weapon', { type: 'equip', item: index });
+    if (category === 'armor') drops.set('armor', { type: 'equip', item: index });
+    if (category === 'ring') {
+      drops.set('ring0', { type: 'equip', item: index });
+      drops.set('ring1', { type: 'equip', item: index });
+    }
+    if (category === 'scroll' && isKnown(world, item) && (TARGETED_SCROLLS as readonly string[]).includes(item.kind)) {
+      for (const ref of scrollTargets(world, hero, item.kind)) drops.set(String(ref), { type: 'use', item: index, on: ref });
+    }
+    drops.set('away', { type: 'drop', item: index });
+    return drops;
+  };
+  const end = (): void => {
+    drag?.ghost?.remove();
+    box.classList.remove('dragging');
+    box.querySelectorAll('.drop-ok, .drop-over').forEach((node) => node.classList.remove('drop-ok', 'drop-over'));
+    drag = null;
+  };
+  const placeAt = (x: number, y: number): HTMLElement | null => {
+    const under = document.elementFromPoint(x, y);
+    return (under?.closest('[data-drop]') as HTMLElement | null) ?? null;
+  };
+  box.addEventListener('pointerdown', (event) => {
+    const node = (event.target as HTMLElement).closest<HTMLElement>('[data-from]');
+    if (!node) return;
+    const from = JSON.parse(node.dataset.from!) as BagChoice;
+    const item = chosenItem(hero, from);
+    if (!item) return;
+    drag = { from, item, node, x: event.clientX, y: event.clientY, ghost: null, ok: dropsFor(from, item) };
+  });
+  box.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    if (!drag.ghost) {
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < SLOP) return;
+      // It is a drag: no hold, no tap; the places that take it light up.
+      drag.node.dispatchEvent(new Event('pointercancel'));
+      drag.node.setPointerCapture?.(event.pointerId);
+      const ghost = el('div', { className: 'pd-drag-ghost' }, slot(world, drag.item, { hero }));
+      document.body.append(ghost);
+      drag.ghost = ghost;
+      box.classList.add('dragging');
+      box.querySelectorAll<HTMLElement>('[data-drop]').forEach((place) => {
+        if (drag!.ok.has(place.dataset.drop!)) place.classList.add('drop-ok');
+      });
+    }
+    drag.ghost!.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
+    box.querySelectorAll('.drop-over').forEach((place) => place.classList.remove('drop-over'));
+    const place = placeAt(event.clientX, event.clientY);
+    if (place && drag.ok.has(place.dataset.drop!)) place.classList.add('drop-over');
+  });
+  const release = (event: PointerEvent): void => {
+    if (!drag?.ghost) {
+      drag = null;
+      return;
+    }
+    const place = placeAt(event.clientX, event.clientY);
+    const action = place ? drag.ok.get(place.dataset.drop!) : undefined;
+    const node = drag.node;
+    end();
+    // The click that ends a drag is not a tap on the item.
+    const swallow = (click: Event): void => {
+      click.stopImmediatePropagation();
+      click.preventDefault();
+    };
+    node.addEventListener('click', swallow, { capture: true, once: true });
+    window.setTimeout(() => node.removeEventListener('click', swallow, { capture: true }), 50);
+    if (!action) return;
+    audio.play('click');
+    if (action.type === 'use') {
+      // Reading a scroll: the dungeon answers, the backpack closes.
+      openBag = null;
+      options.onAction(action);
+      options.onClose();
+      return;
+    }
+    if (openBag) openBag.choice = null;
+    options.onAction(action);
+    refreshBackpack(options.world, options.hero);
+  };
+  box.addEventListener('pointerup', release);
+  box.addEventListener('pointercancel', (event) => {
+    if (event.target === box) end();
+  });
 }
 
 /** The filter tabs: All, Potions, Scrolls, Gear. */
