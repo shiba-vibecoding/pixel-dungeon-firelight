@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { ClientMessage, HeroClass, PlayerInfo } from '@pd/core';
+import { type DailyEntry, type DailyResult, Leaderboard, parseResult } from './leaderboard';
 import { type Delivery, RoomLogic, type RoomState } from './room-logic';
 import { verifyInitData } from './telegram-auth';
 
@@ -16,6 +17,7 @@ import { verifyInitData } from './telegram-auth';
 
 export interface Env {
   ROOM: DurableObjectNamespace<Room>;
+  DAILY: DurableObjectNamespace<DailyBoard>;
   /** Bot token secret. When set, players must prove their identity with Telegram init data. */
   BOT_TOKEN?: string;
   /** "true" lets players without Telegram join as guests even when BOT_TOKEN is set. */
@@ -24,28 +26,29 @@ export interface Env {
 
 const HERO_CLASSES: readonly HeroClass[] = ['warrior', 'mage', 'rogue', 'huntress'];
 
-function heroClassOf(url: URL): HeroClass {
-  const value = url.searchParams.get('hero');
+function heroClassOf(params: URLSearchParams): HeroClass {
+  const value = params.get('hero');
   return (HERO_CLASSES as readonly string[]).includes(value ?? '') ? (value as HeroClass) : 'warrior';
 }
 
-async function authenticate(request: Request, env: Env): Promise<PlayerInfo | null> {
-  const url = new URL(request.url);
-  const name = (url.searchParams.get('name') || 'Hero').slice(0, 32);
+/** Who is asking: from Telegram init data, or a client-chosen id (development and guests). */
+async function authenticate(params: URLSearchParams, env: Env): Promise<PlayerInfo | null> {
+  const name = (params.get('name') || 'Hero').slice(0, 32);
+  const heroClass = heroClassOf(params);
   // Monster ids start with '#', so player ids never may.
-  const clientId = (url.searchParams.get('id') || crypto.randomUUID()).replace(/^#+/, '').slice(0, 64) || 'anon';
+  const clientId = (params.get('id') || crypto.randomUUID()).replace(/^#+/, '').slice(0, 64) || 'anon';
   if (env.BOT_TOKEN) {
-    const initData = url.searchParams.get('initData');
+    const initData = params.get('initData');
     if (initData) {
       const user = await verifyInitData(initData, env.BOT_TOKEN);
       if (!user) return null;
-      return { id: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32), heroClass: heroClassOf(url) };
+      return { id: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32), heroClass };
     }
     // Browser players outside Telegram, if allowed; they can never pose as a Telegram user.
-    return env.ALLOW_GUESTS === 'true' ? { id: `guest-${clientId}`, name, heroClass: heroClassOf(url) } : null;
+    return env.ALLOW_GUESTS === 'true' ? { id: `guest-${clientId}`, name, heroClass } : null;
   }
   // Development: without a bot token the client is trusted.
-  return { id: clientId, name, heroClass: heroClassOf(url) };
+  return { id: clientId, name, heroClass };
 }
 
 export class Room extends DurableObject<Env> {
@@ -82,7 +85,7 @@ export class Room extends DurableObject<Env> {
   }
 
   override async fetch(request: Request): Promise<Response> {
-    const player = await authenticate(request, this.env);
+    const player = await authenticate(new URL(request.url).searchParams, this.env);
     if (!player) {
       return new Response('unauthorized', { status: 401 });
     }
@@ -162,9 +165,74 @@ export class Room extends DurableObject<Env> {
   }
 }
 
+/** One day's leaderboard of the daily dungeon. */
+export class DailyBoard extends DurableObject<Env> {
+  override async fetch(request: Request): Promise<Response> {
+    const board = new Leaderboard((await this.ctx.storage.get<DailyEntry[]>('board')) ?? []);
+    const url = new URL(request.url);
+    if (request.method === 'POST') {
+      const { player, result } = (await request.json()) as { player: PlayerInfo; result: DailyResult };
+      const rank = board.submit(player.id, player.name, result, Date.now());
+      await this.ctx.storage.put('board', board.entries());
+      return json({ rank, top: board.top(20) });
+    }
+    const id = url.searchParams.get('me');
+    return json({ rank: id ? board.rank(id) : null, top: board.top(20) });
+  }
+}
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...CORS } });
+}
+
+/** Only today's board (UTC, give or take a day for time zones) takes results. */
+function isCurrentDay(date: string, now: number): boolean {
+  const day = Date.parse(`${date}T00:00:00Z`);
+  return Number.isFinite(day) && Math.abs(now - day - 12 * 3600_000) <= 36 * 3600_000;
+}
+
+async function daily(request: Request, env: Env, date: string): Promise<Response> {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  const board = env.DAILY.get(env.DAILY.idFromName(date));
+  if (request.method === 'GET') {
+    const url = new URL(request.url);
+    const me = url.searchParams.get('me');
+    return board.fetch(`https://board/${me ? `?me=${encodeURIComponent(me)}` : ''}`);
+  }
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+  if (!isCurrentDay(date, Date.now())) return json({ error: 'this day is over' }, 400);
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return json({ error: 'bad json' }, 400);
+  }
+  const params = new URLSearchParams();
+  for (const key of ['initData', 'id', 'name', 'hero'] as const) {
+    if (typeof body[key] === 'string') params.set(key, body[key] as string);
+  }
+  const player = await authenticate(params, env);
+  if (!player) return json({ error: 'unauthorized' }, 401);
+  const result = parseResult(body.result);
+  if (!result) return json({ error: 'bad result' }, 400);
+  const response = await board.fetch('https://board/', { method: 'POST', body: JSON.stringify({ player, result }) });
+  const payload = (await response.json()) as Record<string, unknown>;
+  return json({ ...payload, you: player.id });
+}
+
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+    const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
+    if (day) return daily(request, env, day[1]!);
+
     const match = /^\/room\/([A-Za-z0-9_-]{1,64})$/.exec(url.pathname);
     if (!match) {
       return new Response('Pixel Dungeon co-op server', { status: url.pathname === '/' ? 200 : 404 });

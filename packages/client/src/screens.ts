@@ -4,6 +4,7 @@ import {
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
 import { isKnown, itemInfo, itemName, spriteOffset } from './itemtext';
+import type { DailyBoard } from './leaderboard';
 
 /*
  * DOM windows over the game: title screen, menu, help, death. They use the
@@ -62,6 +63,8 @@ export interface TitleOptions {
   onCoop(): void;
   onJoin(): void;
   onDaily(): void;
+  /** Shows today's leaderboard; absent without a server. */
+  onDailyBoard?: () => void;
 }
 
 export function showTitle(options: TitleOptions): void {
@@ -120,6 +123,7 @@ export function showTitle(options: TitleOptions): void {
           : el('p', { className: 'pd-note', textContent: t.coopUnavailable }),
         button(t.daily, options.onDaily),
         el('p', { className: 'pd-note', textContent: t.dailyInfo }),
+        options.onDailyBoard && button(t.dailyBoard, options.onDailyBoard),
       ),
     ),
     false,
@@ -172,10 +176,31 @@ export interface EndOptions {
   onRestart: () => void;
   restartLabel: string;
   onExit: () => void;
+  /** For the daily dungeon: today's leaderboard (loading) and a way to share. */
+  daily?: { score: number; board: Promise<DailyBoard | null>; onShare: () => void };
+}
+
+/** Today's best runs, as a list; `you` is highlighted. */
+function boardView(board: DailyBoard | null): HTMLElement {
+  if (!board) return el('p', { className: 'pd-note', textContent: t.boardOffline });
+  if (board.top.length === 0) return el('p', { className: 'pd-note', textContent: t.noResults });
+  const list = el('ol', { className: 'pd-board' });
+  for (const entry of board.top.slice(0, 10)) {
+    list.append(
+      el(
+        'li',
+        { className: entry.id === board.you ? 'me' : '' },
+        el('span', { className: 'who', textContent: `${entry.name} · ${t.classes[entry.heroClass]}` }),
+        el('span', { className: 'what', textContent: `${entry.won ? '★ ' : ''}${t.depthShort(entry.depth)} · ${entry.score}` }),
+      ),
+    );
+  }
+  return el('div', {}, list, board.rank && board.rank > 10 ? el('p', { className: 'pd-note', textContent: t.yourPlace(board.rank) }) : null);
 }
 
 /** The end of a run: the whole party fell, or it won. */
 export function showRunEnd(options: EndOptions): void {
+  const board = el('div', {}, options.daily && el('p', { className: 'pd-note', textContent: t.loading }));
   show(
     el(
       'div',
@@ -183,10 +208,35 @@ export function showRunEnd(options: EndOptions): void {
       el('div', { className: options.victory ? 'pd-victory' : 'pd-gameover' }),
       el('p', { className: 'pd-heading', textContent: options.title }),
       el('p', { className: 'pd-info', textContent: options.text }),
+      options.daily && el('p', { className: 'pd-heading', textContent: t.dailyEnd(options.daily.score) }),
+      options.daily && board,
+      options.daily && button(t.shareResult, options.daily.onShare),
       button(options.restartLabel, options.onRestart, 'primary'),
       button(t.toMenu, options.onExit),
     ),
   );
+  void options.daily?.board.then((loaded) => {
+    const rank = loaded?.rank;
+    board.replaceChildren(
+      ...(rank ? [el('p', { className: 'pd-info', textContent: t.yourPlace(rank) })] : []),
+      boardView(loaded),
+    );
+  });
+}
+
+/** Today's leaderboard from the title screen. */
+export function showDailyBoard(loading: Promise<DailyBoard | null>, onClose: () => void): void {
+  const body = el('div', {}, el('p', { className: 'pd-note', textContent: t.loading }));
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('p', { className: 'pd-heading', textContent: t.dailyBoard }),
+      body,
+      button(t.close, onClose),
+    ),
+  );
+  void loading.then((board) => body.replaceChildren(boardView(board)));
 }
 
 /* Backpack */

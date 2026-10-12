@@ -144,6 +144,15 @@ const en = {
   equippedItem: (name: string) => `You equip the ${name}.`,
   strShort: 'STR',
   goldShort: 'gold',
+  dailyBoard: "Today's best",
+  dailyEnd: (score: number) => `Your score: ${score}`,
+  yourPlace: (n: number) => `Your place today: ${n}`,
+  noResults: 'Nobody yet: be the first!',
+  loading: 'Loading…',
+  boardOffline: 'The leaderboard is unavailable right now.',
+  shareResult: 'Share the result',
+  shareText: (score: number, depth: number) => `Daily dungeon: ${score} points, depth ${depth}. Can you beat it?`,
+  depthShort: (n: number) => `d${n}`,
 };
 
 type Strings = typeof en;
@@ -292,6 +301,15 @@ const ru: Strings = {
   equippedItem: (name) => `Вы надели: ${name}.`,
   strShort: 'СИЛ',
   goldShort: 'зол.',
+  dailyBoard: 'Рекорды дня',
+  dailyEnd: (score) => `Ваш результат: ${score} очков`,
+  yourPlace: (n) => `Ваше место сегодня: ${n}`,
+  noResults: 'Пока никого — будьте первым!',
+  loading: 'Загрузка…',
+  boardOffline: 'Таблица рекордов сейчас недоступна.',
+  shareResult: 'Поделиться результатом',
+  shareText: (score, depth) => `Подземелье дня: ${score} очков, глубина ${depth}. Сможешь лучше?`,
+  depthShort: (n) => `гл. ${n}`,
 };
 
 function capitalize(text: string): string {

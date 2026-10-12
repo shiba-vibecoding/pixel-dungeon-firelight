@@ -7,11 +7,15 @@ import { audio } from './audio';
 import { BUFF_ICONS, Hud } from './hud';
 import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
-import { hideOverlay, overlayOpen, showBackpack, showHelp, showMenu, showRunEnd, showTitle, toast } from './screens';
+import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
+import {
+  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showHelp, showMenu, showRunEnd, showTitle, toast,
+} from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
 import {
-  backButton, haptic, initData, initTelegram, inTelegram, invitedRoom, onLayoutChange, shareInvite, telegramName,
+  backButton, haptic, initData, initTelegram, inTelegram, invitedRoom, launchedForDaily, onLayoutChange, shareDaily,
+  shareInvite, telegramName,
 } from './telegram';
 import { STEP_MS, TILE, View } from './view';
 
@@ -117,14 +121,41 @@ function enterGame(next: Session, roomId: string | null): void {
   hideOverlay();
 }
 
+/** The current run is the daily dungeon, whose results go to the leaderboard. */
+let dailyRun = false;
+
 function startSolo(mode: 'continue' | 'new' | 'daily'): void {
   if (mode === 'new') forgetSolo(SOLO_SLOT);
   const daily = mode === 'daily';
   const seed = daily ? dailySeed() : randomSeed();
   enterGame(soloSession(daily ? null : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed())), null);
+  dailyRun = daily;
+}
+
+/** Who I am on the leaderboard: Telegram proves it; elsewhere a remembered id. */
+function identity(): Identity {
+  return { initData: initData(), id: playerId(), name: playerName.trim() || telegramName() || 'Hero' };
+}
+
+function dailyBoard(): Promise<DailyBoard | null> {
+  return fetchDaily(SERVER, stored('pd-board-id') ?? undefined);
+}
+
+/** Sends a finished daily run and returns today's board. */
+async function submitRun(world: World, me: Hero): Promise<DailyBoard | null> {
+  const board = await submitDaily(SERVER, identity(), {
+    heroClass: me.heroClass,
+    depth: Object.keys(world.levels).length,
+    level: me.lvl,
+    gold: me.gold,
+    won: world.victory,
+  });
+  if (board?.you) store('pd-board-id', board.you);
+  return board;
 }
 
 function startOnline(roomId: string): void {
+  dailyRun = false;
   enterGame(
     onlineSession({
       server: SERVER,
@@ -170,6 +201,7 @@ function toTitle(): void {
     },
     onJoin: () => startOnline(invited!),
     onDaily: () => startSolo('daily'),
+    onDailyBoard: SERVER ? () => showDailyBoard(dailyBoard(), toTitle) : undefined,
   });
 }
 
@@ -565,6 +597,23 @@ function tick(now: number): void {
       audio.play('levelup');
       haptic('success');
     }
+    // A finished daily run goes to today's leaderboard.
+    const daily =
+      dailyRun && SERVER
+        ? (() => {
+            const depth = Object.keys(world.levels).length;
+            const score = (me.gold + me.lvl * depth * 100) * (victory ? 2 : 1);
+            return {
+              score,
+              board: submitRun(world, me),
+              onShare: () => {
+                void shareDaily(t.shareText(score, depth)).then((result) => {
+                  if (result === 'copied') toast(t.linkCopied);
+                });
+              },
+            };
+          })()
+        : undefined;
     window.setTimeout(() => {
       if (!session?.world?.over) return;
       if (!victory) haptic('error');
@@ -578,6 +627,7 @@ function tick(now: number): void {
           hideOverlay();
         },
         onExit: toTitle,
+        daily,
       });
     }, 1200);
   }
@@ -589,6 +639,9 @@ const invited = invitedRoom();
 if (invited && SERVER && new URLSearchParams(location.search).has('room')) {
   // Reloading a page that was in a room goes straight back in.
   startOnline(invited);
+} else if (launchedForDaily()) {
+  // Opened from a shared daily result: straight into today's dungeon.
+  startSolo('daily');
 } else {
   toTitle();
 }

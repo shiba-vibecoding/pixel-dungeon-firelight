@@ -80,16 +80,32 @@ export function invitedRoom(): string | null {
   return new URLSearchParams(location.search).get('room');
 }
 
+/** True when the app was opened to play the daily dungeon (a shared result's link). */
+export function launchedForDaily(): boolean {
+  return webApp?.initDataUnsafe.start_param === 'daily' || new URLSearchParams(location.search).has('daily');
+}
+
 /** Shares an invitation to a room; resolves to 'copied' when it went to the clipboard instead. */
-export async function shareInvite(room: string, text: string): Promise<'shared' | 'copied' | 'failed'> {
+export function shareInvite(room: string, text: string): Promise<'shared' | 'copied' | 'failed'> {
+  return share(`room_${room}`, { room }, text);
+}
+
+/** Shares a daily dungeon result with a link that opens today's dungeon. */
+export function shareDaily(text: string): Promise<'shared' | 'copied' | 'failed'> {
+  return share('daily', { daily: '' }, text);
+}
+
+async function share(
+  startParam: string, query: Record<string, string>, text: string,
+): Promise<'shared' | 'copied' | 'failed'> {
   if (inTelegram && webApp!.openTelegramLink) {
-    const link = `${APP_LINK}?startapp=room_${encodeURIComponent(room)}`;
+    const link = `${APP_LINK}?startapp=${encodeURIComponent(startParam)}`;
     webApp!.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
     return 'shared';
   }
   const url = new URL(location.href);
   url.search = '';
-  url.searchParams.set('room', room);
+  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   const link = url.toString();
   try {
     if (navigator.share) {
