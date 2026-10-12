@@ -192,7 +192,7 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       if (Number.isInteger(action.to) && adjacent(hero.pos, action.to) && level.map[action.to] === T.LOCKED_DOOR) {
         return keyFor(hero) >= 0 ? null : 'the door is locked';
       }
-      if (!canEnter(level, action.to) || !adjacent(hero.pos, action.to)) return 'cannot move there';
+      if (!heroCanEnter(level, hero, action.to) || !adjacent(hero.pos, action.to)) return 'cannot move there';
       return charAt(world, hero.depth, action.to) ? 'cell is occupied' : null;
     case 'attack': {
       const mob = mobById(world, hero.depth, action.target);
@@ -315,6 +315,7 @@ function advance(world: World, depth: number, effects: Effect[]): void {
     if (hero.paralysed > 0) {
       // Paralysed: the turn passes; whatever the player chose waits.
       spend(ctx, hero, TIME_TO_REST);
+      overChasm(ctx, hero);
       continue;
     }
     if (hero.intent) {
@@ -326,11 +327,13 @@ function advance(world: World, depth: number, effects: Effect[]): void {
       } else {
         perform(ctx, hero, action);
         if (floor.falling) itemsFall(world, depth);
+        overChasm(ctx, hero);
       }
       continue;
     }
     if (companionWaiting(world, hero) && isSafe(world, hero)) {
       spend(ctx, hero, TIME_TO_REST);
+      overChasm(ctx, hero);
       continue;
     }
     return;
@@ -398,6 +401,18 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
       hurt(ctx, hero, damage, 'poison');
     }
   }
+  // Armour of viscosity: blows held back are taken now, a point a turn (DeferedDamage).
+  if ((hero.deferred ?? 0) > 0) {
+    const damage = ticks(hero.deferred!);
+    hero.deferred = Math.max(0, hero.deferred! - time);
+    if (damage > 0 && isAlive(hero)) {
+      ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage });
+      hurt(ctx, hero, damage, 'deferred');
+    }
+  }
+  if (hero.blind) hero.blind = Math.max(0, hero.blind - time);
+  if (hero.levitating) hero.levitating = Math.max(0, hero.levitating - time);
+  if (hero.gasImmune) hero.gasImmune = Math.max(0, hero.gasImmune - time);
   if (hero.burning > 0) {
     if (isWater(ctx.level.map[hero.pos]!)) {
       hero.burning = 0;
@@ -480,7 +495,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       let to = action.to;
       if (hero.dizzy > 0) {
         to = staggerTarget(ctx, hero.pos);
-        if (!canEnter(level, to) || charAt(world, hero.depth, to) || level.map[to] === T.LOCKED_DOOR) to = hero.pos;
+        if (!heroCanEnter(level, hero, to) || charAt(world, hero.depth, to) || level.map[to] === T.LOCKED_DOOR) to = hero.pos;
       }
       const from = hero.pos;
       hero.pos = to;
@@ -488,11 +503,12 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       enterCell(level, hero.pos);
       spend(ctx, hero, 1 / heroSpeed(hero));
       if (hero.pos === from) break;
-      // The step is done, then the trap goes off.
-      if (trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
-      if (level.map[hero.pos] === T.WELL) drinkFromWell(ctx, hero);
-      stepOnPlant(ctx, hero, hero.pos);
-      if (level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos, hero);
+      // The step is done, then the trap goes off; floating, the hero touches nothing (Char.move).
+      const floating = (hero.levitating ?? 0) > 0;
+      if (!floating && trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
+      if (!floating && level.map[hero.pos] === T.WELL) drinkFromWell(ctx, hero);
+      if (!floating) stepOnPlant(ctx, hero, hero.pos);
+      if (!floating && level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos, hero);
       if (level.arenaDoor !== undefined) {
         if (hero.depth === 15) enterLair(ctx, hero);
         else if (hero.depth === 20) enterThroneHall(ctx, hero);
@@ -557,6 +573,14 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
 }
 
 /**
+ * A boss's door shuts only once every living hero is through it: a companion
+ * still upstairs must never find it closed, with no key to open it again.
+ */
+function wholeParty(world: World, depth: number, through: (pos: number) => boolean): boolean {
+  return world.heroes.filter(isAlive).every((hero) => hero.depth === depth && through(hero.pos));
+}
+
+/**
  * PrisonBossLevel.press: Tengu appears when the first hero sets foot in the
  * arena, and the door locks once the whole party on the depth is inside.
  */
@@ -584,7 +608,7 @@ function enterArena(ctx: Ctx, hero: Hero): void {
   }
   const fighting = floor.mobs.some((mob) => mob.kind === 'tengu');
   const door = level.arenaDoor!;
-  if (fighting && level.map[door] !== T.LOCKED_DOOR && heroesOn(world, depth).every((h) => inside(h.pos))) {
+  if (fighting && level.map[door] !== T.LOCKED_DOOR && wholeParty(world, depth, inside)) {
     level.map[door] = T.LOCKED_DOOR;
     ctx.effects.push({ type: 'arena', depth, sealed: true });
   }
@@ -619,7 +643,7 @@ function enterLair(ctx: Ctx, hero: Hero): void {
   }
   const fighting = floor.mobs.some((mob) => mob.kind === 'dm300');
   const door = level.arenaDoor!;
-  if (fighting && level.map[door] !== T.WALL && heroesOn(world, depth).every((h) => outside(h.pos))) {
+  if (fighting && level.map[door] !== T.WALL && wholeParty(world, depth, outside)) {
     level.map[door] = T.WALL;
     ctx.effects.push({ type: 'arena', depth, sealed: true });
   }
@@ -651,7 +675,7 @@ function enterThroneHall(ctx: Ctx, hero: Hero): void {
     ctx.effects.push({ type: 'yell', depth, mob: king.id, kind: 'king', line: 'notice', hero: hero.id });
   }
   const fighting = floor.mobs.some((mob) => mob.kind === 'king');
-  if (fighting && level.map[door] !== T.LOCKED_DOOR && heroesOn(world, depth).every((h) => inHall(h.pos))) {
+  if (fighting && level.map[door] !== T.LOCKED_DOOR && wholeParty(world, depth, inHall)) {
     level.map[door] = T.LOCKED_DOOR;
     ctx.effects.push({ type: 'arena', depth, sealed: true });
   }
@@ -804,6 +828,20 @@ function fall(ctx: Ctx, hero: Hero, into: number): void {
   reviveFallen(world, depth, effects);
 }
 
+/** Level.press on a chasm: a hero no longer floating (or blinked onto it) falls through. */
+function overChasm(ctx: Ctx, hero: Hero): void {
+  if (!isAlive(hero) || hero.depth !== ctx.depth || (hero.levitating ?? 0) > 0) return;
+  if (!hasFlag(ctx.level.map[hero.pos]!, F.PIT) || isBossDepth(hero.depth + 1) || hero.depth + 1 >= DEEPEST_AVAILABLE) return;
+  fall(ctx, hero, hero.pos);
+}
+
+/** Where a hero may step: open ground, doors and visible traps, and chasms too while floating. */
+export function heroCanEnter(level: Level, hero: Hero, pos: number): boolean {
+  if (canEnter(level, pos)) return true;
+  return (hero.levitating ?? 0) > 0 && Number.isInteger(pos) && pos >= 0 && pos < LENGTH && hasFlag(level.map[pos]!, F.PIT) &&
+    pos % WIDTH > 0 && pos % WIDTH < WIDTH - 1 && pos >= WIDTH && pos < LENGTH - WIDTH;
+}
+
 const within = (room: { left: number; top: number; right: number; bottom: number }, pos: number): boolean =>
   cellX(pos) > room.left && cellX(pos) < room.right && cellY(pos) > room.top && cellY(pos) < room.bottom;
 
@@ -851,7 +889,7 @@ function reviveFallen(world: World, depth: number, effects: Effect[]): void {
     Object.assign(fallen, {
       hp: Math.max(1, Math.floor(fallen.ht / 2)), depth, intent: null, regen: 0, ooze: -1,
       poison: 0, burning: 0, paralysed: 0, rooted: 0, slowed: 0, hunger: 0, weakened: 0, crippled: 0, charmed: 0,
-      charmedBy: null,
+      charmedBy: null, deferred: 0, blind: 0,
     });
     place(world, fallen, level, level.entrance);
     effects.push({ type: 'revived', hero: fallen.id });
@@ -869,6 +907,8 @@ export function findPath(
   to: number,
   blocked: ReadonlySet<number> = new Set(),
   known?: readonly boolean[],
+  /** A floating hero drifts over chasms (and traps). */
+  floating = false,
 ): number[] | null {
   if (known && !known[to]) return null;
   if (from === to) return [];
@@ -881,9 +921,11 @@ export function findPath(
       if (next < 0 || next >= LENGTH || previous.has(next) || !adjacent(cell, next)) continue;
       // A locked door may end a path: walking into it unlocks it with a key.
       const lockedGoal = next === to && level.map[next] === T.LOCKED_DOOR;
-      if ((!canEnter(level, next) && !lockedGoal) || (blocked.has(next) && next !== to)) continue;
-      // Walk around visible traps, unless one is where the player wants to go.
-      if (next !== to && hasFlag(level.map[next]!, F.AVOID)) continue;
+      const overPit = floating && hasFlag(level.map[next]!, F.PIT) && canEnter(level, next) === false && next % WIDTH > 0 &&
+        next % WIDTH < WIDTH - 1 && next >= WIDTH && next < LENGTH - WIDTH;
+      if ((!canEnter(level, next) && !lockedGoal && !overPit) || (blocked.has(next) && next !== to)) continue;
+      // Walk around visible traps, unless one is where the player wants to go or the hero floats.
+      if (next !== to && !floating && hasFlag(level.map[next]!, F.AVOID)) continue;
       if (known && !known[next]) continue;
       previous.set(next, cell);
       if (next === to) {

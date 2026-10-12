@@ -332,7 +332,9 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
       send({ type: 'attack', target: mob.id }, now);
       return;
     } else {
-      const path = findPath(level, me.pos, mob.pos, occupiedCells(world, me.depth, mob.pos), exploredCells(world, me.depth));
+      const path = findPath(
+      level, me.pos, mob.pos, occupiedCells(world, me.depth, mob.pos), exploredCells(world, me.depth), (me.levitating ?? 0) > 0,
+    );
       if (!path || path.length < 2) {
         walk.chase = null;
         return;
@@ -529,8 +531,9 @@ function tapCell(cell: number): void {
     return;
   }
   if (!explored[cell]) return;
-  // Chasm.heroJump: a chasm right beside the hero asks whether to jump in.
-  if (hasFlag(level.map[cell]!, F.PIT)) {
+  // Chasm.heroJump: a chasm right beside the hero asks whether to jump in; floating, one drifts over it.
+  const floating = (me.levitating ?? 0) > 0;
+  if (hasFlag(level.map[cell]!, F.PIT) && !floating) {
     if (adjacent(me.pos, cell)) {
       showConfirm(t.chasm, t.jumpQuestion, t.jumpYes, t.jumpNo, () => send({ type: 'jump', to: cell }, performance.now()), hideOverlay);
     }
@@ -546,7 +549,7 @@ function tapCell(cell: number): void {
   }
   // The alchemy pot: what it is for, then walk up to it as usual.
   if (level.map[cell] === T.ALCHEMY) view.say(t.alchemyPot, '#ffff44');
-  walk.queue = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored) ?? [];
+  walk.queue = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating) ?? [];
   if (walk.queue.length === 0) return;
   walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';

@@ -47,9 +47,13 @@ Yendor on depth 26:
 - Hunger and food (rations, pasties, mystery meat), regeneration, experience
   and levels, melee and ranged combat.
 - Items: gold, which buys from the shop; potions (including toxic gas,
-  paralytic gas and liquid flame, which can be thrown) and scrolls, unknown
-  until used, and shared knowledge in a party; all melee weapons and armour
-  with upgrades and strength requirements; darts and the boomerang; wands of
+  paralytic gas, liquid flame and frost, which can be thrown, levitation to
+  float over traps and chasms, and purification) and scrolls (including
+  enchantment, terror and psionic blast), unknown until used, and shared
+  knowledge in a party; all melee weapons and armour with upgrades and
+  strength requirements, and the ten weapon enchantments (blazing, venomous,
+  grim, stunning, vampiric, chilling, shocking, unstable, eldritch, lucky) and
+  nine armour glyphs of the original; darts and the boomerang; wands of
   magic missile, firebolt, lightning, poison, slowness, teleportation, blink,
   disintegration and avalanche, known by their wood until used; rings of
   mending, detection, shadows, power, accuracy, evasion, satiety, haste,
@@ -70,13 +74,14 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: weapon enchantments and
-armour glyphs; the ankh; the wands of amok, reach, flock and regrowth; the
+Not ported yet: cursed items and the scroll of remove curse; the scroll of
+mirror image and the glyph of multiplicity (there are no allies yet); the
+potion of might; the ankh; the wands of amok, reach, flock and regrowth; the
 rotberry and the ring of herbalism; the blacksmith's and the imp's quests and
 the wandmaker's rotberry errand; the remaining special rooms (pool, statue,
-vault); dwarf monks disarming; the
-rare monster variants (albino rats, bandits, fetid rats); and gas clouds (gas
-acts at once on everyone within reach instead).
+vault); dwarf monks disarming; the rare monster variants (albino rats,
+bandits, fetid rats); and gas clouds (gas acts at once on everyone within
+reach instead).
 
 ## How co-op works
 

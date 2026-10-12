@@ -559,6 +559,9 @@ function showItem(options: ItemOptions): void {
       if (item.kind === 'scroll.upgrade' && isKnown(world, item)) {
         actions.push(button(t.upgradeWeapon, () => act({ type: 'use', item: index, target: 'weapon' }), 'primary'));
         actions.push(button(t.upgradeArmor, () => act({ type: 'use', item: index, target: 'armor' }), 'primary'));
+      } else if (item.kind === 'scroll.enchantment' && isKnown(world, item)) {
+        actions.push(button(t.enchantWeapon, () => act({ type: 'use', item: index, target: 'weapon' }), 'primary'));
+        actions.push(button(t.enchantArmor, () => act({ type: 'use', item: index, target: 'armor' }), 'primary'));
       } else {
         actions.push(button(t.read, () => act({ type: 'use', item: index }), 'primary'));
       }

@@ -1,6 +1,6 @@
 import { createMob, type Hero, heroArmor, isAlive, type Mob, rollMob } from './actors';
 import { hurt } from './combat';
-import { charAt, type Char, type Ctx, exploredCells, heroesOn, isPassable, isWater } from './floor';
+import { charAt, type Char, type Ctx, exploredCells, heroesOn, isHero, isPassable, isWater } from './floor';
 import { distance, NEIGHBOURS8 } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
 
@@ -30,8 +30,18 @@ const TOXIC_TURNS = 6;
 const PARALYSIS_TURNS = 5;
 const BURNING_TURNS = 8;
 
-/** What a gas trap or a shattered potion releases. */
-export type Burst = 'toxic' | 'paralytic' | 'fire';
+/** Frost.DURATION; GasesImmunity, as a cleansing cloud gives it. */
+const FROST_TURNS = 5;
+const PURE_TURNS = 5;
+
+/** What a gas trap or a shattered potion releases; purity cleanses the air instead. */
+export type Burst = 'toxic' | 'paralytic' | 'fire' | 'frost' | 'purity';
+
+/** Yog-Dzewa breathes no gas and does not burn, nor does its burning fist (Yog's IMMUNITIES). */
+export function immuneTo(char: Char, harm: 'burning' | 'gas'): boolean {
+  if (isHero(char)) return harm === 'gas' && (char.gasImmune ?? 0) > 0;
+  return char.kind === 'yog' || (harm === 'burning' && char.kind === 'burningFist');
+}
 
 /**
  * A cloud of gas or a burst of flame centred on a cell. The original's gas
@@ -42,9 +52,19 @@ export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS, s
   ctx.effects.push({ type: 'burst', depth: ctx.depth, pos, kind, radius, ...(silent ? { silent } : {}) });
   const { level } = ctx;
   for (const char of around(ctx, pos, radius)) {
+    const gas = kind === 'toxic' || kind === 'paralytic';
+    if (gas && immuneTo(char, 'gas')) continue;
     if (kind === 'toxic') char.poison = Math.max(char.poison ?? 0, TOXIC_TURNS);
     if (kind === 'paralytic') char.paralysed = Math.max(char.paralysed ?? 0, PARALYSIS_TURNS);
-    if (kind === 'fire' && !isWater(level.map[char.pos]!)) char.burning = Math.max(char.burning ?? 0, BURNING_TURNS);
+    if (kind === 'fire' && !isWater(level.map[char.pos]!) && !immuneTo(char, 'burning')) {
+      char.burning = Math.max(char.burning ?? 0, BURNING_TURNS);
+    }
+    // Freezing: frozen stiff, and any fire put out.
+    if (kind === 'frost') {
+      char.paralysed = Math.max(char.paralysed ?? 0, Math.round(FROST_TURNS * ctx.rng.floatRange(1, 1.5)));
+      char.burning = 0;
+    }
+    if (kind === 'purity' && isHero(char)) char.gasImmune = Math.max(char.gasImmune ?? 0, PURE_TURNS);
   }
   if (kind !== 'fire') return;
   // Whatever can burn nearby burns down to embers: grass, doors, barricades, bookshelves.
@@ -131,11 +151,11 @@ export function mobConditions(ctx: Ctx, mob: Mob): boolean {
   }
   if ((mob.burning ?? 0) > 0) {
     mob.burning!--;
-    if (mob.kind === 'elemental' || mob.kind === 'burningFist') {
-      // Fire only feeds a fire elemental (Elemental.add), and cannot hurt the burning fist.
+    if (mob.kind === 'elemental') {
+      // Fire only feeds a fire elemental (Elemental.add).
       mob.burning = 0;
       if (mob.hp < mob.ht) mob.hp++;
-    } else if (isWater(ctx.level.map[mob.pos]!)) {
+    } else if (isWater(ctx.level.map[mob.pos]!) || immuneTo(mob, 'burning')) {
       mob.burning = 0;
     } else {
       const damage = ctx.rng.intRange(1, 3 + Math.trunc(ctx.depth / 4));

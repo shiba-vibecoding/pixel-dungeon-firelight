@@ -3,10 +3,11 @@ import {
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
+import { TERROR_TURNS } from './enchant';
 import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, landItem, leaveCell } from './floor';
 import {
   buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
-  magicMissileDamage, missileStats, wandMaxCharges,
+  magicMissileDamage, missileStats, randomEnchantment, randomGlyph, wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
 import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
@@ -62,6 +63,9 @@ const LIGHT_TURNS = 250;
 
 const MIND_VISION_DURATION = 20;
 const INVISIBILITY_DURATION = 15;
+/** Levitation.DURATION; GasesImmunity lasts 5 turns in the original, but here gas has no lingering cloud to outlast. */
+const LEVITATION_DURATION = 20;
+const GAS_IMMUNITY_DURATION = 15;
 
 function heapAt(world: World, hero: Hero): Heap | undefined {
   return world.floors[hero.depth]?.heaps.find((heap) => heap.pos === hero.pos);
@@ -282,6 +286,9 @@ const BURSTS: Partial<Record<ItemKind, { kind: Burst; radius: number }>> = {
   'potion.toxicGas': { kind: 'toxic', radius: 2 },
   'potion.paralyticGas': { kind: 'paralytic', radius: 2 },
   'potion.liquidFlame': { kind: 'fire', radius: 1 },
+  'potion.frost': { kind: 'frost', radius: 2 },
+  // Shattered, a potion of purity cleanses the air: no gas harms those around for a moment.
+  'potion.purity': { kind: 'purity', radius: 2 },
 };
 
 /** Wand.zapper: a charge is spent, and using a wand tells the party what it is. */
@@ -488,8 +495,17 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     case 'potion.invisibility':
       hero.invisible = INVISIBILITY_DURATION;
       break;
+    case 'potion.levitation':
+      // PotionOfLevitation: floating, over traps and chasms alike.
+      hero.levitating = Math.max(hero.levitating ?? 0, LEVITATION_DURATION);
+      break;
+    case 'potion.purity':
+      // PotionOfPurity: no gas can harm the drinker for a while.
+      hero.gasImmune = Math.max(hero.gasImmune ?? 0, GAS_IMMUNITY_DURATION);
+      break;
     case 'potion.toxicGas':
     case 'potion.paralyticGas':
+    case 'potion.frost':
     case 'potion.liquidFlame': {
       // Drunk, it bursts right where the hero stands.
       const harmful = BURSTS[kind]!;
@@ -561,8 +577,48 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     }
     case 'scroll.upgrade': {
       const upgraded = hero[target];
+      // Weapon.upgrade(false): the clash of magics may drive an enchantment out of a well-upgraded item.
+      if ((upgraded.enchant || upgraded.glyph) && upgraded.level > 0 && ctx.rng.int(upgraded.level) > 0) {
+        delete upgraded.enchant;
+        delete upgraded.glyph;
+        ctx.effects.push({ type: 'disenchanted', hero: hero.id, item: upgraded });
+      }
       upgraded.level++;
       ctx.effects.push({ type: 'upgraded', hero: hero.id, item: upgraded });
+      break;
+    }
+    case 'scroll.enchantment': {
+      // ScrollOfEnchantment: a new enchantment for the weapon, or a new glyph for the armour.
+      const imbued = hero[target];
+      if (target === 'weapon') imbued.enchant = randomEnchantment(ctx.rng, imbued.enchant);
+      else imbued.glyph = randomGlyph(ctx.rng, imbued.glyph);
+      ctx.effects.push({ type: 'imbued', hero: hero.id, item: imbued });
+      break;
+    }
+    case 'scroll.terror': {
+      // Every monster in sight flees from the reader.
+      const fov = heroView(world, hero);
+      const frightened = ctx.floor.mobs.filter((mob) => fov[mob.pos] && mob.state !== 'passive');
+      for (const mob of frightened) {
+        mob.terror = TERROR_TURNS;
+        mob.terrorOf = hero.id;
+        if (mob.state === 'sleeping') mob.state = 'hunting';
+      }
+      ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'terror', count: frightened.length });
+      break;
+    }
+    case 'scroll.psionicBlast': {
+      // Everyone in sight is struck and blinded for a while, the reader too.
+      const fov = heroView(world, hero);
+      const struck = ctx.floor.mobs.filter((mob) => fov[mob.pos] && mob.state !== 'passive');
+      ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'psionic', count: struck.length });
+      for (const mob of struck) {
+        mob.dizzy = Math.max(mob.dizzy ?? 0, ctx.rng.intBetween(3, 6));
+        const damage = ctx.rng.intRange(1, Math.max(1, Math.trunc((mob.ht * 2) / 3)));
+        ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: mob.id, damage });
+        hurt(ctx, mob, damage, hero);
+      }
+      hero.blind = Math.max(hero.blind ?? 0, ctx.rng.intBetween(3, 6));
       break;
     }
     default:

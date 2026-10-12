@@ -48,6 +48,10 @@ export const ITEMS = {
   'potion.toxicGas': { category: 'potion' },
   'potion.paralyticGas': { category: 'potion' },
   'potion.liquidFlame': { category: 'potion' },
+  'potion.frost': { category: 'potion' },
+  // Drunk: floating above traps and chasms for a while; cleansing the air around.
+  'potion.levitation': { category: 'potion' },
+  'potion.purity': { category: 'potion' },
 
   'scroll.identify': { category: 'scroll' },
   'scroll.teleportation': { category: 'scroll' },
@@ -56,6 +60,9 @@ export const ITEMS = {
   'scroll.lullaby': { category: 'scroll' },
   'scroll.upgrade': { category: 'scroll' },
   'scroll.recharging': { category: 'scroll' },
+  'scroll.enchantment': { category: 'scroll' },
+  'scroll.terror': { category: 'scroll' },
+  'scroll.psionicBlast': { category: 'scroll' },
 
   'weapon.knuckles': weapon(1, 16, 1, 0.5),
   'weapon.dagger': weapon(1, 19, 1.2),
@@ -145,6 +152,46 @@ export interface Item {
   depth?: number;
   /** Rings: turns worn so far; after a while one knows what they are. */
   worn?: number;
+  /** Melee weapons: an enchantment that does something more with every blow. */
+  enchant?: Enchantment;
+  /** Armour: a glyph that does something when its wearer is struck. */
+  glyph?: Glyph;
+}
+
+/* Enchantments and glyphs (Weapon.Enchantment, Armor.Glyph) */
+
+export type Enchantment =
+  | 'fire' | 'poison' | 'death' | 'paralysis' | 'leech' | 'slow' | 'shock' | 'instability' | 'horror' | 'luck';
+
+/** How often each enchantment comes up. */
+const ENCHANTMENT_CHANCES: ReadonlyArray<readonly [Enchantment, number]> = [
+  ['fire', 10], ['poison', 10], ['death', 1], ['paralysis', 2], ['leech', 1], ['slow', 2], ['shock', 6], ['instability', 3],
+  ['horror', 2], ['luck', 2],
+];
+
+/** The original's glyph of multiplicity, which conjures mirror images, is not ported. */
+export type Glyph =
+  | 'bounce' | 'affection' | 'antiEntropy' | 'potential' | 'metabolism' | 'stench' | 'viscosity' | 'displacement' | 'entanglement';
+
+const GLYPHS: readonly Glyph[] = [
+  'bounce', 'affection', 'antiEntropy', 'potential', 'metabolism', 'stench', 'viscosity', 'displacement', 'entanglement',
+];
+
+/** Enchantment.random, never the one the weapon already has. */
+export function randomEnchantment(rng: Rng, except?: Enchantment): Enchantment {
+  const chances = ENCHANTMENT_CHANCES.map(([, chance]) => chance);
+  for (;;) {
+    const enchant = ENCHANTMENT_CHANCES[rng.chances(chances)]![0];
+    if (enchant !== except) return enchant;
+  }
+}
+
+/** Glyph.random, never the one the armour already has. */
+export function randomGlyph(rng: Rng, except?: Glyph): Glyph {
+  for (;;) {
+    const glyph = GLYPHS[rng.int(GLYPHS.length)]!;
+    if (glyph !== except) return glyph;
+  }
 }
 
 export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
@@ -168,10 +215,11 @@ export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
 const POTION_PRICES: Partial<Record<ItemKind, number>> = {
   'potion.healing': 30, 'potion.experience': 80, 'potion.mindVision': 35, 'potion.invisibility': 40,
   'potion.strength': 100, 'potion.toxicGas': 40, 'potion.paralyticGas': 40, 'potion.liquidFlame': 40,
+  'potion.frost': 50, 'potion.levitation': 35, 'potion.purity': 50,
 };
 const SCROLL_PRICES: Partial<Record<ItemKind, number>> = {
   'scroll.identify': 30, 'scroll.teleportation': 40, 'scroll.mapping': 25, 'scroll.lullaby': 50,
-  'scroll.upgrade': 50, 'scroll.recharging': 40,
+  'scroll.upgrade': 50, 'scroll.recharging': 40, 'scroll.enchantment': 60, 'scroll.terror': 50, 'scroll.psionicBlast': 80,
 };
 const FOOD_PRICES: Partial<Record<ItemKind, number>> = { 'food.ration': 10, 'food.pasty': 20, 'food.meat': 5 };
 
@@ -182,10 +230,11 @@ export function itemPrice(item: Item, known: boolean): number {
   const levelled = (price: number): number =>
     Math.max(1, item.level > 0 ? price * (item.level + 1) : item.level < 0 ? Math.trunc(price / (1 - item.level)) : price);
   switch (def.category) {
+    // Enchanted, half as much again.
     case 'weapon':
-      return levelled(20 * 2 ** (def.tier! - 1));
+      return levelled(Math.trunc(20 * 2 ** (def.tier! - 1) * (item.enchant ? 1.5 : 1)));
     case 'armor':
-      return levelled(10 * 2 ** (def.tier! - 1));
+      return levelled(Math.trunc(10 * 2 ** (def.tier! - 1) * (item.glyph ? 1.5 : 1)));
     case 'potion':
       return (known ? POTION_PRICES[item.kind] ?? 20 : 20) * item.qty;
     case 'scroll':
@@ -263,7 +312,8 @@ export function weaponStats(item: Item): WeaponStats {
 
 export function armorStats(item: Item): { dr: number; str: number } {
   const tier = itemDef(item.kind).tier!;
-  return { dr: Math.max(tier * (2 + item.level), 0), str: 7 + tier * 2 - item.level };
+  // Armor.DR: a glyph adds a level's worth of protection.
+  return { dr: Math.max(tier * (2 + item.level + (item.glyph ? 1 : 0)), 0), str: 7 + tier * 2 - item.level };
 }
 
 /* Labels: the run's potion colours and scroll runes */
@@ -321,17 +371,18 @@ const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
 ];
 
 const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
-  // The original also has levitation, purity and frost; strength and might
-  // only come as guaranteed finds.
+  // Strength only comes as guaranteed finds; the original's might never at all.
   potion: [
     ['potion.healing', 45], ['potion.experience', 4], ['potion.toxicGas', 15], ['potion.paralyticGas', 10],
-    ['potion.liquidFlame', 15], ['potion.mindVision', 20], ['potion.invisibility', 10],
+    ['potion.liquidFlame', 15], ['potion.levitation', 10], ['potion.mindVision', 20], ['potion.purity', 12],
+    ['potion.invisibility', 10], ['potion.frost', 10],
   ],
-  // Also remove curse, terror, psionic blast and mirror image; upgrade only
-  // comes as guaranteed finds.
+  // The original also has remove curse (there are no curses here) and mirror
+  // image; upgrade only comes as guaranteed finds.
   scroll: [
     ['scroll.identify', 30], ['scroll.teleportation', 10], ['scroll.recharging', 10], ['scroll.mapping', 15],
-    ['scroll.challenge', 12], ['scroll.lullaby', 8],
+    ['scroll.challenge', 12], ['scroll.terror', 8], ['scroll.lullaby', 8], ['scroll.psionicBlast', 4],
+    ['scroll.enchantment', 1],
   ],
   weapon: [
     ['weapon.dagger', 1], ['weapon.knuckles', 1], ['weapon.quarterstaff', 1], ['weapon.spear', 1], ['weapon.mace', 1],
@@ -413,7 +464,11 @@ export class ItemGenerator {
       return createItem(kind, 1, level);
     }
     const level = category === 'weapon' || category === 'armor' ? rollLevel(this.rng) : 0;
-    return createItem(kind, 1, level);
+    const item = createItem(kind, 1, level);
+    // MeleeWeapon.random and Armor.random: now and then enchanted, the better the rarer.
+    if (itemDef(kind).category === 'weapon' && this.rng.int(10 + level) === 0) item.enchant = randomEnchantment(this.rng);
+    if (category === 'armor' && this.rng.int(10) === 0) item.glyph = randomGlyph(this.rng);
+    return item;
   }
 }
 

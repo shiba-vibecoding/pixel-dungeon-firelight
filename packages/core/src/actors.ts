@@ -103,6 +103,14 @@ export interface Hero {
   sungrassTime?: number;
   /** Earthroot: bark that takes the blows while the hero stays on that spot. */
   earthroot?: { pos: number; level: number } | null;
+  /** Armour of viscosity: damage still to be taken, a point a turn. */
+  deferred?: number;
+  /** Turns left of being blinded (a scroll of psionic blast): the hero sees nothing beyond arm's reach. */
+  blind?: number;
+  /** Turns left of floating above traps and chasms (a potion of levitation). */
+  levitating?: number;
+  /** Turns left of breathing no gas (a potion of purity). */
+  gasImmune?: number;
   /** Hunger.level: 0 when fed, hungry from HUNGRY, starving at STARVING; and time towards its next step. */
   hunger: number;
   hungerTime: number;
@@ -229,9 +237,9 @@ export function heroRangedSkill(hero: Hero, item: Item, pointBlank: boolean): nu
 /** Heavy armour slows its wearer down (Hero.speed). */
 export function heroSpeed(hero: Hero): number {
   const encumbrance = armorStats(hero.armor).str - heroStr(hero);
-  // Char.speed: crippled, half as fast; a freerunner who is not starving, much faster.
+  // Char.speed: crippled, half as fast; a freerunner who is not starving nor weighed down, much faster.
   const crippled = hero.crippled > 0 ? 0.5 : 1;
-  const running = hero.subclass === 'freerunner' && !isStarving(hero) ? 1.6 : 1;
+  const running = hero.subclass === 'freerunner' && !isStarving(hero) && encumbrance <= 0 ? 1.6 : 1;
   return (encumbrance > 0 ? 1.3 ** -encumbrance : 1) * crippled * running;
 }
 
@@ -388,6 +396,12 @@ export interface Mob {
   loot?: Item[];
   /** Turns left of staggering about. */
   dizzy?: number;
+  /** Turns left of fleeing in terror from a hero (an eldritch weapon, a scroll of terror). */
+  terror?: number;
+  terrorOf?: string;
+  /** Turns left of being charmed by a hero it then will not attack (armour of affection). */
+  charmed?: number;
+  charmedBy?: string;
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {

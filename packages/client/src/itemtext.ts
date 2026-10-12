@@ -21,7 +21,10 @@ export function itemName(world: World, item: Item): string {
     if (category === 'ring') return t.unknownRing(t.gems[label]!);
     return category === 'potion' ? t.unknownPotion(t.colors[label]!) : t.unknownScroll(SCROLL_RUNES[label]!);
   }
-  const name = t.items[item.kind];
+  let name = t.items[item.kind];
+  // Weapon.name and Armor.name: the enchantment or glyph is part of the name.
+  if (item.enchant) name = t.enchantName(name, item.enchant, item.kind);
+  if (item.glyph) name = t.glyphName(name, item.glyph);
   if (category === 'weapon' || category === 'armor' || category === 'wand' || category === 'ring') {
     return item.level === 0 ? name : `${name} ${item.level > 0 ? '+' : ''}${item.level}`;
   }
@@ -32,11 +35,17 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
   const category = itemDef(item.kind).category;
   if (category === 'weapon') {
     const stats = weaponStats(item);
-    return [t.weaponInfo(stats.min, stats.max, stats.str), ...(stats.str > hero.str ? [t.tooHeavy] : [])];
+    return [
+      t.weaponInfo(stats.min, stats.max, stats.str), ...(item.enchant ? [t.enchantInfo[item.enchant]] : []),
+      ...(stats.str > hero.str ? [t.tooHeavy] : []),
+    ];
   }
   if (category === 'armor') {
     const stats = armorStats(item);
-    return [t.armorInfo(stats.dr, stats.str), ...(stats.str > hero.str ? [t.tooHeavy] : [])];
+    return [
+      t.armorInfo(stats.dr, stats.str), ...(item.glyph ? [t.glyphInfo[item.glyph]] : []),
+      ...(stats.str > hero.str ? [t.tooHeavy] : []),
+    ];
   }
   if (category === 'missile') {
     const stats = missileStats(item);

@@ -94,6 +94,15 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
     spend(mob, TICK);
     return;
   }
+  if ((mob.charmed ?? 0) > 0 && --mob.charmed! <= 0) delete mob.charmedBy;
+  // Terror: it runs from whoever frightened it, and does nothing else.
+  if ((mob.terror ?? 0) > 0) {
+    mob.terror!--;
+    const from = heroesOn(ctx.world, ctx.depth).find((hero) => hero.id === mob.terrorOf);
+    if (from && getFurther(ctx, mob, from.pos) === 'moved') spend(mob, 1 / MOBS[mob.kind].speed);
+    else spend(mob, TICK);
+    return;
+  }
   // Goo mends itself in the murky water of its lair, and the rotting fist faster.
   if (mob.kind === 'goo' && isWater(ctx.level.map[mob.pos]!) && mob.hp < mob.ht) mob.hp++;
   if (mob.kind === 'rottingFist' && isWater(ctx.level.map[mob.pos]!)) mob.hp = Math.min(mob.ht, mob.hp + 4);
@@ -135,6 +144,11 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
 
     case 'hunting':
       mob.enemySeen = enemyInFov;
+      // Charmed, it cannot bring itself to strike the one who charmed it.
+      if (enemyInFov && (mob.charmed ?? 0) > 0 && mob.charmedBy === enemy.id) {
+        spend(mob, TICK);
+        return;
+      }
       if (enemyInFov && canAttack(ctx, mob, enemy)) {
         doAttack(ctx, mob, enemy);
         return;
@@ -216,7 +230,7 @@ function ventGas(ctx: Ctx, mob: Mob): void {
   ctx.effects.push({ type: 'burst', depth: ctx.depth, pos: mob.pos, kind: 'toxic', radius: 1, silent: true });
   const strength = 5 + ctx.depth * 5;
   for (const hero of heroesOn(ctx.world, ctx.depth)) {
-    if (distance(hero.pos, mob.pos) > 1) continue;
+    if (distance(hero.pos, mob.pos) > 1 || (hero.gasImmune ?? 0) > 0) continue;
     let damage = Math.trunc((hero.ht + strength) / 40);
     if (ctx.rng.int(40) < (hero.ht + strength) % 40) damage++;
     ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: hero.id, damage });

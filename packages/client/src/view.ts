@@ -1,6 +1,6 @@
 import {
-  cellX, cellY, type Effect, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind, WIDTH,
-  type World,
+  cellX, cellY, type Effect, type Enchantment, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind,
+  WIDTH, type World,
 } from '@pd/core';
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
@@ -17,7 +17,9 @@ import { haptic } from './telegram';
 export const STEP_MS = 110;
 
 /** Potions whose shattering does something; the rest splash harmlessly. */
-const HARMFUL: ReadonlySet<ItemKind> = new Set(['potion.toxicGas', 'potion.paralyticGas', 'potion.liquidFlame']);
+const HARMFUL: ReadonlySet<ItemKind> = new Set([
+  'potion.toxicGas', 'potion.paralyticGas', 'potion.liquidFlame', 'potion.frost', 'potion.purity',
+]);
 
 /** Colours of magic bolts in flight. */
 const BOLT_COLORS: Record<string, string> = {
@@ -26,7 +28,15 @@ const BOLT_COLORS: Record<string, string> = {
 };
 
 /** Tints of the clouds: green poison, yellow paralysis, orange flames. */
-const BURST_COLORS = { toxic: '90, 200, 60', paralytic: '230, 220, 70', fire: '255, 120, 30' } as const;
+const BURST_COLORS = {
+  toxic: '90, 200, 60', paralytic: '230, 220, 70', fire: '255, 120, 30', frost: '170, 220, 255', purity: '240, 250, 255',
+} as const;
+
+/** ItemSprite.Glowing: the colour each enchantment shines with. */
+const ENCHANT_COLORS: Record<Enchantment, string> = {
+  fire: '255, 68, 0', poison: '68, 0, 170', death: '40, 40, 40', paralysis: '255, 255, 68', leech: '170, 0, 40', slow: '0, 68, 255',
+  shock: '255, 255, 255', instability: '255, 255, 255', horror: '90, 90, 90', luck: '0, 255, 0',
+};
 export const TILE = 16;
 
 export interface Puppet {
@@ -375,6 +385,8 @@ export class View {
           const potion = effect.kind.startsWith('potion.');
           audio.play(potion ? 'drink' : 'read');
           if (effect.identified) this.say(t.itWas(t.items[effect.kind]), COLORS.highlight, now);
+          if (effect.hero === myId && effect.kind === 'potion.levitation') this.say(t.floating, COLORS.default, now);
+          if (effect.hero === myId && effect.kind === 'potion.purity') this.say(t.noSmell, COLORS.default, now);
           break;
         }
         case 'identified':
@@ -400,8 +412,38 @@ export class View {
           if (effect.hero === myId) this.say(t.mapped, COLORS.highlight, now);
           break;
         case 'scroll':
-          if (effect.kind !== 'recharging') this.say(effect.kind === 'challenge' ? t.challenge : t.lullaby, COLORS.warning, now);
-          else if (effect.hero === myId) this.say(effect.count > 0 ? t.recharged : t.nothingToRecharge, COLORS.default, now);
+          if (effect.kind === 'recharging') {
+            if (effect.hero === myId) this.say(effect.count > 0 ? t.recharged : t.nothingToRecharge, COLORS.default, now);
+          } else if (effect.kind === 'psionic') {
+            audio.play('blast');
+            if (effect.hero === myId) this.say(t.psionic, COLORS.warning, now);
+          } else {
+            this.say(effect.kind === 'challenge' ? t.challenge : effect.kind === 'terror' ? t.terror : t.lullaby, COLORS.warning, now);
+          }
+          break;
+        case 'enchanted':
+          // The weapon's glow flares up on whoever it struck.
+          if (effect.depth === this.depth) {
+            this.flashes.push({ cell: effect.pos, start: now, color: ENCHANT_COLORS[effect.enchant], duration: 500 });
+          }
+          break;
+        case 'glyph':
+          if (effect.depth === this.depth) this.float(effect.hero, t.glyphShort[effect.glyph], COLORS.highlight, now);
+          break;
+        case 'pushed':
+          break;
+        case 'imbued':
+          if (effect.hero === myId) this.say(t.imbued(itemName(world, effect.item)), COLORS.highlight, now);
+          audio.play('evoke');
+          break;
+        case 'disenchanted':
+          if (effect.hero === myId) this.say(t.disenchanted(itemName(world, effect.item)), COLORS.warning, now);
+          break;
+        case 'fell':
+          if (effect.hero !== myId && effect.depth === this.depth) {
+            this.puppets.delete(effect.hero);
+            this.say(t.fellCompanion(this.name(world, effect.hero)), COLORS.warning, now);
+          }
           break;
         case 'shattered':
           audio.play('shatter');

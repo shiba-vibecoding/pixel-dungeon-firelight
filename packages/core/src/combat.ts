@@ -5,6 +5,7 @@ import {
 import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, isWater, leaveCell } from './floor';
 import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold, wandMaxCharges } from './items';
 import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
+import { armorProc, TERROR_TURNS, weaponProc } from './enchant';
 import { earthrootAbsorbs } from './plants';
 import { questKill } from './quest';
 import { T } from './level/terrain';
@@ -106,6 +107,9 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
       attacker.target = defender.pos;
     }
   }
+  // Hero.attackProc and defenseProc: an enchanted weapon's blow, an inscribed armour's answer.
+  if (isHero(attacker) && !isHero(defender) && !thrown) weaponProc(ctx, attacker, defender, damage);
+  if (isHero(defender) && !isHero(attacker)) damage = armorProc(ctx, attacker, defender, damage);
   if (!isHero(defender) && defender.kind === 'swarm') split(ctx, defender, damage);
   // Yog.defenseProc: struck, Yog-Dzewa spawns a larva next to it.
   if (!isHero(defender) && defender.kind === 'yog') spawnLarva(ctx, defender);
@@ -208,7 +212,7 @@ function split(ctx: Ctx, swarm: Mob, damage: number): void {
 }
 
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
@@ -223,6 +227,8 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
     victim.alerted = true;
     // In a party, a monster turns on whoever hurt it.
     if (by && isHero(by)) victim.enemy = by.id;
+    // Terror.recover: struck again, a frightened monster pulls itself together.
+    if ((victim.terror ?? 0) > 0 && victim.terror! < TERROR_TURNS) victim.terror = 0;
   }
   // A ring of elements: now and then, elemental harm is much reduced (Char.damage with a resistance).
   if (isHero(victim)) {
@@ -275,7 +281,8 @@ function mobDied(ctx: Ctx, mob: Mob): void {
   const stats = mobStats(mob);
   const heroes = heroesOn(ctx.world, ctx.depth);
   for (const hero of heroes) {
-    if (hero.lvl <= stats.maxLvl) earnExp(ctx, hero, stats.exp);
+    // Mob.die: only a monster worth something teaches anything (and feeds a warlock).
+    if (stats.exp > 0 && hero.lvl <= stats.maxLvl) earnExp(ctx, hero, stats.exp);
   }
 
   questKill(ctx, mob);

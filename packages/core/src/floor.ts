@@ -1,6 +1,6 @@
 import { type Hero, isAlive, type Mob, type MobKind, type SubClass } from './actors';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
-import type { Heap, HeapKind, Item, ItemKind } from './items';
+import type { Enchantment, Glyph, Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
 import type { PlantInfo, PlantKind } from './plants';
@@ -66,6 +66,14 @@ export type Effect =
   | { type: 'exp'; hero: string; amount: number }
   | { type: 'levelUp'; hero: string; lvl: number }
   | { type: 'revived'; hero: string }
+  /** An enchanted weapon showed its power on a blow; an inscribed armour on one taken. */
+  | { type: 'enchanted'; depth: number; pos: number; enchant: Enchantment }
+  | { type: 'glyph'; depth: number; hero: string; glyph: Glyph }
+  /** A monster thrown back a step (armour of bounce). */
+  | { type: 'pushed'; depth: number; mob: string; from: number; to: number }
+  /** A scroll of enchantment gave an item its power; a scroll of upgrade drove one out. */
+  | { type: 'imbued'; hero: string; item: Item }
+  | { type: 'disenchanted'; hero: string; item: Item }
   /** A hero jumped into a chasm on `depth` and landed on the depth below. */
   | { type: 'fell'; hero: string; depth: number; pos: number }
   | { type: 'searched'; hero: string }
@@ -107,7 +115,7 @@ export type Effect =
   | { type: 'upgraded'; hero: string; item: Item }
   | { type: 'teleported'; hero: string }
   | { type: 'mapped'; hero: string }
-  | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby' | 'recharging'; count: number }
+  | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby' | 'recharging' | 'terror' | 'psionic'; count: number }
   | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
   | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
   /** A magic bolt: the mage's wand, or a shaman's lightning. */
@@ -182,7 +190,9 @@ export function charAt(world: World, depth: number, cell: number): Char | undefi
 
 /** Field of view of one hero. */
 export function heroView(world: World, hero: Hero): boolean[] {
-  const distance = hero.light > 0 ? Math.max(viewDistance(hero.depth), LIGHT_DISTANCE) : viewDistance(hero.depth);
+  // Blinded, a hero sees no further than arm's reach.
+  const distance = (hero.blind ?? 0) > 0 ? 1
+    : hero.light > 0 ? Math.max(viewDistance(hero.depth), LIGHT_DISTANCE) : viewDistance(hero.depth);
   return castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map), distance);
 }
 
