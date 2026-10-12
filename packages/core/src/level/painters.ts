@@ -1,6 +1,6 @@
 import type { ItemKind } from '../items';
-import { Feeling, HeapType, isBossDepth, type ItemSpec, type LevelBuilder } from './builder';
-import { cell, NEIGHBOURS8, type Point } from './geometry';
+import { Feeling, HeapType, isBossDepth, type ItemSpawn, type ItemSpec, type LevelBuilder } from './builder';
+import { cell, NEIGHBOURS8, type Point, WIDTH } from './geometry';
 import { type Door, DoorType, type Room, RoomType } from './room';
 import { T } from './terrain';
 
@@ -778,7 +778,37 @@ function paintBlacksmith(level: LevelBuilder, room: Room): void {
   level.blacksmith = pos;
 }
 
+/**
+ * RatKingPainter: a hidden treasury of chests along the walls (one of them a
+ * mimic), and the Rat King among them.
+ */
+function paintRatKing(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY_SP, 1);
+  const entrance = entranceOf(room);
+  entrance.set(DoorType.HIDDEN);
+  const door = cell(entrance.x, entrance.y);
+  const chests: ItemSpawn[] = [];
+  const addChest = (pos: number): void => {
+    if (pos === door - 1 || pos === door + 1 || pos === door - WIDTH || pos === door + WIDTH) return;
+    level.dropItem(pos, HeapType.CHEST, { roll: 'kingsPrize' });
+    chests.push(level.items.at(-1)!);
+  };
+  for (let x = room.left + 1; x < room.right; x++) {
+    addChest(cell(x, room.top + 1));
+    addChest(cell(x, room.bottom - 1));
+  }
+  for (let y = room.top + 2; y < room.bottom - 1; y++) {
+    addChest(cell(room.left + 1, y));
+    addChest(cell(room.right - 1, y));
+  }
+  if (chests.length > 0) rng.element(chests)!.heap = HeapType.MIMIC;
+  level.ratKing = room.random(rng);
+}
+
 export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painter>([
+  [RoomType.RAT_KING, paintRatKing],
   [RoomType.BLACKSMITH, paintBlacksmith],
   [RoomType.STATUE, paintStatue],
   [RoomType.POOL, paintPool],

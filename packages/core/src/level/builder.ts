@@ -43,6 +43,8 @@ export type ItemSpec =
   | { roll: 'liquidFlame' }
   /** A few bombs, an armoury's prize now and then. */
   | { roll: 'bombs' }
+  /** One of the Rat King's chests: mostly a few coins, now and then worn gear. */
+  | { roll: 'kingsPrize' }
   /** One particular item, such as the wares of a shop. */
   | { roll: 'kind'; kind: ItemKind };
 
@@ -74,6 +76,8 @@ export class LevelBuilder {
   blacksmithWanted = false;
   blacksmithPlaced = false;
   blacksmith = -1;
+  /** The sewers' boss level: where the Rat King sits in his hidden treasury. */
+  ratKing = -1;
   /** A statue room's level: where the animated statue stands. */
   statue = -1;
   /** A pool room's piranhas. */

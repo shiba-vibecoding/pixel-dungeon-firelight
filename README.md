@@ -49,7 +49,8 @@ Yendor on depth 26:
   depth 15, leaking gas and repairing itself; the King of Dwarves on depth 20,
   raising his undead court; Yog-Dzewa on depth 25 with its fists and larvae.
   Picking up the Amulet of Yendor below wins the run.
-- The sad ghost's quest (the dried rose) on depths 2–4, the old wandmaker's
+- The sad ghost's quest on depths 2–4 (its dried rose, revenge on the fetid
+  rat, or freedom from the curse that binds it), the old wandmaker's
   (corpse dust or a rotberry seed, for a choice of two wands) on depths 7–9,
   the troll blacksmith's on depths 12–14 (dark gold mined with his pickaxe, or a
   bat's blood on it, for reforging two items into one), and the ambitious
@@ -103,10 +104,11 @@ Clouds of toxic and paralytic gas (from traps, potions, DM-300, rotberries and
 armour of stench) spread through open cells, never through walls or closed
 doors, thin out a little every turn, and act on whoever breathes them.
 
-Not ported yet: bags (seed
-pouch, scroll holder, wand holster, keyring); the dew vial; the honeypot and
-its bees; wraiths rising from cursed remains; the ghost's other errand (the
-fetid rat); the Rat King.
+The Rat King keeps a hidden treasury of chests (one of them a mimic) beside
+Goo's lair.
+
+Not ported yet: bags (seed pouch, scroll holder, wand holster, keyring); the
+dew vial; the honeypot and its bees; wraiths rising from cursed remains.
 
 ## How co-op works
 

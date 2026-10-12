@@ -4,7 +4,7 @@ import type { Enchantment, Glyph, Heap, HeapKind, Item, ItemKind } from './items
 import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
 import type { PlantInfo, PlantKind } from './plants';
-import type { GhostLine } from './quest';
+import type { GhostErrand, GhostLine } from './quest';
 import type { Burst, TrapKind } from './traps';
 import type { WandmakerLine } from './wandmaker';
 import type { ImpLine } from './imp';
@@ -164,7 +164,11 @@ export type Effect =
   /** Tengu's arena: sealed when the fight starts, opened when it ends. */
   | { type: 'arena'; depth: number; sealed: boolean }
   | { type: 'unlocked'; depth: number; pos: number; hero: string }
-  | { type: 'ghost'; hero: string; line: GhostLine }
+  | { type: 'ghost'; hero: string; line: GhostLine; errand: GhostErrand }
+  /** The curse binding the sad ghost took shape and turned to fight. */
+  | { type: 'cursed'; depth: number; mob: string; pos: number }
+  /** A word with the Rat King. */
+  | { type: 'ratKing'; hero: string; line: 'notSleeping' | 'busy' }
   | { type: 'well'; hero: string; water: WellWater }
   /** Something dropped into a well of transmutation came out as something else. */
   | { type: 'transmuted'; hero: string; from: Item; to: Item }

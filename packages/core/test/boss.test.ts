@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   act, type Action, addHero, adjacent, createWorld, type Effect, F, findPath, floorAt, hasFlag, heroById, isAlive,
-  levelAt, LENGTH, NEIGHBOURS8, RoomType, T, WIDTH, type World,
+  levelAt, LENGTH, NEIGHBOURS8, RoomType, T, trapAt, WIDTH, type World,
 } from '../src/index';
 import { checkInvariants, pacify } from './helpers';
 
@@ -33,8 +33,11 @@ function atTheLair(seed: number): World {
   const hero = heroById(world, 'p')!;
   const level = levelAt(world, 5);
   Object.assign(hero, { depth: 5, pos: level.entrance, lvl: 14, ht: 120, hp: 120, attackSkill: 25, defenseSkill: 20 });
-  // Hidden doors are no part of this test: open them all.
-  for (let i = 0; i < LENGTH; i++) if (level.map[i] === T.SECRET_DOOR) level.map[i] = T.DOOR;
+  // Hidden doors and traps are no part of this test: open and disarm them all.
+  for (let i = 0; i < LENGTH; i++) {
+    if (level.map[i] === T.SECRET_DOOR) level.map[i] = T.DOOR;
+    if (trapAt(level.map[i]!)) level.map[i] = T.INACTIVE_TRAP;
+  }
   return world;
 }
 
@@ -51,7 +54,9 @@ describe("Goo's lair", () => {
       expect(level.map[level.entrance]).toBe(T.ENTRANCE);
 
       const mobs = floorAt(world, 5).mobs;
-      expect(mobs.map((m) => m.kind)).toEqual(['goo']);
+      // Goo, and the Rat King in his hidden room next door when there is room for one.
+      expect(mobs[0]!.kind).toBe('goo');
+      expect(mobs.slice(1).map((m) => m.kind)).toEqual(level.rooms.some((r) => r.type === RoomType.RAT_KING) ? ['ratKing'] : []);
       const goo = mobs[0]!;
       const x = goo.pos % WIDTH;
       const y = Math.trunc(goo.pos / WIDTH);

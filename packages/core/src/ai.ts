@@ -80,7 +80,7 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
   }
   // The shopkeeper minds the shop; the sad ghost drifts about the level at
   // half speed, never after anyone.
-  if (mob.state === 'passive' && (mob.kind === 'shopkeeper' || mob.kind === 'wandmaker' || mob.kind === 'imp' || mob.kind === 'blacksmith')) {
+  if (mob.state === 'passive' && (mob.kind === 'shopkeeper' || mob.kind === 'wandmaker' || mob.kind === 'imp' || mob.kind === 'blacksmith' || mob.kind === 'ratKing')) {
     spend(mob, TICK);
     return;
   }
@@ -131,6 +131,8 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
     else spend(mob, TICK);
     return;
   }
+  // CursePersonification.act: the curse mends itself, a point a turn.
+  if (mob.kind === 'curse' && mob.hp < mob.ht) mob.hp++;
   // Goo mends itself in the murky water of its lair, and the rotting fist faster.
   if (mob.kind === 'goo' && isWater(ctx.level.map[mob.pos]!) && mob.hp < mob.ht) mob.hp++;
   if (mob.kind === 'rottingFist' && isWater(ctx.level.map[mob.pos]!)) mob.hp = Math.min(mob.ht, mob.hp + 4);
@@ -749,7 +751,9 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
     // Goo sleeps in its lair; Tengu and DM-300 only appear when someone enters their arena.
     if (level.depth !== 5) return [];
     const arena = level.rooms.find((room) => room.type === RoomType.BOSS_EXIT)!;
-    return [createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0)];
+    const goo = createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0);
+    // The Rat King, in his hidden treasury next door.
+    return level.ratKing === undefined ? [goo] : [goo, createMob(nextMobId(world), 'ratKing', level.ratKing, 'passive', 0)];
   }
   const mobs: Mob[] = [];
   if (level.shopkeeper !== undefined) mobs.push(createMob(nextMobId(world), 'shopkeeper', level.shopkeeper, 'passive', 0));

@@ -165,6 +165,8 @@ export const ITEMS = {
   'key.golden': { category: 'key', sprite: 10 },
   /** The sad ghost's dried rose. */
   'quest.rose': { category: 'quest', sprite: 100 },
+  /** The fetid rat's, for the sad ghost. */
+  'quest.skull': { category: 'quest', sprite: 103 },
   /** Dark gold, mined from the veins of the caves for the troll blacksmith. */
   'quest.ore': { category: 'quest', sprite: 102 },
   /** Left by the monks or golems the ambitious imp wants gone. */
@@ -288,6 +290,8 @@ const FOOD_PRICES: Partial<Record<ItemKind, number>> = {
 /** Item.price; unknown potions and scrolls fetch a plain price. 0 for what cannot be sold. */
 export function itemPrice(item: Item, known: boolean): number {
   const def = itemDef(item.kind);
+  // RatSkull.price: a hunting trophy, of a sort.
+  if (item.kind === 'quest.skull') return 100;
   // Item.considerState: better items are worth more, worse ones less.
   const levelled = (price: number): number =>
     Math.max(1, item.level > 0 ? price * (item.level + 1) : item.level < 0 ? Math.trunc(price / (1 - item.level)) : price);
@@ -610,13 +614,32 @@ function randomDropCell(rng: Rng, level: Level): number {
 
 const HEAP_KINDS: Readonly<Partial<Record<HeapType, HeapKind>>> = {
   [HeapType.CHEST]: 'chest',
-  [HeapType.MIMIC]: 'chest',
+  [HeapType.MIMIC]: 'mimic',
   [HeapType.TOMB]: 'tomb',
   [HeapType.LOCKED_CHEST]: 'lockedChest',
   [HeapType.CRYSTAL_CHEST]: 'crystalChest',
   [HeapType.SKELETON]: 'skeleton',
   [HeapType.FOR_SALE]: 'forSale',
 };
+
+/** RatKingPainter.addChest: mostly a few coins; now and then a weapon or armour, a little worn. */
+function kingsPrize(generator: ItemGenerator, rng: Rng): Item {
+  switch (rng.int(10)) {
+    case 0: {
+      const prize = generator.of('weapon');
+      if (itemDef(prize.kind).category === 'missile') prize.qty = 1;
+      else prize.level -= rng.int(3);
+      return prize;
+    }
+    case 1: {
+      const prize = generator.of('armor');
+      prize.level -= rng.int(3);
+      return prize;
+    }
+    default:
+      return createItem('gold', rng.intRange(1, 5));
+  }
+}
 
 /** Rolls what a painter asked for. */
 function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: number): Item {
@@ -633,6 +656,8 @@ function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: num
       return { ...createItem('key.golden'), depth };
     case 'liquidFlame':
       return createItem('potion.liquidFlame');
+    case 'kingsPrize':
+      return kingsPrize(generator, rng);
     case 'bombs':
       // Bomb.random: one to three.
       return createItem('bomb', rng.intRange(1, 3));

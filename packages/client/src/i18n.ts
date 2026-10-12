@@ -51,6 +51,7 @@ const en = {
     rottingFist: 'rotting fist', burningFist: 'burning fist', larva: "god's larva", mimic: 'mimic',
     statue: 'animated statue', piranha: 'giant piranha', imp: 'ambitious imp', sheep: 'sheep', blacksmith: 'troll blacksmith', mirror: 'mirror image',
     albino: 'albino rat', bandit: 'crazy bandit', shielded: 'shielded brute', senior: 'senior monk', acidic: 'acidic scorpio',
+    fetidRat: 'fetid rat', curse: 'curse personification', ratKing: 'rat king',
   } as Record<MobKind, string>,
   isMimic: 'This is a mimic!',
   yogNotice: 'Hope is an illusion...',
@@ -239,6 +240,7 @@ const en = {
     'key.golden': 'golden key',
     ankh: 'Ankh',
     'quest.rose': 'dried rose',
+    'quest.skull': 'giant rat skull',
     'quest.dust': 'corpse dust',
     'quest.token': 'dwarf token',
     'quest.ore': 'dark gold ore',
@@ -325,6 +327,7 @@ const en = {
     'wand.flock': 'Summons a flock of magic sheep: a living wall that fades away after a while.',
     'wand.regrowth': 'Grass springs up along the bolt, and grows tall where it lands.',
     'quest.rose': 'The rose has dried long ago, but it has kept all its petals somehow.',
+    'quest.skull': 'It could be a nice hunting trophy, but it smells too bad to place it on a wall.',
     'quest.dust': "The ball of corpse dust doesn't differ outwardly from a regular dust ball. However, you know somehow that it's better to get rid of it as soon as possible.",
     'quest.ore': 'Dark gold ore, mined from the veins of the caves. The troll blacksmith wants it.',
     'quest.token': 'Many dwarves and some of their larger creations carry these small pieces of metal of unknown purpose. Maybe they are jewelry, or maybe some kind of ID. The ambitious imp wants them.',
@@ -368,6 +371,26 @@ const en = {
     reward:
       'Yes! Yes!!! This is it! Please give it to me! And you can take one of these items, maybe they will be useful to you in your journey...',
     farewell: 'Farewell, adventurer!',
+  },
+  ghostRat: {
+    intro:
+      'Hello adventurer... Once I was like you - strong and confident... And now I\'m dead... But I can\'t leave this place... Not until I have my revenge... Slay the fetid rat that has taken my life...',
+    remind: 'Please... Help me... Slay the abomination...',
+    reward:
+      'Yes! The ugly creature is slain and I can finally rest... Please take one of these items, maybe they will be useful to you in your journey...',
+  },
+  ghostCurse: {
+    intro:
+      'Hello adventurer... Once I was like you - strong and confident... And now I\'m dead... But I can\'t leave this place, as I am bound by a horrid curse... Please... Help me... Destroy the curse...',
+    reward: (cls: string) =>
+      `Thank you, ${cls}! The curse is broken and I can finally rest... Please take one of these items, maybe they will be useful to you in your journey...`,
+    yes: 'Yes, I will do it for you',
+    no: 'No, I can\'t help you',
+  },
+  cursed: 'The curse takes shape!',
+  ratKing: {
+    notSleeping: 'I\'m not sleeping!',
+    busy: 'What is it? I have no time for this nonsense. My kingdom won\'t rule itself!',
   },
   takeReward: (name: string) => `Take: ${name}`,
   wandmaker: {
@@ -703,6 +726,7 @@ const ru: Strings = {
     statue: 'ожившая статуя', piranha: 'гигантская пиранья', imp: 'амбициозный бес', sheep: 'овца', blacksmith: 'тролль-кузнец', mirror: 'зеркальный образ',
     albino: 'крыса-альбинос', bandit: 'безумный бандит', shielded: 'гнолл-громила со щитом', senior: 'старший монах',
     acidic: 'кислотный скорпион',
+    fetidRat: 'зловонная крыса', curse: 'олицетворение проклятия', ratKing: 'крысиный король',
   },
   isMimic: 'Это мимик!',
   yogNotice: 'Надежда — это иллюзия...',
@@ -888,6 +912,7 @@ const ru: Strings = {
     'key.golden': 'золотой ключ',
     ankh: 'Анкх',
     'quest.rose': 'сухая роза',
+    'quest.skull': 'череп гигантской крысы',
     'quest.dust': 'трупная пыль',
     'quest.token': 'жетон гнома',
     'quest.ore': 'тёмное золото',
@@ -974,6 +999,7 @@ const ru: Strings = {
     'wand.flock': 'Призывает стадо волшебных овец — живую стену, которая со временем исчезает.',
     'wand.regrowth': 'Вдоль заряда прорастает трава, а там, куда он попадёт, она вырастает высокой.',
     'quest.rose': 'Эта роза иссохла много лет тому назад, но, не смотря на это, сохранила каждый лепесток.',
+    'quest.skull': 'Неплохой охотничий трофей, но пахнет слишком скверно, чтобы вешать его на стену.',
     'quest.dust': 'С виду этот комок трупной пыли ничем не отличается от обычной пыли. Но почему-то вы чувствуете, что от него лучше избавиться как можно скорее.',
     'quest.ore': 'Тёмное золото, добытое из жил в пещерах. Его ждёт тролль-кузнец.',
     'quest.token': 'Многие гномы и некоторые их творения покрупнее носят эти кусочки металла неизвестного назначения. Может, это украшения, а может, что-то вроде удостоверений. Они нужны амбициозному бесу.',
@@ -1017,6 +1043,24 @@ const ru: Strings = {
     remind: 'Прошу... Помоги... Найди розу...',
     reward: 'Да! Да!!! То что нужно! Прошу, отдай её мне! И можешь взять любой из этих предметов, они могут тебе пригодится...',
     farewell: 'Прощай, авантюрист!',
+  },
+  ghostRat: {
+    intro:
+      'Здравствуй, путешественник... Когда-то я был таким же, как ты, - сильным, уверенным... А теперь я мёртв... Но я не могу покинуть это место... Пока не отомщу... Убей зловонную крысу, что отняла мою жизнь...',
+    remind: 'Прошу... Помоги... Убей это чудовище...',
+    reward: 'Да! Мерзкая тварь мертва, и я наконец обрету покой... Прошу, возьми один из этих предметов, они могут тебе пригодиться...',
+  },
+  ghostCurse: {
+    intro:
+      'Здравствуй, путешественник... Когда-то я был таким же, как ты, - сильным, уверенным... А теперь я мёртв... Но я не могу покинуть это место: меня держит страшное проклятие... Прошу... Помоги... Уничтожь проклятие...',
+    reward: (cls) => `Спасибо тебе, ${cls}! Проклятие снято, и я наконец обрету покой... Прошу, возьми один из этих предметов, они могут тебе пригодиться...`,
+    yes: 'Да, я сделаю это',
+    no: 'Нет, я не могу помочь',
+  },
+  cursed: 'Проклятие обретает облик!',
+  ratKing: {
+    notSleeping: 'Я не сплю!',
+    busy: 'Ну что ещё? Мне некогда заниматься всякой ерундой. Моё королевство само собой не управится!',
   },
   takeReward: (name) => `Взять: ${name}`,
   wandmaker: {

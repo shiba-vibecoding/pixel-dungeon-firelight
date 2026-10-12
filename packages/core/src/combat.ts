@@ -11,7 +11,8 @@ import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
 import { armorProc, TERROR_TURNS, weaponProc } from './enchant';
 import { earthrootAbsorbs } from './plants';
 import { impQuestKill } from './imp';
-import { questKill } from './quest';
+import { curseBroken, questKill } from './quest';
+import { seedGas } from './gas';
 import { T } from './level/terrain';
 import { isBossDepth } from './level/builder';
 
@@ -114,6 +115,8 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
         dropItem(ctx.floor, defender.pos, createItem('gold', lost));
       }
     }
+    // CursePersonification.attackProc: each blow throws its victim back a step, if there is room.
+    if (attacker.kind === 'curse') shove(ctx, attacker, defender);
     // Undead.attackProc: now and then a blow stuns.
     if (attacker.kind === 'undead' && ctx.rng.int(5) === 0) defender.paralysed = Math.max(defender.paralysed ?? 0, 1);
     // Spinner.attackProc: half its bites are venomous, and then it backs off.
@@ -132,6 +135,8 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     if (!isAlive(defender) || ctx.effects.slice(mark).some((e) => e.type === 'resurrected')) return true;
   }
   if (!isHero(defender) && defender.kind === 'swarm') split(ctx, defender, damage);
+  // FetidRat.defenseProc: struck, it lets out a puff of paralytic gas.
+  if (!isHero(defender) && defender.kind === 'fetidRat') seedGas(ctx, defender.pos, 'paralytic', 20);
   // Acidic.defenseProc: striking it splashes acid back on the striker.
   if (!isHero(defender) && defender.kind === 'acidic' && isHero(attacker) && damage > 0) {
     const acid = ctx.rng.intRange(0, damage);
@@ -199,6 +204,19 @@ function masteredBlow(ctx: Ctx, hero: Hero, mob: Mob, damage: number, thrown: bo
     default:
       return damage;
   }
+}
+
+/** CursePersonification.attackProc: the victim is pushed one step straight away from the curse. */
+function shove(ctx: Ctx, curse: Mob, victim: Char): void {
+  const offset = victim.pos - curse.pos;
+  if (!NEIGHBOURS8.includes(offset)) return;
+  const to = victim.pos + offset;
+  if (!isPassable(ctx.level, to) || charAt(ctx.world, ctx.depth, to)) return;
+  const from = victim.pos;
+  victim.pos = to;
+  leaveCell(ctx.world, ctx.level, ctx.depth, from);
+  enterCell(ctx.level, to);
+  ctx.effects.push({ type: 'pushed', depth: ctx.depth, mob: victim.id, from, to });
 }
 
 /** Cripple.DURATION. */
@@ -311,6 +329,11 @@ function mobDied(ctx: Ctx, mob: Mob): void {
   ctx.floor.mobs.splice(ctx.floor.mobs.indexOf(mob), 1);
   leaveCell(ctx.world, ctx.level, ctx.depth, mob.pos);
   ctx.effects.push({ type: 'died', depth: ctx.depth, who: mob.id, pos: mob.pos });
+  // The curse, broken, is the ghost again: nothing to learn from it, nothing left behind.
+  if (mob.kind === 'curse') {
+    curseBroken(ctx, mob);
+    return;
+  }
 
   // Everyone fighting on the depth learns from the kill, not just the killer.
   const stats = mobStats(mob);
@@ -325,6 +348,8 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 
   // A thief's stolen goods fall where it dies, and a mimic's treasure.
   if (mob.item) dropItem(ctx.floor, mob.pos, mob.item);
+  // FetidRat.die: its skull, for the sad ghost.
+  if (mob.kind === 'fetidRat') dropItem(ctx.floor, mob.pos, createItem('quest.skull'));
   for (const item of mob.loot ?? []) dropItem(ctx.floor, mob.pos, item);
 
   // Mob.dropLoot, unless the party has outgrown the monster.

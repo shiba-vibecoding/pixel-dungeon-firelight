@@ -71,7 +71,14 @@ export function buildSewerBossLevel(level: LevelBuilder): boolean {
   for (const r of rooms) {
     if (r.type === RoomType.NULL && r.connected.size > 0) r.type = RoomType.TUNNEL;
   }
-  // The rat king's room beside the arena joins once he is ported.
+  // SewerBossLevel.build: the Rat King's hidden room, beside the arena but not through its top wall.
+  const candidates = roomExit.neighbours.filter((r) => !roomExit.connected.has(r) &&
+    (roomExit.left === r.right || roomExit.right === r.left || roomExit.bottom === r.top));
+  if (candidates.length > 0) {
+    const kingsRoom = rng.element(candidates)!;
+    kingsRoom.connect(roomExit);
+    kingsRoom.type = RoomType.RAT_KING;
+  }
 
   paint(level, SEWER_BOSS_STYLE);
   paintWater(level, SEWER_BOSS_STYLE);

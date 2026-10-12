@@ -290,7 +290,8 @@ export type MobKind =
   | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead'
   | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva' | 'mimic'
   | 'statue' | 'piranha' | 'imp' | 'sheep' | 'blacksmith' | 'mirror'
-  | 'albino' | 'bandit' | 'shielded' | 'senior' | 'acidic';
+  | 'albino' | 'bandit' | 'shielded' | 'senior' | 'acidic'
+  | 'fetidRat' | 'curse' | 'ratKing';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -360,6 +361,11 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   mirror: { name: 'mirror image', ht: 1, attack: 0, defense: 0, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   blacksmith: { name: 'troll blacksmith', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   imp: { name: 'ambitious imp', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
+  // The sad ghost's errands: the rat that killed it, and the curse that binds it (its numbers grow with the depth).
+  fetidRat: { name: 'fetid rat', ht: 15, attack: 12, defense: 5, damage: [2, 6], dr: 2, exp: 3, maxLvl: 5, speed: 1 },
+  curse: { name: 'curse personification', ht: 16, attack: 12, defense: 12, damage: [3, 5], dr: 1, exp: 0, maxLvl: 5, speed: 0.5, flying: true },
+  /** Asleep (or so he says) in his hidden treasury beside Goo's lair. */
+  ratKing: { name: 'rat king', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 2 },
   piranha: { name: 'giant piranha', ht: 15, attack: 22, defense: 12, damage: [1, 6], dr: 1, exp: 0, maxLvl: 30, speed: 2 },
 };
 
@@ -374,6 +380,7 @@ export function mobStats(mob: Mob): MobStats {
       damage: [weapon.min, weapon.max], dr: depth, attackDelay: weapon.delay,
     };
   }
+  if (mob.kind === 'curse') return { ...MOBS.curse, ht: 10 + depth * 3, attack: 10 + depth, defense: 10 + depth };
   if (mob.kind === 'piranha') {
     return { ...MOBS.piranha, ht: 10 + depth * 5, attack: 20 + depth * 2, defense: 10 + depth * 2, damage: [depth, 4 + depth * 2], dr: depth };
   }
@@ -411,6 +418,8 @@ export interface Mob {
   time: number;
   /** Goo only: pumped up for a big attack. */
   pumped?: boolean;
+  /** The Rat King: woken by someone (though he says he was not asleep). */
+  awake?: boolean;
   /** Turns left of poison, paralysis and burning from traps and potions. */
   poison?: number;
   paralysed?: number;

@@ -30,7 +30,8 @@ describe('items on the levels', () => {
         }
         expect(new Set(heaps.map((h) => h.pos)).size).toBe(heaps.length);
       }
-      expect(floorAt(world, 5).heaps).toEqual([]);
+      // The lair holds only the Rat King's chests, if anything.
+      expect(floorAt(world, 5).heaps.every((h) => h.kind === 'chest' || h.kind === 'mimic')).toBe(true);
       // Strength and upgrades are guaranteed over the sewers.
       expect(world.run.strengthFound).toBeGreaterThanOrEqual(1);
       expect(world.run.strengthFound).toBeLessThanOrEqual(2);

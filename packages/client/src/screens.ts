@@ -275,6 +275,8 @@ export interface QuestOptions {
   /** Rewards on offer, one of which the hero may take. */
   offers?: readonly Item[];
   onChoose?(index: number): void;
+  /** Answers to give instead of just closing (WndQuest's buttons), each closing the window. */
+  answers?: ReadonlyArray<{ label: string; onAnswer(): void }>;
   onClose(): void;
 }
 
@@ -305,7 +307,13 @@ export function showQuest(options: QuestOptions): void {
       el('p', { className: 'pd-heading', textContent: capitalize(t.mobs[options.who]) }),
       el('p', { className: 'pd-info', textContent: options.text }),
       ...offers.map(offer),
-      button(t.close, options.onClose),
+      ...(options.answers ?? []).map((answer, i) =>
+        button(answer.label, () => {
+          answer.onAnswer();
+          options.onClose();
+        }, i === 0 ? 'primary' : undefined),
+      ),
+      ...(options.answers ? [] : [button(t.close, options.onClose)]),
     ),
   );
 }

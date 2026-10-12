@@ -12,7 +12,7 @@ import { inventoryProblem, isInventoryAction, type InventoryAction, performInven
 import { createItem, createItems, itemDef, ItemGenerator, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
 import { staggerTarget, stepOnPlant, sungrassHeals } from './plants';
 import { discoverable } from './level/flags';
-import { type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
+import { faceCurse, faceCurseProblem, type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
 import { evolveGas } from './gas';
 import { scorchPack } from './cooking';
@@ -58,6 +58,8 @@ export type Action =
   | { type: 'reforge'; first: ItemRef; second: ItemRef }
   /** The old wandmaker's reward: a battle wand or a useful one. */
   | { type: 'wandReward'; choice: 'battle' | 'utility' }
+  /** Agree to free the sad ghost of its curse, and face it. */
+  | { type: 'faceCurse' }
   /** Lloyd's beacon: set it where the hero stands, or return to where it was set. */
   | { type: 'beacon'; item: number; mode: 'set' | 'return' }
   | InventoryAction;
@@ -235,6 +237,8 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       return hero.pos === level.exit ? null : 'not on the stairs';
     case 'beacon':
       return beaconProblem(world, hero, action.item, action.mode);
+    case 'faceCurse':
+      return faceCurseProblem(world, hero);
     case 'jump':
       if (hero.rooted > 0) return 'you are rooted';
       if ((hero.levitating ?? 0) > 0) return 'you are floating';
@@ -575,6 +579,11 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         else if (mob.kind === 'imp') talkToImp(ctx, hero);
         else if (mob.kind === 'blacksmith') talkToSmith(ctx, hero);
         else if (mob.kind === 'sheep') ctx.effects.push({ type: 'baa', depth: hero.depth, mob: mob.id });
+        else if (mob.kind === 'ratKing') {
+          // RatKing.interact: woken, he says he was not sleeping; awake, he has no time for this.
+          ctx.effects.push({ type: 'ratKing', hero: hero.id, line: mob.awake ? 'busy' : 'notSleeping' });
+          mob.awake = true;
+        }
         else if (mob.kind === 'mirror') {
           // MirrorImage.interact: the hero and the image swap places.
           const from = hero.pos;
@@ -607,6 +616,10 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
 
     case 'impReward':
       ringFromImp(ctx, hero);
+      break;
+
+    case 'faceCurse':
+      faceCurse(ctx, hero);
       break;
 
     case 'reforge':

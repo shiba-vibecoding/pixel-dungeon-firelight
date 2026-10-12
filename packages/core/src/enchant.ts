@@ -20,10 +20,10 @@ const FROST_TURNS = 5;
 const BURNING_TURNS = 8;
 
 /** IMMUNITIES and RESISTANCES: who shrugs off a grim blow, and who takes only some of it. */
-const DEATH_IMMUNE: ReadonlySet<MobKind> = new Set(['yog', 'skeleton']);
+const DEATH_IMMUNE: ReadonlySet<MobKind> = new Set(['yog', 'skeleton', 'curse']);
 const DEATH_RESISTANT: ReadonlySet<MobKind> = new Set(['goo', 'tengu', 'dm300', 'king', 'statue', 'eye', 'warlock']);
 /** Those who know no fear (Terror among their IMMUNITIES), and those no magic drives amok. */
-const FEARLESS: ReadonlySet<MobKind> = new Set(['yog', 'rottingFist', 'burningFist', 'golem', 'monk', 'brute', 'eye']);
+const FEARLESS: ReadonlySet<MobKind> = new Set(['yog', 'rottingFist', 'burningFist', 'golem', 'monk', 'brute', 'eye', 'curse']);
 const UNSHAKEABLE: ReadonlySet<MobKind> = new Set(['yog', 'golem', 'monk']);
 export const fearless = (mob: Mob): boolean => FEARLESS.has(baseKind(mob.kind));
 export const unshakeable = (mob: Mob): boolean => UNSHAKEABLE.has(baseKind(mob.kind));

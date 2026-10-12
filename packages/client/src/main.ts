@@ -454,7 +454,8 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
 
 function handleMyEffects(effects: readonly Effect[], myId: string): void {
   for (const effect of effects) {
-    if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line);
+    if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line, effect.errand);
+    if (effect.type === 'ratKing' && effect.hero === myId) talkWithRatKing(effect.line);
     if (effect.type === 'wandmaker' && effect.hero === myId) talkWithWandmaker(effect.line);
     if (effect.type === 'imp' && effect.hero === myId) talkWithImp(effect.line);
     if (effect.type === 'smith' && effect.hero === myId) talkWithSmith(effect.line);
@@ -473,22 +474,40 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
   }
 }
 
-function talkWithGhost(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
+function talkWithGhost(line: 'intro' | 'remind' | 'reward' | 'farewell', errand: 'rose' | 'rat' | 'curse'): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!world || !me) return;
   audio.play('ghost');
   walk.reset();
   const quest = world.quest;
+  // Each errand has its own words; the curse is only taken on if the hero says yes.
+  const text =
+    line === 'farewell' ? t.ghost.farewell
+    : errand === 'rat' ? t.ghostRat[line]
+    : errand === 'curse' ? (line === 'reward' ? t.ghostCurse.reward(t.classes[me.heroClass]) : t.ghostCurse.intro)
+    : t.ghost[line];
   showQuest({
     world,
     hero: me,
     who: 'ghost',
-    text: t.ghost[line],
+    text,
     offers: line === 'reward' && quest ? [quest.weapon, quest.armor] : [],
     onChoose: (index) => send({ type: 'reward', choice: index === 0 ? 'weapon' : 'armor' }, performance.now()),
+    ...(errand === 'curse' && line === 'intro'
+      ? { answers: [{ label: t.ghostCurse.yes, onAnswer: () => send({ type: 'faceCurse' }, performance.now()) }, { label: t.ghostCurse.no, onAnswer: () => undefined }] }
+      : {}),
     onClose: hideOverlay,
   });
+}
+
+/** RatKing.interact: a few words, and back to his kingdom. */
+function talkWithRatKing(line: 'notSleeping' | 'busy'): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  walk.reset();
+  showQuest({ world, hero: me, who: 'ratKing', text: t.ratKing[line], onClose: hideOverlay });
 }
 
 function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {

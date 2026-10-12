@@ -701,6 +701,10 @@ export class View {
             this.flashes.push({ cell: effect.pos, start: now, duration: 400 });
           }
           break;
+        case 'cursed':
+          audio.play('ghost');
+          if (effect.depth === this.depth) this.say(t.cursed, COLORS.negative, now);
+          break;
         case 'beacon':
           audio.play(effect.mode === 'set' ? 'beacon' : 'teleport');
           if (effect.hero === myId && effect.mode === 'set') this.say(t.beaconDone, COLORS.default, now);

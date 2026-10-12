@@ -150,6 +150,9 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
 
 /** Hurt a monster's turn by the conditions traps leave behind; true if it loses the turn. */
 export function mobConditions(ctx: Ctx, mob: Mob): boolean {
+  // IMMUNITIES: the fetid rat breathes its own paralytic cloud unharmed, and nothing holds the curse.
+  if (mob.kind === 'fetidRat' || mob.kind === 'curse') mob.paralysed = 0;
+  if (mob.kind === 'curse') mob.rooted = 0;
   if ((mob.slowed ?? 0) > 0) mob.slowed!--;
   if ((mob.crippled ?? 0) > 0) mob.crippled!--;
   if ((mob.rooted ?? 0) > 0) mob.rooted!--;
