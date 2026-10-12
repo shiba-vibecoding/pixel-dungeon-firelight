@@ -125,6 +125,10 @@ export type Effect =
   | { type: 'zapped'; depth: number; from: number; to: number; bolt?: Bolt }
   /** Rocks falling on these cells (wand of avalanche). */
   | { type: 'avalanche'; depth: number; cells: number[] }
+  /** Magic sheep appear on these cells (wand of flock); one fades away; one is spoken to. */
+  | { type: 'flock'; depth: number; cells: number[] }
+  | { type: 'faded'; depth: number; mob: string; pos: number }
+  | { type: 'baa'; depth: number; mob: string }
   /** Something thrown by a monster (Tengu's shuriken), drawn with an item sprite. */
   | { type: 'missile'; depth: number; from: number; to: number; sprite: number }
   /** Tengu vanishes in a puff of smoke and lands elsewhere. */

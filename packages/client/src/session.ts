@@ -30,7 +30,7 @@ export interface Session {
   close(): void;
 }
 
-const SAVE_VERSION = 25;
+const SAVE_VERSION = 26;
 
 interface SoloSave {
   version: number;

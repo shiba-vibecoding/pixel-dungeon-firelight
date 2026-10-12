@@ -25,6 +25,7 @@ const HARMFUL: ReadonlySet<ItemKind> = new Set([
 const BOLT_COLORS: Record<string, string> = {
   magic: '120, 180, 255', lightning: '255, 255, 200', fire: '255, 130, 40', poison: '120, 220, 60', slow: '230, 220, 120',
   teleport: '170, 230, 255', blink: '255, 255, 255', beam: '200, 90, 255', rocks: '170, 160, 140', shadow: '90, 40, 120',
+  amok: '255, 60, 150', reach: '230, 230, 230', flock: '255, 255, 255', regrowth: '120, 255, 120',
 };
 
 /** Tints of the clouds: green poison, yellow paralysis, orange flames. */
@@ -496,6 +497,19 @@ export class View {
           if (effect.depth !== this.depth) break;
           for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '150, 140, 120', duration: 900 });
           audio.play('rocks');
+          break;
+        case 'flock':
+          if (effect.depth !== this.depth) break;
+          for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '255, 255, 255', duration: 500 });
+          audio.play('puff');
+          break;
+        case 'faded':
+          if (effect.depth !== this.depth) break;
+          this.puppets.delete(effect.mob);
+          this.flashes.push({ cell: effect.pos, start: now, color: '255, 255, 255', duration: 500 });
+          break;
+        case 'baa':
+          if (effect.depth === this.depth) this.float(effect.mob, t.baa[Math.floor(Math.random() * t.baa.length)]!, COLORS.default, now);
           break;
         case 'missile':
           if (effect.depth === this.depth) this.shoot(effect.from, effect.to, effect.sprite, now);

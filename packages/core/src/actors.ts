@@ -281,7 +281,7 @@ export type MobKind =
   | 'spinner' | 'dm300'
   | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead'
   | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva' | 'mimic'
-  | 'statue' | 'piranha' | 'imp';
+  | 'statue' | 'piranha' | 'imp' | 'sheep';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -341,6 +341,7 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   // Guardians of special rooms, as strong as their depth (see mobStats): a statue that comes alive, armed;
   // piranhas that never leave their pool.
   statue: { name: 'animated statue', ht: 20, attack: 10, defense: 5, damage: [1, 4], dr: 1, exp: 0, maxLvl: 30, speed: 1 },
+  sheep: { name: 'sheep', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   imp: { name: 'ambitious imp', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   piranha: { name: 'giant piranha', ht: 15, attack: 22, defense: 12, damage: [1, 6], dr: 1, exp: 0, maxLvl: 30, speed: 2 },
 };
@@ -420,6 +421,10 @@ export interface Mob {
   /** Turns left of being charmed by a hero it then will not attack (armour of affection). */
   charmed?: number;
   charmedBy?: string;
+  /** Turns left of running amok (a wand of amok): it attacks whoever is nearest, friend or foe. */
+  amok?: number;
+  /** A magic sheep: turns left before it fades away. */
+  lifespan?: number;
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {

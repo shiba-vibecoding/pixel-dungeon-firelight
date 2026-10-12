@@ -536,6 +536,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         if (mob.kind === 'shopkeeper') ctx.effects.push({ type: 'shop', hero: hero.id });
         else if (mob.kind === 'wandmaker') talkToWandmaker(ctx, hero);
         else if (mob.kind === 'imp') talkToImp(ctx, hero);
+        else if (mob.kind === 'sheep') ctx.effects.push({ type: 'baa', depth: hero.depth, mob: mob.id });
         else talkToGhost(ctx, hero);
         break;
       }

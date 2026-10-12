@@ -96,6 +96,10 @@ export const ITEMS = {
   'wand.blink': { category: 'wand' },
   'wand.disintegration': { category: 'wand' },
   'wand.avalanche': { category: 'wand' },
+  'wand.amok': { category: 'wand' },
+  'wand.reach': { category: 'wand' },
+  'wand.flock': { category: 'wand' },
+  'wand.regrowth': { category: 'wand' },
   // Rings, two of which can be worn at once; they go by their gem until worn a while.
   'ring.mending': { category: 'ring' },
   'ring.detection': { category: 'ring' },
@@ -408,10 +412,10 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
     ['ring.mending', 1], ['ring.detection', 1], ['ring.shadows', 1], ['ring.power', 1], ['ring.accuracy', 1],
     ['ring.evasion', 1], ['ring.satiety', 1], ['ring.haste', 1], ['ring.elements', 1],
   ],
-  // The original also has amok, reach, flock and regrowth.
   wand: [
-    ['wand.teleportation', 10], ['wand.slowness', 10], ['wand.firebolt', 15], ['wand.poison', 10], ['wand.blink', 11],
-    ['wand.lightning', 15], ['wand.disintegration', 5], ['wand.avalanche', 5],
+    ['wand.teleportation', 10], ['wand.slowness', 10], ['wand.firebolt', 15], ['wand.regrowth', 6], ['wand.poison', 10],
+    ['wand.blink', 11], ['wand.lightning', 15], ['wand.amok', 6], ['wand.reach', 5], ['wand.flock', 5], ['wand.disintegration', 5],
+    ['wand.avalanche', 5],
   ],
 };
 

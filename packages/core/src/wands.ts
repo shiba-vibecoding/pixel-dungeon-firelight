@@ -1,7 +1,8 @@
-import { type Hero, isAlive, type Mob, MOBS, ringBonus } from './actors';
+import { createMob, type Hero, isAlive, type Mob, MOBS, ringBonus } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
 import { hurt } from './combat';
-import { charAt, type Ctx, enterCell, isHero, isWater, leaveCell } from './floor';
+import { charAt, type Ctx, enterCell, isHero, isPassable, isWater, leaveCell } from './floor';
+import { collect } from './inventory';
 import { type Item, magicMissileDamage } from './items';
 import { distance, LENGTH, NEIGHBOURS8 } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
@@ -14,7 +15,9 @@ import { burst } from './traps';
  */
 
 /** How a bolt looks in flight. */
-export type Bolt = 'magic' | 'lightning' | 'fire' | 'poison' | 'slow' | 'teleport' | 'blink' | 'beam' | 'rocks' | 'shadow';
+export type Bolt =
+  | 'magic' | 'lightning' | 'fire' | 'poison' | 'slow' | 'teleport' | 'blink' | 'beam' | 'rocks' | 'shadow' | 'amok' | 'reach'
+  | 'flock' | 'regrowth';
 
 /** The monster at a cell, if any; heroes are never the target of a hero's wand. */
 function mobAt(ctx: Ctx, cell: number): Mob | undefined {
@@ -194,6 +197,104 @@ export function zapWand(ctx: Ctx, hero: Hero, wand: Item, target: number): void 
         if (isAlive(victim) && rng.int(power + 2 + d) < power + 1) {
           victim.paralysed = Math.max(victim.paralysed ?? 0, rng.intRange(2, 6));
         }
+      }
+      return;
+    }
+
+    case 'wand.amok': {
+      // The target runs amok, falling upon whoever is nearest.
+      const end = ballistica(ctx, hero.pos, target).at(-1)!;
+      fx(end, 'amok');
+      const victim = mobAt(ctx, end);
+      if (victim && victim.state !== 'passive') {
+        victim.amok = Math.max(victim.amok ?? 0, 3 + power);
+        if (victim.state === 'sleeping') victim.state = 'hunting';
+      }
+      return;
+    }
+
+    case 'wand.reach': {
+      // Reaches along the bolt: grabs what lies there, or swaps places with whoever stands in the way.
+      const trace = ballistica(ctx, hero.pos, target);
+      const reach = Math.min(trace.length, power + 4);
+      fx(trace[reach - 1]!, 'reach');
+      for (let i = 1; i < reach; i++) {
+        const cell = trace[i]!;
+        const char = charAt(world, depth, cell);
+        if (char) {
+          if (!isHero(char) && char.state === 'passive') return;
+          const from = hero.pos;
+          hero.pos = cell;
+          char.pos = from;
+          enterCell(level, cell);
+          enterCell(level, from);
+          ctx.effects.push({ type: 'teleported', hero: hero.id });
+          if (!isHero(char)) ctx.effects.push({ type: 'jumped', depth, mob: char.id, from: cell, to: from });
+          return;
+        }
+        const heap = ctx.floor.heaps.find((h) => h.pos === cell);
+        if (!heap) continue;
+        if (heap.kind === 'chest' || heap.kind === 'tomb' || heap.kind === 'skeleton') {
+          ctx.effects.push({ type: 'opened', depth, pos: cell, heap: heap.kind });
+          heap.kind = 'heap';
+        } else if (heap.kind === 'heap') {
+          // Into the pack, all of it that fits.
+          heap.items = heap.items.filter((item) => {
+            if (!collect(hero, item)) return true;
+            ctx.effects.push({ type: 'pickedUp', hero: hero.id, item });
+            return false;
+          });
+          if (heap.items.length === 0) ctx.floor.heaps.splice(ctx.floor.heaps.indexOf(heap), 1);
+        }
+      }
+      return;
+    }
+
+    case 'wand.flock': {
+      // A flock of magic sheep around where the bolt lands: a living wall, for a while.
+      const trace = ballistica(ctx, hero.pos, target);
+      let cell = trace.at(-1)!;
+      if (charAt(world, depth, cell) && trace.length > 2) cell = trace[trace.length - 2]!;
+      fx(cell, 'flock');
+      const n = Math.trunc((power + 5) / 2);
+      const free = (c: number): boolean => isPassable(level, c) && !charAt(world, depth, c);
+      const dist = new Int32Array(LENGTH).fill(-1);
+      dist[cell] = 0;
+      const queue = [cell];
+      for (let head = 0; head < queue.length; head++) {
+        const c = queue[head]!;
+        for (const nb of NEIGHBOURS8) {
+          const next = c + nb;
+          if (next < 0 || next >= LENGTH || dist[next]! >= 0 || distance(c, next) !== 1 || !free(next)) continue;
+          dist[next] = dist[c]! + 1;
+          queue.push(next);
+        }
+      }
+      const spots = queue.filter(free).slice(0, n);
+      for (const spot of spots) {
+        const sheep = createMob(`#${++world.nextId}`, 'sheep', spot, 'passive', ctx.floor.now + 1);
+        sheep.lifespan = power + 4;
+        ctx.floor.mobs.push(sheep);
+        enterCell(level, spot);
+      }
+      ctx.effects.push({ type: 'flock', depth, cells: spots });
+      return;
+    }
+
+    case 'wand.regrowth': {
+      // Grass springs up along the bolt, and grows tall where it lands.
+      const trace = ballistica(ctx, hero.pos, target);
+      const end = trace.at(-1)!;
+      fx(end, 'regrowth');
+      const bare = (t: number): boolean => t === T.EMPTY || t === T.EMBERS || t === T.EMPTY_DECO;
+      for (const cell of trace.slice(1, -1)) if (bare(level.map[cell]!)) level.map[cell] = T.GRASS;
+      if (!bare(level.map[end]!) && level.map[end] !== T.GRASS && level.map[end] !== T.HIGH_GRASS) return;
+      const radius = 1 + Math.trunc(power / 3);
+      for (let cell = 0; cell < LENGTH; cell++) {
+        const d = distance(cell, end);
+        const t = level.map[cell]!;
+        if (d > radius || (!bare(t) && t !== T.GRASS)) continue;
+        level.map[cell] = d < radius || t === T.GRASS ? T.HIGH_GRASS : T.GRASS;
       }
       return;
     }

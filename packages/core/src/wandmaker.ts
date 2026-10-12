@@ -29,7 +29,7 @@ export interface WandQuest {
 export type WandmakerLine = 'intro' | 'remind' | 'reward' | 'farewell';
 
 const BATTLE_WANDS: readonly ItemKind[] = ['wand.avalanche', 'wand.disintegration', 'wand.firebolt', 'wand.lightning', 'wand.poison'];
-const UTILITY_WANDS: readonly ItemKind[] = ['wand.blink', 'wand.slowness', 'wand.teleportation'];
+const UTILITY_WANDS: readonly ItemKind[] = ['wand.amok', 'wand.blink', 'wand.regrowth', 'wand.slowness', 'wand.teleportation'];
 
 /** Wand.random, then upgraded once more: a wand worth the trouble. */
 function rewardWand(rng: Rng, kinds: readonly ItemKind[]): Item {

@@ -38,10 +38,10 @@ function zapped(kind: ItemKind, level = 0): { world: World; rat: Mob; line: numb
 describe('wands', () => {
   it('go by their wood until used, and two charges plus their level', () => {
     const wands = (Object.keys(ITEMS) as ItemKind[]).filter((k) => itemDef(k).category === 'wand' && k !== 'wand.magicMissile');
-    expect(wands).toHaveLength(8);
+    expect(wands).toHaveLength(12);
     const labels = createWorld(9).run.labels;
     const sprites = new Set(wands.map((k) => itemSprite(createItem(k), labels)));
-    expect(sprites.size).toBe(8);
+    expect(sprites.size).toBe(12);
     expect(wandMaxCharges(createItem('wand.firebolt', 1, 2))).toBe(4);
     expect(createItem('wand.lightning').charges).toBe(2);
   });
@@ -115,5 +115,48 @@ describe('wands', () => {
     const { rat, effects } = zapped('wand.avalanche', 3);
     expect(effects.some((e) => e.type === 'avalanche' && e.cells.includes(rat.pos))).toBe(true);
     expect(effects.some((e) => e.type === 'attack' && e.target === '#rat')).toBe(true);
+  });
+
+  it('amok turns a monster on its own kind', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const setup = range('wand.amok', seed, 3);
+      if (!setup) continue;
+      const { world, rat, line } = setup;
+      // Another rat right behind the first, closer to it than the hero.
+      const map = levelAt(world, 1);
+      const behind = rat.pos + (line[2]! - line[1]!);
+      if (!canEnter(map, behind) || charAt(world, 1, behind)) continue;
+      const other = createMob('#other', 'rat', behind, 'sleeping', floorAt(world, 1).now);
+      Object.assign(other, { ht: 1000, hp: 1000 });
+      floorAt(world, 1).mobs.push(other);
+      act(world, 'p', { type: 'zap', item: 0, target: rat.pos });
+      expect(rat.amok).toBeGreaterThan(0);
+      for (let i = 0; i < 4; i++) act(world, 'p', { type: 'wait' });
+      expect(other.hp).toBeLessThan(1000);
+      return;
+    }
+    throw new Error('no open line');
+  });
+
+  it('reach swaps places with whoever is in the way', () => {
+    const { world, rat, line } = zapped('wand.reach', 3);
+    const hero = heroById(world, 'p')!;
+    expect(hero.pos).toBe(line[2]);
+    expect(rat.pos).not.toBe(line[2]);
+  });
+
+  it('flock raises a wall of sheep, which fades away', () => {
+    const { world, effects } = zapped('wand.flock', 1);
+    const sheep = floorAt(world, 1).mobs.filter((m) => m.kind === 'sheep');
+    expect(sheep.length).toBe(3);
+    expect(effects.some((e) => e.type === 'flock')).toBe(true);
+    for (let i = 0; i < 10; i++) act(world, 'p', { type: 'wait' });
+    expect(floorAt(world, 1).mobs.some((m) => m.kind === 'sheep')).toBe(false);
+  });
+
+  it('regrowth makes grass spring up along the bolt and grow tall where it lands', () => {
+    const { world, line } = zapped('wand.regrowth', 0);
+    const map = levelAt(world, 1).map;
+    expect(map[line[2]!] === T.HIGH_GRASS || map[line[1]!] === T.GRASS || map[line[1]!] === T.HIGH_GRASS).toBe(true);
   });
 });

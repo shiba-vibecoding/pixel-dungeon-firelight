@@ -61,6 +61,18 @@ function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
 }
 
 export function mobAct(ctx: Ctx, mob: Mob): void {
+  // A magic sheep just stands there, until it fades away.
+  if (mob.kind === 'sheep') {
+    mob.lifespan = (mob.lifespan ?? 0) - TICK;
+    if (mob.lifespan <= 0) {
+      ctx.floor.mobs.splice(ctx.floor.mobs.indexOf(mob), 1);
+      leaveCell(ctx.world, ctx.level, ctx.depth, mob.pos);
+      ctx.effects.push({ type: 'faded', depth: ctx.depth, mob: mob.id, pos: mob.pos });
+      return;
+    }
+    spend(mob, TICK);
+    return;
+  }
   // The shopkeeper minds the shop; the sad ghost drifts about the level at
   // half speed, never after anyone.
   if (mob.state === 'passive' && (mob.kind === 'shopkeeper' || mob.kind === 'wandmaker' || mob.kind === 'imp')) {
@@ -96,6 +108,11 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
     return;
   }
   if ((mob.charmed ?? 0) > 0 && --mob.charmed! <= 0) delete mob.charmedBy;
+  if ((mob.amok ?? 0) > 0) {
+    mob.amok!--;
+    runAmok(ctx, mob);
+    return;
+  }
   // Terror: it runs from whoever frightened it, and does nothing else.
   if ((mob.terror ?? 0) > 0) {
     mob.terror!--;
@@ -189,6 +206,27 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
       if (mob.kind === 'spinner' && mob.state === 'fleeing' && enemyInFov && enemy.poison <= 0) mob.state = 'hunting';
       return;
     }
+  }
+}
+
+/** Amok: it falls upon whoever is nearest in sight, monster or hero. */
+function runAmok(ctx: Ctx, mob: Mob): void {
+  const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map), mobSight(mob, ctx.depth));
+  const others: Array<Hero | Mob> = [
+    ...heroesOn(ctx.world, ctx.depth),
+    ...ctx.floor.mobs.filter((other) => other !== mob && other.state !== 'passive'),
+  ].filter((other) => fov[other.pos] && isAlive(other));
+  let nearest: Hero | Mob | undefined;
+  for (const other of others) {
+    if (!nearest || distance(mob.pos, other.pos) < distance(mob.pos, nearest.pos)) nearest = other;
+  }
+  if (nearest && adjacent(mob.pos, nearest.pos)) {
+    attack(ctx, mob, nearest);
+    spend(mob, mobStats(mob).attackDelay ?? TICK);
+  } else if (nearest && getCloser(ctx, mob, nearest.pos, fov)) {
+    spend(mob, 1 / MOBS[mob.kind].speed);
+  } else {
+    spend(mob, TICK);
   }
 }
 
@@ -461,7 +499,7 @@ function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
   }
   if (mob.kind !== 'goo') {
     attack(ctx, mob, enemy);
-    spend(mob, MOBS[mob.kind].attackDelay ?? TICK);
+    spend(mob, mobStats(mob).attackDelay ?? TICK);
     return;
   }
   // Goo (Goo.doAttack): sometimes pumps itself up, then strikes hard, leaping

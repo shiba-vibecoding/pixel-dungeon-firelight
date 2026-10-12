@@ -59,7 +59,8 @@ Yendor on depth 26:
   grim, stunning, vampiric, chilling, shocking, unstable, eldritch, lucky) and
   nine armour glyphs of the original; darts and the boomerang; wands of
   magic missile, firebolt, lightning, poison, slowness, teleportation, blink,
-  disintegration and avalanche, known by their wood until used; rings of
+  disintegration, avalanche, amok, reach, flock (magic sheep) and regrowth,
+  known by their wood until used; rings of
   mending, detection, shadows, power, accuracy, evasion, satiety, haste,
   elements, thorns and haggler, two worn at once, known by their gem until worn
   a while; seeds of firebloom, icecap, sorrowmoss, dreamweed, sungrass,
@@ -80,8 +81,7 @@ Yendor on depth 26:
 
 Not ported yet: cursed items and the scroll of remove curse; the scroll of
 mirror image and the glyph of multiplicity (there are no allies yet); the
-potion of might; the wands of amok, reach, flock and regrowth; the rotberry
-and the ring of herbalism; the blacksmith's quest and the wandmaker's
+potion of might; the rotberry and the ring of herbalism; the blacksmith's quest and the wandmaker's
 rotberry errand; dwarf monks disarming; the rare monster variants
 (albino rats, bandits, fetid rats); and gas clouds (gas acts at once on
 everyone within reach instead).

@@ -221,6 +221,11 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
       anim(20, [0], true), anim(10, [0]), anim(10, [0, 3, 2, 1, 0, 3, 2, 1, 0]),
     ),
   },
+  sheep: {
+    w: 16,
+    h: 15,
+    anims: basic(anim(8, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 0], true), anim(8, [0], true), anim(8, [0]), anim(20, [4])),
+  },
   statue: {
     w: 12,
     h: 15,
@@ -267,7 +272,7 @@ export async function loadAssets(base: string): Promise<Assets> {
   const names = [
     'tiles0', 'water0', 'tiles1', 'water1', 'tiles2', 'water2', 'spinner', 'dm300', 'tiles3', 'water3',
     'elemental', 'monk', 'warlock', 'golem', 'king', 'undead', 'tiles4', 'water4',
-    'succubus', 'eye', 'scorpio', 'yog', 'rottingFist', 'burningFist', 'larva', 'mimic', 'statue', 'piranha', 'imp', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
+    'succubus', 'eye', 'scorpio', 'yog', 'rottingFist', 'burningFist', 'larva', 'mimic', 'statue', 'piranha', 'imp', 'sheep', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
     'skeleton', 'thief', 'swarm', 'shaman', 'bat', 'brute', 'tengu', 'shopkeeper', 'wandmaker',
     'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs', 'plants',
   ] as const;
