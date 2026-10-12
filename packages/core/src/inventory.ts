@@ -41,6 +41,11 @@ import {
 export type InventoryAction =
   | { type: 'pickup' }
   /**
+   * Hero.actOpenChest: open a chest, a tomb or remains from the next cell (or the one the hero
+   * stands on); what they held then lies there, to be picked up.
+   */
+  | { type: 'open'; cell: number }
+  /**
    * Drink a potion, read a scroll or eat. Scrolls of upgrade, enchantment and
    * identify act on the item chosen `on` (see scrolls.ts); `target` is how older
    * clients chose between the weapon and the armour worn.
@@ -68,7 +73,7 @@ export type InventoryAction =
   | { type: 'balance'; item: number; weapon?: number; imbue: 'speed' | 'accuracy' };
 
 const INVENTORY_ACTIONS: ReadonlySet<string> = new Set([
-  'pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master', 'mine', 'special', 'balance',
+  'pickup', 'open', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master', 'mine', 'special', 'balance',
 ]);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
@@ -79,6 +84,8 @@ export function isInventoryAction(action: { type: string }): action is Inventory
 const CURSED = 'it is cursed: you cannot take it off';
 
 const TIME_TO_PICK_UP = 1;
+/** Key.TIME_TO_UNLOCK. */
+const TIME_TO_UNLOCK = 1;
 const TIME_TO_USE = 1;
 const TIME_TO_EQUIP = 1;
 const TIME_TO_DROP = 1;
@@ -115,6 +122,13 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     if ((heap.kind === 'lockedChest' || heap.kind === 'crystalChest') && goldenKeyFor(hero) < 0) return 'the chest is locked';
     if (heap.kind === 'hidden') return 'nothing here';
     return heap.kind === 'forSale' ? 'that is for sale' : null;
+  }
+  if (action.type === 'open') {
+    const heap = Number.isInteger(action.cell) ? world.floors[hero.depth]?.heaps.find((h) => h.pos === action.cell) : undefined;
+    if (!heap || heap.kind === 'heap' || heap.kind === 'forSale' || heap.kind === 'hidden') return 'nothing to open';
+    if (heap.pos !== hero.pos && !adjacent(heap.pos, hero.pos)) return 'too far away';
+    if ((heap.kind === 'lockedChest' || heap.kind === 'crystalChest') && goldenKeyFor(hero) < 0) return 'the chest is locked';
+    return null;
   }
   if (action.type === 'mine') return mineProblem(world, hero);
   if (action.type === 'special') return specialProblem(world, hero, action.target);
@@ -188,6 +202,9 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
     case 'pickup':
       pickUp(ctx, hero);
       return TIME_TO_PICK_UP;
+    case 'open':
+      openHeap(ctx, hero, ctx.floor.heaps.find((h) => h.pos === action.cell)!);
+      return TIME_TO_UNLOCK;
     case 'mine':
       mine(ctx, hero);
       return TIME_TO_MINE;
@@ -538,9 +555,9 @@ export function collect(hero: Hero, item: Item): boolean {
 }
 
 /** Opens a chest or remains if need be, and takes everything there is room for. */
-function pickUp(ctx: Ctx, hero: Hero): void {
-  const heap = ctx.floor.heaps.find((h) => h.pos === hero.pos)!;
-  if (heap.kind === 'mimic' && springMimic(ctx, hero, heap)) return;
+/** Heap.open: a chest unlocked (with the golden key, if it wants one), a tomb or remains disturbed; false if a mimic sprang instead. */
+function openHeap(ctx: Ctx, hero: Hero, heap: Heap): boolean {
+  if (heap.kind === 'mimic' && springMimic(ctx, hero, heap)) return false;
   // A locked or crystal chest: the golden key turns in its lock and stays there.
   if (heap.kind === 'lockedChest' || heap.kind === 'crystalChest') hero.items.splice(goldenKeyFor(hero), 1);
   if (heap.kind !== 'heap') {
@@ -548,6 +565,12 @@ function pickUp(ctx: Ctx, hero: Hero): void {
     disturb(ctx, hero, heap);
     heap.kind = 'heap';
   }
+  return true;
+}
+
+function pickUp(ctx: Ctx, hero: Hero): void {
+  const heap = ctx.floor.heaps.find((h) => h.pos === hero.pos)!;
+  if (!openHeap(ctx, hero, heap)) return;
   const left: Item[] = [];
   for (const item of heap.items) {
     if (item.kind === 'dew') {
@@ -728,10 +751,13 @@ function springMimic(ctx: Ctx, hero: Hero, heap: Heap): boolean {
     return false;
   }
   const pos = heap.pos;
-  const to = rng.element(cells)!;
-  hero.pos = to;
-  leaveCell(world, level, depth, pos);
-  enterCell(level, to);
+  // Standing on it, the hero is thrown off; opened from beside it, they stay where they are.
+  if (hero.pos === pos) {
+    const to = rng.element(cells)!;
+    hero.pos = to;
+    leaveCell(world, level, depth, pos);
+    enterCell(level, to);
+  }
   floor.heaps.splice(floor.heaps.indexOf(heap), 1);
   const mimic = scaleMob(world, createMob(`#${++world.nextId}`, 'mimic', pos, 'hunting', floor.now + 1));
   mimic.level = depth;

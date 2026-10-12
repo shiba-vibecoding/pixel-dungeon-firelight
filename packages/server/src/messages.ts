@@ -1,5 +1,5 @@
 import {
-  type Action, type EffectId, type FrameId, type ItemRef, LENGTH, type Look, OFFERS, type SkinVariant, SUBCLASSES,
+  type Action, type EffectId, type FrameId, isItemRef, type ItemRef, LENGTH, type Look, OFFERS, type SkinVariant, SUBCLASSES,
   type SubClass,
 } from '@pd/core';
 
@@ -24,7 +24,8 @@ const cell = (value: unknown): number | null => (isInt(value, 0, LENGTH - 1) ? v
 const slot = (value: unknown): number | null => (isInt(value, 0, MAX_SLOT) ? value : null);
 const oneOf = <T extends string>(value: unknown, options: readonly T[]): T | null =>
   (options as readonly unknown[]).includes(value) ? (value as T) : null;
-const itemRef = (value: unknown): ItemRef | null => (value === 'weapon' || value === 'armor' ? value : slot(value));
+/** A backpack slot, the weapon, the armour or a worn ring (the core's ItemRef). */
+const itemRef = (value: unknown): ItemRef | null => (isItemRef(value) && (typeof value !== 'number' || slot(value) !== null) ? value : null);
 
 const ALL_SUBCLASSES: readonly SubClass[] = Object.values(SUBCLASSES).flat();
 
@@ -43,6 +44,10 @@ export function sanitizeAction(raw: unknown): Action | null {
     case 'buy':
     case 'mine':
       return { type: a.type };
+    case 'open': {
+      const at = cell(a.cell);
+      return at === null ? null : { type: 'open', cell: at };
+    }
     case 'move':
     case 'jump': {
       const to = cell(a.to);
@@ -71,6 +76,11 @@ export function sanitizeAction(raw: unknown): Action | null {
     case 'use': {
       const item = slot(a.item);
       if (item === null) return null;
+      // What a scroll is read on: picked from the whole pack and what is worn (`target` is older clients' way).
+      if (a.on !== undefined) {
+        const on = itemRef(a.on);
+        return on === null ? null : { type: 'use', item, on };
+      }
       if (a.target === undefined) return { type: 'use', item };
       const target = oneOf(a.target, ['weapon', 'armor'] as const);
       return target ? { type: 'use', item, target } : null;

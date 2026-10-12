@@ -104,6 +104,20 @@ canvas#game {
 
 /* «Back to the hero» shows only while the view has been dragged away. */
 .pd-mapbtn[hidden] { display: none; }
+/* AttackIndicator: the enemy's portrait in a red frame; resume: a gold arrow. */
+.pd-mapbtn.attack { box-shadow: inset 0 0 0 2px #c0392b, inset 0 0 0 4px var(--void); overflow: hidden; padding: 0; }
+.pd-mapbtn.attack::before { display: none; }
+.pd-mapbtn.attack .pd-portrait { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.pd-mapbtn.attack .pd-portrait canvas { max-width: 36px; max-height: 36px; }
+.pd-coach {
+  position: absolute; z-index: var(--z-hud, 10); transform: translate(-50%, calc(-100% - 10px)); pointer-events: none;
+  padding: 4px 10px; background: var(--stone-900, #1f1d1d); border: 2px solid var(--gold-deep, #ffcc66); color: var(--gold, #ffeba4);
+  font: var(--text-body, 400 18px/24px var(--font-ui)); white-space: nowrap; animation: pd-coach 1.2s steps(4) infinite;
+}
+.pd-coach::after { content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -6px; border: 6px solid transparent; border-top-color: var(--gold-deep, #ffcc66); border-bottom: 0; }
+@keyframes pd-coach { 0%, 100% { margin-top: 0; } 50% { margin-top: -4px; } }
+@media (prefers-reduced-motion: reduce) { .pd-coach { animation: none; } }
+.pd-mapbtn.resume { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void); }
 
 /* A question's answers, one above the other: long ones wrap rather than being cut. */
 .pd-confirm-actions { display: flex; flex-direction: column; gap: var(--space-2); }

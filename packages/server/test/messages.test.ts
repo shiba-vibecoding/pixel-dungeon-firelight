@@ -9,6 +9,12 @@ describe('client messages', () => {
     expect(sanitizeAction({ type: 'attack', target: '#3', also: 1 })).toEqual({ type: 'attack', target: '#3' });
     expect(sanitizeAction({ type: 'use', item: 2, target: 'armor' })).toEqual({ type: 'use', item: 2, target: 'armor' });
     expect(sanitizeAction({ type: 'use', item: 2 })).toEqual({ type: 'use', item: 2 });
+    // A scroll read on an item the player picked (scrolls.ts): a slot, the weapon, the armour or a worn ring.
+    expect(sanitizeAction({ type: 'use', item: 2, on: 5 })).toEqual({ type: 'use', item: 2, on: 5 });
+    expect(sanitizeAction({ type: 'use', item: 2, on: 'ring1' })).toEqual({ type: 'use', item: 2, on: 'ring1' });
+    expect(sanitizeAction({ type: 'use', item: 2, on: 'boots' })).toBeNull();
+    expect(sanitizeAction({ type: 'open', cell: 300, junk: 1 })).toEqual({ type: 'open', cell: 300 });
+    expect(sanitizeAction({ type: 'reforge', first: 'ring0', second: 3 })).toEqual({ type: 'reforge', first: 'ring0', second: 3 });
     expect(sanitizeAction({ type: 'throw', item: 0, target: 100 })).toEqual({ type: 'throw', item: 0, target: 100 });
     expect(sanitizeAction({ type: 'reforge', first: 'weapon', second: 3 })).toEqual({ type: 'reforge', first: 'weapon', second: 3 });
     expect(sanitizeAction({ type: 'master', item: 1, subclass: 'warden' })).toEqual({ type: 'master', item: 1, subclass: 'warden' });

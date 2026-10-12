@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  act, addHero, canEnter, charAt, createMob, createWorld, F, floorAt, hasFlag, heroById, isSafe, levelAt, NEIGHBOURS8, WIDTH, type World,
+  act, addHero, canEnter, charAt, createItem, createMob, createWorld, F, floorAt, hasFlag, heroById, isSafe, levelAt, NEIGHBOURS8, WIDTH, type World,
 } from '../src/index';
 import { pacify } from './helpers';
 
@@ -67,5 +67,17 @@ describe('co-op', () => {
     alice.pos = levelAt(world, 1).exit;
     expect(act(world, 'alice', { type: 'descend' }).ok).toBe(true);
     expect(bob.hp).toBe(0);
+  });
+
+  it('opens a chest from beside it, as the original did, and leaves what it held there', () => {
+    const { world } = party();
+    const alice = heroById(world, 'alice')!;
+    const cell = NEIGHBOURS8.map((n) => alice.pos + n).find((c) => canEnter(levelAt(world, 1), c) && !charAt(world, 1, c))!;
+    floorAt(world, 1).heaps.push({ pos: cell, kind: 'chest', items: [createItem('potion.healing')] });
+    expect(act(world, 'alice', { type: 'open', cell }).ok).toBe(true);
+    const heap = floorAt(world, 1).heaps.find((h) => h.pos === cell)!;
+    expect(heap.kind).toBe('heap');
+    expect(alice.items.some((i) => i.kind === 'potion.healing')).toBe(false);
+    expect(act(world, 'alice', { type: 'open', cell: alice.pos + 5 * WIDTH })).toEqual({ ok: false, reason: 'nothing to open' });
   });
 });

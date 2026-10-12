@@ -1,5 +1,5 @@
 import {
-  adjacent, blockers, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
+  adjacent, blockers, distance, type Mob, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
   HEAP_SPRITES,
   type Hero, type Item, type Level,
   heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
@@ -209,7 +209,52 @@ const mapControls = new MapControls(document.getElementById('ui')!, {
   home: () => {
     pan.home = true;
   },
+  attack: () => {
+    const world = session?.world;
+    const me = world && heroById(world, session!.myId);
+    const target = world && me ? attackTarget(world, me) : null;
+    if (!world || !me || !target || session!.busy) return;
+    walk.reset();
+    if (adjacent(me.pos, target.pos)) send({ type: 'attack', target: target.id }, performance.now());
+    else walk.chase = target.id;
+  },
+  resume: () => {
+    const goal = walk.goal;
+    if (goal !== null) tapCell(goal);
+  },
 });
+
+/** The very first game: «tap where to go» over the hero until the first step is taken (kept on this device). */
+let coach: HTMLElement | null = null;
+let coached = stored('pd-moved') === '1';
+function coachMove(me: Hero): void {
+  if (coached) {
+    coach?.remove();
+    coach = null;
+    return;
+  }
+  if (!coach) {
+    coach = document.createElement('div');
+    coach.className = 'pd-coach';
+    coach.textContent = t.moveHint;
+    document.getElementById('ui')!.append(coach);
+  }
+  const x = (cellX(me.pos) * TILE + TILE / 2 - camera.x) * camera.zoom / (canvas.width / canvas.clientWidth);
+  const y = (cellY(me.pos) * TILE - camera.y) * camera.zoom / (canvas.height / canvas.clientHeight);
+  coach.style.left = `${Math.round(x)}px`;
+  coach.style.top = `${Math.round(y)}px`;
+}
+
+/**
+ * AttackIndicator: the enemy to go for — one in sight that is after me, else the nearest awake
+ * one, else the nearest asleep (a sneak attack); never a passive one (a shopkeeper, the ghost).
+ */
+function attackTarget(world: World, me: Hero): Mob | null {
+  const visible = visibleCells(world, me.depth);
+  const foes = (world.floors[me.depth]?.mobs ?? []).filter((m) => m.state !== 'passive' && visible[m.pos] && m.hp > 0 && !m.image);
+  const rank = (m: Mob): number => (m.enemy === me.id && m.state === 'hunting' ? 0 : m.state === 'sleeping' ? 2 : 1) * 1000 + distance(m.pos, me.pos);
+  return foes.sort((a, b) => rank(a) - rank(b) || (a.id < b.id ? -1 : 1))[0] ?? null;
+}
 const finds = new Finds(document.getElementById('ui')!);
 /** Something was picked up since the backpack was last opened. */
 let newLoot = false;
@@ -495,6 +540,10 @@ const walk = {
   /** Monster to walk up to and hit. */
   chase: null as string | null,
   stairs: null as 'descend' | 'ascend' | null,
+  /** Where the last walk was headed: a monster coming into sight stops it, and «go on» resumes it. */
+  goal: null as number | null,
+  /** A chest, tomb or remains to open once the walk has brought the hero beside it. */
+  open: null as number | null,
   /** Pick up what lies at the end of the walk. */
   pickup: false,
   /** Resting until healed (a long press on the hourglass), stopped by any danger. */
@@ -506,6 +555,8 @@ const walk = {
     this.stairs = null;
     this.pickup = false;
     this.resting = false;
+    this.goal = null;
+    this.open = null;
   },
 };
 
@@ -554,6 +605,11 @@ function send(action: Parameters<Session['send']>[0], now: number): void {
   }
   walk.lastSent = now;
   session!.send(action);
+  // The first thing done: the first game's hint has done its job.
+  if (!coached) {
+    coached = true;
+    store('pd-moved', '1');
+  }
 }
 
 /**
@@ -637,6 +693,15 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
     return;
   }
 
+  if (walk.open !== null) {
+    const cell = walk.open;
+    walk.open = null;
+    if (adjacent(me.pos, cell)) {
+      openAt(world, me, cell, now);
+      return;
+    }
+  }
+
   if (walk.pickup) {
     walk.pickup = false;
     if (heapAt(world, me.depth, me.pos)) {
@@ -665,6 +730,18 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
 }
 
 /** Picks up what lies here, or offers a shop's ware for sale. */
+/** Opens the chest, tomb or remains in the cell beside the hero; a locked chest wants the level's golden key. */
+function openAt(world: World, me: Hero, cell: number, now: number): void {
+  const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === cell);
+  if (!heap) return;
+  const locked = heap.kind === 'lockedChest' || heap.kind === 'crystalChest';
+  if (locked && !me.items.some((i) => i.kind === 'key.golden' && i.depth === me.depth)) {
+    view.say(heap.kind === 'crystalChest' ? t.crystalChest(itemName(world, heap.items[0]!)) : t.lockedChest, '#ff8800');
+    return;
+  }
+  send({ type: 'open', cell }, now);
+}
+
 function takeHere(world: World, me: Hero, now: number): void {
   const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === me.pos);
   if (!heap || heap.kind === 'hidden') return;
@@ -770,6 +847,8 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
         item.kind.startsWith('ring.') || item.kind.startsWith('wand.') || item.kind === 'potion.strength' || item.kind === 'scroll.upgrade');
     }
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
+    // Goo winding up: a warning nobody can miss, while there is still time to step back.
+    if (effect.type === 'pumped' && me && effect.depth === me.depth) toast(t.gooPumpsTip, { tone: 'warn' });
     // Hunger kills quietly in the original's log: here it says what to do, and with what.
     if (effect.type === 'hunger' && effect.hero === myId && world && me) {
       const food = me.items.find((item) => itemDef(item.kind).category === 'food');
@@ -934,6 +1013,23 @@ function tapCell(cell: number, quiet = false): void {
     return;
   }
   if (!explored[cell]) return;
+  const floating = (me.levitating ?? 0) > 0;
+  // Hero.actOpenChest: a chest, a tomb or remains are opened from beside them, as in the original
+  // (by a wall or in a corner, fewer wraiths can rise round a tomb); from afar, the hero walks up to one.
+  const box = world.floors[me.depth]?.heaps.find((h) => h.pos === cell && h.kind !== 'heap' && h.kind !== 'forSale' && h.kind !== 'hidden');
+  if (box) {
+    if (adjacent(me.pos, cell)) {
+      openAt(world, me, cell, performance.now());
+      return;
+    }
+    const way = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating);
+    if (way && way.length > 1) {
+      walk.queue = way.slice(0, -1);
+      walk.open = cell;
+      if (!quiet) feedback.aim(cell, false, vnow);
+      return;
+    }
+  }
   // A vein of dark gold beside the hero, with the blacksmith's pickaxe at hand: mine it.
   const pickaxe = me.weapon?.kind === 'weapon.pickaxe' || me.items.some((i) => i.kind === 'weapon.pickaxe');
   if (level.map[cell] === T.WALL_DECO && adjacent(me.pos, cell) && pickaxe && me.depth >= 11 && me.depth <= 15) {
@@ -941,7 +1037,6 @@ function tapCell(cell: number, quiet = false): void {
     return;
   }
   // Chasm.heroJump: a chasm right beside the hero asks whether to jump in; floating, one drifts over it.
-  const floating = (me.levitating ?? 0) > 0;
   if (hasFlag(level.map[cell]!, F.PIT) && !floating) {
     if (adjacent(me.pos, cell)) {
       showConfirm(t.chasm, t.jumpQuestion, t.jumpYes, t.jumpNo, () => send({ type: 'jump', to: cell }, performance.now()), hideOverlay);
@@ -982,6 +1077,7 @@ function tapCell(cell: number, quiet = false): void {
     return;
   }
   if (!quiet && walk.queue.length > 1) feedback.aim(cell, false, vnow);
+  if (!quiet) walk.goal = cell;
   walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && me.depth > 1) walk.stairs = 'ascend';
@@ -1829,6 +1925,14 @@ function tick(now: number): void {
     Math.round(zoom.target) < zoom.max, Math.round(zoom.target) > zoom.min, Math.hypot(pan.x, pan.y) > TILE * 1.5 && !pan.home,
     document.querySelector<HTMLElement>('#ui .pd-log')?.offsetHeight ?? 120,
   );
+  // The attack indicator and «go on», right there on the map's column.
+  if (walk.goal === me.pos) walk.goal = null;
+  const foe = isAlive(me) ? attackTarget(world, me) : null;
+  mapControls.indicators(
+    foe ? { key: `${foe.id}:${foe.kind}`, portrait: () => portrait(foe.kind) } : null,
+    isAlive(me) && walk.goal !== null && walk.queue.length === 0 && !walk.chase && !session.busy,
+  );
+  coachMove(me);
 
   // Who the dungeon is waiting for, once my action has been queued for a moment.
   if (session.busy) busySince ||= now;

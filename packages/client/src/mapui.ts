@@ -14,6 +14,29 @@ export interface MapActions {
   zoomOut(): void;
   whole(): void;
   home(): void;
+  /** The attack indicator: strike (or go for) the enemy it shows. */
+  attack(): void;
+  /** Go on to where the last walk was headed, after a monster stopped it. */
+  resume(): void;
+}
+
+/** A 12×12 pixel arrow, the resume button's icon. */
+function arrowIcon(): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 12;
+  const g = canvas.getContext('2d')!;
+  const rows = ['............', '..#.....#...', '..##....##..', '..###...###.', '..####..####', '..###...###.', '..##....##..', '..#.....#...', '............'];
+  rows.forEach((row, y) => [...row].forEach((c, x) => {
+    if (c !== '#') return;
+    g.fillStyle = '#0b0b09';
+    g.fillRect(x, y + 2, 1, 1);
+  }));
+  rows.forEach((row, y) => [...row].forEach((c, x) => {
+    if (c !== '#') return;
+    g.fillStyle = '#ffeba4';
+    g.fillRect(x, y + 1, 1, 1);
+  }));
+  return canvas.toDataURL();
 }
 
 export class MapControls {
@@ -21,6 +44,9 @@ export class MapControls {
   private readonly hero: HTMLButtonElement;
   private readonly zoomIn: HTMLButtonElement;
   private readonly zoomOut: HTMLButtonElement;
+  private readonly attackButton: HTMLButtonElement;
+  private readonly resumeButton: HTMLButtonElement;
+  private attackKey = '';
   private state = '';
 
   constructor(root: HTMLElement, actions: MapActions) {
@@ -37,10 +63,28 @@ export class MapControls {
     this.hero = button('hero', t.mapHero, actions.home);
     this.zoomIn = button('in', t.mapIn, actions.zoomIn);
     this.zoomOut = button('out', t.mapOut, actions.zoomOut);
+    this.attackButton = button('attack', t.attackEnemy, actions.attack);
+    this.attackButton.hidden = true;
+    this.resumeButton = button('resume', t.resumeWalk, actions.resume);
+    this.resumeButton.style.setProperty('--ico', `url("${arrowIcon()}")`);
+    this.resumeButton.hidden = true;
     this.box = document.createElement('div');
     this.box.className = 'pd-mapctl';
-    this.box.append(this.hero, this.zoomIn, this.zoomOut, button('all', t.mapAll, actions.whole));
+    this.box.append(this.attackButton, this.resumeButton, this.hero, this.zoomIn, this.zoomOut, button('all', t.mapAll, actions.whole));
     root.append(this.box);
+  }
+
+  /**
+   * AttackIndicator: the enemy a tap on it goes for, shown by its portrait (`key` tells when it
+   * changed); null hides it. Resume: shown while a stopped walk can go on.
+   */
+  indicators(attack: { key: string; portrait: () => HTMLElement } | null, resume: boolean): void {
+    if ((attack?.key ?? '') !== this.attackKey) {
+      this.attackKey = attack?.key ?? '';
+      this.attackButton.replaceChildren(...(attack ? [attack.portrait()] : []));
+      this.attackButton.hidden = !attack;
+    }
+    if (this.resumeButton.hidden === resume) this.resumeButton.hidden = !resume;
   }
 
   /** The buttons as things stand: at a limit of the zoom one is spent; «to the hero» only when dragged away. */
