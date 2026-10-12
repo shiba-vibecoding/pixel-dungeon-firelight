@@ -17,9 +17,11 @@ export interface Floor {
   rng: RngState;
   /** The depth's clock: the time of the latest actor to act. */
   now: number;
-  /** When the depth next tries to replenish its monsters. */
+  /** When the depth next tries to replenish its monsters; -1 on boss levels, which never do. */
   respawn: number;
 }
+
+export const isWater = (terrain: number): boolean => terrain >= T.WATER_TILES && terrain <= T.WATER;
 
 /** What players should see happen; returned by every accepted action. */
 export type Effect =
@@ -31,6 +33,13 @@ export type Effect =
   | { type: 'revived'; hero: string }
   | { type: 'searched'; hero: string }
   | { type: 'discovered'; depth: number; cell: number }
+  /** Damage that comes from no one, e.g. caustic ooze. */
+  | { type: 'hurt'; depth: number; who: string; damage: number }
+  | { type: 'oozed'; hero: string }
+  | { type: 'pumped'; depth: number; mob: string }
+  | { type: 'yell'; depth: number; mob: string; line: 'notice' | 'death' }
+  | { type: 'bossSlain'; depth: number }
+  | { type: 'victory'; hero: string }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };
 

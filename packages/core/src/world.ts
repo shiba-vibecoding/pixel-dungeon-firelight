@@ -1,13 +1,14 @@
 import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
 import { awareness, createHero, type Hero, heroAttackDelay, isAlive, type Mob, type PlayerInfo } from './actors';
-import { attack } from './combat';
+import { attack, hurt } from './combat';
 import {
-  canEnter, charAt, type Ctx, type Effect, enterCell, type Floor, freeCellNear, heroesOn, leaveCell,
+  canEnter, charAt, type Ctx, type Effect, enterCell, type Floor, freeCellNear, heroesOn, isWater, leaveCell,
 } from './floor';
+import { isBossDepth } from './level/builder';
 import { castShadow, terrainBlocksSight } from './fov';
 import { generateLevel, type Level } from './level/generate';
 import { adjacent, cellX, cellY, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
-import { discover, F, hasFlag } from './level/terrain';
+import { discover, F, hasFlag, T } from './level/terrain';
 import { deriveSeed, Rng, seedRng, Stream } from './rng';
 import { createRun, type RunState } from './run';
 
@@ -47,11 +48,14 @@ export interface World {
   turn: number;
   /** Last monster id handed out. */
   nextId: number;
-  /** Set when every hero has fallen. */
+  /** The run has ended: every hero has fallen, or the party won. */
   over: boolean;
+  /** Goo is slain and a hero took the stairs out of its lair. */
+  victory: boolean;
 }
 
-export const DEEPEST_AVAILABLE = 4;
+/** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
+export const DEEPEST_AVAILABLE = 5;
 const TIME_TO_REST = 1;
 const TIME_TO_SEARCH = 2;
 /** How far a deliberate search reaches; the original only checked adjacent cells. */
@@ -59,7 +63,9 @@ const SEARCH_RADIUS = 2;
 const REGENERATION_DELAY = 10;
 
 export function createWorld(seed: number): World {
-  return { run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false };
+  return {
+    run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
+  };
 }
 
 /** Starts a new run in place for the same party. */
@@ -78,7 +84,7 @@ export function levelAt(world: World, depth: number): Level {
         mobs: populate(world, level, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d))),
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
         now: 0,
-        respawn: TIME_TO_RESPAWN,
+        respawn: isBossDepth(d) ? -1 : TIME_TO_RESPAWN,
       };
     }
   }
@@ -149,6 +155,7 @@ export function isSafe(world: World, hero: Hero): boolean {
 
 /** Why an action is impossible right now, or null if it is fine. */
 function problemWith(world: World, hero: Hero, action: Action): string | null {
+  if (world.over) return 'the run is over';
   if (!isAlive(hero)) return 'you are dead';
   const level = levelAt(world, hero.depth);
   switch (action.type) {
@@ -164,10 +171,10 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       return adjacent(hero.pos, mob.pos) ? null : 'too far away';
     }
     case 'descend':
-      if (hero.pos !== level.exit) return 'not on the stairs';
-      return hero.depth >= DEEPEST_AVAILABLE ? 'deeper levels are not ported yet' : null;
+      return hero.pos === level.exit ? null : 'not on the stairs';
     case 'ascend':
       if (hero.pos !== level.entrance) return 'not on the stairs';
+      if (level.map[hero.pos] !== T.ENTRANCE) return 'the way up is flooded';
       return hero.depth <= 1 ? 'the way up is sealed' : null;
     default:
       return 'unknown action';
@@ -209,7 +216,7 @@ function nextTurn(world: World, depth: number): Turn | undefined {
   for (const mob of floor.mobs) {
     if (mob.time < time) [turn, time] = [{ kind: 'mob', mob }, mob.time];
   }
-  if (floor.respawn < time) turn = { kind: 'respawn' };
+  if (floor.respawn >= 0 && floor.respawn < time) turn = { kind: 'respawn' };
   return turn;
 }
 
@@ -247,7 +254,7 @@ function advance(world: World, depth: number, effects: Effect[]): void {
   const ctx: Ctx = { world, depth, level: levelAt(world, depth), floor, rng: new Rng(floor.rng), effects };
 
   for (let guard = 0; guard < 100_000; guard++) {
-    const turn = nextTurn(world, depth);
+    const turn = world.over ? undefined : nextTurn(world, depth);
     if (!turn) return;
 
     if (turn.kind === 'mob') {
@@ -275,19 +282,29 @@ function advance(world: World, depth: number, effects: Effect[]): void {
       continue;
     }
     if (companionWaiting(world, hero) && isSafe(world, hero)) {
-      spend(hero, TIME_TO_REST);
+      spend(ctx, hero, TIME_TO_REST);
       continue;
     }
     return;
   }
 }
 
-function spend(hero: Hero, time: number): void {
+function spend(ctx: Ctx, hero: Hero, time: number): void {
   hero.time += time;
   hero.regen += time;
   while (hero.regen >= REGENERATION_DELAY) {
     hero.regen -= REGENERATION_DELAY;
     if (isAlive(hero) && hero.hp < hero.ht) hero.hp++;
+  }
+  // Caustic ooze burns every turn until washed off in water.
+  if (hero.ooze >= 0) {
+    hero.ooze += time;
+    while (hero.ooze >= 1 && isAlive(hero)) {
+      hero.ooze -= 1;
+      ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage: 1 });
+      hurt(ctx, hero, 1, null);
+    }
+    if (isWater(ctx.level.map[hero.pos]!) || !isAlive(hero)) hero.ooze = -1;
   }
 }
 
@@ -295,14 +312,14 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
   const { world, level } = ctx;
   switch (action.type) {
     case 'wait':
-      spend(hero, TIME_TO_REST);
+      spend(ctx, hero, TIME_TO_REST);
       break;
 
     case 'search': {
       const found = search(ctx, hero, true);
       const skill = awareness(hero);
       ctx.effects.push({ type: 'searched', hero: hero.id });
-      spend(hero, found && ctx.rng.float() >= 2 * skill - skill * skill ? TIME_TO_SEARCH * 2 : TIME_TO_SEARCH);
+      spend(ctx, hero, found && ctx.rng.float() >= 2 * skill - skill * skill ? TIME_TO_SEARCH * 2 : TIME_TO_SEARCH);
       break;
     }
 
@@ -311,17 +328,25 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       hero.pos = action.to;
       leaveCell(world, level, hero.depth, from);
       enterCell(level, hero.pos);
-      spend(hero, 1);
+      spend(ctx, hero, 1);
       search(ctx, hero, false);
       break;
     }
 
     case 'attack':
       attack(ctx, hero, mobById(world, hero.depth, action.target)!);
-      spend(hero, heroAttackDelay(hero));
+      spend(ctx, hero, heroAttackDelay(hero));
       break;
 
     case 'descend':
+      if (hero.depth >= DEEPEST_AVAILABLE) {
+        // Out of Goo's lair: the sewers are conquered.
+        world.victory = true;
+        world.over = true;
+        for (const other of world.heroes) other.intent = null;
+        ctx.effects.push({ type: 'victory', hero: hero.id });
+        return;
+      }
       changeDepth(world, hero, hero.depth + 1, 'entrance');
       reviveFallen(world, hero.depth, ctx.effects);
       break;

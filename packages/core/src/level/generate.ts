@@ -6,6 +6,7 @@ import { PAINTERS } from './painters';
 import { buildRegularLevel } from './regular';
 import { RoomType } from './room';
 import { SEWER_STYLE } from './sewer';
+import { buildSewerBossLevel, SEWER_BOSS_STYLE } from './sewer-boss';
 
 export interface RoomInfo {
   left: number;
@@ -52,27 +53,29 @@ function rollFeeling(rng: Rng, depth: number): Feeling {
  * next and special rooms rotate through the run.
  */
 export function generateLevel(run: RunState, depth: number): Level {
-  if (depth < 1 || depth > 4) {
-    throw new Error(`Depth ${depth} is not generated yet; the port currently covers the sewers (1-4)`);
+  if (depth < 1 || depth > 5) {
+    throw new Error(`Depth ${depth} is not generated yet; the port currently covers the sewers (1-5)`);
   }
 
   const rng = Rng.seeded(deriveSeed(run.seed, Stream.LAYOUT, depth));
   const feeling = rollFeeling(rng, depth);
   const pitNeeded = depth > 1 && run.weakFloorCreated;
+  const boss = isBossDepth(depth);
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     // Each attempt starts clean: a failed one leaves no rooms, items or
     // rotated specials behind (the original kept some of them).
-    const specials = run.specials.filter(
-      (type) => PAINTERS.has(type) && !(type === RoomType.WEAK_FLOOR && isBossDepth(depth + 1)),
-    );
+    const specials = boss
+      ? []
+      : run.specials.filter((type) => PAINTERS.has(type) && !(type === RoomType.WEAK_FLOOR && isBossDepth(depth + 1)));
     const level = new LevelBuilder(rng, depth, feeling, specials);
-    level.pitRoomNeeded = pitNeeded;
-    if (!buildRegularLevel(level, SEWER_STYLE)) {
+    level.pitRoomNeeded = pitNeeded && !boss;
+    const style = boss ? SEWER_BOSS_STYLE : SEWER_STYLE;
+    if (!(boss ? buildSewerBossLevel(level) : buildRegularLevel(level, style))) {
       continue;
     }
 
-    SEWER_STYLE.decorate(level);
+    style.decorate(level);
     stitchTerrain(level.map);
 
     for (const used of level.usedSpecials) {

@@ -1,10 +1,12 @@
-import { createMob, type Hero, heroStealth, type Mob, type MobState, MOBS, rollMob } from './actors';
+import { createMob, GOO_PUMPED, type Hero, heroStealth, type Mob, type MobState, MOBS, rollMob } from './actors';
 import { attack } from './combat';
 import { castShadow, terrainBlocksSight } from './fov';
-import { charAt, type Ctx, enterCell, heroesOn, isPassable, leaveCell } from './floor';
+import { charAt, type Ctx, enterCell, heroesOn, isPassable, isWater, leaveCell } from './floor';
+import { isBossDepth } from './level/builder';
 import type { Level, RoomInfo } from './level/generate';
-import { adjacent, distance, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
+import { adjacent, cellX, cellY, distance, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { RoomType } from './level/room';
+import { F, hasFlag, T } from './level/terrain';
 import type { Rng } from './rng';
 import type { World } from './world';
 
@@ -45,6 +47,9 @@ function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
 }
 
 export function mobAct(ctx: Ctx, mob: Mob): void {
+  // Goo mends itself in the murky water of its lair.
+  if (mob.kind === 'goo' && isWater(ctx.level.map[mob.pos]!) && mob.hp < mob.ht) mob.hp++;
+
   const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map));
   const justAlerted = mob.alerted;
   mob.alerted = false;
@@ -79,9 +84,8 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
 
     case 'hunting':
       mob.enemySeen = enemyInFov;
-      if (enemyInFov && adjacent(mob.pos, enemy.pos)) {
-        attack(ctx, mob, enemy);
-        spend(mob, TICK);
+      if (enemyInFov && canAttack(mob, enemy)) {
+        doAttack(ctx, mob, enemy);
         return;
       }
       if (enemyInFov) mob.target = enemy.pos;
@@ -102,16 +106,98 @@ function notice(ctx: Ctx, mob: Mob, enemy: Hero, state: MobState): void {
   mob.state = state;
   mob.target = enemy.pos;
   ctx.effects.push({ type: 'noticed', depth: ctx.depth, mob: mob.id });
+  if (mob.kind === 'goo') ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, line: 'notice' });
+}
+
+function canAttack(mob: Mob, enemy: Hero): boolean {
+  return mob.pumped ? distance(mob.pos, enemy.pos) <= 2 : adjacent(mob.pos, enemy.pos);
+}
+
+function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
+  if (mob.kind !== 'goo') {
+    attack(ctx, mob, enemy);
+    spend(mob, TICK);
+    return;
+  }
+  // Goo (Goo.doAttack): sometimes pumps itself up, then strikes hard, leaping
+  // at an enemy two cells away.
+  if (mob.pumped) {
+    if (adjacent(mob.pos, enemy.pos)) {
+      attack(ctx, mob, enemy, { attack: GOO_PUMPED.attack, damage: GOO_PUMPED.damage });
+    } else {
+      const trace = ballistica(ctx, mob.pos, enemy.pos);
+      if (trace.at(-1) !== enemy.pos) {
+        // No clear leap: it deflates and acts again at once.
+        mob.pumped = false;
+        return;
+      }
+      moveMob(ctx, mob, trace.at(-2)!);
+      attack(ctx, mob, enemy, { attack: GOO_PUMPED.jumpAttack, damage: GOO_PUMPED.damage });
+    }
+    mob.pumped = false;
+    spend(mob, TICK);
+  } else if (ctx.rng.int(3) > 0) {
+    attack(ctx, mob, enemy);
+    spend(mob, TICK);
+  } else {
+    mob.pumped = true;
+    spend(mob, GOO_PUMPED.delay);
+    ctx.effects.push({ type: 'pumped', depth: ctx.depth, mob: mob.id });
+  }
+}
+
+/**
+ * Ballistica.cast: the cells a straight line from `from` passes on its way to
+ * `to`, ending at the first character or sight-blocking cell, or before a wall.
+ */
+function ballistica(ctx: Ctx, from: number, to: number): number[] {
+  const { world, depth, level } = ctx;
+  let dx = cellX(to) - cellX(from);
+  let dy = cellY(to) - cellY(from);
+  const stepX = dx > 0 ? 1 : -1;
+  const stepY = dy > 0 ? 1 : -1;
+  dx = Math.abs(dx);
+  dy = Math.abs(dy);
+  const [stepA, stepB, dA, dB] = dx > dy ? [stepX, stepY * WIDTH, dx, dy] : [stepY * WIDTH, stepX, dy, dx];
+
+  const trace = [from];
+  let cell = from;
+  let err = Math.trunc(dA / 2);
+  while (cell !== to) {
+    cell += stepA;
+    err += dB;
+    if (err >= dA) {
+      err -= dA;
+      cell += stepB;
+    }
+    trace.push(cell);
+    const terrain = level.map[cell]!;
+    if (!hasFlag(terrain, F.PASSABLE) && !hasFlag(terrain, F.AVOID)) {
+      trace.pop();
+      return trace;
+    }
+    if (hasFlag(terrain, F.LOS_BLOCKING) || charAt(world, depth, cell)) return trace;
+  }
+  return trace;
 }
 
 function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean {
+  if (mob.kind === 'goo') mob.pumped = false;
   const step = findStep(ctx, mob.pos, target, fov);
   if (step === -1) return false;
-  const from = mob.pos;
-  mob.pos = step;
-  leaveCell(ctx.world, ctx.level, ctx.depth, from);
-  enterCell(ctx.level, step);
+  moveMob(ctx, mob, step);
   return true;
+}
+
+function moveMob(ctx: Ctx, mob: Mob, to: number): void {
+  const from = mob.pos;
+  mob.pos = to;
+  leaveCell(ctx.world, ctx.level, ctx.depth, from);
+  enterCell(ctx.level, to);
+  // Once Goo stirs, its lair floods behind the heroes: no way back up.
+  if (mob.kind === 'goo' && ctx.level.map[ctx.level.entrance] === T.ENTRANCE) {
+    ctx.level.map[ctx.level.entrance] = T.WATER_TILES;
+  }
 }
 
 /** Dungeon.findPath: the next step, treating characters the mover can see as obstacles. */
@@ -213,6 +299,10 @@ const nextMobId = (world: World): string => `#${++world.nextId}`;
 
 /** The monsters a new level starts with, asleep in its rooms. */
 export function populate(world: World, level: Level, rng: Rng): Mob[] {
+  if (isBossDepth(level.depth)) {
+    const arena = level.rooms.find((room) => room.type === RoomType.BOSS_EXIT)!;
+    return [createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0)];
+  }
   const mobs: Mob[] = [];
   const count = nMobs(rng, level.depth);
   // Not yet registered in world.floors, so placement checks this list itself.

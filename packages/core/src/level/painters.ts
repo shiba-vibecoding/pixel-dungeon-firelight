@@ -29,6 +29,15 @@ function paintExit(level: LevelBuilder, room: Room): void {
   level.set(level.exit, T.EXIT);
 }
 
+/** The boss arena: its exit is locked into the middle of the top wall. */
+function paintBossExit(level: LevelBuilder, room: Room): void {
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY, 1);
+  setDoors(room, DoorType.REGULAR);
+  level.exit = cell(Math.trunc((room.left + room.right) / 2), room.top);
+  level.set(level.exit, T.LOCKED_EXIT);
+}
+
 /* --- Standard rooms, occasionally decorated with one of several themes --- */
 
 function paintStandard(level: LevelBuilder, room: Room): void {
@@ -300,6 +309,7 @@ export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painte
   [RoomType.STANDARD, paintStandard],
   [RoomType.ENTRANCE, paintEntrance],
   [RoomType.EXIT, paintExit],
+  [RoomType.BOSS_EXIT, paintBossExit],
   [RoomType.TUNNEL, paintTunnel],
   [RoomType.PASSAGE, paintPassage],
 ]);

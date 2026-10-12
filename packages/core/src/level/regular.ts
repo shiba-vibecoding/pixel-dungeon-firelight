@@ -108,7 +108,7 @@ export function buildRegularLevel(level: LevelBuilder, style: RegionStyle): bool
   return true;
 }
 
-function initRooms(level: LevelBuilder, style: RegionStyle): boolean {
+export function initRooms(level: LevelBuilder, style: RegionStyle): boolean {
   level.rooms = [];
   split(level, style, new Rect(0, 0, WIDTH - 1, HEIGHT - 1));
   if (level.rooms.length < 8) {
@@ -236,7 +236,7 @@ function remove<T>(list: T[], value: T): void {
   }
 }
 
-function paint(level: LevelBuilder, style: RegionStyle): void {
+export function paint(level: LevelBuilder, style: RegionStyle): void {
   for (const r of level.rooms) {
     if (r.type !== RoomType.NULL) {
       placeDoors(level, r);
@@ -358,7 +358,7 @@ export function patch(level: LevelBuilder, density: number, generations: number)
   return off;
 }
 
-function paintWater(level: LevelBuilder, style: RegionStyle): void {
+export function paintWater(level: LevelBuilder, style: RegionStyle): void {
   const [density, generations] = style.water(level.feeling);
   const lake = patch(level, f32(density), generations);
   for (let i = 0; i < LENGTH; i++) {
@@ -368,7 +368,7 @@ function paintWater(level: LevelBuilder, style: RegionStyle): void {
   }
 }
 
-function paintGrass(level: LevelBuilder, style: RegionStyle): void {
+export function paintGrass(level: LevelBuilder, style: RegionStyle): void {
   const [density, generations] = style.grass(level.feeling);
   const grass = patch(level, f32(density), generations);
 
@@ -399,7 +399,7 @@ const SECRET_TRAPS = [
   T.SECRET_ALARM_TRAP, T.SECRET_LIGHTNING_TRAP, T.SECRET_GRIPPING_TRAP, T.SECRET_SUMMONING_TRAP,
 ];
 
-function placeTraps(level: LevelBuilder, style: RegionStyle): void {
+export function placeTraps(level: LevelBuilder, style: RegionStyle): void {
   const { rng, depth } = level;
   const nTraps = depth <= 1 ? 0 : rng.intBetween(1, level.rooms.length + depth);
   for (let i = 0; i < nTraps; i++) {

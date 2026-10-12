@@ -38,7 +38,8 @@ function drawIcon(ctx: CanvasRenderingContext2D, assets: Assets, icon: readonly 
 
 function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y: number, now: number): void {
   const { sheet, anims } = puppet.sprite;
-  const frame = frameAt(anims[puppet.anim], now - puppet.animStart);
+  const anim = puppet.anim === 'idle' && puppet.pumped ? 'pump' : puppet.anim;
+  const frame = frameAt(anims[anim], now - puppet.animStart);
   const sx = (frame % sheet.cols) * sheet.w;
   const sy = Math.floor(frame / sheet.cols) * sheet.h;
   const dx = Math.round(x + (TILE - sheet.w) / 2);
@@ -64,6 +65,11 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
     // Hit flash: adding the sprite onto itself brightens only its own pixels.
     ctx.globalCompositeOperation = 'lighter';
     ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+    ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+  } else if (puppet.pumped && puppet.alive) {
+    // A pumped-up Goo throbs.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.35 + 0.35 * Math.sin(now / 60);
     ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
   }
   ctx.restore();
@@ -162,4 +168,20 @@ export function render(
     ctx.fillText(floater.text, sx, sy);
   }
   ctx.globalAlpha = 1;
+
+  // "Boss slain" banner, fading in and out.
+  const age = now - view.bannerStart;
+  if (view.bannerStart > 0 && age < 4000) {
+    const banner = assets.bossBanner;
+    const scale = camera.zoom;
+    ctx.globalAlpha = Math.min(1, age / 300, (4000 - age) / 600);
+    ctx.drawImage(
+      banner,
+      Math.round(canvas.width / 2 - (banner.width * scale) / 2),
+      Math.round(canvas.height / 3 - (banner.height * scale) / 2),
+      banner.width * scale,
+      banner.height * scale,
+    );
+    ctx.globalAlpha = 1;
+  }
 }

@@ -1,12 +1,13 @@
 import {
-  adjacent, blockers, cellX, cellY, createWorld, DEEPEST_AVAILABLE, type Effect, exploredCells, findPath, type Hero,
+  adjacent, blockers, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, type Hero,
   heroById, type HeroClass, HEIGHT, isAlive, levelAt, mobById, T, visibleCells, WIDTH, type World,
 } from '@pd/core';
+import * as core from '@pd/core';
 import { audio } from './audio';
 import { Hud } from './hud';
 import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
-import { hideOverlay, overlayOpen, showDeath, showHelp, showMenu, showTitle, toast } from './screens';
+import { hideOverlay, overlayOpen, showHelp, showMenu, showRunEnd, showTitle, toast } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
 import {
@@ -258,8 +259,7 @@ function useStairs(world: World, stairs: 'descend' | 'ascend', now: number): voi
   const me = heroById(world, session!.myId)!;
   const level = levelAt(world, me.depth);
   if (stairs === 'descend' && me.pos === level.exit) {
-    if (me.depth >= DEEPEST_AVAILABLE) view.say(t.tooDeep, '#ffff44', now);
-    else send({ type: 'descend' }, now);
+    send({ type: 'descend' }, now);
   } else if (stairs === 'ascend' && me.pos === level.entrance && me.depth > 1) {
     send({ type: 'ascend' }, now);
   }
@@ -388,10 +388,7 @@ resize();
 /* Frame loop */
 
 /** Stands in for the hero while an online session is still connecting. */
-const placeholderHero: Hero = {
-  id: '', name: '', heroClass: 'warrior', depth: 1, pos: 0, hp: 1, ht: 1, str: 10, lvl: 1, exp: 0,
-  attackSkill: 0, defenseSkill: 0, time: 0, intent: null, regen: 0,
-};
+const placeholderHero: Hero = createHero({ id: '', name: '', heroClass: 'warrior' }, 1, 0, 0);
 
 let baked: HTMLCanvasElement | null = null;
 let bakedKey = '';
@@ -516,13 +513,19 @@ function tick(now: number): void {
   if (world.over && deathShown !== session.generation) {
     deathShown = session.generation;
     const solo = session.mode === 'solo';
+    const victory = world.victory;
+    if (victory) {
+      audio.play('levelup');
+      haptic('success');
+    }
     window.setTimeout(() => {
       if (!session?.world?.over) return;
-      haptic('error');
-      showDeath({
-        title: solo ? t.youDied : t.partyFell,
-        text: t.soloFell(me.depth),
-        restartLabel: solo ? t.tryAgain : t.restartRun,
+      if (!victory) haptic('error');
+      showRunEnd({
+        victory,
+        title: victory ? t.victory : solo ? t.youDied : t.partyFell,
+        text: victory ? t.victoryText : t.soloFell(me.depth),
+        restartLabel: victory ? t.newRun : solo ? t.tryAgain : t.restartRun,
         onRestart: () => {
           session?.restart();
           hideOverlay();
@@ -551,5 +554,13 @@ if (import.meta.env.DEV) {
     virtual = Math.max(virtual, performance.now());
     for (let t = 0; t < ms; t += 33) tick((virtual += 33));
   };
-  Object.assign(window, { __pd: { get session() { return session; }, camera, view, walk, advance, resize } });
+  /** Runs frames in real time for `ms`, so a screenshot right after shows a consistent frame. */
+  const play = async (ms: number): Promise<void> => {
+    const end = performance.now() + ms;
+    while (performance.now() < end) {
+      tick(performance.now());
+      await new Promise((resolve) => setTimeout(resolve, 33));
+    }
+  };
+  Object.assign(window, { __pd: { get session() { return session; }, camera, view, walk, advance, play, resize, core } });
 }

@@ -15,7 +15,7 @@ export interface Animation {
   loop: boolean;
 }
 
-export type AnimName = 'idle' | 'run' | 'attack' | 'die' | 'operate';
+export type AnimName = 'idle' | 'run' | 'attack' | 'die' | 'operate' | 'pump';
 
 export interface CharSprite {
   sheet: Sheet;
@@ -28,6 +28,7 @@ export interface Assets {
   heroes: Record<HeroClass, CharSprite>;
   mobs: Record<MobKind, CharSprite>;
   icons: HTMLImageElement;
+  bossBanner: HTMLImageElement;
   status: HTMLImageElement;
   toolbar: HTMLImageElement;
   hpBar: HTMLImageElement;
@@ -36,11 +37,18 @@ export interface Assets {
 
 const anim = (fps: number, frames: number[], loop = false): Animation => ({ fps, frames, loop });
 
+/** Animations of a character that has no special ones for operating or pumping up. */
+function basic(idle: Animation, run: Animation, attack: Animation, die: Animation): Record<AnimName, Animation> {
+  return { idle, run, attack, die, operate: idle, pump: idle };
+}
+
 const HERO_ANIMS: Record<AnimName, Animation> = {
-  idle: anim(1, [0, 0, 0, 1, 0, 0, 1, 1], true),
-  run: anim(20, [2, 3, 4, 5, 6, 7], true),
-  attack: anim(15, [13, 14, 15, 0]),
-  die: anim(20, [8, 9, 10, 11, 12, 11]),
+  ...basic(
+    anim(1, [0, 0, 0, 1, 0, 0, 1, 1], true),
+    anim(20, [2, 3, 4, 5, 6, 7], true),
+    anim(15, [13, 14, 15, 0]),
+    anim(20, [8, 9, 10, 11, 12, 11]),
+  ),
   operate: anim(8, [16, 17, 16, 17]),
 };
 
@@ -48,34 +56,24 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
   rat: {
     w: 16,
     h: 15,
-    anims: {
-      idle: anim(2, [0, 0, 0, 1], true),
-      run: anim(10, [6, 7, 8, 9, 10], true),
-      attack: anim(15, [2, 3, 4, 5, 0]),
-      die: anim(10, [11, 12, 13, 14]),
-      operate: anim(1, [0]),
-    },
+    anims: basic(anim(2, [0, 0, 0, 1], true), anim(10, [6, 7, 8, 9, 10], true), anim(15, [2, 3, 4, 5, 0]), anim(10, [11, 12, 13, 14])),
   },
   gnoll: {
     w: 12,
     h: 15,
-    anims: {
-      idle: anim(2, [0, 0, 0, 1, 0, 0, 1, 1], true),
-      run: anim(12, [4, 5, 6, 7], true),
-      attack: anim(12, [2, 3, 0]),
-      die: anim(12, [8, 9, 10]),
-      operate: anim(1, [0]),
-    },
+    anims: basic(anim(2, [0, 0, 0, 1, 0, 0, 1, 1], true), anim(12, [4, 5, 6, 7], true), anim(12, [2, 3, 0]), anim(12, [8, 9, 10])),
   },
   crab: {
     w: 16,
     h: 16,
+    anims: basic(anim(5, [0, 1, 0, 2], true), anim(15, [3, 4, 5, 6], true), anim(12, [7, 8, 9]), anim(12, [10, 11, 12, 13])),
+  },
+  goo: {
+    w: 20,
+    h: 14,
     anims: {
-      idle: anim(5, [0, 1, 0, 2], true),
-      run: anim(15, [3, 4, 5, 6], true),
-      attack: anim(12, [7, 8, 9]),
-      die: anim(12, [10, 11, 12, 13]),
-      operate: anim(1, [0]),
+      ...basic(anim(10, [0, 1], true), anim(10, [0, 1], true), anim(10, [5, 0, 6]), anim(10, [2, 3, 4])),
+      pump: anim(20, [0, 1], true),
     },
   },
 };
@@ -104,8 +102,8 @@ const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image
 
 export async function loadAssets(base: string): Promise<Assets> {
   const names = [
-    'tiles0', 'water0', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab',
-    'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar',
+    'tiles0', 'water0', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo',
+    'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss',
   ] as const;
   const images = Object.fromEntries(
     await Promise.all(names.map(async (name) => [name, await loadImage(`${base}${name}.png`)] as const)),
@@ -125,8 +123,9 @@ export async function loadAssets(base: string): Promise<Assets> {
       rogue: hero(images.rogue),
       huntress: hero(images.ranger),
     },
-    mobs: { rat: mob('rat'), gnoll: mob('gnoll'), crab: mob('crab') },
+    mobs: { rat: mob('rat'), gnoll: mob('gnoll'), crab: mob('crab'), goo: mob('goo') },
     icons: images.icons,
+    bossBanner: images['banner-boss'],
     status: images.status_pane,
     toolbar: images.toolbar,
     hpBar: images.hp_bar,

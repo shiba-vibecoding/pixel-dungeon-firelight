@@ -70,6 +70,8 @@ export interface Hero {
   intent: Action | null;
   /** Time spent since the last regenerated hit point. */
   regen: number;
+  /** Caustic ooze from Goo: time since it last burned, or -1 when clean. Water washes it off. */
+  ooze: number;
 }
 
 export interface PlayerInfo {
@@ -96,6 +98,7 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     time,
     intent: null,
     regen: 0,
+    ooze: -1,
   };
 }
 
@@ -146,7 +149,7 @@ export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 
 /* Monsters */
 
-export type MobKind = 'rat' | 'gnoll' | 'crab';
+export type MobKind = 'rat' | 'gnoll' | 'crab' | 'goo';
 export type MobState = 'sleeping' | 'wandering' | 'hunting';
 
 export interface MobStats {
@@ -166,7 +169,11 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   rat: { name: 'marsupial rat', ht: 8, attack: 8, defense: 3, damage: [1, 5], dr: 1, exp: 1, maxLvl: 5, speed: 1 },
   gnoll: { name: 'gnoll scout', ht: 12, attack: 11, defense: 4, damage: [2, 5], dr: 2, exp: 2, maxLvl: 8, speed: 1 },
   crab: { name: 'sewer crab', ht: 15, attack: 12, defense: 5, damage: [3, 6], dr: 4, exp: 3, maxLvl: 9, speed: 2 },
+  goo: { name: 'Goo', ht: 80, attack: 15, defense: 12, damage: [2, 12], dr: 2, exp: 10, maxLvl: 30, speed: 1 },
 };
+
+/** Goo, pumped up: harder hits from up to two cells away. */
+export const GOO_PUMPED = { attack: 30, jumpAttack: 15, damage: [5, 30] as const, delay: 2 };
 
 export interface Mob {
   /** '#' followed by a number, so it never clashes with a player id. */
@@ -184,6 +191,8 @@ export interface Mob {
   /** Hurt since its last turn: it notices whoever is in sight at once. */
   alerted: boolean;
   time: number;
+  /** Goo only: pumped up for a big attack. */
+  pumped?: boolean;
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {
@@ -200,6 +209,7 @@ const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]
   2: [['rat', 1], ['gnoll', 1]],
   3: [['rat', 1], ['gnoll', 2], ['crab', 1]],
   4: [['rat', 1], ['gnoll', 2], ['crab', 3]],
+  5: [['goo', 1]],
 };
 
 export function rollMob(rng: Rng, depth: number): MobKind {

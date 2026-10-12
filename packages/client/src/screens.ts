@@ -162,24 +162,25 @@ export function showHelp(onClose: () => void): void {
   );
 }
 
-export interface DeathOptions {
+export interface EndOptions {
+  victory: boolean;
   title: string;
   text: string;
-  /** Only when the whole party has fallen. */
-  onRestart?: () => void;
+  onRestart: () => void;
   restartLabel: string;
   onExit: () => void;
 }
 
-export function showDeath(options: DeathOptions): void {
+/** The end of a run: the whole party fell, or it won. */
+export function showRunEnd(options: EndOptions): void {
   show(
     el(
       'div',
       { className: 'pd-window' },
-      el('div', { className: 'pd-gameover' }),
+      el('div', { className: options.victory ? 'pd-victory' : 'pd-gameover' }),
       el('p', { className: 'pd-heading', textContent: options.title }),
       el('p', { className: 'pd-info', textContent: options.text }),
-      options.onRestart && button(options.restartLabel, options.onRestart, 'primary'),
+      button(options.restartLabel, options.onRestart, 'primary'),
       button(t.toMenu, options.onExit),
     ),
   );

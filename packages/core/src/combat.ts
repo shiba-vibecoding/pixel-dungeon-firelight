@@ -2,6 +2,7 @@ import {
   type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive, maxExp, type Mob, MOBS,
 } from './actors';
 import { type Char, type Ctx, heroesOn, isHero, leaveCell } from './floor';
+import { T } from './level/terrain';
 
 /*
  * Melee combat as in Char.attack: an accuracy roll against an evasion roll,
@@ -22,20 +23,32 @@ function armor(char: Char): number {
   return isHero(char) ? heroArmor(char) : MOBS[char.kind].dr;
 }
 
-function damageRoll(ctx: Ctx, char: Char): number {
+function damageRoll(ctx: Ctx, char: Char, range?: readonly [number, number]): number {
   if (isHero(char)) return heroDamageRoll(char, ctx.rng);
-  const [min, max] = MOBS[char.kind].damage;
+  const [min, max] = range ?? MOBS[char.kind].damage;
   return ctx.rng.normalIntRange(min, max);
 }
 
-export function attack(ctx: Ctx, attacker: Char, defender: Char): void {
-  const hit = ctx.rng.floatMax(attackSkill(attacker)) >= ctx.rng.floatMax(defenseSkill(defender));
+/** Changes to an attacker's usual numbers, e.g. a pumped-up Goo. */
+export interface AttackOverride {
+  attack?: number;
+  damage?: readonly [number, number];
+}
+
+export function attack(ctx: Ctx, attacker: Char, defender: Char, override: AttackOverride = {}): void {
+  const skill = override.attack ?? attackSkill(attacker);
+  const hit = ctx.rng.floatMax(skill) >= ctx.rng.floatMax(defenseSkill(defender));
   if (!hit) {
     ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage: 0 });
     return;
   }
   const reduction = ctx.rng.intRange(0, armor(defender));
-  const damage = Math.max(damageRoll(ctx, attacker) - reduction, 0);
+  const damage = Math.max(damageRoll(ctx, attacker, override.damage) - reduction, 0);
+  // Goo's touch may leave caustic ooze that burns until washed off in water.
+  if (!isHero(attacker) && attacker.kind === 'goo' && ctx.rng.int(3) === 0 && isHero(defender)) {
+    if (defender.ooze < 0) ctx.effects.push({ type: 'oozed', hero: defender.id });
+    defender.ooze = 0;
+  }
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
   hurt(ctx, defender, damage, attacker);
 }
@@ -65,6 +78,15 @@ function mobDied(ctx: Ctx, mob: Mob): void {
   const stats = MOBS[mob.kind];
   for (const hero of heroesOn(ctx.world, ctx.depth)) {
     if (hero.lvl <= stats.maxLvl) earnExp(ctx, hero, stats.exp);
+  }
+
+  if (mob.kind === 'goo') {
+    // The lair opens: the way back up dries out and the exit unlocks.
+    const { level } = ctx;
+    if (level.map[level.entrance] === T.WATER_TILES) level.map[level.entrance] = T.ENTRANCE;
+    if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
+    ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, line: 'death' });
+    ctx.effects.push({ type: 'bossSlain', depth: ctx.depth });
   }
 }
 

@@ -31,6 +31,8 @@ export interface Puppet {
   flashUntil: number;
   alertUntil: number;
   sleeping: boolean;
+  /** Goo, pumped up for a big hit. */
+  pumped: boolean;
   hp: number;
   ht: number;
 }
@@ -65,6 +67,8 @@ export class View {
   flashes: Array<{ cell: number; start: number }> = [];
   log: LogLine[] = [];
   depth = 0;
+  /** When the "boss slain" banner appeared, or 0. */
+  bannerStart = 0;
 
   constructor(private readonly assets: Assets) {}
 
@@ -74,6 +78,7 @@ export class View {
     this.puppets.clear();
     this.floaters = [];
     this.flashes = [];
+    this.bannerStart = 0;
   }
 
   say(text: string, color = COLORS.default, now = performance.now()): void {
@@ -89,13 +94,14 @@ export class View {
     const seen = new Set<string>();
     const place = (
       id: string, kind: string, sprite: CharSprite, isHero: boolean, pos: number, hp: number, ht: number, sleeping: boolean,
+      pumped = false,
     ): void => {
       seen.add(id);
       let puppet = this.puppets.get(id);
       if (!puppet) {
         puppet = {
           id, kind, sprite, isHero, from: pos, to: pos, moveStart: 0, flip: false, anim: 'idle', animStart: now,
-          alive: hp > 0, removeAt: Infinity, flashUntil: 0, alertUntil: 0, sleeping, hp, ht,
+          alive: hp > 0, removeAt: Infinity, flashUntil: 0, alertUntil: 0, sleeping, pumped, hp, ht,
         };
         if (!puppet.alive) {
           puppet.anim = 'die';
@@ -116,6 +122,7 @@ export class View {
       puppet.hp = hp;
       puppet.ht = ht;
       puppet.sleeping = sleeping;
+      puppet.pumped = pumped;
       if (hp > 0 && !puppet.alive) {
         // Revived.
         puppet.alive = true;
@@ -130,7 +137,7 @@ export class View {
       }
     }
     for (const mob of world.floors[this.depth]?.mobs ?? []) {
-      place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht, mob.state === 'sleeping');
+      place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht, mob.state === 'sleeping', mob.pumped);
     }
     for (const [id, puppet] of this.puppets) {
       if (!seen.has(id) && (puppet.alive || now >= puppet.removeAt)) this.puppets.delete(id);
@@ -268,7 +275,30 @@ export class View {
         case 'revived':
           this.say(t.revived(this.name(world, effect.hero)), COLORS.positive, now);
           break;
+        case 'hurt':
+          if (effect.depth === this.depth) this.float(effect.who, String(effect.damage), COLORS.negative, now);
+          break;
+        case 'oozed':
+          if (effect.hero === myId) this.say(t.oozed, COLORS.negative, now);
+          break;
+        case 'pumped':
+          if (effect.depth !== this.depth) break;
+          this.float(effect.mob, '!!!', COLORS.negative, now);
+          this.say(t.gooPumps, COLORS.negative, now);
+          break;
+        case 'yell':
+          if (effect.depth === this.depth) {
+            this.say(`${t.mobs.goo}: «${effect.line === 'notice' ? t.gooNotice : t.gooDeath}»`, COLORS.negative, now);
+          }
+          break;
+        case 'bossSlain':
+          this.bannerStart = now;
+          this.say(t.bossSlain, COLORS.highlight, now);
+          audio.play('boss');
+          haptic('success');
+          break;
         case 'interrupted':
+        case 'victory':
           break;
       }
     }
