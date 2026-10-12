@@ -42,6 +42,26 @@
    npx wrangler secret put WEBHOOK_SECRET --config packages/server/wrangler.jsonc
    ```
 
+4. Поддержка и возвраты. Узнайте свой Telegram ID (например, у @userinfobot) и
+   впишите его в `packages/server/wrangler.jsonc` в `vars`:
+   `"ADMIN_CHAT_ID": "123456789"` (можно и id группы, он начинается с `-`).
+   Это не секрет, но без него сообщения игроков после `/paysupport` никуда не
+   уходят: бот лишь советует написать @barboskich. С ним бот пересылает вам
+   каждое такое сообщение вместе с ID игрока, @username и номерами его последних
+   платежей, а в этом чате (и только в нём) работают команды:
+   - `/payments <user_id>` — платежи игрока, новые сверху;
+   - `/refund <user_id> <charge_id>` — вернуть звёзды (Bot API `refundStarPayment`)
+     и забрать покупку из кошелька;
+   - `/reply <user_id> <текст>` — ответить игроку от имени бота.
+
+   `TERMS_URL` в том же `vars` — адрес страницы условий (`terms.html` клиента),
+   на неё ссылается `/terms`. После правки `vars` выложите сервер заново.
+
+Сервер сам удаляет комнаты, в которых 30 дней никто не играл, и таблицы
+«Подземелья дня» через 60 дней после их дня. Журналы вызовов Cloudflare
+(invocation logs) выключены в `wrangler.jsonc`: в адресе WebSocket комнаты
+передаются данные входа Telegram, и записывать их нельзя.
+
 ## 2. Вебхук бота
 
 У бота один вебхук. Сейчас его принимает Worker Java-версии
@@ -85,6 +105,11 @@ node packages/server/scripts/set-webhook.mjs https://pd-coop.<поддомен>.
   `python packages/client/scripts/bot-cover.py "Другая подпись"`.
 - Политика конфиденциальности: `https://shiba-vibecoding.github.io/pixel-dungeon-telegram/privacy.html`
   (@BotFather → бот → Bot Settings → Privacy Policy).
+- Условия использования: `https://shiba-vibecoding.github.io/pixel-dungeon-telegram/terms.html`
+  (@BotFather → бот → Bot Settings → Terms of Service, если такой пункт есть; иначе
+  достаточно команды `/terms`, которая на них ссылается). Обе страницы лежат в
+  `packages/client/public/` и выкладываются вместе с клиентом.
+- Команды бота (@BotFather → `/setcommands`): `start`, `paysupport`, `terms`.
 - Оплата звёздами в Telegram отдельно не включается: звёзды работают у любого бота.
   Вывод заработанных звёзд — @BotFather → бот → Balance (через Fragment, в TON).
 
@@ -97,8 +122,9 @@ node packages/server/scripts/set-webhook.mjs https://pd-coop.<поддомен>.
 - В игре: «Играть с друзьями» — друг заходит по ссылке, вы видите друг друга.
 - «Подземелье дня» → конец забега → таблица дня с вашим местом.
 - Пиксель-Март → купить облик → Telegram показывает оплату звёздами.
-  Проверить можно на самом дешёвом товаре и вернуть звёзды через `/paysupport`
-  (возврат делает владелец бота: Bot API `refundStarPayment`).
+  Проверить можно на самом дешёвом товаре: напишите боту `/paysupport тест` —
+  сообщение придёт в чат `ADMIN_CHAT_ID`; там `/payments <ваш id>` покажет платёж,
+  а `/refund <ваш id> <charge_id>` вернёт звёзды.
 
 ## Запуск на своём компьютере
 

@@ -30,4 +30,15 @@ describe('Telegram init data', () => {
     expect(await verifyInitData(stale, BOT_TOKEN, 86400, now)).toBeNull();
     expect(await verifyInitData('user=x', BOT_TOKEN, 86400, now)).toBeNull();
   });
+
+  it('rejects data signed in the future, beyond a little clock skew', async () => {
+    expect(await verifyInitData(sign({ auth_date: String(now + 60), user }), BOT_TOKEN, 86400, now)).toMatchObject({ id: 4242 });
+    expect(await verifyInitData(sign({ auth_date: String(now + 3600), user }), BOT_TOKEN, 86400, now)).toBeNull();
+  });
+
+  it('takes a longer age where asked (reading the shop)', async () => {
+    const old = sign({ auth_date: String(now - 3 * 86400), user });
+    expect(await verifyInitData(old, BOT_TOKEN, 86400, now)).toBeNull();
+    expect(await verifyInitData(old, BOT_TOKEN, 7 * 86400, now)).toMatchObject({ id: 4242 });
+  });
 });

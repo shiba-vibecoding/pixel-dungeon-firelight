@@ -29,12 +29,23 @@ export interface RoomState {
   seq: number;
   /** When each hero who is holding companions up started doing so (ms). */
   holdingSince: Record<string, number>;
+  /**
+   * Players who play a hero not of their own id, by player id: a seat taken
+   * over from someone long gone, or a new hero for a player whose own was
+   * taken over (see seatFor). Absent in rooms saved before seats could change.
+   */
+  seats?: Record<string, string>;
+  /** Since when each hero's player has been away (ms), by hero id. */
+  offlineSince?: Record<string, number>;
 }
 
 export const TURN_TIMEOUT = 12_000;
 
 /** Heroes per party; a shared invite link in a big chat must not flood one dungeon. */
 export const PARTY_SIZE = 4;
+
+/** How long a full party's hero must have been without its player before a newcomer may take it over. */
+export const SEAT_TIMEOUT = 30 * 60_000;
 
 export class RoomLogic {
   private readonly online = new Set<string>();
@@ -72,10 +83,59 @@ export class RoomLogic {
     return heroes.length >= PARTY_SIZE && !heroes.some((hero) => hero.id === playerId);
   }
 
+  /**
+   * The hero a player plays in this room, by id: their own, or a new one, or,
+   * when the party is full, the hero of whoever has been away longest, if
+   * that is over SEAT_TIMEOUT (a party must not keep seats for players who
+   * never come back). Null if there is no seat for them. The player then
+   * connects under that hero's id; the room remembers whose it is now, and
+   * someone whose hero was taken over gets a new one when they come back.
+   */
+  seatFor(playerId: string, now: number): string | null {
+    const seats = (this.saved.seats ??= {});
+    const heroes = this.saved.world.heroes;
+    const exists = (id: string): boolean => heroes.some((hero) => hero.id === id);
+    const taken = new Set(Object.values(seats));
+    const mine = seats[playerId];
+    // Theirs, or a new one set aside for them that has yet to join.
+    if (mine !== undefined && (exists(mine) || heroes.length < PARTY_SIZE)) return mine;
+    if (mine === undefined && exists(playerId) && !taken.has(playerId)) return playerId;
+
+    // No hero of their own (any more): a new one if there is room.
+    if (heroes.length < PARTY_SIZE) {
+      let id = playerId;
+      for (let n = 2; exists(id) || taken.has(id); n++) id = `${playerId}~${n}`;
+      if (id === playerId) delete seats[playerId];
+      else seats[playerId] = id;
+      return id;
+    }
+    const gone = this.longestAway(now);
+    if (!gone) return null;
+    // Whoever played that hero before (if not its first player) no longer does.
+    for (const [player, hero] of Object.entries(seats)) if (hero === gone) delete seats[player];
+    if (gone === playerId) delete seats[playerId];
+    else seats[playerId] = gone;
+    return gone;
+  }
+
+  /** The hero whose player has been away longest, if over SEAT_TIMEOUT. */
+  private longestAway(now: number): string | null {
+    const away = (this.saved.offlineSince ??= {});
+    let best: string | null = null;
+    for (const hero of this.saved.world.heroes) {
+      if (this.online.has(hero.id)) continue;
+      // A hero away since before the room kept count: counted from now.
+      away[hero.id] ??= now;
+      if (now - away[hero.id]! >= SEAT_TIMEOUT && (best === null || away[hero.id]! < away[best]!)) best = hero.id;
+    }
+    return best;
+  }
+
   connect(player: PlayerInfo, now: number): Delivery[] {
     const deliveries: Delivery[] = [];
     const others = this.onlinePlayers().filter((id) => id !== player.id);
     this.online.add(player.id);
+    if (this.saved.offlineSince) delete this.saved.offlineSince[player.id];
 
     if (!this.saved.world.heroes.some((hero) => hero.id === player.id)) {
       // Everyone already here learns about the newcomer as a regular event;
@@ -90,6 +150,7 @@ export class RoomLogic {
 
   disconnect(playerId: string, now: number): Delivery[] {
     this.online.delete(playerId);
+    (this.saved.offlineSince ??= {})[playerId] = now;
     return [this.presence(), ...this.settle(now)];
   }
 

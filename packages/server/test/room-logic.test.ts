@@ -4,7 +4,7 @@ import {
   type ServerMessage, type World,
 } from '@pd/core';
 import { botAction, pacify } from '../../core/test/helpers';
-import { type Delivery, RoomLogic, STATE_FORMAT, TURN_TIMEOUT } from '../src/room-logic';
+import { type Delivery, RoomLogic, SEAT_TIMEOUT, STATE_FORMAT, TURN_TIMEOUT } from '../src/room-logic';
 
 const alice = { id: 'alice', name: 'Alice', heroClass: 'warrior' as const };
 const bob = { id: 'bob', name: 'Bob', heroClass: 'mage' as const };
@@ -233,5 +233,56 @@ describe('co-op turns on the server', () => {
     // The replicas were broken by hand above, so they resync and then match.
     route(room.receive('alice', { type: 'sync' }, 0), replicas);
     expect(replicas.alice.world).toEqual(world);
+  });
+
+  it('gives a full party’s seat to a newcomer only once its player has long been away', () => {
+    const room = RoomLogic.create(12);
+    const join = (id: string, now: number) => {
+      const seat = room.seatFor(id, now);
+      if (seat !== null) room.connect({ id: seat, name: id, heroClass: 'rogue' }, now);
+      return seat;
+    };
+    for (const id of ['a', 'b', 'c', 'd']) expect(join(id, 0)).toBe(id);
+    expect(room.seatFor('e', 0)).toBeNull();
+
+    room.disconnect('b', 1000);
+    room.disconnect('c', 2000);
+    // Away, but not for long enough.
+    expect(room.seatFor('e', 1000 + SEAT_TIMEOUT - 1)).toBeNull();
+    // The longest away goes first; the hero stays, now played by the newcomer.
+    expect(join('e', 2000 + SEAT_TIMEOUT)).toBe('b');
+    expect(room.state().world.heroes.map((h) => h.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(room.seatFor('e', 2000 + SEAT_TIMEOUT)).toBe('b');
+
+    // Members still present keep theirs, and whoever lost a seat no longer has it.
+    expect(room.seatFor('a', 2000 + SEAT_TIMEOUT)).toBe('a');
+    expect(room.seatFor('b', 2000 + SEAT_TIMEOUT)).toBe('c');
+  });
+
+  it('gives a player whose hero was taken over a new hero of their own when there is room', () => {
+    const room = RoomLogic.create(12);
+    for (const id of ['a', 'b', 'c', 'd']) room.connect({ id, name: id, heroClass: 'mage' }, 0);
+    room.disconnect('a', 0);
+    const seat = room.seatFor('e', SEAT_TIMEOUT);
+    expect(seat).toBe('a');
+    room.connect({ id: seat!, name: 'e', heroClass: 'mage' }, SEAT_TIMEOUT);
+    // The party had a death in the family: one hero fewer, a seat free.
+    const world = room.state().world;
+    world.heroes.splice(world.heroes.findIndex((h) => h.id === 'd'), 1);
+    expect(room.seatFor('a', SEAT_TIMEOUT)).toBe('a~2');
+    expect(room.seatFor('a', SEAT_TIMEOUT)).toBe('a~2');
+    expect(room.seatFor('e', SEAT_TIMEOUT)).toBe('a');
+  });
+
+  it('keeps seats when the room is saved and restored', () => {
+    const room = RoomLogic.create(12);
+    for (const id of ['a', 'b', 'c', 'd']) room.connect({ id, name: id, heroClass: 'mage' }, 0);
+    room.disconnect('a', 0);
+    expect(room.seatFor('e', SEAT_TIMEOUT)).toBe('a');
+    room.connect({ id: 'a', name: 'e', heroClass: 'mage' }, SEAT_TIMEOUT);
+    const restored = RoomLogic.restore(JSON.parse(JSON.stringify(room.state())), 1);
+    restored.restoreOnline(['a', 'b', 'c', 'd']);
+    expect(restored.seatFor('e', SEAT_TIMEOUT)).toBe('a');
+    expect(restored.seatFor('f', SEAT_TIMEOUT)).toBeNull();
   });
 });

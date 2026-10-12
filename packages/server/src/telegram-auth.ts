@@ -9,12 +9,20 @@ export interface TelegramUser {
   id: number;
   first_name?: string;
   username?: string;
+  language_code?: string;
 }
+
+/** How long init data is good for: a day for anything that spends, a week to read (the Mini App can stay open for long). */
+export const DAY_SECONDS = 24 * 60 * 60;
+export const WEEK_SECONDS = 7 * DAY_SECONDS;
+/** How far ahead of the server's clock a signing date may be: clocks differ a little, never by more. */
+const CLOCK_SKEW_SECONDS = 5 * 60;
 
 const encoder = new TextEncoder();
 
 async function hmac(key: ArrayBuffer | Uint8Array, data: string): Promise<ArrayBuffer> {
-  const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  // Node's types (the tests') and the Workers' differ on which byte arrays a key may be; both take these.
+  const cryptoKey = await crypto.subtle.importKey('raw', key as Uint8Array<ArrayBuffer>, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data));
 }
 
@@ -22,11 +30,11 @@ function hex(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Returns the signed-in user, or null if the data is forged, malformed or stale. */
+/** Returns the signed-in user, or null if the data is forged, malformed, stale or dated in the future. */
 export async function verifyInitData(
   initData: string,
   botToken: string,
-  maxAgeSeconds = 24 * 60 * 60,
+  maxAgeSeconds = DAY_SECONDS,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): Promise<TelegramUser | null> {
   const params = new URLSearchParams(initData);
@@ -47,7 +55,7 @@ export async function verifyInitData(
   if (diff !== 0) return null;
 
   const authDate = Number(params.get('auth_date'));
-  if (!Number.isFinite(authDate) || nowSeconds - authDate > maxAgeSeconds) return null;
+  if (!Number.isFinite(authDate) || nowSeconds - authDate > maxAgeSeconds || authDate - nowSeconds > CLOCK_SKEW_SECONDS) return null;
 
   try {
     const user = JSON.parse(params.get('user') ?? '') as TelegramUser;

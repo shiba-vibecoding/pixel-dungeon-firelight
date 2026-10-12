@@ -75,3 +75,33 @@ export class Leaderboard {
     return this.board.slice(0, count);
   }
 }
+
+/** How many results a player may send in a day; a real player finishes a handful of runs at most. */
+export const MAX_SUBMISSIONS = 10;
+
+/** Counts a player's result of the day: false, without counting, once they have sent MAX_SUBMISSIONS. */
+export function countSubmission(counts: Record<string, number>, id: string, max = MAX_SUBMISSIONS): boolean {
+  const sent = counts[id] ?? 0;
+  if (sent >= max) return false;
+  counts[id] = sent + 1;
+  return true;
+}
+
+/** What the board shows for a player: an opaque id, the same all day, unlinkable across days. */
+const PUBLIC_ID = /^p[0-9a-f]{16}$/;
+
+export function isPublicId(id: string): boolean {
+  return PUBLIC_ID.test(id);
+}
+
+/**
+ * A player's id on one day's board: a keyed hash of the day and their account,
+ * so the board never shows a Telegram id, and nobody can tell from two days'
+ * boards that the same player is on both. `key` is a server secret.
+ */
+export async function publicId(key: string, date: string, playerId: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey('raw', encoder.encode(`daily-board:${key}`), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(`${date}\n${playerId}`)));
+  return `p${[...mac.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+}
