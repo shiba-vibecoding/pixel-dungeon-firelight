@@ -1,13 +1,13 @@
 import {
-  adjacent, blockers, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, type Hero,
-  heroById, type HeroClass, HEIGHT, isAlive, levelAt, mobById, T, visibleCells, WIDTH, type World,
+  adjacent, blockers, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, HEAP_SPRITES, type Hero,
+  heroById, type HeroClass, HEIGHT, isAlive, itemSprite, levelAt, mobById, T, visibleCells, WIDTH, type World,
 } from '@pd/core';
 import * as core from '@pd/core';
 import { audio } from './audio';
-import { Hud } from './hud';
+import { BUFF_ICONS, Hud } from './hud';
 import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
-import { hideOverlay, overlayOpen, showHelp, showMenu, showRunEnd, showTitle, toast } from './screens';
+import { hideOverlay, overlayOpen, showBackpack, showHelp, showMenu, showRunEnd, showTitle, toast } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
 import {
@@ -198,13 +198,19 @@ const walk = {
   /** Monster to walk up to and hit. */
   chase: null as string | null,
   stairs: null as 'descend' | 'ascend' | null,
+  /** Pick up what lies at the end of the walk. */
+  pickup: false,
   lastSent: 0,
   reset(): void {
     this.queue = [];
     this.chase = null;
     this.stairs = null;
+    this.pickup = false;
   },
 };
+
+const heapAt = (world: World, depth: number, pos: number): boolean =>
+  (world.floors[depth]?.heaps ?? []).some((heap) => heap.pos === pos);
 
 /** Awake monsters the party could see last frame; a new one interrupts walking. */
 let threats = new Set<string>();
@@ -246,6 +252,14 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
     }
     send({ type: 'move', to: next }, now);
     return;
+  }
+
+  if (walk.pickup) {
+    walk.pickup = false;
+    if (heapAt(world, me.depth, me.pos)) {
+      send({ type: 'pickup' }, now);
+      return;
+    }
   }
 
   if (walk.stairs) {
@@ -304,7 +318,8 @@ function tapCell(cell: number): void {
   walk.reset();
 
   if (cell === me.pos) {
-    if (me.pos === level.exit) useStairs(world, 'descend', performance.now());
+    if (heapAt(world, me.depth, me.pos)) send({ type: 'pickup' }, performance.now());
+    else if (me.pos === level.exit) useStairs(world, 'descend', performance.now());
     else if (me.pos === level.entrance && me.depth > 1) useStairs(world, 'ascend', performance.now());
     else act('search');
     return;
@@ -316,8 +331,18 @@ function tapCell(cell: number): void {
   }
   if (!explored[cell]) return;
   walk.queue = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored) ?? [];
+  if (walk.queue.length === 0) return;
+  walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && me.depth > 1) walk.stairs = 'ascend';
+}
+
+function openBackpack(): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  walk.reset();
+  showBackpack({ world, hero: me, onAction: (action) => send(action, performance.now()), onClose: hideOverlay });
 }
 
 canvas.addEventListener('pointerdown', (event) => {
@@ -329,6 +354,7 @@ canvas.addEventListener('pointerdown', (event) => {
   if (button) audio.play('click');
   if (button === 'wait' || button === 'search') act(button);
   else if (button === 'help') showHelp(hideOverlay);
+  else if (button === 'backpack') openBackpack();
   else if (button === 'menu') openMenu();
   if (button || hud.covers(px, py)) return;
 
@@ -359,6 +385,10 @@ addEventListener('keydown', (event) => {
     act('wait');
   } else if (event.code === 'KeyF') {
     act('search');
+  } else if (event.code === 'KeyI') {
+    openBackpack();
+  } else if (event.code === 'KeyG') {
+    if (heapAt(world, me.depth, me.pos)) send({ type: 'pickup' }, performance.now());
   } else if (event.code === 'Enter') {
     tapCell(me.pos);
   } else if (event.code === 'Escape') {
@@ -411,7 +441,10 @@ function drawBackdrop(now: number): void {
   const span = WIDTH * TILE;
   camera.x = Math.round(span / 2 - canvas.width / camera.zoom / 2 + Math.sin(now / 9000) * 60);
   camera.y = Math.round(span / 2 - canvas.height / camera.zoom / 2 + Math.cos(now / 11000) * 40);
-  render(ctx, level, backdrop.baked, all, all, backdrop.view, '', assets, camera, now);
+  render(
+    ctx, { level, baked: backdrop.baked, visible: all, explored: all, heaps: [], seeAll: false },
+    backdrop.view, '', assets, camera, now,
+  );
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = 'rgba(15, 13, 13, 0.6)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -431,7 +464,9 @@ function tick(now: number): void {
   const me = world && heroById(world, session.myId);
   if (!world || !me) {
     drawBackdrop(now);
-    hud.draw(ctx, { me: placeholderHero, party: [], online: [], waitingFor: [], status: session.status, log: [] }, now);
+    hud.draw(
+      ctx, { me: placeholderHero, party: [], online: [], waitingFor: [], status: session.status, log: [], buffs: [] }, now,
+    );
     return;
   }
 
@@ -487,7 +522,14 @@ function tick(now: number): void {
   const at = mine ? view.position(mine, now) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
   camera.x = Math.round(at.x + TILE / 2 - canvas.width / camera.zoom / 2);
   camera.y = Math.round(at.y + TILE / 2 - canvas.height / camera.zoom / 2);
-  render(ctx, level, baked!, visible, exploredCells(world, me.depth), view, session.myId, assets, camera, now);
+  const heaps = (world.floors[me.depth]?.heaps ?? []).map((heap) => ({
+    pos: heap.pos,
+    sprite: heap.kind === 'heap' ? itemSprite(heap.items[0]!, world.run.labels) : HEAP_SPRITES[heap.kind],
+  }));
+  const scene = {
+    level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, seeAll: me.mindVision > 0,
+  };
+  render(ctx, scene, view, session.myId, assets, camera, now);
 
   // Who the dungeon is waiting for, once my action has been queued for a moment.
   if (session.busy) busySince ||= now;
@@ -506,6 +548,11 @@ function tick(now: number): void {
       waitingFor,
       status,
       log: view.log,
+      buffs: [
+        ...(me.mindVision > 0 ? [BUFF_ICONS.mindVision] : []),
+        ...(me.invisible > 0 ? [BUFF_ICONS.invisible] : []),
+        ...(me.ooze >= 0 ? [BUFF_ICONS.ooze] : []),
+      ],
     },
     now,
   );

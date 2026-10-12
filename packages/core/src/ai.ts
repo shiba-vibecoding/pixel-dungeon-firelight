@@ -26,7 +26,8 @@ function spend(mob: Mob, time: number): void {
 }
 
 function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
-  const heroes = heroesOn(ctx.world, ctx.depth);
+  // Invisible heroes cannot be picked out.
+  const heroes = heroesOn(ctx.world, ctx.depth).filter((hero) => hero.invisible <= 0);
   const current = heroes.find((hero) => hero.id === mob.enemy);
   if (current && fov[current.pos]) return current;
 
@@ -277,7 +278,7 @@ function randomCell(rng: Rng, ok: (cell: number) => boolean): number {
 }
 
 /** RegularLevel.randomRespawnCell: a free cell in a standard room, out of sight. */
-function randomRespawnCell(rng: Rng, world: World, level: Level, hidden: (cell: number) => boolean): number {
+export function randomRespawnCell(rng: Rng, world: World, level: Level, hidden: (cell: number) => boolean): number {
   const free = (cell: number): boolean =>
     cell >= 0 && cell < LENGTH && hidden(cell) && isPassable(level, cell) && !charAt(world, level.depth, cell);
   for (let count = 0; count < 10; count++) {

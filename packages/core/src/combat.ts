@@ -1,7 +1,8 @@
 import {
   type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive, maxExp, type Mob, MOBS,
 } from './actors';
-import { type Char, type Ctx, heroesOn, isHero, leaveCell } from './floor';
+import { type Char, type Ctx, dropItem, heroesOn, isHero, leaveCell } from './floor';
+import { rollGold } from './items';
 import { T } from './level/terrain';
 
 /*
@@ -36,6 +37,8 @@ export interface AttackOverride {
 }
 
 export function attack(ctx: Ctx, attacker: Char, defender: Char, override: AttackOverride = {}): void {
+  // Striking gives an invisible hero away.
+  if (isHero(attacker)) attacker.invisible = 0;
   const skill = override.attack ?? attackSkill(attacker);
   const hit = ctx.rng.floatMax(skill) >= ctx.rng.floatMax(defenseSkill(defender));
   if (!hit) {
@@ -76,8 +79,14 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 
   // Everyone fighting on the depth learns from the kill, not just the killer.
   const stats = MOBS[mob.kind];
-  for (const hero of heroesOn(ctx.world, ctx.depth)) {
+  const heroes = heroesOn(ctx.world, ctx.depth);
+  for (const hero of heroes) {
     if (hero.lvl <= stats.maxLvl) earnExp(ctx, hero, stats.exp);
+  }
+
+  // Mob.dropLoot: gnolls carry some gold, unless the party has outgrown them.
+  if (mob.kind === 'gnoll' && heroes.some((h) => h.lvl <= stats.maxLvl + 2) && ctx.rng.float() < 0.5) {
+    dropItem(ctx.floor, mob.pos, rollGold(ctx.rng, ctx.depth));
   }
 
   if (mob.kind === 'goo') {

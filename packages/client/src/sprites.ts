@@ -29,6 +29,9 @@ export interface Assets {
   mobs: Record<MobKind, CharSprite>;
   icons: HTMLImageElement;
   bossBanner: HTMLImageElement;
+  items: HTMLImageElement;
+  /** 7x7 buff icons (BuffIndicator). */
+  buffs: HTMLImageElement;
   status: HTMLImageElement;
   toolbar: HTMLImageElement;
   hpBar: HTMLImageElement;
@@ -103,7 +106,7 @@ const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image
 export async function loadAssets(base: string): Promise<Assets> {
   const names = [
     'tiles0', 'water0', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo',
-    'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss',
+    'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs',
   ] as const;
   const images = Object.fromEntries(
     await Promise.all(names.map(async (name) => [name, await loadImage(`${base}${name}.png`)] as const)),
@@ -126,6 +129,8 @@ export async function loadAssets(base: string): Promise<Assets> {
     mobs: { rat: mob('rat'), gnoll: mob('gnoll'), crab: mob('crab'), goo: mob('goo') },
     icons: images.icons,
     bossBanner: images['banner-boss'],
+    items: images.items,
+    buffs: images.buffs,
     status: images.status_pane,
     toolbar: images.toolbar,
     hpBar: images.hp_bar,

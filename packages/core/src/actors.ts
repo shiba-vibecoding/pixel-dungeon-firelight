@@ -1,3 +1,4 @@
+import { armorStats, createItem, type Item, type ItemKind, weaponStats } from './items';
 import type { Rng } from './rng';
 import type { Action } from './world';
 
@@ -11,44 +12,27 @@ const f32 = Math.fround;
 
 export type HeroClass = 'warrior' | 'mage' | 'rogue' | 'huntress';
 
-export interface Weapon {
-  min: number;
-  max: number;
-  /** Strength needed to use it without penalties. */
-  str: number;
-  /** ACU and DLY of the original: accuracy and attack-delay factors. */
-  accuracy: number;
-  delay: number;
-}
-
-/** A tier-1 melee weapon, as MeleeWeapon derives its damage. */
-function tier1(accuracy: number, delay: number, str = 10): Weapon {
-  return { min: 1, max: Math.trunc(f32(f32(10 / f32(accuracy)) * f32(delay))), str, accuracy, delay };
-}
-
-export const WEAPONS = {
-  shortSword: tier1(1, 1, 11),
-  dagger: tier1(1.2, 1),
-  knuckles: tier1(1, 0.5),
-} as const;
-
-/** Cloth armour, worn by every class: tier 1. */
-const ARMOR = { dr: 2, str: 9 };
-
 interface ClassKit {
   ht: number;
   str: number;
-  weapon: Weapon;
+  weapon: ItemKind;
+  /** Extra starting items, known to the party from the start. */
+  items: readonly ItemKind[];
   stealth: number;
 }
 
 export const HERO_CLASSES: Readonly<Record<HeroClass, ClassKit>> = {
-  warrior: { ht: 20, str: 11, weapon: WEAPONS.shortSword, stealth: 0 },
-  mage: { ht: 20, str: 10, weapon: WEAPONS.knuckles, stealth: 0 },
+  warrior: { ht: 20, str: 11, weapon: 'weapon.shortSword', items: [], stealth: 0 },
+  // The mage's wand of magic missile and the huntress's boomerang are not
+  // ported yet; a potion of healing makes up for them for now.
+  mage: { ht: 20, str: 10, weapon: 'weapon.knuckles', items: ['potion.healing'], stealth: 0 },
   // The rogue's starting ring of shadows +1.
-  rogue: { ht: 20, str: 10, weapon: WEAPONS.dagger, stealth: 1 },
-  huntress: { ht: 15, str: 10, weapon: WEAPONS.dagger, stealth: 0 },
+  rogue: { ht: 20, str: 10, weapon: 'weapon.dagger', items: [], stealth: 1 },
+  huntress: { ht: 15, str: 10, weapon: 'weapon.dagger', items: ['potion.healing'], stealth: 0 },
 };
+
+/** Backpack slots, equipment aside. */
+export const BACKPACK_SIZE = 20;
 
 export interface Hero {
   id: string;
@@ -72,6 +56,13 @@ export interface Hero {
   regen: number;
   /** Caustic ooze from Goo: time since it last burned, or -1 when clean. Water washes it off. */
   ooze: number;
+  weapon: Item;
+  armor: Item;
+  items: Item[];
+  gold: number;
+  /** Turns left of sensing every monster on the level / of being unseen. */
+  mindVision: number;
+  invisible: number;
 }
 
 export interface PlayerInfo {
@@ -99,20 +90,26 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     intent: null,
     regen: 0,
     ooze: -1,
+    weapon: createItem(kit.weapon),
+    armor: createItem('armor.cloth'),
+    items: kit.items.map((kind) => createItem(kind)),
+    gold: 0,
+    mindVision: 0,
+    invisible: 0,
   };
 }
 
 export const isAlive = (char: { hp: number }): boolean => char.hp > 0;
 
 export function heroAttackSkill(hero: Hero): number {
-  const weapon = HERO_CLASSES[hero.heroClass].weapon;
+  const weapon = weaponStats(hero.weapon);
   const encumbrance = weapon.str - hero.str;
   const factor = encumbrance > 0 ? f32(weapon.accuracy / 1.5 ** encumbrance) : f32(weapon.accuracy);
   return Math.trunc(f32(hero.attackSkill * factor));
 }
 
 export function heroDefenseSkill(hero: Hero): number {
-  const encumbrance = ARMOR.str - hero.str;
+  const encumbrance = armorStats(hero.armor).str - hero.str;
   if (encumbrance > 0) {
     return Math.trunc(hero.defenseSkill / 1.5 ** encumbrance);
   }
@@ -120,8 +117,14 @@ export function heroDefenseSkill(hero: Hero): number {
   return hero.heroClass === 'rogue' ? hero.defenseSkill - encumbrance : hero.defenseSkill;
 }
 
+/** Heavy armour slows its wearer down (Hero.speed). */
+export function heroSpeed(hero: Hero): number {
+  const encumbrance = armorStats(hero.armor).str - hero.str;
+  return encumbrance > 0 ? 1.3 ** -encumbrance : 1;
+}
+
 export function heroDamageRoll(hero: Hero, rng: Rng): number {
-  const weapon = HERO_CLASSES[hero.heroClass].weapon;
+  const weapon = weaponStats(hero.weapon);
   let damage = rng.normalIntRange(weapon.min, weapon.max);
   if (hero.heroClass !== 'huntress') {
     const excess = hero.str - weapon.str;
@@ -133,7 +136,7 @@ export function heroDamageRoll(hero: Hero, rng: Rng): number {
 }
 
 export function heroAttackDelay(hero: Hero): number {
-  const weapon = HERO_CLASSES[hero.heroClass].weapon;
+  const weapon = weaponStats(hero.weapon);
   const encumbrance = weapon.str - hero.str;
   return encumbrance > 0 ? f32(weapon.delay * 1.2 ** encumbrance) : weapon.delay;
 }
@@ -143,7 +146,7 @@ export function awareness(hero: Hero): number {
   return 1 - (hero.heroClass === 'rogue' ? 0.85 : 0.9) ** ((1 + Math.min(hero.lvl, 9)) * 0.5);
 }
 
-export const heroArmor = (_hero: Hero): number => ARMOR.dr;
+export const heroArmor = (hero: Hero): number => armorStats(hero.armor).dr;
 export const heroStealth = (hero: Hero): number => HERO_CLASSES[hero.heroClass].stealth;
 export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 

@@ -1,11 +1,15 @@
 import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
-import { awareness, createHero, type Hero, heroAttackDelay, isAlive, type Mob, type PlayerInfo } from './actors';
+import {
+  awareness, createHero, type Hero, heroAttackDelay, heroSpeed, isAlive, type Mob, type PlayerInfo,
+} from './actors';
 import { attack, hurt } from './combat';
 import {
-  canEnter, charAt, type Ctx, type Effect, enterCell, type Floor, freeCellNear, heroesOn, isWater, leaveCell,
+  canEnter, charAt, type Ctx, type Effect, enterCell, exploredCells, type Floor, freeCellNear, heroesOn, heroView,
+  isWater, leaveCell, observe,
 } from './floor';
+import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
+import { createItems, type ItemKind } from './items';
 import { isBossDepth } from './level/builder';
-import { castShadow, terrainBlocksSight } from './fov';
 import { generateLevel, type Level } from './level/generate';
 import { adjacent, cellX, cellY, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { discover, F, hasFlag, T } from './level/terrain';
@@ -31,7 +35,8 @@ export type Action =
   | { type: 'descend' }
   | { type: 'ascend' }
   | { type: 'wait' }
-  | { type: 'search' };
+  | { type: 'search' }
+  | InventoryAction;
 
 export type ActionResult = { ok: true; effects: Effect[] } | { ok: false; reason: string };
 
@@ -52,6 +57,8 @@ export interface World {
   over: boolean;
   /** Goo is slain and a hero took the stairs out of its lair. */
   victory: boolean;
+  /** Potion and scroll kinds the party has identified; knowledge is shared. */
+  known: ItemKind[];
 }
 
 /** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
@@ -65,6 +72,7 @@ const REGENERATION_DELAY = 10;
 export function createWorld(seed: number): World {
   return {
     run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
+    known: [],
   };
 }
 
@@ -85,6 +93,7 @@ export function levelAt(world: World, depth: number): Level {
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
         now: 0,
         respawn: isBossDepth(d) ? -1 : TIME_TO_RESPAWN,
+        heaps: createItems(world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), isBossDepth(d)),
       };
     }
   }
@@ -100,6 +109,10 @@ export function addHero(world: World, player: PlayerInfo): Hero {
   const level = levelAt(world, 1);
   const hero = createHero(player, 1, freeCellNear(world, level, 1, level.entrance), floorAt(world, 1).now);
   world.heroes.push(hero);
+  // Heroes know what they set out with.
+  for (const item of hero.items) {
+    if (!world.known.includes(item.kind)) world.known.push(item.kind);
+  }
   observe(world, hero);
   return hero;
 }
@@ -117,12 +130,7 @@ export function mobById(world: World, depth: number, id: string): Mob | undefine
   return world.floors[depth]?.mobs.find((mob) => mob.id === id);
 }
 
-export { canEnter };
-
-/** Field of view of one hero. */
-export function heroView(world: World, hero: Hero): boolean[] {
-  return castShadow(hero.pos, terrainBlocksSight(levelAt(world, hero.depth).map));
-}
+export { canEnter, exploredCells, heroView };
 
 /** Everything the party currently sees on a depth. */
 export function visibleCells(world: World, depth: number): boolean[] {
@@ -135,18 +143,6 @@ export function visibleCells(world: World, depth: number): boolean[] {
   return visible;
 }
 
-export function exploredCells(world: World, depth: number): boolean[] {
-  return (world.explored[depth] ??= new Array<boolean>(LENGTH).fill(false));
-}
-
-/** Adds what a hero sees to the party's shared map. */
-function observe(world: World, hero: Hero): void {
-  const explored = exploredCells(world, hero.depth);
-  heroView(world, hero).forEach((seen, i) => {
-    if (seen) explored[i] = true;
-  });
-}
-
 /** True when no awake monster is in the hero's sight. */
 export function isSafe(world: World, hero: Hero): boolean {
   const fov = heroView(world, hero);
@@ -157,6 +153,7 @@ export function isSafe(world: World, hero: Hero): boolean {
 function problemWith(world: World, hero: Hero, action: Action): string | null {
   if (world.over) return 'the run is over';
   if (!isAlive(hero)) return 'you are dead';
+  if (isInventoryAction(action)) return inventoryProblem(world, hero, action);
   const level = levelAt(world, hero.depth);
   switch (action.type) {
     case 'wait':
@@ -306,10 +303,17 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
     }
     if (isWater(ctx.level.map[hero.pos]!) || !isAlive(hero)) hero.ooze = -1;
   }
+  hero.mindVision = Math.max(0, hero.mindVision - time);
+  hero.invisible = Math.max(0, hero.invisible - time);
 }
 
 function perform(ctx: Ctx, hero: Hero, action: Action): void {
   const { world, level } = ctx;
+  if (isInventoryAction(action)) {
+    spend(ctx, hero, performInventory(ctx, hero, action));
+    if (isAlive(hero)) observe(world, hero);
+    return;
+  }
   switch (action.type) {
     case 'wait':
       spend(ctx, hero, TIME_TO_REST);
@@ -328,7 +332,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       hero.pos = action.to;
       leaveCell(world, level, hero.depth, from);
       enterCell(level, hero.pos);
-      spend(ctx, hero, 1);
+      spend(ctx, hero, 1 / heroSpeed(hero));
       search(ctx, hero, false);
       break;
     }

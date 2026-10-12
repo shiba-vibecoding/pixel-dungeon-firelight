@@ -1,6 +1,7 @@
 import { cellX, cellY, type Effect, heroById, isAlive, type MobKind, type World } from '@pd/core';
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
+import { itemName } from './itemtext';
 import { type AnimName, type Assets, type CharSprite, duration } from './sprites';
 import { haptic } from './telegram';
 
@@ -33,6 +34,8 @@ export interface Puppet {
   sleeping: boolean;
   /** Goo, pumped up for a big hit. */
   pumped: boolean;
+  /** A hero under a potion of invisibility. */
+  invisible: boolean;
   hp: number;
   ht: number;
 }
@@ -95,13 +98,14 @@ export class View {
     const place = (
       id: string, kind: string, sprite: CharSprite, isHero: boolean, pos: number, hp: number, ht: number, sleeping: boolean,
       pumped = false,
+      invisible = false,
     ): void => {
       seen.add(id);
       let puppet = this.puppets.get(id);
       if (!puppet) {
         puppet = {
           id, kind, sprite, isHero, from: pos, to: pos, moveStart: 0, flip: false, anim: 'idle', animStart: now,
-          alive: hp > 0, removeAt: Infinity, flashUntil: 0, alertUntil: 0, sleeping, pumped, hp, ht,
+          alive: hp > 0, removeAt: Infinity, flashUntil: 0, alertUntil: 0, sleeping, pumped, invisible, hp, ht,
         };
         if (!puppet.alive) {
           puppet.anim = 'die';
@@ -123,6 +127,7 @@ export class View {
       puppet.ht = ht;
       puppet.sleeping = sleeping;
       puppet.pumped = pumped;
+      puppet.invisible = invisible;
       if (hp > 0 && !puppet.alive) {
         // Revived.
         puppet.alive = true;
@@ -133,7 +138,10 @@ export class View {
 
     for (const hero of world.heroes) {
       if (hero.depth === this.depth) {
-        place(hero.id, hero.heroClass, this.assets.heroes[hero.heroClass], true, hero.pos, hero.hp, hero.ht, false);
+        place(
+          hero.id, hero.heroClass, this.assets.heroes[hero.heroClass], true, hero.pos, hero.hp, hero.ht, false, false,
+          hero.invisible > 0,
+        );
       }
     }
     for (const mob of world.floors[this.depth]?.mobs ?? []) {
@@ -296,6 +304,59 @@ export class View {
           this.say(t.bossSlain, COLORS.highlight, now);
           audio.play('boss');
           haptic('success');
+          break;
+        case 'opened':
+          audio.play('item', 0.8);
+          break;
+        case 'pickedUp':
+          if (effect.hero !== myId) break;
+          if (effect.item.kind === 'gold') {
+            this.say(t.youFoundGold(effect.item.qty), COLORS.highlight, now);
+            audio.play('gold', 0.9 + Math.random() * 0.2);
+          } else {
+            this.say(t.youPicked(itemName(world, effect.item)), COLORS.default, now);
+            audio.play('item');
+          }
+          break;
+        case 'packFull':
+          if (effect.hero === myId) this.say(t.packFull, COLORS.warning, now);
+          break;
+        case 'dropped':
+          if (effect.hero === myId) audio.play('item', 0.7);
+          break;
+        case 'equipped':
+          if (effect.hero === myId) this.say(t.equippedItem(itemName(world, effect.item)), COLORS.default, now);
+          break;
+        case 'used': {
+          const potion = effect.kind.startsWith('potion.');
+          audio.play(potion ? 'drink' : 'read');
+          if (effect.identified) this.say(t.itWas(t.items[effect.kind]), COLORS.highlight, now);
+          break;
+        }
+        case 'identified':
+          if (effect.hero === myId) this.say(t.identifiedAs(t.items[effect.kind]), COLORS.highlight, now);
+          break;
+        case 'healed':
+          if (effect.amount > 0) this.float(effect.hero, `+${effect.amount}`, COLORS.positive, now);
+          break;
+        case 'strength':
+          this.float(effect.hero, `+1 ${t.strShort}`, COLORS.positive, now);
+          if (effect.hero === myId) this.say(t.stronger, COLORS.positive, now);
+          break;
+        case 'upgraded':
+          if (effect.hero === myId) this.say(t.upgradedItem(itemName(world, effect.item)), COLORS.highlight, now);
+          break;
+        case 'teleported':
+          // Appear at once in the new place rather than sliding across the map.
+          this.puppets.delete(effect.hero);
+          audio.play('teleport');
+          if (effect.hero === myId) this.say(t.teleported, COLORS.default, now);
+          break;
+        case 'mapped':
+          if (effect.hero === myId) this.say(t.mapped, COLORS.highlight, now);
+          break;
+        case 'scroll':
+          this.say(effect.kind === 'challenge' ? t.challenge : t.lullaby, COLORS.warning, now);
           break;
         case 'interrupted':
         case 'victory':

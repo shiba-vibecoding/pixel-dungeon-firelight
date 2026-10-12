@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  act, type Action, addHero, blockers, canEnter, charAt, createMob, createWorld, type Effect, F, floorAt, hasFlag,
-  heroById, isAlive, levelAt, MOBS, NEIGHBOURS8, RoomType, T, WEAPONS, type World,
+  act, type Action, addHero, armorStats, blockers, canEnter, charAt, createItem, createMob, createWorld, type Effect,
+  F, floorAt, hasFlag, heroById, isAlive, type ItemKind, levelAt, MOBS, NEIGHBOURS8, RoomType, T, weaponStats,
+  type World,
 } from '../src/index';
 import { botAction, checkInvariants, pacify, unblock } from './helpers';
 
@@ -56,10 +57,17 @@ describe('monsters', () => {
     }
   });
 
-  it('use the original weapons and stats', () => {
-    expect(WEAPONS.shortSword).toMatchObject({ min: 1, max: 10, str: 11 });
-    expect(WEAPONS.dagger).toMatchObject({ min: 1, max: 8, str: 10 });
-    expect(WEAPONS.knuckles).toMatchObject({ min: 1, max: 5, delay: 0.5 });
+  it('use the original weapons, armour and stats', () => {
+    const stats = (kind: ItemKind, level = 0) => weaponStats(createItem(kind, 1, level));
+    expect(stats('weapon.shortSword')).toMatchObject({ min: 1, max: 10, str: 11 });
+    expect(stats('weapon.dagger')).toMatchObject({ min: 1, max: 8, str: 10 });
+    expect(stats('weapon.knuckles')).toMatchObject({ min: 1, max: 5, delay: 0.5 });
+    expect(stats('weapon.mace')).toMatchObject({ min: 3, max: 12, str: 14 });
+    // 30 / 1.2f is 24.99999 in Java's float arithmetic: the war hammer tops out at 24.
+    expect(stats('weapon.warHammer')).toMatchObject({ min: 5, max: 24, str: 18 });
+    // Upgrades raise damage and lower the strength needed.
+    expect(stats('weapon.sword', 2)).toMatchObject({ min: 5, max: 22, str: 12 });
+    expect(armorStats(createItem('armor.mail', 1, 1))).toEqual({ dr: 9, str: 12 });
     expect(MOBS.crab).toMatchObject({ ht: 15, speed: 2, dr: 4 });
   });
 });

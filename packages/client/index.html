@@ -189,6 +189,67 @@
         gap: 6px;
         font-size: 0.9em;
       }
+      .pd-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pd-row .pd-heading {
+        flex: 1;
+        text-align: left;
+      }
+      .pd-row.equipped .pd-slot {
+        width: 25%;
+      }
+      .pd-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 4px;
+      }
+      .pd-slot {
+        position: relative;
+        aspect-ratio: 1;
+        display: grid;
+        place-items: center;
+        padding: 0;
+        font: inherit;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid #5c5a50;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      .pd-slot.empty {
+        cursor: default;
+        opacity: 0.5;
+      }
+      .pd-item {
+        --s: calc(var(--px) * 1.75);
+        display: inline-block;
+        width: calc(16px * var(--s));
+        height: calc(16px * var(--s));
+        background-image: url(assets/items.png);
+        background-size: calc(128px * var(--s)) calc(256px * var(--s));
+        image-rendering: pixelated;
+      }
+      .pd-qty, .pd-lvl, .pd-tag {
+        position: absolute;
+        font-size: 0.7em;
+        text-shadow: 0 1px 0 #000, 1px 0 0 #000;
+      }
+      .pd-qty { right: 3px; bottom: 1px; }
+      .pd-lvl { left: 3px; top: 1px; }
+      .pd-lvl.up { color: #44ff44; }
+      .pd-lvl.down { color: #ff6666; }
+      .pd-tag { left: 0; right: 0; bottom: 1px; text-align: center; color: #ffeba4; }
+      .pd-gold {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        color: #ffeba4;
+      }
+      .pd-gold .pd-item { --s: var(--px); }
+      .pd-stats { flex: 1; text-align: right; color: #cacfc2; }
       #toast {
         position: fixed;
         left: 50%;

@@ -1,4 +1,6 @@
 import { type Hero, isAlive, type Mob } from './actors';
+import { castShadow, terrainBlocksSight } from './fov';
+import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
@@ -19,6 +21,20 @@ export interface Floor {
   now: number;
   /** When the depth next tries to replenish its monsters; -1 on boss levels, which never do. */
   respawn: number;
+  /** Items lying around, at most one heap per cell. */
+  heaps: Heap[];
+}
+
+/** Puts an item on a cell, adding to whatever lies there already. */
+export function dropItem(floor: Floor, pos: number, item: Item): void {
+  const heap = floor.heaps.find((h) => h.pos === pos);
+  if (!heap) {
+    floor.heaps.push({ pos, kind: 'heap', items: [item] });
+  } else if (heap.kind !== 'heap') {
+    heap.items.push(item);
+  } else {
+    heap.items.unshift(item);
+  }
 }
 
 export const isWater = (terrain: number): boolean => terrain >= T.WATER_TILES && terrain <= T.WATER;
@@ -40,6 +56,20 @@ export type Effect =
   | { type: 'yell'; depth: number; mob: string; line: 'notice' | 'death' }
   | { type: 'bossSlain'; depth: number }
   | { type: 'victory'; hero: string }
+  | { type: 'opened'; depth: number; pos: number; heap: HeapKind }
+  | { type: 'pickedUp'; hero: string; item: Item }
+  | { type: 'packFull'; hero: string }
+  | { type: 'dropped'; hero: string; item: Item }
+  | { type: 'equipped'; hero: string; item: Item }
+  /** A potion drunk or a scroll read; `identified` when this taught the party what it is. */
+  | { type: 'used'; hero: string; kind: ItemKind; identified: boolean }
+  | { type: 'identified'; hero: string; kind: ItemKind }
+  | { type: 'healed'; hero: string; amount: number }
+  | { type: 'strength'; hero: string }
+  | { type: 'upgraded'; hero: string; item: Item }
+  | { type: 'teleported'; hero: string }
+  | { type: 'mapped'; hero: string }
+  | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby'; count: number }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };
 
@@ -67,6 +97,23 @@ export function charAt(world: World, depth: number, cell: number): Char | undefi
     world.heroes.find((hero) => hero.depth === depth && hero.pos === cell && isAlive(hero)) ??
     world.floors[depth]?.mobs.find((mob) => mob.pos === cell)
   );
+}
+
+/** Field of view of one hero. */
+export function heroView(world: World, hero: Hero): boolean[] {
+  return castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map));
+}
+
+export function exploredCells(world: World, depth: number): boolean[] {
+  return (world.explored[depth] ??= new Array<boolean>(LENGTH).fill(false));
+}
+
+/** Adds what a hero sees to the party's shared map. */
+export function observe(world: World, hero: Hero): void {
+  const explored = exploredCells(world, hero.depth);
+  heroView(world, hero).forEach((seen, i) => {
+    if (seen) explored[i] = true;
+  });
 }
 
 /** Cells a hero may step on: open ground, doors and visible traps. */

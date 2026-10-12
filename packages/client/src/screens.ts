@@ -1,6 +1,9 @@
-import type { HeroClass } from '@pd/core';
+import {
+  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, type World,
+} from '@pd/core';
 import { audio } from './audio';
-import { t } from './i18n';
+import { capitalize, t } from './i18n';
+import { isKnown, itemInfo, itemName, spriteOffset } from './itemtext';
 
 /*
  * DOM windows over the game: title screen, menu, help, death. They use the
@@ -182,6 +185,113 @@ export function showRunEnd(options: EndOptions): void {
       el('p', { className: 'pd-info', textContent: options.text }),
       button(options.restartLabel, options.onRestart, 'primary'),
       button(t.toMenu, options.onExit),
+    ),
+  );
+}
+
+/* Backpack */
+
+function itemIcon(world: World, item: Item): HTMLElement {
+  const [x, y] = spriteOffset(world, item);
+  const icon = el('span', { className: 'pd-item' });
+  icon.style.backgroundPosition = `calc(${-x}px * var(--s)) calc(${-y}px * var(--s))`;
+  return icon;
+}
+
+function slot(world: World, item: Item | undefined, onClick?: () => void, label?: string): HTMLElement {
+  const node = el('button', { className: `pd-slot${item ? '' : ' empty'}`, disabled: !item });
+  if (item) {
+    node.append(itemIcon(world, item));
+    if (item.qty > 1) node.append(el('span', { className: 'pd-qty', textContent: String(item.qty) }));
+    if (item.level !== 0 && isKnown(world, item)) {
+      node.append(
+        el('span', { className: `pd-lvl ${item.level > 0 ? 'up' : 'down'}`, textContent: `${item.level > 0 ? '+' : ''}${item.level}` }),
+      );
+    }
+    if (label) node.append(el('span', { className: 'pd-tag', textContent: label }));
+    node.onclick = () => {
+      audio.play('click');
+      onClick?.();
+    };
+  }
+  return node;
+}
+
+export interface BackpackOptions {
+  world: World;
+  hero: Hero;
+  onAction(action: InventoryAction): void;
+  onClose(): void;
+}
+
+export function showBackpack(options: BackpackOptions): void {
+  const { world, hero } = options;
+  const open = (item: Item, index: number | null): void => showItem({ ...options, item, index });
+  const grid = el('div', { className: 'pd-grid' });
+  for (let i = 0; i < BACKPACK_SIZE; i++) {
+    const item = hero.items[i];
+    grid.append(slot(world, item, item && (() => open(item, i))));
+  }
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el(
+        'div',
+        { className: 'pd-row' },
+        el('p', { className: 'pd-heading', textContent: t.backpack }),
+        el('span', { className: 'pd-gold' }, itemIcon(world, { kind: 'gold', qty: 1, level: 0 }), String(hero.gold)),
+      ),
+      el(
+        'div',
+        { className: 'pd-row equipped' },
+        slot(world, hero.weapon, () => open(hero.weapon, null), t.equippedLabel),
+        slot(world, hero.armor, () => open(hero.armor, null), t.equippedLabel),
+        el('span', { className: 'pd-stats', textContent: `${t.strShort} ${hero.str}` }),
+      ),
+      grid,
+      button(t.close, options.onClose),
+    ),
+  );
+}
+
+interface ItemOptions extends BackpackOptions {
+  item: Item;
+  /** Backpack slot, or null for equipped items. */
+  index: number | null;
+}
+
+function showItem(options: ItemOptions): void {
+  const { world, hero, item, index } = options;
+  const category = itemDef(item.kind).category;
+  const act = (action: InventoryAction): void => {
+    options.onAction(action);
+    options.onClose();
+  };
+  const actions: HTMLElement[] = [];
+  if (index !== null) {
+    if (category === 'potion') actions.push(button(t.drink, () => act({ type: 'use', item: index }), 'primary'));
+    if (category === 'scroll') {
+      if (item.kind === 'scroll.upgrade' && isKnown(world, item)) {
+        actions.push(button(t.upgradeWeapon, () => act({ type: 'use', item: index, target: 'weapon' }), 'primary'));
+        actions.push(button(t.upgradeArmor, () => act({ type: 'use', item: index, target: 'armor' }), 'primary'));
+      } else {
+        actions.push(button(t.read, () => act({ type: 'use', item: index }), 'primary'));
+      }
+    }
+    if (category === 'weapon' || category === 'armor') {
+      actions.push(button(t.equip, () => act({ type: 'equip', item: index }), 'primary'));
+    }
+    actions.push(button(t.dropItem, () => act({ type: 'drop', item: index })));
+  }
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('div', { className: 'pd-row' }, slot(world, item), el('p', { className: 'pd-heading', textContent: capitalize(itemName(world, item)) })),
+      ...itemInfo(world, hero, item).map((line) => el('p', { className: 'pd-info', textContent: line })),
+      ...actions,
+      button(t.back, () => showBackpack(options)),
     ),
   );
 }

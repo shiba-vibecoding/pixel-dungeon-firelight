@@ -10,7 +10,7 @@ import { COLORS, type LogLine } from './view';
  * the toolbar at the bottom (Toolbar: wait, search, help).
  */
 
-export type HudButton = 'wait' | 'search' | 'help' | 'menu';
+export type HudButton = 'wait' | 'search' | 'help' | 'backpack' | 'menu';
 
 interface Area {
   id: HudButton;
@@ -29,13 +29,19 @@ export interface HudState {
   waitingFor: string[];
   status: string;
   log: readonly LogLine[];
+  /** BuffIndicator icons to show under the health bar. */
+  buffs: readonly number[];
 }
+
+/** Buff icons in buffs.png (BuffIndicator). */
+export const BUFF_ICONS = { mindVision: 0, ooze: 8, invisible: 12 } as const;
 
 const TOOLS: ReadonlyArray<{ id: HudButton; sx: number; w: number }> = [
   { id: 'wait', sx: 0, w: 20 },
   { id: 'search', sx: 20, w: 20 },
   { id: 'help', sx: 40, w: 21 },
 ];
+const BACKPACK = { id: 'backpack' as const, sx: 60, w: 23 };
 
 export class Hud {
   /** Device pixels per HUD pixel. */
@@ -59,11 +65,13 @@ export class Hud {
     this.top = Math.ceil(insetTop / this.ui);
     this.bottom = Math.ceil(insetBottom / this.ui);
     let x = 0;
+    const y = this.height - this.bottom - 25;
     this.areas = TOOLS.map((tool) => {
-      const area = { id: tool.id, x, y: this.height - this.bottom - 25, w: tool.w, h: 25 };
+      const area = { id: tool.id, x, y, w: tool.w, h: 25 };
       x += tool.w;
       return area;
     });
+    this.areas.push({ id: BACKPACK.id, x: this.width - BACKPACK.w, y, w: BACKPACK.w, h: 25 });
     this.areas.push({ id: 'menu', x: this.width - 20, y: this.top, w: 20, h: 20 });
   }
 
@@ -119,11 +127,14 @@ export class Hud {
     ctx.drawImage(assets.hpBar, 0, 0, Math.ceil(64 * hp), 4, 30, 3, Math.ceil(64 * hp), 4);
     const exp = me.exp / maxExp(me);
     if (exp > 0) ctx.drawImage(assets.expBar, 0, 0, 16, 1, 0, 0, W * exp, 1);
+    state.buffs.forEach((icon, i) => {
+      ctx.drawImage(assets.buffs, (icon % 18) * 7, Math.floor(icon / 18) * 7, 7, 7, 32 + i * 8, 11, 7, 7);
+    });
     ctx.setTransform(ui, 0, 0, ui, 0, 0);
 
     // Pressed toolbar buttons light up briefly.
     for (const area of this.areas) {
-      const tool = TOOLS.find((tl) => tl.id === area.id);
+      const tool = TOOLS.find((tl) => tl.id === area.id) ?? (area.id === BACKPACK.id ? BACKPACK : undefined);
       if (!tool) continue;
       ctx.drawImage(assets.toolbar, tool.sx, 7, tool.w, 25, area.x, area.y, tool.w, 25);
       if (this.pressed?.id === area.id && now < this.pressed.until) {
@@ -135,7 +146,7 @@ export class Hud {
     // Text at device resolution.
     this.text(ctx, String(me.lvl), 27.5, T + 31, 8, '#ffeba4', 'center');
     this.text(ctx, String(me.depth), W - 42, T + 11.5, 8, '#cacfc2', 'right');
-    this.text(ctx, `${Math.max(0, me.hp)}/${me.ht}`, 34, T + 15.5, 7, '#ffffff', 'left');
+    this.text(ctx, `${Math.max(0, me.hp)}/${me.ht}`, 34 + state.buffs.length * 8, T + 17, 7, '#ffffff', 'left');
 
     let y = T + 40;
     for (const hero of state.party) {

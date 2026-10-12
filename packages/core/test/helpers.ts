@@ -24,7 +24,10 @@ export function botAction(world: World, id: string): Action {
   const level = levelAt(world, hero.depth);
   const floor = floorAt(world, hero.depth);
   const enemy = floor.mobs.find((mob) => adjacent(mob.pos, hero.pos) && mob.state !== 'sleeping');
+  const healing = hero.items.findIndex((item) => item.kind === 'potion.healing');
+  if (hero.hp < hero.ht / 3 && healing >= 0) return { type: 'use', item: healing };
   if (enemy) return { type: 'attack', target: enemy.id };
+  if (floor.heaps.some((heap) => heap.pos === hero.pos) && hero.items.length < 20) return { type: 'pickup' };
   if (hero.pos === level.exit && hero.depth < 4) return { type: 'descend' };
   if (hero.hp < hero.ht / 2) return { type: 'wait' };
 

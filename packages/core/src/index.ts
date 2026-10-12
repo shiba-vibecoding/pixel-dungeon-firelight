@@ -7,7 +7,9 @@ export { Feeling, HeapType, type ItemSpawn, type ItemSpec, isBossDepth } from '.
 export { generateLevel, type Level, type RoomInfo } from './level/generate';
 export { discoverable, passable } from './level/flags';
 export * from './actors';
-export { charAt, type Effect, type Floor, heroesOn } from './floor';
+export * from './items';
+export { type InventoryAction, isInventoryAction } from './inventory';
+export { charAt, type Effect, type Floor, heroesOn, isWater } from './floor';
 export * from './world';
 export { castShadow, MAX_VIEW_DISTANCE } from './fov';
 export * from './protocol';

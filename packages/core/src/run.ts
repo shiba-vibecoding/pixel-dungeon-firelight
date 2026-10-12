@@ -1,3 +1,4 @@
+import { type Labels, rollLabels } from './items';
 import { RoomType, SPECIALS } from './level/room';
 import { deriveSeed, Rng, Stream } from './rng';
 
@@ -8,13 +9,18 @@ export interface RunState {
   specials: RoomType[];
   /** The deepest generated level has a weak floor, so the next one needs a pit room. */
   weakFloorCreated: boolean;
+  /** Guaranteed potions of strength and scrolls of upgrade placed so far. */
+  strengthFound: number;
+  upgradesFound: number;
+  /** This run's potion colours and scroll runes. */
+  labels: Labels;
 }
 
 export function createRun(seed: number): RunState {
   const rng = Rng.seeded(deriveSeed(seed, Stream.RUN));
   const specials = [...SPECIALS];
   rng.shuffle(specials);
-  return { seed, specials, weakFloorCreated: false };
+  return { seed, specials, weakFloorCreated: false, strengthFound: 0, upgradesFound: 0, labels: rollLabels(seed) };
 }
 
 /** Moves a used special room kind to the back, making repeats less likely. */

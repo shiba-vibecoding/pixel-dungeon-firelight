@@ -46,6 +46,7 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   const dy = Math.round(y + TILE - sheet.h);
 
   ctx.save();
+  if (puppet.invisible) ctx.globalAlpha = 0.4;
   if (!puppet.alive) {
     if (puppet.isHero) {
       ctx.globalAlpha = 0.75;
@@ -87,18 +88,27 @@ function drawHealth(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   ctx.fillRect(left, top, Math.max(0, Math.round((width * puppet.hp) / puppet.ht)), 1);
 }
 
+export interface Scene {
+  level: Level;
+  baked: HTMLCanvasElement;
+  visible: readonly boolean[];
+  explored: readonly boolean[];
+  /** Items lying around, with their sprite index in items.png. */
+  heaps: ReadonlyArray<{ pos: number; sprite: number }>;
+  /** Mind vision: every monster on the level shows. */
+  seeAll: boolean;
+}
+
 export function render(
   ctx: CanvasRenderingContext2D,
-  level: Level,
-  baked: HTMLCanvasElement,
-  visible: readonly boolean[],
-  explored: readonly boolean[],
+  scene: Scene,
   view: View,
   myId: string,
   assets: Assets,
   camera: Camera,
   now: number,
 ): void {
+  const { level, baked, visible, explored } = scene;
   const { canvas } = ctx;
   ctx.imageSmoothingEnabled = false;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -119,6 +129,16 @@ export function render(
   }
   ctx.drawImage(baked, 0, 0);
 
+  // Items on the floor, remembered (and dimmed by the fog) once seen.
+  for (const heap of scene.heaps) {
+    if (!explored[heap.pos]) continue;
+    const bob = visible[heap.pos] ? Math.round(Math.sin(now / 300 + heap.pos) * 0.6) : 0;
+    ctx.drawImage(
+      assets.items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16,
+      (heap.pos % WIDTH) * TILE, Math.trunc(heap.pos / WIDTH) * TILE - 1 + bob, 16, 16,
+    );
+  }
+
   // Freshly discovered secrets glow for a moment.
   for (const flash of view.flashes) {
     ctx.fillStyle = `rgba(255, 255, 200, ${0.6 * (1 - (now - flash.start) / 600)})`;
@@ -134,7 +154,7 @@ export function render(
 
   // Characters, back to front. Monsters only show where the party can see.
   const shown = [...view.puppets.values()]
-    .filter((puppet) => puppet.isHero || visible[puppet.to] || visible[puppet.from])
+    .filter((puppet) => puppet.isHero || scene.seeAll || visible[puppet.to] || visible[puppet.from])
     .map((puppet) => ({ puppet, ...view.position(puppet, now) }))
     .sort((a, b) => Number(a.puppet.alive) - Number(b.puppet.alive) || a.y - b.y);
   for (const { puppet, x, y } of shown) drawPuppet(ctx, puppet, x, y, now);
