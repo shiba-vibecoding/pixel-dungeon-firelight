@@ -186,8 +186,10 @@ export interface Scene {
   lights?: ReadonlyArray<{ x: number; y: number; radius: number; color: string; strength: number }>;
   /** The hero has fallen: how far the world has drained of colour, 0 to 1. */
   mourning?: number;
-  /** The middle of the band the HUD and toolbar leave free, in device pixels: cards are centred there. */
+  /** The middle of the band the HUD and toolbar leave free, in device pixels. */
   middle?: number;
+  /** Where the cards (a new region, a boss) go, in device pixels: above the hero, in the band's upper part. */
+  cardY?: number;
   /** How each heap moves this frame: dropping in, bouncing (motion.ts). */
   heapLook?: (pos: number, now: number) => HeapLook;
   /** Drawn over the floor, under what lies on it: doors swinging, grass swaying, rings on water (motion.ts). */
@@ -426,7 +428,7 @@ export function render(
   // The hero's light, the view's edges sinking into the dark, is a layer over the canvas (#vignette, main.ts).
   fx.drawScreen(ctx, canvas.width, canvas.height, now);
 
-  const middle = scene.middle ?? canvas.height / 2;
+  const middle = scene.cardY ?? scene.middle ?? canvas.height / 2;
 
   // My level-up: the new level, golden, three tiles over the hero.
   const card = view.levelCard;

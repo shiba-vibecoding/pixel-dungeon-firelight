@@ -1669,6 +1669,8 @@ function tick(now: number): void {
     },
     mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
     middle,
+    // The cards sit above the hero, not on them: a third of the way down the free band.
+    cardY: (free.top + (free.bottom - free.top) * 0.3) * (canvas.height / (canvas.clientHeight || 1)),
   };
   render(ctx, scene, view, session.myId, assets, camera, vnow);
   coop.frame(ctx, { session, world, view, camera, free, now: vnow });
