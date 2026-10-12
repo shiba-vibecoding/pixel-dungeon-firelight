@@ -8,6 +8,7 @@ import type { GhostLine } from './quest';
 import type { Burst, TrapKind } from './traps';
 import type { WandmakerLine } from './wandmaker';
 import type { ImpLine } from './imp';
+import type { SmithLine } from './smith';
 import type { Bolt } from './wands';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
@@ -154,6 +155,9 @@ export type Effect =
   | { type: 'well'; hero: string; water: WellWater }
   | { type: 'wandmaker'; hero: string; line: WandmakerLine }
   | { type: 'imp'; hero: string; line: ImpLine }
+  | { type: 'smith'; hero: string; line: SmithLine }
+  /** A piece of dark gold ore mined out of a vein. */
+  | { type: 'mined'; depth: number; pos: number; hero: string }
   /** Something eaten; mystery meat may disagree with the eater. */
   | { type: 'ate'; hero: string; kind: ItemKind; outcome: MeatOutcome | null }
   | { type: 'hunger'; hero: string; state: 'hungry' | 'starving' }

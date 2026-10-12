@@ -15,6 +15,7 @@ import { discover, F, hasFlag, T } from './level/terrain';
 import { type Burst, burst } from './traps';
 import { plant, SEED_PLANTS } from './plants';
 import { zapWand } from './wands';
+import { mine, mineProblem, TIME_TO_MINE } from './smith';
 import type { World } from './world';
 
 /*
@@ -39,10 +40,12 @@ export type InventoryAction =
   /** Take off a worn ring, back into the pack. */
   | { type: 'remove'; ring: number }
   /** Read the Tome of Mastery and master one of the two ways of the hero's class. */
-  | { type: 'master'; item: number; subclass: SubClass };
+  | { type: 'master'; item: number; subclass: SubClass }
+  /** Mine the vein of dark gold next to the hero with the blacksmith's pickaxe. */
+  | { type: 'mine' };
 
 const INVENTORY_ACTIONS: ReadonlySet<string> = new Set([
-  'pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master',
+  'pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master', 'mine',
 ]);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
@@ -82,6 +85,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     if ((heap.kind === 'lockedChest' || heap.kind === 'crystalChest') && goldenKeyFor(hero) < 0) return 'the chest is locked';
     return heap.kind === 'forSale' ? 'that is for sale' : null;
   }
+  if (action.type === 'mine') return mineProblem(world, hero);
   if (action.type === 'remove') {
     if (!Number.isInteger(action.ring) || !hero.rings[action.ring]) return 'no such ring';
     return hero.items.length < BACKPACK_SIZE ? null : 'your pack is full';
@@ -102,6 +106,9 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     case 'use':
       if (category !== 'potion' && category !== 'scroll' && category !== 'food' && category !== 'torch') return 'that cannot be used';
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
+      // The blacksmith's pickaxe is a tool: no scroll improves it.
+      if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
+        hero.weapon.kind === 'weapon.pickaxe' && world.known.includes(item.kind)) return 'the pickaxe cannot be improved';
       return null;
     case 'equip':
       return category === 'weapon' || category === 'armor' || category === 'ring' ? null : 'that cannot be equipped';
@@ -132,6 +139,9 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
     case 'pickup':
       pickUp(ctx, hero);
       return TIME_TO_PICK_UP;
+    case 'mine':
+      mine(ctx, hero);
+      return TIME_TO_MINE;
     case 'use':
       if (itemDef(hero.items[action.item]!.kind).category === 'food') {
         eat(ctx, hero, action.item);

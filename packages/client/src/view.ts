@@ -500,6 +500,13 @@ export class View {
           for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '150, 140, 120', duration: 900 });
           audio.play('rocks');
           break;
+        case 'mined':
+          if (effect.depth !== this.depth) break;
+          this.flashes.push({ cell: effect.pos, start: now, color: '255, 210, 90', duration: 500 });
+          audio.play('rocks', 1.3, 0.5);
+          break;
+        case 'smith':
+          break;
         case 'flock':
           if (effect.depth !== this.depth) break;
           for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '255, 255, 255', duration: 500 });

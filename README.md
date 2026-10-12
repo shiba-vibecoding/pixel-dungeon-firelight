@@ -49,8 +49,9 @@ Yendor on depth 26:
   Picking up the Amulet of Yendor below wins the run.
 - The sad ghost's quest (the dried rose) on depths 2–4, the old wandmaker's
   (corpse dust or a rotberry seed, for a choice of two wands) on depths 7–9,
-  and the ambitious imp's on depths 17–19 (tokens from slain monks or golems,
-  for a ring).
+  the troll blacksmith's on depths 12–14 (dark gold mined with his pickaxe, or a
+  bat's blood on it, for reforging two items into one), and the ambitious
+  imp's on depths 17–19 (tokens from slain monks or golems, for a ring).
 - Hunger and food (rations, pasties, mystery meat), regeneration, experience
   and levels, melee and ranged combat.
 - Items: gold, which buys from the shop; potions (including toxic gas,
@@ -84,7 +85,7 @@ Yendor on depth 26:
 
 Not ported yet: cursed items and the scroll of remove curse; the scroll of
 mirror image and the glyph of multiplicity (there are no allies yet); the
-potion of might; the blacksmith's quest; dwarf monks disarming; and gas clouds
+potion of might; dwarf monks disarming; and gas clouds
 (gas acts at once on everyone within reach instead).
 
 ## How co-op works

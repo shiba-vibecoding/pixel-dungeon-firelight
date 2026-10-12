@@ -75,6 +75,8 @@ export const ITEMS = {
   'weapon.battleAxe': weapon(4, 22, 1.2),
   'weapon.warHammer': weapon(5, 23, 1.2),
   'weapon.glaive': weapon(5, 30),
+  /** The troll blacksmith's, lent for his errand (Pickaxe): a tool first, a weapon at a pinch. */
+  'weapon.pickaxe': weapon(2, 101, 1, 1, 14),
 
   'armor.cloth': armor(1, 24),
   'armor.leather': armor(2, 25),
@@ -136,6 +138,8 @@ export const ITEMS = {
   'key.golden': { category: 'key', sprite: 10 },
   /** The sad ghost's dried rose. */
   'quest.rose': { category: 'quest', sprite: 100 },
+  /** Dark gold, mined from the veins of the caves for the troll blacksmith. */
+  'quest.ore': { category: 'quest', sprite: 102 },
   /** Left by the monks or golems the ambitious imp wants gone. */
   'quest.token': { category: 'quest', sprite: 122 },
   /** What the old wandmaker is after. */
@@ -169,6 +173,8 @@ export interface Item {
   enchant?: Enchantment;
   /** Armour: a glyph that does something when its wearer is struck. */
   glyph?: Glyph;
+  /** The blacksmith's pickaxe: stained with a vampire bat's blood. */
+  bloody?: boolean;
 }
 
 /* Enchantments and glyphs (Weapon.Enchantment, Armor.Glyph) */
@@ -211,7 +217,7 @@ export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
   return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || category === 'torch' ||
-    category === 'seed' || kind === 'missile.dart' || kind === 'quest.token';
+    category === 'seed' || kind === 'missile.dart' || kind === 'quest.token' || kind === 'quest.ore';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
@@ -245,6 +251,7 @@ export function itemPrice(item: Item, known: boolean): number {
   switch (def.category) {
     // Enchanted, half as much again.
     case 'weapon':
+      if (item.kind === 'weapon.pickaxe') return 0;
       return levelled(Math.trunc(20 * 2 ** (def.tier! - 1) * (item.enchant ? 1.5 : 1)));
     case 'armor':
       return levelled(Math.trunc(10 * 2 ** (def.tier! - 1) * (item.glyph ? 1.5 : 1)));
@@ -312,6 +319,8 @@ export interface WeaponStats {
 }
 
 export function weaponStats(item: Item): WeaponStats {
+  // Pickaxe: fixed numbers, never upgraded.
+  if (item.kind === 'weapon.pickaxe') return { min: 3, max: 12, str: 14, accuracy: 1, delay: 1 };
   const def = itemDef(item.kind);
   const tier = def.tier!;
   const accuracy = def.accuracy!;

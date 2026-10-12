@@ -14,6 +14,8 @@ export interface RunState {
   upgradesFound: number;
   /** This run's potion colours and scroll runes. */
   labels: Labels;
+  /** The troll blacksmith has set up his forge in the caves (absent in older runs). */
+  blacksmithSpawned?: boolean;
 }
 
 export function createRun(seed: number): RunState {

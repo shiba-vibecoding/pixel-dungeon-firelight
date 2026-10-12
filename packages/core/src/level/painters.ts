@@ -750,7 +750,35 @@ function paintVault(level: LevelBuilder, room: Room): void {
   lockWithKey(level, room);
 }
 
+/**
+ * BlacksmithPainter: the troll's forge behind a ring of fire traps, a way in
+ * from every door, and two pieces of gear lying about.
+ */
+function paintBlacksmith(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.FIRE_TRAP, 1);
+  level.fillRect(room, T.EMPTY_SP, 2);
+  for (let i = 0; i < 2; i++) {
+    let pos: number;
+    do {
+      pos = room.random(rng);
+    } while (level.map[pos] !== T.EMPTY_SP || level.items.some((spawn) => spawn.pos === pos));
+    level.dropItem(pos, HeapType.HEAP, { roll: 'category', categories: [rng.oneOf(['armor', 'weapon'] as const)], tries: 1 });
+  }
+  for (const door of room.doors()) {
+    door.set(DoorType.REGULAR);
+    level.drawInside(room, door, 1, T.EMPTY);
+  }
+  let pos: number;
+  do {
+    pos = room.random(rng, 1);
+  } while (level.items.some((spawn) => spawn.pos === pos));
+  level.blacksmith = pos;
+}
+
 export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painter>([
+  [RoomType.BLACKSMITH, paintBlacksmith],
   [RoomType.STATUE, paintStatue],
   [RoomType.POOL, paintPool],
   [RoomType.VAULT, paintVault],

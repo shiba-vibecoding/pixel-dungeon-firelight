@@ -3,7 +3,7 @@ import {
   HEAP_SPRITES,
   type Hero, type Item,
   heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
-  PLANT_KINDS, T,
+  ORE_WANTED, PLANT_KINDS, type SmithLine, T,
   visibleCells, wandMaxCharges, WIDTH,
   type World,
 } from '@pd/core';
@@ -15,7 +15,7 @@ import { itemName } from './itemtext';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  hideOverlay, overlayOpen, showBackpack, showConfirm, showDailyBoard, showHelp, showHero, showMenu, showQuest, showRunEnd,
+  hideOverlay, overlayOpen, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero, showMenu, showQuest, showRunEnd,
   showSell, showSign, showTitle, showTrade, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
@@ -457,6 +457,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line);
     if (effect.type === 'wandmaker' && effect.hero === myId) talkWithWandmaker(effect.line);
     if (effect.type === 'imp' && effect.hero === myId) talkWithImp(effect.line);
+    if (effect.type === 'smith' && effect.hero === myId) talkWithSmith(effect.line);
     if (effect.type === 'shop' && effect.hero === myId) openShop();
     if (effect.type === 'fell' && effect.hero === myId) justFell = true;
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
@@ -508,6 +509,28 @@ function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): vo
     onChoose: (index) => send({ type: 'wandReward', choice: index === 0 ? 'battle' : 'utility' }, performance.now()),
     onClose: hideOverlay,
   });
+}
+
+function talkWithSmith(line: SmithLine): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  const quest = world?.smithQuest;
+  if (!world || !me || !quest) return;
+  walk.reset();
+  const text =
+    line === 'intro' ? t.smith.intro[quest.wants]
+    : line === 'noGold' ? t.smith.noGold(ORE_WANTED)
+    : t.smith[line];
+  // Done with the errand: his services are on offer at once.
+  if (line === 'completed' || line === 'reforge') {
+    showReforge({
+      world, hero: me, text,
+      onReforge: (first, second) => send({ type: 'reforge', first, second }, performance.now()),
+      onClose: hideOverlay,
+    });
+    return;
+  }
+  showQuest({ world, hero: me, who: 'blacksmith', text, onClose: hideOverlay });
 }
 
 function talkWithImp(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
@@ -570,6 +593,12 @@ function tapCell(cell: number): void {
     return;
   }
   if (!explored[cell]) return;
+  // A vein of dark gold beside the hero, with the blacksmith's pickaxe at hand: mine it.
+  const pickaxe = me.weapon.kind === 'weapon.pickaxe' || me.items.some((i) => i.kind === 'weapon.pickaxe');
+  if (level.map[cell] === T.WALL_DECO && adjacent(me.pos, cell) && pickaxe && me.depth >= 11 && me.depth <= 15) {
+    send({ type: 'mine' }, performance.now());
+    return;
+  }
   // Chasm.heroJump: a chasm right beside the hero asks whether to jump in; floating, one drifts over it.
   const floating = (me.levitating ?? 0) > 0;
   if (hasFlag(level.map[cell]!, F.PIT) && !floating) {

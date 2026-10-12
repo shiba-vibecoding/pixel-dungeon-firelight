@@ -136,6 +136,10 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   if (!isHero(defender) && defender.kind === 'yog') spawnLarva(ctx, defender);
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
   hurt(ctx, defender, damage, attacker);
+  // Pickaxe.proc: a vampire bat slain with the pickaxe leaves its blood on it, as the blacksmith wants.
+  if (isHero(attacker) && attacker.weapon.kind === 'weapon.pickaxe' && !thrown && !isHero(defender) && defender.kind === 'bat' && !isAlive(defender)) {
+    attacker.weapon.bloody = true;
+  }
   // Hero.defenseProc: a ring of thorns turns some of the blow back on the attacker.
   if (isHero(defender) && !isHero(attacker) && isAlive(attacker) && defender.rings.some((r) => r.kind === 'ring.thorns')) {
     const back = ctx.rng.intRange(0, damage);

@@ -1,5 +1,5 @@
 import {
-  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, maxExp, type MobKind,
+  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, type ItemRef, maxExp, type MobKind,
   SUBCLASSES, wandMaxCharges, type World,
 } from '@pd/core';
 import { audio } from './audio';
@@ -310,6 +310,59 @@ export function showQuest(options: QuestOptions): void {
   );
 }
 
+export interface ReforgeOptions {
+  world: World;
+  hero: Hero;
+  text: string;
+  onReforge(first: ItemRef, second: ItemRef): void;
+  onClose(): void;
+}
+
+/**
+ * WndBlacksmith: two items of one kind become one, a level better. Rather
+ * than picking two items one after the other, each possible pair is offered
+ * at once: the better item, and what would be melted down with it.
+ */
+export function showReforge(options: ReforgeOptions): void {
+  const { world, hero } = options;
+  const owned: Array<{ ref: ItemRef; item: Item }> = [
+    { ref: 'weapon' as ItemRef, item: hero.weapon },
+    { ref: 'armor' as ItemRef, item: hero.armor },
+    ...hero.items.map((item, index) => ({ ref: index as ItemRef, item })),
+  ].filter(({ item }) => {
+    const category = itemDef(item.kind).category;
+    return (category === 'weapon' || category === 'armor' || category === 'wand' || category === 'ring') &&
+      item.level >= 0 && item.kind !== 'weapon.pickaxe';
+  });
+  const pairs: Array<{ first: ItemRef; second: ItemRef; better: Item; worse: Item }> = [];
+  owned.forEach((a, i) => {
+    for (const b of owned.slice(i + 1)) {
+      if (a.item.kind !== b.item.kind) continue;
+      // What is melted down comes from the pack.
+      const [keep, melt] = typeof b.ref !== 'number' || (typeof a.ref === 'number' && a.item.level < b.item.level) ? [b, a] : [a, b];
+      if (typeof melt.ref !== 'number') continue;
+      const better = keep.item.level >= melt.item.level ? keep.item : melt.item;
+      pairs.push({ first: keep.ref, second: melt.ref, better, worse: better === keep.item ? melt.item : keep.item });
+    }
+  });
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('p', { className: 'pd-heading', textContent: capitalize(t.mobs.blacksmith) }),
+      el('p', { className: 'pd-info', textContent: options.text }),
+      ...(pairs.length === 0
+        ? [el('p', { className: 'pd-note', textContent: t.nothingToReforge })]
+        : pairs.map((pair) =>
+          button(t.reforgePair(itemName(world, pair.better), itemName(world, pair.worse)), () => {
+            options.onReforge(pair.first, pair.second);
+            options.onClose();
+          }, 'primary'))),
+      button(t.close, options.onClose),
+    ),
+  );
+}
+
 /** The tip on a level's sign (Sign.read). */
 export function showSign(text: string, onClose: () => void): void {
   show(
@@ -546,6 +599,9 @@ function showItem(options: ItemOptions): void {
           );
         }, 'primary'),
       );
+    }
+    if (item.kind === 'weapon.pickaxe') {
+      actions.push(button(t.mine, () => act({ type: 'mine' }), 'primary'));
     }
     if (category === 'seed') {
       actions.push(

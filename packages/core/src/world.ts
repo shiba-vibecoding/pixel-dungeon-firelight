@@ -15,6 +15,7 @@ import { discoverable } from './level/flags';
 import { type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
 import { type ImpQuest, impRewardProblem, ringFromImp, spawnImp, talkToImp } from './imp';
+import { type ItemRef, reforge, reforgeProblem, type SmithQuest, spawnBlacksmith, talkToSmith } from './smith';
 import { spawnWandmaker, talkToWandmaker, type WandQuest, wandFromWandmaker, wandRewardProblem } from './wandmaker';
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
@@ -51,6 +52,8 @@ export type Action =
   | { type: 'reward'; choice: 'weapon' | 'armor' }
   /** The ambitious imp's reward, for the tokens. */
   | { type: 'impReward' }
+  /** The troll blacksmith's service: two items of a kind reforged into one, better. */
+  | { type: 'reforge'; first: ItemRef; second: ItemRef }
   /** The old wandmaker's reward: a battle wand or a useful one. */
   | { type: 'wandReward'; choice: 'battle' | 'utility' }
   | InventoryAction;
@@ -82,11 +85,15 @@ export interface World {
   wandQuest: WandQuest | null;
   /** The ambitious imp's errand, once he has appeared (absent in older saves). */
   impQuest?: ImpQuest | null;
+  /** The troll blacksmith's errand, once his forge is found (absent in older saves). */
+  smithQuest?: SmithQuest | null;
 }
 
 /** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
 export const DEEPEST_AVAILABLE = 26;
 const TIME_TO_REST = 1;
+/** Blacksmith.upgrade: the hero waits while the troll works. */
+const TIME_TO_REFORGE = 2;
 const TIME_TO_SEARCH = 2;
 /** How far a deliberate search reaches; the original only checked adjacent cells. */
 const SEARCH_RADIUS = 2;
@@ -95,11 +102,12 @@ const REGENERATION_DELAY = 10;
 const GHOST_STREAM = 1;
 const WANDMAKER_STREAM = 2;
 const IMP_STREAM = 3;
+const BLACKSMITH_STREAM = 4;
 
 export function createWorld(seed: number): World {
   return {
     run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
-    known: [], quest: null, wandQuest: null, impQuest: null,
+    known: [], quest: null, wandQuest: null, impQuest: null, smithQuest: null,
   };
 }
 
@@ -119,6 +127,7 @@ export function levelAt(world: World, depth: number): Level {
       spawnGhost(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, GHOST_STREAM)));
       spawnWandmaker(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, WANDMAKER_STREAM)));
       spawnImp(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, IMP_STREAM)));
+      spawnBlacksmith(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, BLACKSMITH_STREAM)));
       world.floors[d] = {
         mobs,
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
@@ -214,6 +223,8 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       return wandRewardProblem(world, hero, action.choice);
     case 'impReward':
       return impRewardProblem(world, hero);
+    case 'reforge':
+      return reforgeProblem(world, hero, action.first, action.second);
     case 'descend':
       return hero.pos === level.exit ? null : 'not on the stairs';
     case 'jump':
@@ -544,6 +555,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         if (mob.kind === 'shopkeeper') ctx.effects.push({ type: 'shop', hero: hero.id });
         else if (mob.kind === 'wandmaker') talkToWandmaker(ctx, hero);
         else if (mob.kind === 'imp') talkToImp(ctx, hero);
+        else if (mob.kind === 'blacksmith') talkToSmith(ctx, hero);
         else if (mob.kind === 'sheep') ctx.effects.push({ type: 'baa', depth: hero.depth, mob: mob.id });
         else talkToGhost(ctx, hero);
         break;
@@ -569,6 +581,11 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
 
     case 'impReward':
       ringFromImp(ctx, hero);
+      break;
+
+    case 'reforge':
+      reforge(ctx, hero, action.first, action.second);
+      spend(ctx, hero, TIME_TO_REFORGE);
       break;
 
     case 'descend':

@@ -44,6 +44,8 @@ export interface Level {
   arenaDoor?: number;
   /** A shop's level: where the shopkeeper stands. */
   shopkeeper?: number;
+  /** Where the troll blacksmith keeps his forge. */
+  blacksmith?: number;
   /** Where an animated statue stands guard, and a pool's piranhas swim. */
   statue?: number;
   piranhas?: number[];
@@ -107,6 +109,7 @@ export function generateLevel(run: RunState, depth: number): Level {
       : run.specials.filter((type) => PAINTERS.has(type) && !(type === RoomType.WEAK_FLOOR && isBossDepth(depth + 1)));
     const level = new LevelBuilder(rng, depth, feeling, specials);
     level.pitRoomNeeded = pitNeeded && !boss;
+    level.blacksmithWanted = !run.blacksmithSpawned;
     const { style, build } = layoutFor(depth);
     if (!build(level)) {
       continue;
@@ -119,6 +122,7 @@ export function generateLevel(run: RunState, depth: number): Level {
       useSpecial(run, used);
     }
     run.weakFloorCreated = level.weakFloorCreated;
+    if (level.blacksmithPlaced) run.blacksmithSpawned = true;
 
     return {
       depth,
@@ -134,6 +138,7 @@ export function generateLevel(run: RunState, depth: number): Level {
       ...(level.arenaDoor >= 0 ? { arenaDoor: level.arenaDoor } : {}),
       ...(level.shopkeeper >= 0 ? { shopkeeper: level.shopkeeper } : {}),
       ...(level.statue >= 0 ? { statue: level.statue } : {}),
+      ...(level.blacksmith >= 0 ? { blacksmith: level.blacksmith } : {}),
       ...(level.piranhas.length > 0 ? { piranhas: level.piranhas } : {}),
       ...(level.plants.length > 0 ? { plants: level.plants } : {}),
     };

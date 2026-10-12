@@ -283,7 +283,7 @@ export type MobKind =
   | 'spinner' | 'dm300'
   | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead'
   | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva' | 'mimic'
-  | 'statue' | 'piranha' | 'imp' | 'sheep'
+  | 'statue' | 'piranha' | 'imp' | 'sheep' | 'blacksmith'
   | 'albino' | 'bandit' | 'shielded' | 'senior' | 'acidic';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
@@ -351,6 +351,7 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   senior: { name: 'senior monk', ht: 70, attack: 30, defense: 30, damage: [12, 20], dr: 2, exp: 11, maxLvl: 21, speed: 1, attackDelay: 0.5 },
   acidic: { name: 'acidic scorpio', ht: 95, attack: 36, defense: 24, damage: [20, 32], dr: 16, exp: 14, maxLvl: 25, speed: 1 },
   sheep: { name: 'sheep', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
+  blacksmith: { name: 'troll blacksmith', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   imp: { name: 'ambitious imp', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   piranha: { name: 'giant piranha', ht: 15, attack: 22, defense: 12, damage: [1, 6], dr: 1, exp: 0, maxLvl: 30, speed: 2 },
 };

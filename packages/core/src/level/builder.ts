@@ -68,6 +68,10 @@ export class LevelBuilder {
   arenaDoor = -1;
   /** A shop's level: where the shopkeeper stands. */
   shopkeeper = -1;
+  /** The caves: whether the troll blacksmith may set up his forge here, whether he did, and where he stands. */
+  blacksmithWanted = false;
+  blacksmithPlaced = false;
+  blacksmith = -1;
   /** A statue room's level: where the animated statue stands. */
   statue = -1;
   /** A pool room's piranhas. */
