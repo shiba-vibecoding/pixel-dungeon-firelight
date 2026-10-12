@@ -88,7 +88,10 @@ export class CoopMarks {
   constructor(host: HTMLElement) {
     this.root = el('div', 'pd-coopctl');
     this.root.hidden = true;
-    this.root.style.setProperty('--coop-sheet', `url("${import.meta.env.BASE_URL}assets/world/coop.png")`);
+    // Absolute: a relative url() in a custom property would resolve against the stylesheet that uses it
+    // (built into assets/), not against the page.
+    const sheetUrl = new URL(`${import.meta.env.BASE_URL}assets/world/coop.png`, document.baseURI).href;
+    this.root.style.setProperty('--coop-sheet', `url("${sheetUrl}")`);
     this.toggle = el('button', 'pd-tool pd-signal');
     this.toggle.ariaLabel = t.signalsLabel;
     this.toggle.setAttribute('aria-haspopup', 'menu');
