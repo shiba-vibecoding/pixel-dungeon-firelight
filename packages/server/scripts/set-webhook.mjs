@@ -1,17 +1,37 @@
 // Points the bot's webhook at this server and sets its commands.
 //
-//   $env:BOT_TOKEN = Read-Host "Bot token"
-//   $env:WEBHOOK_SECRET = Read-Host "Webhook secret"
-//   $env:SERVER_URL = "https://pd-coop.<subdomain>.workers.dev"
-//   node packages/server/scripts/set-webhook.mjs
+//   node packages/server/scripts/set-webhook.mjs https://pd-coop.<subdomain>.workers.dev
 //
-// The values are read from the environment, never from the command line, so they
-// stay out of the shell's history. Telegram keeps one webhook per bot: this one
-// replaces the old version's.
+// The bot token and the webhook secret are asked for with hidden input (or taken
+// from BOT_TOKEN / WEBHOOK_SECRET in the environment), never from the command
+// line, so they stay off the screen and out of the shell's history. Telegram
+// keeps one webhook per bot: this one replaces the old version's.
 
-const { BOT_TOKEN, WEBHOOK_SECRET, SERVER_URL } = process.env;
-if (!BOT_TOKEN || !WEBHOOK_SECRET || !SERVER_URL) {
-  console.error('Set BOT_TOKEN, WEBHOOK_SECRET and SERVER_URL first (see the top of this file).');
+import { createInterface } from 'node:readline';
+
+function askHidden(question) {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    rl._writeToOutput = (text) => {
+      if (text.startsWith(question)) process.stdout.write(question);
+    };
+    rl.question(question, (answer) => {
+      rl.close();
+      process.stdout.write('\n');
+      resolve(answer.trim());
+    });
+  });
+}
+
+const SERVER_URL = process.argv[2] ?? process.env.SERVER_URL;
+if (!SERVER_URL) {
+  console.error('Usage: node packages/server/scripts/set-webhook.mjs https://pd-coop.<subdomain>.workers.dev');
+  process.exit(1);
+}
+const BOT_TOKEN = process.env.BOT_TOKEN || (await askHidden('Bot token (hidden): '));
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || (await askHidden('Webhook secret (hidden): '));
+if (!BOT_TOKEN || !WEBHOOK_SECRET) {
+  console.error('Both the bot token and the webhook secret are needed.');
   process.exit(1);
 }
 if (!/^[A-Za-z0-9_-]{1,256}$/.test(WEBHOOK_SECRET)) {

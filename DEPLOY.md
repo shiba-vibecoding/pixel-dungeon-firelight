@@ -33,8 +33,9 @@
    В браузере по нему должно быть написано `Pixel Dungeon co-op server`.
 
 3. Секреты сервера. Токен — тот же, что у бота (@BotFather → `/mybots` → бот →
-   API Token). Секрет вебхука — любая строка до 256 символов из `A-Z a-z 0-9 _ -`,
-   придумайте и запомните на минуту, он нужен ещё в шаге 2:
+   API Token). Секрет вебхука — случайная строка до 256 символов из `A-Z a-z 0-9 _ -`
+   (не из примеров), он нужен ещё в шаге 2. Сгенерировать:
+   `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`.
 
    ```powershell
    npx wrangler secret put BOT_TOKEN --config packages/server/wrangler.jsonc
@@ -48,14 +49,10 @@
 (отвечает кнопкой «Играть») плюс оплату и команды.
 
 ```powershell
-$env:BOT_TOKEN = Read-Host "Bot token"
-$env:WEBHOOK_SECRET = Read-Host "Webhook secret"
-$env:SERVER_URL = "https://pd-coop.<поддомен>.workers.dev"
-node packages/server/scripts/set-webhook.mjs
-Remove-Item Env:BOT_TOKEN, Env:WEBHOOK_SECRET
+node packages/server/scripts/set-webhook.mjs https://pd-coop.<поддомен>.workers.dev
 ```
 
-Скрипт напишет `Webhook: https://pd-coop…/telegram/webhook`. Проверка: напишите
+Скрипт спросит токен бота и секрет вебхука (ввод не виден на экране) и напишет `Webhook: https://pd-coop…/telegram/webhook`. Проверка: напишите
 боту что угодно — он ответит фразой и кнопкой «Играть». Старый Worker после
 этого можно удалить в панели Cloudflare.
 
