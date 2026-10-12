@@ -115,16 +115,40 @@ async function reports(request: Request, env: Env): Promise<Response> {
   return store.fetch('https://reports/');
 }
 
+/** Reports worth a message to the admin chat at once: errors, desyncs, the server's own failures, a player's «report a problem». */
+const ALERT_KINDS: ReadonlySet<string> = new Set(['server', 'error', 'rejection', 'desync']);
+/** The admin chat hears of at most this many new problems an hour; the rest wait in the reports. */
+const ALERTS_PER_HOUR = 6;
+
 /** The reports, kept in one object: the latest few hundred, each address sending only so many. */
-export class ReportStore extends DurableObject {
+export class ReportStore extends DurableObject<Env> {
   private readonly limiter = new WindowLimiter(REPORTS_PER_WINDOW, REPORT_WINDOW_MS);
+  private readonly alerts = new WindowLimiter(ALERTS_PER_HOUR, 3600_000);
+
+  /** A new kind of problem (not a repeat of one kept) goes to the admin chat, if there is one. */
+  private async alert(report: Report, kept: readonly Report[]): Promise<void> {
+    const playerReport = report.kind === 'coop-log' && report.message.startsWith('player report');
+    if (!ALERT_KINDS.has(report.kind) && !playerReport) return;
+    if (kept.some((r) => r.kind === report.kind && r.message === report.message && r.stack === report.stack)) return;
+    if (!this.env.BOT_TOKEN || !this.env.ADMIN_CHAT_ID || !this.alerts.allow('admin', Date.now())) return;
+    const context = Object.entries(report.context ?? {}).map(([k, v]) => `${k}=${v}`).join(' ');
+    const head = `⚠️ ${playerReport ? 'Игрок сообщил о проблеме' : `[${report.kind}]`} ${report.message}`.slice(0, 600);
+    const text = [head, context, report.stack?.split('\n').slice(0, 3).join('\n') ?? ''].filter(Boolean).join('\n');
+    try {
+      await botApi(this.env.BOT_TOKEN)('sendMessage', { chat_id: this.env.ADMIN_CHAT_ID, text });
+    } catch {
+      // The report is kept anyway.
+    }
+  }
 
   override async fetch(request: Request): Promise<Response> {
     if (request.method === 'POST') {
       const address = request.headers.get(ADDRESS_HEADER);
       if (address && !this.limiter.allow(address, Date.now())) return new Response(null, { status: 429 });
       const report = (await request.json()) as Report;
-      const reports = addReport((await this.ctx.storage.get<Report[]>('reports')) ?? [], report);
+      const kept = (await this.ctx.storage.get<Report[]>('reports')) ?? [];
+      await this.alert(report, kept);
+      const reports = addReport(kept, report);
       await this.ctx.storage.put('reports', reports);
       return new Response(null, { status: 204 });
     }
