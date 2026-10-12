@@ -5,6 +5,7 @@ import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
 import type { GhostLine } from './quest';
 import type { Burst, TrapKind } from './traps';
+import type { WandmakerLine } from './wandmaker';
 import type { Bolt } from './wands';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
@@ -107,6 +108,7 @@ export type Effect =
   | { type: 'unlocked'; depth: number; pos: number; hero: string }
   | { type: 'ghost'; hero: string; line: GhostLine }
   | { type: 'well'; hero: string; water: WellWater }
+  | { type: 'wandmaker'; hero: string; line: WandmakerLine }
   /** Something eaten; mystery meat may disagree with the eater. */
   | { type: 'ate'; hero: string; kind: ItemKind; outcome: MeatOutcome | null }
   | { type: 'hunger'; hero: string; state: 'hungry' | 'starving' }

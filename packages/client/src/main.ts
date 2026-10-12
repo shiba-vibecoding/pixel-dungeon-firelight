@@ -12,8 +12,8 @@ import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showGhost, showHelp, showHero, showMenu, showRunEnd, showSell,
-  showSign, showTitle, showTrade, toast,
+  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showHelp, showHero, showMenu, showQuest, showRunEnd,
+  showSell, showSign, showTitle, showTrade, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -430,6 +430,7 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
 function handleMyEffects(effects: readonly Effect[], myId: string): void {
   for (const effect of effects) {
     if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line);
+    if (effect.type === 'wandmaker' && effect.hero === myId) talkWithWandmaker(effect.line);
     if (effect.type === 'shop' && effect.hero === myId) openShop();
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     const hurt =
@@ -451,18 +452,30 @@ function talkWithGhost(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
   audio.play('ghost');
   walk.reset();
   const quest = world.quest;
-  showGhost({
+  showQuest({
     world,
     hero: me,
+    who: 'ghost',
     text: t.ghost[line],
-    reward:
-      line === 'reward' && quest
-        ? {
-            weapon: quest.weapon,
-            armor: quest.armor,
-            onChoose: (choice) => send({ type: 'reward', choice }, performance.now()),
-          }
-        : undefined,
+    offers: line === 'reward' && quest ? [quest.weapon, quest.armor] : [],
+    onChoose: (index) => send({ type: 'reward', choice: index === 0 ? 'weapon' : 'armor' }, performance.now()),
+    onClose: hideOverlay,
+  });
+}
+
+function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  walk.reset();
+  const quest = world.wandQuest;
+  showQuest({
+    world,
+    hero: me,
+    who: 'wandmaker',
+    text: t.wandmaker[line],
+    offers: line === 'reward' && quest ? [quest.battle, quest.utility] : [],
+    onChoose: (index) => send({ type: 'wandReward', choice: index === 0 ? 'battle' : 'utility' }, performance.now()),
     onClose: hideOverlay,
   });
 }

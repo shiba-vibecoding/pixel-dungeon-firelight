@@ -28,7 +28,8 @@ The first two acts of the original, depths 1–10:
   that split, gnoll shamans with lightning, vampire bats, gnoll brutes.
 - Bosses: Goo on depth 5, Tengu in its locked arena on depth 10; escaping
   Tengu's prison wins the run.
-- The sad ghost's quest (the dried rose) on depths 2–4.
+- The sad ghost's quest (the dried rose) on depths 2–4, and the old
+  wandmaker's (corpse dust, for a choice of two wands) on depths 7–9.
 - Hunger and food (rations, pasties, mystery meat), regeneration, experience
   and levels, melee and ranged combat.
 - Items: gold, which buys from the shop; potions (including toxic gas,
@@ -50,7 +51,7 @@ The first two acts of the original, depths 1–10:
 
 Not ported yet: depths 11+ (caves, city, halls), rings, the wands of amok,
 reach, flock and regrowth, seeds and plants, the remaining special rooms (garden, pool, statue,
-laboratory, vault, weak floor), the wandmaker's quest, hero subclasses, and gas
+laboratory, vault, weak floor), the wandmaker's rotberry errand, hero subclasses, and gas
 clouds (gas acts at once on everyone within reach instead).
 
 ## How co-op works

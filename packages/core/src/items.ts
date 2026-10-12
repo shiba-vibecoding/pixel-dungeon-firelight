@@ -99,6 +99,8 @@ export const ITEMS = {
   'key.iron': { category: 'key', sprite: 9 },
   /** The sad ghost's dried rose. */
   'quest.rose': { category: 'quest', sprite: 100 },
+  /** What the old wandmaker is after. */
+  'quest.dust': { category: 'quest', sprite: 121 },
 } as const satisfies Record<string, ItemDef>;
 
 export type ItemKind = keyof typeof ITEMS;

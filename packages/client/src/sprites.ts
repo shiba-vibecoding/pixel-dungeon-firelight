@@ -90,6 +90,11 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
     h: 14,
     anims: basic(anim(10, [1, 1, 1, 1, 1, 0, 0, 0, 0], true), anim(10, [1], true), anim(10, [1]), anim(20, [0])),
   },
+  wandmaker: {
+    w: 12,
+    h: 14,
+    anims: basic(anim(10, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 3, 3, 2, 1], true), anim(20, [0], true), anim(20, [0]), anim(20, [0])),
+  },
   skeleton: {
     w: 12,
     h: 15,
@@ -158,7 +163,7 @@ const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image
 export async function loadAssets(base: string): Promise<Assets> {
   const names = [
     'tiles0', 'water0', 'tiles1', 'water1', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
-    'skeleton', 'thief', 'swarm', 'shaman', 'bat', 'brute', 'tengu', 'shopkeeper',
+    'skeleton', 'thief', 'swarm', 'shaman', 'bat', 'brute', 'tengu', 'shopkeeper', 'wandmaker',
     'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs',
   ] as const;
   const images = Object.fromEntries(

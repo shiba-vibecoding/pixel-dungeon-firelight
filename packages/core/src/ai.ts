@@ -54,7 +54,7 @@ function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
 export function mobAct(ctx: Ctx, mob: Mob): void {
   // The shopkeeper minds the shop; the sad ghost drifts about the level at
   // half speed, never after anyone.
-  if (mob.state === 'passive' && mob.kind === 'shopkeeper') {
+  if (mob.state === 'passive' && (mob.kind === 'shopkeeper' || mob.kind === 'wandmaker')) {
     spend(mob, TICK);
     return;
   }

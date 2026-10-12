@@ -1,6 +1,6 @@
 import {
-  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, maxExp, wandMaxCharges,
-  type World,
+  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, maxExp, type MobKind,
+  wandMaxCharges, type World,
 } from '@pd/core';
 import { audio } from './audio';
 import { BUFF_ICONS, type BuffName } from './hud';
@@ -263,19 +263,24 @@ export function showSell(options: SellOptions): void {
   );
 }
 
-export interface GhostOptions {
+export interface QuestOptions {
   world: World;
   hero: Hero;
+  /** Who is speaking: the sad ghost or the old wandmaker. */
+  who: MobKind;
   text: string;
-  /** Offered when the hero brings the rose. */
-  reward?: { weapon: Item; armor: Item; onChoose(choice: 'weapon' | 'armor'): void };
+  /** Rewards on offer, one of which the hero may take. */
+  offers?: readonly Item[];
+  onChoose?(index: number): void;
   onClose(): void;
 }
 
-/** A word with the sad ghost (WndQuest / WndSadGhost). */
-export function showGhost(options: GhostOptions): void {
-  const { world, hero, reward } = options;
-  const offer = (item: Item, choice: 'weapon' | 'armor'): HTMLElement =>
+/** A word with a quest giver (WndQuest, WndSadGhost, WndWandmaker). */
+export function showQuest(options: QuestOptions): void {
+  const { hero, offers = [] } = options;
+  // The rewards are shown for what they are.
+  const world = { ...options.world, known: [...options.world.known, ...offers.map((item) => item.kind)] };
+  const offer = (item: Item, index: number): HTMLElement =>
     el(
       'div',
       { className: 'pd-row' },
@@ -285,7 +290,7 @@ export function showGhost(options: GhostOptions): void {
         { className: 'pd-offer' },
         ...itemInfo(world, hero, item).map((line) => el('p', { className: 'pd-note', textContent: line })),
         button(t.takeReward(itemName(world, item)), () => {
-          reward!.onChoose(choice);
+          options.onChoose?.(index);
           options.onClose();
         }, 'primary'),
       ),
@@ -294,10 +299,9 @@ export function showGhost(options: GhostOptions): void {
     el(
       'div',
       { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: capitalize(t.mobs.ghost) }),
+      el('p', { className: 'pd-heading', textContent: capitalize(t.mobs[options.who]) }),
       el('p', { className: 'pd-info', textContent: options.text }),
-      reward && offer(reward.weapon, 'weapon'),
-      reward && offer(reward.armor, 'armor'),
+      ...offers.map(offer),
       button(t.close, options.onClose),
     ),
   );
