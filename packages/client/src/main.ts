@@ -50,10 +50,11 @@ function store(key: string, value: string): void {
   }
 }
 
-let heroClass: HeroClass = (HERO_CLASSES as readonly string[]).includes(stored('pd-class') ?? '')
-  ? (stored('pd-class') as HeroClass)
-  : 'warrior';
-let playerName = stored('pd-name') ?? '';
+// ?hero= and ?name= override the saved choices (handy for testing several players).
+const query = new URLSearchParams(location.search);
+const savedClass = query.get('hero') ?? stored('pd-class') ?? '';
+let heroClass: HeroClass = (HERO_CLASSES as readonly string[]).includes(savedClass) ? (savedClass as HeroClass) : 'warrior';
+let playerName = query.get('name') ?? stored('pd-name') ?? '';
 
 function playerId(): string {
   // ?player= lets two tabs of one browser act as different players in development.

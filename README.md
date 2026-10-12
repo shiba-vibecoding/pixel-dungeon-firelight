@@ -7,15 +7,30 @@ and the web, built for **co-op multiplayer** from the start.
   no rendering, no platform APIs. The world state is plain JSON, so the same code
   runs in the browser and on the authoritative co-op server, and games can be
   saved, sent over the network and replayed.
-- `packages/client` — the Mini App: canvas renderer using the original art.
+- `packages/client` — the Mini App: canvas renderer and HUD using the original art.
+- `packages/server` — the co-op server: a Cloudflare Worker with one Durable
+  Object per party, WebSockets with hibernation, Telegram login.
 
-## Status
+## What works
 
-- Seeded random stream, bit-compatible with the Java version (verified against
-  reference data exported by the Java build).
-- Sewer level generation (depths 1–4), checked by invariants on 1200 levels.
-- Shared world with several heroes; every change goes through validated actions.
-- Client: walk the sewers with tap-to-move and keyboard, descend the stairs.
+- Seeded random stream, bit-compatible with the Java version.
+- The sewers (depths 1–4): level generation, hidden doors and searching.
+- Rats, gnoll scouts and sewer crabs with the original stats and behaviour;
+  melee combat, experience and levels, regeneration, respawning monsters.
+- Four hero classes with their starting weapons.
+- Solo runs saved on the device, a daily dungeon shared by everyone.
+- Co-op: invite friends by a Telegram link; everyone plays in the same dungeon.
+  Time flows freely while the party explores; in a fight the dungeon waits for
+  each hero in turn (with a timeout, and never for someone who left). A fallen
+  hero gets back up when a companion goes deeper.
+- Russian and English.
+
+## How co-op works
+
+The server owns the world. A client sends an intention (`move`, `attack`, …);
+the server applies it and broadcasts it as an ordered event; every client
+applies the same event to its own copy. The core is deterministic, so all
+copies stay identical; a client that misses an event asks for a snapshot.
 
 ## Development
 
@@ -23,8 +38,11 @@ and the web, built for **co-op multiplayer** from the start.
 npm install
 npm test            # vitest
 npm run typecheck
-npm run dev         # http://127.0.0.1:5173/?hero=mage&seed=123
+npm run server      # co-op server on ws://127.0.0.1:8787
+npm run dev         # client on http://127.0.0.1:5173
 ```
+
+Deployment (GitHub Pages + Cloudflare + Telegram): see [DEPLOY.md](DEPLOY.md).
 
 ## Credits and license
 

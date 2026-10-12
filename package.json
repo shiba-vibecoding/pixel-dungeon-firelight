@@ -10,7 +10,9 @@
     "test": "vitest run",
     "typecheck": "tsc -p packages/core && tsc -p packages/core/test && tsc -p packages/client && tsc -p packages/server",
     "dev": "npm run dev -w @pd/client",
-    "server": "npm run dev -w @pd/server"
+    "server": "npm run dev -w @pd/server",
+    "build": "npm run build -w @pd/client",
+    "deploy:server": "npm run deploy -w @pd/server"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261011.1",

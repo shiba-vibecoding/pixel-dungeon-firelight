@@ -10,13 +10,16 @@ import { verifyInitData } from './telegram-auth';
  *
  *   GET /room/<name>  (WebSocket upgrade)
  *     ?initData=<Telegram.WebApp.initData>&hero=<class>   with BOT_TOKEN set
- *     ?id=<id>&name=<name>&hero=<class>                   in development
+ *     ?id=<id>&name=<name>&hero=<class>                   in development, or as a
+ *                                                         guest when ALLOW_GUESTS is "true"
  */
 
 export interface Env {
   ROOM: DurableObjectNamespace<Room>;
   /** Bot token secret. When set, players must prove their identity with Telegram init data. */
   BOT_TOKEN?: string;
+  /** "true" lets players without Telegram join as guests even when BOT_TOKEN is set. */
+  ALLOW_GUESTS?: string;
 }
 
 const HERO_CLASSES: readonly HeroClass[] = ['warrior', 'mage', 'rogue', 'huntress'];
@@ -28,15 +31,21 @@ function heroClassOf(url: URL): HeroClass {
 
 async function authenticate(request: Request, env: Env): Promise<PlayerInfo | null> {
   const url = new URL(request.url);
+  const name = (url.searchParams.get('name') || 'Hero').slice(0, 32);
+  // Monster ids start with '#', so player ids never may.
+  const clientId = (url.searchParams.get('id') || crypto.randomUUID()).replace(/^#+/, '').slice(0, 64) || 'anon';
   if (env.BOT_TOKEN) {
-    const user = await verifyInitData(url.searchParams.get('initData') ?? '', env.BOT_TOKEN);
-    if (!user) return null;
-    return { id: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32), heroClass: heroClassOf(url) };
+    const initData = url.searchParams.get('initData');
+    if (initData) {
+      const user = await verifyInitData(initData, env.BOT_TOKEN);
+      if (!user) return null;
+      return { id: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32), heroClass: heroClassOf(url) };
+    }
+    // Browser players outside Telegram, if allowed; they can never pose as a Telegram user.
+    return env.ALLOW_GUESTS === 'true' ? { id: `guest-${clientId}`, name, heroClass: heroClassOf(url) } : null;
   }
-  // Development only: without a bot token the client is trusted. Monster ids
-  // start with '#', so player ids never do.
-  const id = (url.searchParams.get('id') || crypto.randomUUID()).replace(/^#+/, '') || 'anon';
-  return { id: id.slice(0, 64), name: (url.searchParams.get('name') || 'Hero').slice(0, 32), heroClass: heroClassOf(url) };
+  // Development: without a bot token the client is trusted.
+  return { id: clientId, name, heroClass: heroClassOf(url) };
 }
 
 export class Room extends DurableObject<Env> {
