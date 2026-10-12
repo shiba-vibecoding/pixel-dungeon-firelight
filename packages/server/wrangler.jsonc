@@ -7,13 +7,15 @@
     "bindings": [
       { "name": "ROOM", "class_name": "Room" },
       { "name": "DAILY", "class_name": "DailyBoard" },
-      { "name": "WALLET", "class_name": "WalletStore" }
+      { "name": "WALLET", "class_name": "WalletStore" },
+      { "name": "REPORTS", "class_name": "ReportStore" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Room"] },
     { "tag": "v2", "new_sqlite_classes": ["DailyBoard"] },
-    { "tag": "v3", "new_sqlite_classes": ["WalletStore"] }
+    { "tag": "v3", "new_sqlite_classes": ["WalletStore"] },
+    { "tag": "v4", "new_sqlite_classes": ["ReportStore"] }
   ],
   "vars": {
     // Players outside Telegram (a plain browser) may join rooms as guests.
@@ -21,6 +23,7 @@
     // The Mini App's t.me link: the bot's play button.
     "APP_LINK": "https://t.me/pixel_dungeon_gamebot/pixel_dungeon"
   },
-  // Secrets: npx wrangler secret put BOT_TOKEN, and WEBHOOK_SECRET for the bot's webhook (/telegram/webhook).
+  // Secrets: npx wrangler secret put BOT_TOKEN, and WEBHOOK_SECRET for the bot's webhook (/telegram/webhook);
+  // REPORT_KEY reads the error reports back (scripts/reports.mjs).
   "observability": { "enabled": true }
 }

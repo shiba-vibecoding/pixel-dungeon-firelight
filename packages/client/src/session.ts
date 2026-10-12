@@ -2,6 +2,7 @@ import {
   act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, heroById, type HeroClass,
   type Look, restartWorld, type ServerMessage, type World,
 } from '@pd/core';
+import { report } from './report';
 
 /*
  * Where the world comes from. A solo session runs the core directly and keeps
@@ -184,6 +185,8 @@ export function onlineSession(options: OnlineOptions): Session {
   };
   /** My look, sent again whenever the connection is made anew. */
   let myLook: Look | null = null;
+  /** Connections in a row that never opened. */
+  let failures = 0;
 
   const receive = (message: ServerMessage): void => {
     switch (message.type) {
@@ -203,7 +206,15 @@ export function onlineSession(options: OnlineOptions): Session {
         }
         const result = applyEvent(session.world, message.event);
         seq = message.seq;
-        if (result.ok) pending.push(...result.effects);
+        if (result.ok) {
+          pending.push(...result.effects);
+        } else {
+          // The room took this action, so a world that refuses it has drifted from the room's:
+          // start over from the room's own, and say so.
+          report('desync', `${message.event.type === 'act' ? message.event.action.type : message.event.type}: ${result.reason}`);
+          transmit({ type: 'sync' });
+          return;
+        }
         if (message.event.type === 'restart') session.generation++;
         if (message.event.type === 'act' && message.event.heroId === session.myId) inFlight = false;
         break;
@@ -231,14 +242,28 @@ export function onlineSession(options: OnlineOptions): Session {
       url.searchParams.set('name', options.name);
     }
     socket = new WebSocket(url);
+    let opened = false;
     socket.onopen = () => {
+      opened = true;
+      failures = 0;
       session.status = '';
       if (myLook) transmit({ type: 'look', look: myLook });
     };
-    socket.onmessage = (event) => receive(JSON.parse(String(event.data)) as ServerMessage);
+    socket.onmessage = (event) => {
+      try {
+        receive(JSON.parse(String(event.data)) as ServerMessage);
+      } catch (error) {
+        // Whatever broke, the room's own world puts it right.
+        report('error', `receive: ${(error as Error).message}`, (error as Error).stack);
+        transmit({ type: 'sync' });
+      }
+    };
     socket.onclose = (event) => {
       inFlight = false;
       if (closed) return;
+      // A room that cannot be reached (refused, or the network) is worth knowing about once it keeps happening.
+      if (!opened && ++failures === 3) report('socket', `cannot connect: close ${event.code}${event.reason ? ` ${event.reason}` : ''}`, undefined, { telegram: Boolean(options.initData) });
+      if (opened && event.code !== 1000 && event.code !== 1001 && event.code < 4000) report('socket', `dropped: close ${event.code}`);
       if (event.code === 4000) {
         session.status = options.text.replaced;
         return;

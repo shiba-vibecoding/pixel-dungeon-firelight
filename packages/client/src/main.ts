@@ -38,9 +38,10 @@ import { rankings, recordRun, runScore } from './rankings';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
 import {
-  backButton, haptic, initData, initTelegram, inTelegram, invitedRoom, launchedForDaily, onLayoutChange, shareDaily,
+  backButton, haptic, initData, initTelegram, inTelegram, invitedRoom, launchedForDaily, onLayoutChange, platform, shareDaily,
   shareInvite, telegramName,
 } from './telegram';
+import { startReporting } from './report';
 import { STEP_MS, TILE, View } from './view';
 
 /*
@@ -53,6 +54,16 @@ const SOLO_SLOT = 'pd-solo';
 const SERVER: string = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? `ws://${location.hostname}:8787` : '');
 
 initTelegram('#1f1d1d');
+// What goes wrong reaches whoever looks after the game (report.ts): never who, only where.
+startReporting(import.meta.env.DEV ? '' : SERVER, () => {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  return {
+    platform, mode: session ? (session.mode === 'online' ? 'coop' : dailyRun ? 'daily' : 'solo') : 'title',
+    ...(me ? { depth: me.depth, turn: world!.turn, heroes: world!.heroes.length } : {}),
+    screen: `${innerWidth}x${innerHeight}@${devicePixelRatio}`,
+  };
+});
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;

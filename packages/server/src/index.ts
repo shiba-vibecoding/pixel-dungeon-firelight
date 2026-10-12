@@ -4,7 +4,10 @@ import { botApi, createInvoice, handleUpdate, type Wallets } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { type DailyEntry, type DailyResult, Leaderboard, parseResult } from './leaderboard';
 import { type Delivery, RoomLogic, type RoomState } from './room-logic';
+import { parseReport, type Report, ReportStore } from './reports';
 import { verifyInitData } from './telegram-auth';
+
+export { ReportStore };
 
 /*
  * Co-op server: one Durable Object per room holds the authoritative world.
@@ -30,6 +33,52 @@ export interface Env {
   BOT_TOKEN?: string;
   /** "true" lets players without Telegram join as guests even when BOT_TOKEN is set. */
   ALLOW_GUESTS?: string;
+  /** What went wrong, clients' and the server's own (reports.ts). */
+  REPORTS: DurableObjectNamespace<ReportStore>;
+  /** Secret that reads the reports back: GET /reports with Authorization: Bearer <REPORT_KEY>. */
+  REPORT_KEY?: string;
+}
+
+/** Keeps a report; never fails what it is reporting on. */
+async function keepReport(env: Env, report: Report): Promise<void> {
+  try {
+    console.error(`[${report.kind}] ${report.message}`, report.context ?? {});
+    await env.REPORTS.get(env.REPORTS.idFromName('all')).fetch('https://reports/', { method: 'POST', body: JSON.stringify(report) });
+  } catch {
+    // Reporting is best effort.
+  }
+}
+
+/** An exception of the server's own, as a report. */
+function serverReport(error: unknown, where: string, context: Record<string, string | number | boolean> = {}): Report {
+  const e = error instanceof Error ? error : new Error(String(error));
+  return { at: Date.now(), kind: 'server', message: `${where}: ${e.message}`.slice(0, 500), ...(e.stack ? { stack: e.stack.slice(0, 1500) } : {}), context };
+}
+
+async function reports(request: Request, env: Env): Promise<Response> {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  const store = env.REPORTS.get(env.REPORTS.idFromName('all'));
+  if (request.method === 'POST') {
+    // A client's report: sendBeacon posts it as text, which needs no CORS preflight.
+    const body = await request.text();
+    if (body.length > 8000) return new Response(null, { status: 413, headers: CORS });
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return new Response(null, { status: 400, headers: CORS });
+    }
+    const report = parseReport(parsed, Date.now());
+    if (!report) return new Response(null, { status: 400, headers: CORS });
+    const country = (request as Request & { cf?: { country?: string } }).cf?.country;
+    if (country) report.context = { ...report.context, country };
+    await keepReport(env, report);
+    return new Response(null, { status: 204, headers: CORS });
+  }
+  // Reading them back takes the key.
+  if (!env.REPORT_KEY || request.headers.get('Authorization') !== `Bearer ${env.REPORT_KEY}`) return new Response('not found', { status: 404 });
+  if (request.method === 'DELETE') return store.fetch('https://reports/', { method: 'DELETE' });
+  return store.fetch('https://reports/');
 }
 
 const HERO_CLASSES: readonly HeroClass[] = ['warrior', 'mage', 'rogue', 'huntress'];
@@ -88,8 +137,24 @@ export class Room extends DurableObject<Env> {
   }
 
   override async alarm(): Promise<void> {
-    const room = await this.room();
-    await this.apply(room.tick(Date.now()));
+    try {
+      const room = await this.room();
+      await this.apply(room.tick(Date.now()));
+    } catch (error) {
+      await this.failed(error, 'alarm');
+    }
+  }
+
+  /**
+   * Something threw while the room was changing: tell whoever looks after the game, and drop
+   * what is in memory, which may be half changed. The next message reloads the room as last
+   * saved; nothing of the failed change was sent, so the players are still in step with it.
+   */
+  private async failed(error: unknown, where: string): Promise<void> {
+    const turn = this.logic?.state().world?.turn;
+    this.logic = null;
+    this.writer.reset();
+    await keepReport(this.env, serverReport(error, `room ${where}`, { ...(turn !== undefined ? { turn } : {}), players: this.ctx.getWebSockets().length }));
   }
 
   override async fetch(request: Request): Promise<Response> {
@@ -148,16 +213,27 @@ export class Room extends DurableObject<Env> {
     } catch {
       return;
     }
-    if (message.type === 'look') {
-      await this.wear(this.playerOf(ws), message.look ?? {});
-      return;
-    }
-    const room = await this.room();
-    const deliveries = room.receive(this.playerOf(ws).id, message, Date.now());
-    if (message.type === 'sync') {
-      this.deliver(deliveries);
-    } else {
-      await this.apply(deliveries);
+    try {
+      if (message.type === 'look') {
+        await this.wear(this.playerOf(ws), message.look ?? {});
+        return;
+      }
+      const room = await this.room();
+      const deliveries = room.receive(this.playerOf(ws).id, message, Date.now());
+      if (message.type === 'sync') {
+        this.deliver(deliveries);
+      } else {
+        await this.apply(deliveries);
+      }
+    } catch (error) {
+      await this.failed(error, `message ${message.type}${message.type === 'act' ? ` ${message.action?.type}` : ''}`);
+      // The sender starts over from the room as saved.
+      try {
+        const room = await this.room();
+        this.deliver(room.receive(this.playerOf(ws).id, { type: 'sync' }, Date.now()));
+      } catch (again) {
+        await this.failed(again, 'resync');
+      }
     }
   }
 
@@ -345,6 +421,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/shop/me' || url.pathname === '/shop/invoice') return shop(request, env, url.pathname === '/shop/me' ? 'me' : 'invoice');
     if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env);
+    if (url.pathname === '/report' || url.pathname === '/reports') return reports(request, env);
     const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
     if (day) return daily(request, env, day[1]!);
 

@@ -83,4 +83,9 @@ export class ChunkWriter {
   loaded(entries: ReadonlyMap<string, string>): void {
     this.written = new Map(entries);
   }
+
+  /** Forgets what it believes is stored (a write may have failed): the next load tells it again. */
+  reset(): void {
+    this.written = new Map();
+  }
 }

@@ -29,6 +29,9 @@ const webApp = (globalThis as { Telegram?: { WebApp?: WebApp } }).Telegram?.WebA
 /** True when running inside Telegram (the script is loaded in browsers too). */
 export const inTelegram = Boolean(webApp?.initData);
 
+/** Telegram's platform (ios, android, tdesktop, weba...), or 'browser' outside it. */
+export const platform: string = inTelegram ? webApp!.platform || 'telegram' : 'browser';
+
 /** The Mini App's t.me link, used for invitations. */
 const APP_LINK: string = import.meta.env.VITE_TG_APP_LINK ?? 'https://t.me/pixel_dungeon_gamebot/pixel_dungeon';
 
