@@ -132,12 +132,18 @@ export function showArenaPick(options: ArenaPickOptions): void {
   show(box, options.onClose);
 }
 
-/** How rare a reward looks: upgrades and strength, +2 and better, enchanted or inscribed gear are legendary; rings, wands and +1 gear rare. */
+/**
+ * How rare a reward looks: upgrades, strength, might, an ankh, +2 and better, enchanted or inscribed gear are
+ * legendary; rings, wands, +1 gear, a honeypot, psionic blast and recharging rare.
+ */
+const LEGENDS: ReadonlySet<string> = new Set(['scroll.upgrade', 'potion.strength', 'scroll.enchantment', 'potion.experience', 'potion.might', 'ankh']);
+const RARES: ReadonlySet<string> = new Set(['honeypot', 'scroll.psionicBlast', 'scroll.recharging']);
+
 export function rarity(item: Item): 'common' | 'rare' | 'legend' {
   const category = itemDef(item.kind).category;
-  if (item.kind === 'scroll.upgrade' || item.kind === 'potion.strength' || item.kind === 'scroll.enchantment' || item.kind === 'potion.experience') return 'legend';
+  if (LEGENDS.has(item.kind)) return 'legend';
   if (item.level >= 2 || item.enchant || item.glyph) return 'legend';
-  if (category === 'ring' || category === 'wand' || item.level === 1) return 'rare';
+  if (category === 'ring' || category === 'wand' || item.level === 1 || RARES.has(item.kind)) return 'rare';
   return 'common';
 }
 

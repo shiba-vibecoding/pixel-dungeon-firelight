@@ -1,7 +1,7 @@
-import { createMob, type Hero, isAlive, type Mob, type MobKind, rollMob } from './actors';
+import { createMob, type Hero, isAlive, isHungry, type Mob, type MobKind, rollMob } from './actors';
 import { canEnter, charAt, type Ctx, dropItem, enterCell, type Floor, freeCellNear, leaveCell, observe } from './floor';
 import { collect } from './inventory';
-import { createItem, type GeneratedCategory, type Item, itemDef, ItemGenerator, rollFood } from './items';
+import { createItem, type Item, itemDef, type ItemKind, ITEMS, missileStats, rollFood } from './items';
 import { ARENA_CENTRE, ARENA_DEPTHS, ARENA_RADIUS, ARENA_STANDS, buildArenaLevel, insideArena, ringDistance } from './level/arena';
 import { identify } from './ident';
 import { isBossDepth, LAST_SHOP_DEPTH } from './level/builder';
@@ -469,38 +469,138 @@ function freeHeapCell(floor: Floor, level: Level): number {
 /* Rewards */
 
 /** What a reward may be, and how likely: kit to fight with, and things to use. */
-const OFFER_CATEGORIES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
-  ['weapon', 3], ['armor', 3], ['wand', 2], ['ring', 1], ['potion', 3], ['scroll', 3], ['seed', 1], ['misc', 1],
+/*
+ * The arena's rewards. Not the dungeon's mix: there is nothing to map, identify, uncurse or
+ * flee to in the pit, so those never come. An offer is three things for three needs — one to
+ * stay alive, one for the next wave's crowd, one to grow stronger — so each pick is a real
+ * choice. Gear on offer is better than what the hero wields and within their strength; stacks
+ * grow with the waves.
+ */
+
+type Make = (rng: Rng, wave: number, hero: Hero) => Item | null;
+type Pool = ReadonlyArray<readonly [number, Make]>;
+
+const kindOf = (kind: ItemKind, qty = 1): Make => () => createItem(kind, qty);
+const has = (hero: Hero, kind: ItemKind): boolean =>
+  hero.items.some((item) => item.kind === kind) || hero.weapon?.kind === kind || hero.armor.kind === kind || hero.rings.some((ring) => ring.kind === kind);
+const wands = (hero: Hero): number => hero.items.filter((item) => itemDef(item.kind).category === 'wand').length;
+
+/** To stay alive through the next wave. */
+const SURVIVE: Pool = [
+  [6, (rng, wave) => createItem('potion.healing', wave >= 8 && rng.int(3) === 0 ? 2 : 1)],
+  [2, kindOf('seed.sungrass', 2)],
+  [2, kindOf('seed.earthroot', 2)],
+  [2, kindOf('honeypot')],
+  [2, kindOf('scroll.mirrorImage')],
+  // Should the hero fall, once: a late and rare gift.
+  [1, (_rng, wave, hero) => (wave >= 8 && !has(hero, 'ankh') ? createItem('ankh') : null)],
 ];
-/** The first of the three is always something to use. */
-const CONSUMABLES: readonly GeneratedCategory[] = ['potion', 'potion', 'scroll', 'scroll', 'seed', 'misc'];
+
+/** Thrown weapons by the wave (kind, from wave, fewest, most): darts first, javelins and tomahawks later. */
+const MISSILES: ReadonlyArray<readonly [ItemKind, number, number, number]> = [
+  ['missile.dart', 0, 10, 16], ['missile.curare', 3, 3, 6], ['missile.incendiary', 3, 3, 6], ['missile.shuriken', 6, 6, 10],
+  ['missile.javelin', 8, 4, 8], ['missile.tomahawk', 12, 4, 7],
+];
+
+/** For the next wave's crowd: blasts, clouds, fear and sleep, and something to throw. */
+const CROWD: Pool = [
+  [4, (_rng, wave) => createItem('bomb', Math.min(3, 1 + Math.trunc(wave / 6)))],
+  [3, kindOf('potion.liquidFlame')],
+  [2, kindOf('potion.frost')],
+  [2, kindOf('potion.paralyticGas')],
+  [2, kindOf('potion.toxicGas')],
+  [2, kindOf('scroll.terror')],
+  [2, kindOf('scroll.lullaby')],
+  [1, (_rng, wave) => (wave >= 6 ? createItem('scroll.psionicBlast') : null)],
+  [1, (rng) => createItem(rng.oneOf(['seed.firebloom', 'seed.icecap', 'seed.sorrowmoss', 'seed.dreamweed'] as const), 2)],
+  [4, (rng, wave, hero) => {
+    const [kind, , fewest, most] = rng.oneOf(MISSILES.filter(([, from]) => wave >= from));
+    // Heavy ones only for an arm strong enough to throw them well.
+    if (missileStats(createItem(kind)).str > hero.str + 2) return createItem('missile.dart', rng.intRange(10, 16));
+    return createItem(kind, rng.intRange(fewest, most));
+  }],
+];
+
+/** Battle wands worth carrying into a wave, and rings worth wearing in one. */
+const BATTLE_WANDS: readonly ItemKind[] = [
+  'wand.magicMissile', 'wand.firebolt', 'wand.lightning', 'wand.poison', 'wand.slowness', 'wand.amok', 'wand.flock', 'wand.teleportation',
+];
+const LATE_WANDS: readonly ItemKind[] = ['wand.avalanche', 'wand.disintegration'];
+const FIGHTING_RINGS: readonly ItemKind[] = [
+  'ring.haste', 'ring.evasion', 'ring.accuracy', 'ring.mending', 'ring.elements', 'ring.thorns', 'ring.satiety',
+];
 
 /**
- * Three rewards for a hero after a wave, as the matching depth would have them: one
- * thing to use, two of anything; after a champions' wave a scroll of upgrade or a
- * potion of strength is one of them, and every third wave food if the hero has none.
- * Nothing cursed is offered.
+ * A weapon or armour better than the one worn, which the hero can wield: of the same tier or
+ * the next, upgraded enough to fit their strength (a level takes a point off what it asks).
+ */
+function betterGear(rng: Rng, wave: number, hero: Hero, slot: 'weapon' | 'armor'): Item {
+  const worn = slot === 'weapon' ? hero.weapon : hero.armor;
+  const wornTier = Math.min(5, worn ? (itemDef(worn.base ?? worn.kind).tier ?? 1) : 1);
+  // The opening gift is always a step up; later, half the time, or always once the waves outgrow the tier.
+  const tier = Math.min(5, wornTier + (wave === 0 || rng.int(2) === 0 || wave >= 4 * wornTier ? 1 : 0));
+  const kinds = (Object.keys(ITEMS) as ItemKind[]).filter((kind) => {
+    const def = itemDef(kind);
+    return def.category === slot && def.tier === tier && kind !== 'weapon.pickaxe';
+  });
+  const kind = rng.oneOf(kinds);
+  const def = itemDef(kind);
+  const needs = slot === 'weapon' ? (def.str ?? 8 + tier * 2) : 7 + tier * 2;
+  let level = Math.max(Math.min(3, rng.int(2) + Math.trunc(wave / 7)), needs - hero.str);
+  // Of the same kind, it must still be the better of the two.
+  if (worn && kind === worn.kind) level = Math.max(level, worn.level + 1);
+  return createItem(kind, 1, Math.max(0, level));
+}
+
+/** To grow stronger: better gear, a battle wand, a ring, an enchantment, experience. */
+const GROW: Pool = [
+  [3, (rng, wave, hero) => betterGear(rng, wave, hero, 'weapon')],
+  [3, (rng, wave, hero) => betterGear(rng, wave, hero, 'armor')],
+  [3, (rng, wave, hero) => {
+    if (wands(hero) >= 3) return null;
+    const kinds = [...BATTLE_WANDS, ...(wave >= 8 ? LATE_WANDS : [])].filter((kind) => !has(hero, kind));
+    return kinds.length > 0 ? createItem(rng.oneOf(kinds), 1, 1 + rng.int(2) + Math.trunc(wave / 8)) : null;
+  }],
+  [2, (rng, wave, hero) => {
+    const kinds = [...FIGHTING_RINGS, ...(wands(hero) > 0 ? ['ring.power' as const] : [])].filter((kind) => !has(hero, kind));
+    return kinds.length > 0 ? createItem(rng.oneOf(kinds), 1, 1 + rng.int(2) + Math.trunc(wave / 8)) : null;
+  }],
+  [1, (_rng, _wave, hero) => (hero.weapon ? createItem('scroll.enchantment') : null)],
+  [2, (_rng, _wave, hero) => (wands(hero) > 0 ? createItem('scroll.recharging') : null)],
+  [2, kindOf('potion.experience')],
+  [1, (_rng, wave) => (wave >= 8 ? createItem('potion.might') : null)],
+  [1, (_rng, _wave, hero) => (has(hero, 'missile.boomerang') ? null : createItem('missile.boomerang', 1, 1))],
+];
+
+/** One thing from a pool, not of a kind already on offer. */
+function pick(rng: Rng, pool: Pool, wave: number, hero: Hero, taken: Set<string>): Item {
+  for (let i = 0; i < 12; i++) {
+    const item = pool[rng.chances(pool.map(([weight]) => weight))]![1](rng, wave, hero);
+    if (item && !taken.has(item.kind)) {
+      taken.add(item.kind);
+      return item;
+    }
+  }
+  // A pool runs dry only for a hero who has it all: a potion of healing is never wasted.
+  return createItem('potion.healing');
+}
+
+/**
+ * Three rewards for a hero after a wave: to survive, for the crowd, to grow. After a champions'
+ * wave the third is a scroll of upgrade or a potion of strength; with nothing to eat, every third
+ * wave (or when hungry) the first is food. Before the first wave, the arena master's opening
+ * gift: a better weapon or armour, a potion of healing, and something for the crowd.
  */
 export function rollOffer(rng: Rng, wave: number, hero: Hero): Item[] {
-  const generator = new ItemGenerator(rng, equivalentDepth(wave + 1));
-  const kinds = new Set<string>();
-  const roll = (category: GeneratedCategory): Item => {
-    let item = generator.of(category);
-    for (let i = 0; i < 6 && (item.level < 0 || item.cursed || kinds.has(item.kind)); i++) item = generator.of(category);
-    if (item.level < 0 || item.cursed) {
-      item.level = Math.abs(item.level);
-      delete item.cursed;
-    }
-    kinds.add(item.kind);
-    return item;
-  };
-  const any = (): Item => roll(OFFER_CATEGORIES[rng.chances(OFFER_CATEGORIES.map(([, chance]) => chance))]![0]);
-  // Before the first wave: something to fight or defend with, a potion of healing, and one more thing to use.
-  if (wave === 0) return [roll(rng.oneOf(['weapon', 'armor'] as const)), createItem('potion.healing'), roll(rng.oneOf(CONSUMABLES))];
-  const hungry = wave > 0 && wave % 3 === 0 && !hero.items.some((item) => itemDef(item.kind).category === 'food');
-  const first = hungry ? rollFood(rng) : roll(rng.oneOf(CONSUMABLES));
-  kinds.add(first.kind);
-  const second = any();
-  const third = isChampionsWave(wave) ? createItem(wave % (2 * WAVES_PER_TIER) === WAVES_PER_TIER ? 'scroll.upgrade' : 'potion.strength') : any();
+  const taken = new Set<string>();
+  if (wave === 0) {
+    return [betterGear(rng, 0, hero, rng.oneOf(['weapon', 'armor'] as const)), createItem('potion.healing'), pick(rng, CROWD, 0, hero, taken)];
+  }
+  const starving = !hero.items.some((item) => itemDef(item.kind).category === 'food') && (wave % 3 === 0 || isHungry(hero));
+  const first = starving ? rollFood(rng) : pick(rng, SURVIVE, wave, hero, taken);
+  const second = pick(rng, CROWD, wave, hero, taken);
+  const third = isChampionsWave(wave)
+    ? createItem(wave % (2 * WAVES_PER_TIER) === WAVES_PER_TIER ? 'scroll.upgrade' : 'potion.strength')
+    : pick(rng, GROW, wave, hero, taken);
   return [first, second, third];
 }
