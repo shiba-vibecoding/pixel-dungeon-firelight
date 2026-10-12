@@ -1,0 +1,164 @@
+import {
+  type Action, type EffectId, type FrameId, type ItemRef, LENGTH, type Look, OFFERS, type SkinVariant, SUBCLASSES,
+  type SubClass,
+} from '@pd/core';
+
+/*
+ * What a room accepts from a client, rebuilt field by field. An action the
+ * room takes is broadcast to every player, so it must carry nothing but the
+ * fields the rules read: `{ type: 'wait', junk: ... }` becomes `{ type: 'wait' }`,
+ * and anything that is not an action of the rules at all is refused before the
+ * world sees it. Whether the action makes sense in the dungeon is still the
+ * rules' to say (act() in the core); this only checks its shape.
+ */
+
+/** A backpack slot or a worn ring's index: small and whole. */
+const MAX_SLOT = 255;
+/** Monster ids are short ('#12'); anything longer is not one. */
+const MAX_ID = 64;
+
+const isInt = (value: unknown, min: number, max: number): value is number =>
+  Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+
+const cell = (value: unknown): number | null => (isInt(value, 0, LENGTH - 1) ? value : null);
+const slot = (value: unknown): number | null => (isInt(value, 0, MAX_SLOT) ? value : null);
+const oneOf = <T extends string>(value: unknown, options: readonly T[]): T | null =>
+  (options as readonly unknown[]).includes(value) ? (value as T) : null;
+const itemRef = (value: unknown): ItemRef | null => (value === 'weapon' || value === 'armor' ? value : slot(value));
+
+const ALL_SUBCLASSES: readonly SubClass[] = Object.values(SUBCLASSES).flat();
+
+/** The action as the rules know it, or null if it is not one. */
+export function sanitizeAction(raw: unknown): Action | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const a = raw as Record<string, unknown>;
+  switch (a.type) {
+    case 'descend':
+    case 'ascend':
+    case 'wait':
+    case 'search':
+    case 'impReward':
+    case 'faceCurse':
+    case 'pickup':
+    case 'buy':
+    case 'mine':
+      return { type: a.type };
+    case 'move':
+    case 'jump': {
+      const to = cell(a.to);
+      return to === null ? null : { type: a.type, to };
+    }
+    case 'attack':
+      return typeof a.target === 'string' && a.target.length > 0 && a.target.length <= MAX_ID ? { type: 'attack', target: a.target } : null;
+    case 'reward': {
+      const choice = oneOf(a.choice, ['weapon', 'armor'] as const);
+      return choice ? { type: 'reward', choice } : null;
+    }
+    case 'wandReward': {
+      const choice = oneOf(a.choice, ['battle', 'utility'] as const);
+      return choice ? { type: 'wandReward', choice } : null;
+    }
+    case 'reforge': {
+      const first = itemRef(a.first);
+      const second = itemRef(a.second);
+      return first === null || second === null ? null : { type: 'reforge', first, second };
+    }
+    case 'beacon': {
+      const item = slot(a.item);
+      const mode = oneOf(a.mode, ['set', 'return'] as const);
+      return item === null || !mode ? null : { type: 'beacon', item, mode };
+    }
+    case 'use': {
+      const item = slot(a.item);
+      if (item === null) return null;
+      if (a.target === undefined) return { type: 'use', item };
+      const target = oneOf(a.target, ['weapon', 'armor'] as const);
+      return target ? { type: 'use', item, target } : null;
+    }
+    case 'equip':
+    case 'drop':
+    case 'sell': {
+      const item = slot(a.item);
+      return item === null ? null : { type: a.type, item };
+    }
+    case 'throw':
+    case 'zap': {
+      const item = slot(a.item);
+      const target = cell(a.target);
+      return item === null || target === null ? null : { type: a.type, item, target };
+    }
+    case 'remove': {
+      const ring = slot(a.ring);
+      return ring === null ? null : { type: 'remove', ring };
+    }
+    case 'master': {
+      const item = slot(a.item);
+      const subclass = oneOf(a.subclass, ALL_SUBCLASSES);
+      return item === null || !subclass ? null : { type: 'master', item, subclass };
+    }
+    case 'special': {
+      if (a.target === undefined) return { type: 'special' };
+      const target = cell(a.target);
+      return target === null ? null : { type: 'special', target };
+    }
+    case 'balance': {
+      const item = slot(a.item);
+      const imbue = oneOf(a.imbue, ['speed', 'accuracy'] as const);
+      if (item === null || !imbue) return null;
+      if (a.weapon === undefined) return { type: 'balance', item, imbue };
+      const weapon = slot(a.weapon);
+      return weapon === null ? null : { type: 'balance', item, weapon, imbue };
+    }
+    default:
+      return null;
+  }
+}
+
+const SKINS = [...new Set(OFFERS.flatMap((offer) => (offer.skin ? [offer.skin] : [])))] as SkinVariant[];
+const EFFECTS = [...new Set(OFFERS.flatMap((offer) => (offer.effect ? [offer.effect] : [])))] as EffectId[];
+const FRAMES = [...new Set(OFFERS.flatMap((offer) => (offer.frame ? [offer.frame] : [])))] as FrameId[];
+
+/** A look of things Pixel-Mart has; `patron` is the server's to set, never the client's. */
+export function sanitizeLook(raw: unknown): Look {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const l = raw as Record<string, unknown>;
+  const look: Look = {};
+  const skin = oneOf(l.skin, SKINS);
+  const effect = oneOf(l.effect, EFFECTS);
+  const frame = oneOf(l.frame, FRAMES);
+  if (skin) look.skin = skin;
+  if (effect) look.effect = effect;
+  if (frame) look.frame = frame;
+  return look;
+}
+
+/**
+ * A client's message as the room will handle it. An action of the wrong shape
+ * is null (the sender hears it was refused); a signal is checked by validSignal
+ * (signals.ts) when it is relayed.
+ */
+export type RoomMessage =
+  | { type: 'act'; action: Action | null }
+  | { type: 'restart' }
+  | { type: 'sync' }
+  | { type: 'look'; look: Look }
+  | { type: 'signal'; signal: unknown };
+
+/** A client's message, rebuilt, or null if it is not one. */
+export function parseClientMessage(raw: unknown): RoomMessage | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const m = raw as Record<string, unknown>;
+  switch (m.type) {
+    case 'act':
+      return { type: 'act', action: sanitizeAction(m.action) };
+    case 'restart':
+    case 'sync':
+      return { type: m.type };
+    case 'look':
+      return { type: 'look', look: sanitizeLook(m.look) };
+    case 'signal':
+      return { type: 'signal', signal: m.signal };
+    default:
+      return null;
+  }
+}

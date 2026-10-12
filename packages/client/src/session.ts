@@ -2,6 +2,7 @@ import {
   act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, heroById, type HeroClass,
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
 } from '@pd/core';
+import { guestSecret } from './guest';
 import { report } from './report';
 
 /*
@@ -278,7 +279,9 @@ export function onlineSession(options: OnlineOptions): Session {
     if (options.initData) {
       url.searchParams.set('initData', options.initData);
     } else {
+      // The id serves a server in development; a live one knows a guest by their secret alone.
       url.searchParams.set('id', options.playerId);
+      url.searchParams.set('gs', guestSecret());
       url.searchParams.set('name', options.name);
     }
     socket = new WebSocket(url);

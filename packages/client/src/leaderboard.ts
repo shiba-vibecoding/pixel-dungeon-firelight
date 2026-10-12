@@ -19,7 +19,7 @@ export interface DailyEntry extends DailyResult {
 export interface DailyBoard {
   rank: number | null;
   top: DailyEntry[];
-  /** My id on the board, when known. */
+  /** My id on the board, when known: an opaque id for the day, never an account id. */
   you?: string;
 }
 
@@ -45,6 +45,8 @@ export async function submitDaily(server: string, identity: Identity, result: Da
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...identity, hero: result.heroClass, result }),
     });
+    // Only Telegram players are ranked: a guest sees the day's board, without a place of their own.
+    if (response.status === 403) return fetchDaily(server);
     return response.ok ? ((await response.json()) as DailyBoard) : null;
   } catch {
     return null;
