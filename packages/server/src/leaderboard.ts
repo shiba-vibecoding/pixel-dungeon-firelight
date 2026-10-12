@@ -27,18 +27,21 @@ export function score(result: DailyResult): number {
   return (result.gold + result.level * result.depth * 100) * (result.won ? 2 : 1);
 }
 
-/** Checks a submitted result and clamps it to what the sewers allow. */
+/** The Amulet's depth: the deepest anyone can get, and the only place a run is won. */
+const LAST_DEPTH = 26;
+
+/** Checks a submitted result and clamps it to what the dungeon allows. */
 export function parseResult(input: unknown): DailyResult | null {
   if (typeof input !== 'object' || input === null) return null;
   const r = input as Record<string, unknown>;
   const int = (value: unknown, min: number, max: number): number | null =>
     Number.isInteger(value) && (value as number) >= min && (value as number) <= max ? (value as number) : null;
-  const depth = int(r.depth, 1, 5);
+  const depth = int(r.depth, 1, LAST_DEPTH);
   const level = int(r.level, 1, 30);
-  const gold = int(r.gold, 0, 20_000);
+  const gold = int(r.gold, 0, 100_000);
   if (depth === null || level === null || gold === null || typeof r.won !== 'boolean') return null;
   if (typeof r.heroClass !== 'string' || !HERO_CLASSES.has(r.heroClass)) return null;
-  return { heroClass: r.heroClass, depth, level, gold, won: r.won && depth === 5 };
+  return { heroClass: r.heroClass, depth, level, gold, won: r.won && depth === LAST_DEPTH };
 }
 
 export class Leaderboard {

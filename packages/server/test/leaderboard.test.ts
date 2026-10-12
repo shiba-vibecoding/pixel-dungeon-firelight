@@ -34,7 +34,9 @@ describe('daily leaderboard', () => {
     expect(parseResult({ ...run(3, 2, 10), depth: 99 })).toBeNull();
     expect(parseResult({ ...run(3, 2, 10), gold: -5 })).toBeNull();
     expect(parseResult('nonsense')).toBeNull();
-    // A win only counts on the last depth.
+    // A win only counts on the last depth, the Amulet's.
     expect(parseResult(run(3, 2, 10, true))!.won).toBe(false);
+    expect(parseResult(run(26, 20, 5000, true))!.won).toBe(true);
+    expect(parseResult(run(27, 20, 5000, true))).toBeNull();
   });
 });
