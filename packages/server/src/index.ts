@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { ClientMessage, HeroClass, PlayerInfo } from '@pd/core';
+import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { type DailyEntry, type DailyResult, Leaderboard, parseResult } from './leaderboard';
 import { type Delivery, RoomLogic, type RoomState } from './room-logic';
 import { verifyInitData } from './telegram-auth';
@@ -53,6 +54,7 @@ async function authenticate(params: URLSearchParams, env: Env): Promise<PlayerIn
 
 export class Room extends DurableObject<Env> {
   private logic: RoomLogic | null = null;
+  private readonly writer = new ChunkWriter();
 
   private playerOf(ws: WebSocket): PlayerInfo {
     return ws.deserializeAttachment() as PlayerInfo;
@@ -60,8 +62,7 @@ export class Room extends DurableObject<Env> {
 
   private async room(): Promise<RoomLogic> {
     if (!this.logic) {
-      const saved = await this.ctx.storage.get<RoomState>('state');
-      this.logic = RoomLogic.restore(saved, Math.floor(Math.random() * 2 ** 31));
+      this.logic = RoomLogic.restore(await this.load(), Math.floor(Math.random() * 2 ** 31));
       this.logic.restoreOnline(this.ctx.getWebSockets().map((ws) => this.playerOf(ws).id));
     }
     return this.logic;
@@ -163,10 +164,23 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  /** The stored room, from its chunks (see chunks.ts); a room stored whole by an earlier version is read as is. */
+  private async load(): Promise<RoomState | undefined> {
+    const meta = await this.ctx.storage.get<unknown>('state');
+    if (meta === undefined) return undefined;
+    if (typeof meta !== 'string') return meta as RoomState;
+    const chunks = await this.ctx.storage.get<string>(chunkKeys(meta));
+    const entries = new Map<string, string>([['state', meta], ...chunks]);
+    this.writer.loaded(entries);
+    return fromChunks(entries);
+  }
+
+  /** Writes the chunks that changed since last time, and drops those of depths gone after a restart. */
   private async persist(): Promise<void> {
-    if (this.logic) {
-      await this.ctx.storage.put('state', this.logic.state());
-    }
+    if (!this.logic) return;
+    const { put, remove } = this.writer.changes(this.logic.state());
+    if (Object.keys(put).length > 0) await this.ctx.storage.put(put);
+    if (remove.length > 0) await this.ctx.storage.delete(remove);
   }
 }
 
