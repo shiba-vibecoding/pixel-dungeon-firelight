@@ -1,7 +1,8 @@
 import {
   adjacent, blockers, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, HEAP_SPRITES,
   type Hero, type Item,
-  heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind, T,
+  heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
+  PLANT_KINDS, T,
   visibleCells, wandMaxCharges, WIDTH,
   type World,
 } from '@pd/core';
@@ -815,8 +816,9 @@ function tick(now: number): void {
     pos: heap.pos,
     sprite: heap.kind === 'heap' || heap.kind === 'forSale' ? itemSprite(heap.items[0]!, world.run.labels) : HEAP_SPRITES[heap.kind],
   }));
+  const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
   const scene = {
-    level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, seeAll: me.mindVision > 0,
+    level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, plants, seeAll: me.mindVision > 0,
   };
   render(ctx, scene, view, session.myId, assets, camera, now);
 

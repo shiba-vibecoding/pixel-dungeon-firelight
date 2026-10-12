@@ -11,6 +11,7 @@ import { adjacent, cellX, cellY, distance, LENGTH, NEIGHBOURS8, WIDTH } from './
 import { RoomType } from './level/room';
 import { F, hasFlag, T } from './level/terrain';
 import { burst, mobConditions } from './traps';
+import { staggerTarget, stepOnPlant } from './plants';
 import type { Rng } from './rng';
 import type { World } from './world';
 
@@ -77,6 +78,14 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
   }
   // Poisoned or paralysed by a trap's gas.
   if (mobConditions(ctx, mob)) {
+    spend(mob, TICK);
+    return;
+  }
+  // Dizzy, it staggers about instead of doing anything useful.
+  if ((mob.dizzy ?? 0) > 0) {
+    mob.dizzy!--;
+    const to = staggerTarget(ctx, mob.pos);
+    if (isPassable(ctx.level, to) && !charAt(ctx.world, ctx.depth, to)) moveMob(ctx, mob, to);
     spend(mob, TICK);
     return;
   }
@@ -538,6 +547,7 @@ function moveMob(ctx: Ctx, mob: Mob, to: number): void {
     ctx.level.map[ctx.level.entrance] = T.WATER_TILES;
   }
   if (mob.kind === 'dm300') dm300Steps(ctx, mob, to);
+  stepOnPlant(ctx, mob, to);
 }
 
 /** Dungeon.findPath: the next step, treating characters the mover can see as obstacles. */

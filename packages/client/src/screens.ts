@@ -508,6 +508,14 @@ function showItem(options: ItemOptions): void {
     }
     if (category === 'food') actions.push(button(t.eat, () => act({ type: 'use', item: index }), 'primary'));
     if (category === 'torch') actions.push(button(t.light, () => act({ type: 'use', item: index }), 'primary'));
+    if (category === 'seed') {
+      actions.push(
+        button(t.plantSeed, () => {
+          options.onClose();
+          options.onAim(index, 'throw');
+        }, 'primary'),
+      );
+    }
     if (category === 'scroll') {
       if (item.kind === 'scroll.upgrade' && isKnown(world, item)) {
         actions.push(button(t.upgradeWeapon, () => act({ type: 'use', item: index, target: 'weapon' }), 'primary'));

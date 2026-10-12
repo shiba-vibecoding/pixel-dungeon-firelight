@@ -1,3 +1,4 @@
+import type { PlantInfo } from '../plants';
 import { deriveSeed, Rng, Stream } from '../rng';
 import { type RunState, useSpecial } from '../run';
 import { Feeling, isBossDepth, type ItemSpawn, type ItemSpec, LevelBuilder, type WellWater } from './builder';
@@ -43,6 +44,8 @@ export interface Level {
   arenaDoor?: number;
   /** A shop's level: where the shopkeeper stands. */
   shopkeeper?: number;
+  /** Plants the level starts with (a garden's sungrass). */
+  plants?: PlantInfo[];
 }
 
 /** How each depth is laid out: the sewers, Goo's lair, the prison, Tengu's prison, the caves, DM-300's caves. */
@@ -127,6 +130,7 @@ export function generateLevel(run: RunState, depth: number): Level {
       secretDoors: level.secretDoors,
       ...(level.arenaDoor >= 0 ? { arenaDoor: level.arenaDoor } : {}),
       ...(level.shopkeeper >= 0 ? { shopkeeper: level.shopkeeper } : {}),
+      ...(level.plants.length > 0 ? { plants: level.plants } : {}),
     };
   }
   throw new Error(`Unable to generate depth ${depth} after ${MAX_ATTEMPTS} attempts`);

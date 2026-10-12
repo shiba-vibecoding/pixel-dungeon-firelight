@@ -15,7 +15,8 @@ import type { RunState } from './run';
  */
 
 export type ItemCategory =
-  | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'food' | 'dew' | 'torch' | 'key' | 'quest';
+  | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
+  | 'quest';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -100,6 +101,14 @@ export const ITEMS = {
   'ring.elements': { category: 'ring' },
   'ring.thorns': { category: 'ring' },
   'ring.haggler': { category: 'ring' },
+  // Seeds, thrown where a plant should grow.
+  'seed.firebloom': { category: 'seed', sprite: 88 },
+  'seed.icecap': { category: 'seed', sprite: 89 },
+  'seed.sorrowmoss': { category: 'seed', sprite: 90 },
+  'seed.dreamweed': { category: 'seed', sprite: 91 },
+  'seed.sungrass': { category: 'seed', sprite: 92 },
+  'seed.earthroot': { category: 'seed', sprite: 93 },
+  'seed.fadeleaf': { category: 'seed', sprite: 94 },
   // Food (Food, Pasty, MysteryMeat): a ration staves off hunger for a while,
   // a pasty completely; mystery meat from crabs is a gamble.
   'food.ration': { category: 'food', sprite: 4, energy: 260 },
@@ -140,7 +149,7 @@ export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
   return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || category === 'torch' ||
-    kind === 'missile.dart';
+    category === 'seed' || kind === 'missile.dart';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
@@ -189,6 +198,8 @@ export function itemPrice(item: Item, known: boolean): number {
       return 10 * item.qty;
     case 'ring':
       return levelled(80);
+    case 'seed':
+      return 10 * item.qty;
     default:
       return 0;
   }
@@ -301,10 +312,10 @@ export function itemSprite(item: Item, labels: Labels): number {
 /* Generator */
 
 /** Categories the generator picks from; thrown weapons come with the weapons. */
-type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand' | 'ring';
+type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand' | 'ring' | 'seed';
 
 const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
-  ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['wand', 4], ['ring', 2], ['gold', 50],
+  ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['wand', 4], ['ring', 2], ['seed', 5], ['gold', 50],
 ];
 
 const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
@@ -326,6 +337,11 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
     ['missile.dart', 1],
   ],
   armor: [['armor.cloth', 1], ['armor.leather', 1], ['armor.mail', 1], ['armor.scale', 1], ['armor.plate', 1]],
+  // The original's rotberry seed only comes from the wandmaker's errand.
+  seed: [
+    ['seed.firebloom', 1], ['seed.icecap', 1], ['seed.sorrowmoss', 1], ['seed.dreamweed', 1], ['seed.sungrass', 1],
+    ['seed.earthroot', 1], ['seed.fadeleaf', 1],
+  ],
   // The original also has herbalism; thorns and haggler are only dropped by DM-300 and thieves.
   ring: [
     ['ring.mending', 1], ['ring.detection', 1], ['ring.shadows', 1], ['ring.power', 1], ['ring.accuracy', 1],

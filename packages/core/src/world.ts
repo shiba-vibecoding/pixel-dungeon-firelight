@@ -9,7 +9,8 @@ import {
   heroView, isPassable, isWater, leaveCell, observe,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
-import { createItem, createItems, itemDef, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
+import { createItem, createItems, itemDef, ItemGenerator, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
+import { staggerTarget, stepOnPlant, sungrassHeals } from './plants';
 import { discoverable } from './level/flags';
 import { type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
@@ -113,6 +114,7 @@ export function levelAt(world: World, depth: number): Level {
         mobs,
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
         now: 0,
+        plants: [...(level.plants ?? [])],
         // Boss levels and the Amulet's hall never fill up again, and hold only what their layout asks for.
         respawn: isBossDepth(d) || d >= 26 ? -1 : TIME_TO_RESPAWN,
         heaps: createItems(
@@ -360,6 +362,8 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   hero.crippled = Math.max(0, hero.crippled - time);
   hero.light = Math.max(0, hero.light - time);
   hero.charmed = Math.max(0, hero.charmed - time);
+  hero.dizzy = Math.max(0, hero.dizzy - time);
+  sungrassHeals(hero, time);
   if (hero.charmed <= 0) hero.charmedBy = null;
 
   // Wands recharge with time.
@@ -461,14 +465,22 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         level.map[action.to] = T.DOOR;
         ctx.effects.push({ type: 'unlocked', depth: hero.depth, pos: action.to, hero: hero.id });
       }
+      // Vertigo: a dizzy hero staggers to some other cell, or into a wall.
+      let to = action.to;
+      if (hero.dizzy > 0) {
+        to = staggerTarget(ctx, hero.pos);
+        if (!canEnter(level, to) || charAt(world, hero.depth, to) || level.map[to] === T.LOCKED_DOOR) to = hero.pos;
+      }
       const from = hero.pos;
-      hero.pos = action.to;
+      hero.pos = to;
       leaveCell(world, level, hero.depth, from);
       enterCell(level, hero.pos);
       spend(ctx, hero, 1 / heroSpeed(hero));
+      if (hero.pos === from) break;
       // The step is done, then the trap goes off.
       if (trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
       if (level.map[hero.pos] === T.WELL) drinkFromWell(ctx, hero);
+      stepOnPlant(ctx, hero, hero.pos);
       if (level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos);
       if (level.arenaDoor !== undefined) {
         if (hero.depth === 15) enterLair(ctx, hero);
@@ -661,9 +673,10 @@ function awakenYog(ctx: Ctx, hero: Hero): void {
   ctx.effects.push({ type: 'yell', depth, mob: yog.id, kind: 'yog', line: 'notice', hero: hero.id });
 }
 
-/** HighGrass.trample: walked through, tall grass is flattened and sometimes sheds a dewdrop. */
+/** HighGrass.trample: walked through, tall grass is flattened and sometimes sheds a seed or a dewdrop. */
 function trample(ctx: Ctx, pos: number): void {
   ctx.level.map[pos] = T.GRASS;
+  if (ctx.rng.int(18) === 0) dropItem(ctx.floor, pos, new ItemGenerator(ctx.rng, ctx.depth).of('seed'));
   if (ctx.rng.int(6) === 0) dropItem(ctx.floor, pos, createItem('dew'));
 }
 

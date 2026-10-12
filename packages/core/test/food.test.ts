@@ -136,6 +136,8 @@ describe('tall grass', () => {
       if (heap?.items.some((item) => item.kind === 'dew')) {
         dew++;
         hero.hp = hero.ht - 5;
+        // Natural regeneration must not tick during the pickup.
+        hero.regen = 0;
         const result = act(world, 'p', { type: 'pickup' });
         expect(result.ok && result.effects.find((e) => e.type === 'dew')).toEqual({ type: 'dew', hero: 'p', amount: 1 });
         expect(hero.hp).toBe(hero.ht - 4);

@@ -502,6 +502,13 @@ export class View {
         case 'weakened':
           if (effect.hero === myId) this.say(t.weakened, COLORS.negative, now);
           break;
+        case 'plantTriggered':
+          if (effect.depth !== this.depth) break;
+          this.flashes.push({ cell: effect.pos, start: now, color: '120, 220, 120', duration: 700 });
+          if (effect.who === myId) this.say(t.plants[effect.kind], COLORS.warning, now);
+          break;
+        case 'planted':
+          break;
         case 'mimic':
           if (effect.depth !== this.depth) break;
           this.say(t.isMimic, COLORS.negative, now);

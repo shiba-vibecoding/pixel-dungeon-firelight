@@ -80,6 +80,13 @@ export interface Hero {
   charmed: number;
   /** Whom the hero is charmed by, and cannot bring themselves to attack. */
   charmedBy: string | null;
+  /** Turns left of staggering about (dreamweed's confusion gas). */
+  dizzy: number;
+  /** Sungrass: the spot it heals the hero on, while they stay there (-1 when not), and time towards the next healing. */
+  sungrass?: number;
+  sungrassTime?: number;
+  /** Earthroot: bark that takes the blows while the hero stays on that spot. */
+  earthroot?: { pos: number; level: number } | null;
   /** Hunger.level: 0 when fed, hungry from HUNGRY, starving at STARVING; and time towards its next step. */
   hunger: number;
   hungerTime: number;
@@ -131,6 +138,7 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     light: 0,
     charmed: 0,
     charmedBy: null,
+    dizzy: 0,
     hunger: 0,
     hungerTime: 0,
     kills: 0,
@@ -351,6 +359,8 @@ export interface Mob {
   /** A mimic: the depth it lurks on, and the treasure it held. */
   level?: number;
   loot?: Item[];
+  /** Turns left of staggering about. */
+  dizzy?: number;
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {

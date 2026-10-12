@@ -5,6 +5,7 @@ import {
 import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, isWater, leaveCell } from './floor';
 import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold } from './items';
 import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
+import { earthrootAbsorbs } from './plants';
 import { questKill } from './quest';
 import { T } from './level/terrain';
 
@@ -194,6 +195,8 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
     const what = typeof source === 'string' ? source : isHero(source) ? '' : source.kind;
     if (elements > 0 && ELEMENTAL.has(what) && ctx.rng.int(elements + 3) >= 3) damage = ctx.rng.intRange(0, damage);
   }
+  // Earthroot's bark takes the blows first.
+  if (isHero(victim)) damage = earthrootAbsorbs(victim, damage);
   if (!isHero(victim) && victim.kind === 'yog') {
     // Yog.damage: each living fist halves the harm, and they all come to defend it.
     const fists = ctx.floor.mobs.filter(isFist);

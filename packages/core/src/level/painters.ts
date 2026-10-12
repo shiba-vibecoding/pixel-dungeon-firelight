@@ -512,6 +512,22 @@ function paintShop(level: LevelBuilder, room: Room): void {
   for (const d of room.doors()) d.set(DoorType.REGULAR);
 }
 
+/** GardenPainter: tall grass around, grass within, and a bush or two of sungrass. */
+function paintGarden(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.HIGH_GRASS, 1);
+  level.fillRect(room, T.GRASS, 2);
+  entranceOf(room).set(DoorType.REGULAR);
+  // The original's honeypot (and its bees) is not ported: the garden always has sungrass.
+  const bushes = rng.int(5) === 0 ? 2 : 1;
+  for (let i = 0; i < bushes; i++) {
+    const pos = room.random(rng);
+    level.set(pos, T.GRASS);
+    if (!level.plants.some((p) => p.pos === pos)) level.plants.push({ pos, kind: 'sungrass' });
+  }
+}
+
 /** MagicWellPainter: a well of healing or awareness in the middle. */
 function paintMagicWell(level: LevelBuilder, room: Room): void {
   const { rng } = level;
@@ -571,6 +587,7 @@ export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painte
   [RoomType.TRAPS, paintTraps],
   [RoomType.STORAGE, paintStorage],
   [RoomType.SHOP, paintShop],
+  [RoomType.GARDEN, paintGarden],
   [RoomType.STANDARD, paintStandard],
   [RoomType.ENTRANCE, paintEntrance],
   [RoomType.EXIT, paintExit],

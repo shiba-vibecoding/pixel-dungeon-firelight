@@ -96,6 +96,8 @@ export interface Scene {
   explored: readonly boolean[];
   /** Items lying around, with their sprite index in items.png. */
   heaps: ReadonlyArray<{ pos: number; sprite: number }>;
+  /** Plants growing here, with their index in plants.png. */
+  plants?: ReadonlyArray<{ pos: number; index: number }>;
   /** Mind vision: every monster on the level shows. */
   seeAll: boolean;
 }
@@ -132,6 +134,10 @@ export function render(
   ctx.drawImage(baked, 0, 0);
 
   // Items on the floor, remembered (and dimmed by the fog) once seen.
+  for (const plant of scene.plants ?? []) {
+    if (!explored[plant.pos]) continue;
+    ctx.drawImage(assets.plants, plant.index * 16, 0, 16, 16, (plant.pos % WIDTH) * TILE, Math.trunc(plant.pos / WIDTH) * TILE, 16, 16);
+  }
   for (const heap of scene.heaps) {
     if (!explored[heap.pos]) continue;
     const bob = visible[heap.pos] ? Math.round(Math.sin(now / 300 + heap.pos) * 0.6) : 0;

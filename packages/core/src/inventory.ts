@@ -10,6 +10,7 @@ import { discoverable } from './level/flags';
 import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
 import { discover, F, hasFlag } from './level/terrain';
 import { type Burst, burst } from './traps';
+import { plant, SEED_PLANTS } from './plants';
 import { zapWand } from './wands';
 import type { World } from './world';
 
@@ -94,7 +95,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       return itemPrice(item, world.known.includes(item.kind)) > 0 ? null : 'nobody would buy that';
     case 'throw':
     case 'zap': {
-      const fits = action.type === 'throw' ? category === 'missile' || category === 'potion' : category === 'wand';
+      const fits = action.type === 'throw' ? category === 'missile' || category === 'potion' || category === 'seed' : category === 'wand';
       if (!fits) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
       if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
         return 'bad target';
@@ -194,6 +195,15 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
   const item = hero.items[index]!;
   if (itemDef(item.kind).category === 'potion') {
     throwPotion(ctx, hero, index, target);
+    return;
+  }
+  if (itemDef(item.kind).category === 'seed') {
+    // Plant.Seed.onThrow: it takes root where it lands.
+    const kind = item.kind;
+    if (--item.qty <= 0) hero.items.splice(index, 1);
+    const end = ballistica(ctx, hero.pos, target).at(-1)!;
+    ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: kind });
+    plant(ctx, end, SEED_PLANTS[kind]!);
     return;
   }
   const boomerang = item.kind === 'missile.boomerang';

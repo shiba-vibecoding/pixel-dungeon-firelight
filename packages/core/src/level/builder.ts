@@ -66,6 +66,8 @@ export class LevelBuilder {
   arenaDoor = -1;
   /** A shop's level: where the shopkeeper stands. */
   shopkeeper = -1;
+  /** Plants grown at generation (GardenPainter's sungrass). */
+  readonly plants: Array<{ pos: number; kind: 'sungrass' }> = [];
   pitRoomNeeded = false;
   weakFloorCreated = false;
   /** Special rooms placed on this level, in placement order. */

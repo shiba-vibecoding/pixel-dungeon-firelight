@@ -3,6 +3,7 @@ import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './
 import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
+import type { PlantInfo, PlantKind } from './plants';
 import type { GhostLine } from './quest';
 import type { Burst, TrapKind } from './traps';
 import type { WandmakerLine } from './wandmaker';
@@ -31,6 +32,8 @@ export interface Floor {
   heaps: Heap[];
   /** Tengu's level: someone has set foot in the arena, and Tengu has appeared. */
   arenaEntered?: boolean;
+  /** Plants growing here, set off by whoever steps on them. */
+  plants?: PlantInfo[];
 }
 
 /** Puts an item on a cell, adding to whatever lies there already. */
@@ -65,6 +68,9 @@ export type Effect =
   | { type: 'yell'; depth: number; mob: string; kind: MobKind; line: 'notice' | 'death' | 'summon'; hero?: string }
   /** A warlock's shadow bolt left the hero weakened. */
   | { type: 'weakened'; hero: string }
+  /** A seed took root; a plant was set off by someone stepping on it. */
+  | { type: 'planted'; depth: number; pos: number; kind: PlantKind }
+  | { type: 'plantTriggered'; depth: number; pos: number; kind: PlantKind; who: string }
   /** A chest that was a mimic springs at the hero. */
   | { type: 'mimic'; depth: number; mob: string; hero: string }
   /** A torch lit; a succubus's charm; a scorpio's crippling sting. */

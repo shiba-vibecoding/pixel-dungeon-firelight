@@ -31,6 +31,8 @@ export interface Assets {
   icons: HTMLImageElement;
   bossBanner: HTMLImageElement;
   items: HTMLImageElement;
+  /** 16x16 plants, in the order of PLANT_KINDS. */
+  plants: HTMLImageElement;
   /** 7x7 buff icons (BuffIndicator). */
   buffs: HTMLImageElement;
   status: HTMLImageElement;
@@ -249,7 +251,7 @@ export async function loadAssets(base: string): Promise<Assets> {
     'elemental', 'monk', 'warlock', 'golem', 'king', 'undead', 'tiles4', 'water4',
     'succubus', 'eye', 'scorpio', 'yog', 'rottingFist', 'burningFist', 'larva', 'mimic', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
     'skeleton', 'thief', 'swarm', 'shaman', 'bat', 'brute', 'tengu', 'shopkeeper', 'wandmaker',
-    'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs',
+    'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs', 'plants',
   ] as const;
   const images = Object.fromEntries(
     await Promise.all(names.map(async (name) => [name, await loadImage(`${base}${name}.png`)] as const)),
@@ -273,6 +275,7 @@ export async function loadAssets(base: string): Promise<Assets> {
     icons: images.icons,
     bossBanner: images['banner-boss'],
     items: images.items,
+    plants: images.plants,
     buffs: images.buffs,
     status: images.status_pane,
     toolbar: images.toolbar,
