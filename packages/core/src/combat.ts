@@ -355,6 +355,8 @@ function mobDied(ctx: Ctx, mob: Mob): void {
     if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
     ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'death' });
     ctx.effects.push({ type: 'bossSlain', depth: ctx.depth, kind: mob.kind });
+    // King.die: the armour kit.
+    if (mob.kind === 'king') dropItem(ctx.floor, mob.pos, createItem('kit.armor'));
     // Tengu.die: a Tome of Mastery, here one for every hero who has not mastered yet.
     if (mob.kind === 'tengu') {
       for (const hero of ctx.world.heroes) if (!hero.subclass) dropItem(ctx.floor, mob.pos, createItem('tome.mastery'));

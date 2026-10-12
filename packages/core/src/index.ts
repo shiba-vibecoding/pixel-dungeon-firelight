@@ -14,6 +14,7 @@ export { PLANT_KINDS, type PlantInfo, type PlantKind, SEED_PLANTS } from './plan
 export { charAt, type Effect, type Floor, heroesOn, isWater } from './floor';
 export { type ItemRef, ORE_WANTED, type SmithLine, type SmithQuest } from './smith';
 export { type ImpQuest, TOKENS_WANTED } from './imp';
+export { CLASS_ARMOR, CLASS_ARMOR_OF } from './classArmor';
 export * from './world';
 export { castShadow, LIGHT_DISTANCE, MAX_VIEW_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 export * from './protocol';

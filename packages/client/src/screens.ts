@@ -1,6 +1,6 @@
 import {
   BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, type ItemRef, maxExp, type MobKind,
-  SUBCLASSES, wandMaxCharges, type World,
+  SUBCLASSES, wandMaxCharges, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
 import { BUFF_ICONS, type BuffName } from './hud';
@@ -514,7 +514,7 @@ export interface BackpackOptions {
   hero: Hero;
   onAction(action: InventoryAction): void;
   /** Throw or zap the item at a cell the player picks next. */
-  onAim(index: number, kind: 'throw' | 'zap'): void;
+  onAim(index: number, kind: 'throw' | 'zap' | 'special'): void;
   onClose(): void;
 }
 
@@ -604,6 +604,9 @@ function showItem(options: ItemOptions): void {
     if (item.kind === 'weapon.pickaxe') {
       actions.push(button(t.mine, () => act({ type: 'mine' }), 'primary'));
     }
+    if (category === 'kit') {
+      actions.push(button(t.applyKit, () => act({ type: 'use', item: index, target: 'armor' }), 'primary'));
+    }
     if (category === 'seed') {
       actions.push(
         button(t.plantSeed, () => {
@@ -639,6 +642,16 @@ function showItem(options: ItemOptions): void {
   } else if (options.ring !== undefined) {
     const ring = options.ring;
     actions.push(button(t.takeOff, () => act({ type: 'remove', ring }), 'primary'));
+  } else if (item === hero.armor && item.kind === CLASS_ARMOR_OF[hero.heroClass]) {
+    // ClassArmor.doSpecial: the leap and the smoke bomb want a cell; the others act at once.
+    const aimed = hero.heroClass === 'warrior' || hero.heroClass === 'rogue';
+    actions.push(
+      button(t.specials[hero.heroClass], () => {
+        if (!aimed) return act({ type: 'special' });
+        options.onClose();
+        options.onAim(-1, 'special');
+      }, 'primary'),
+    );
   }
   show(
     el(

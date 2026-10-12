@@ -82,6 +82,9 @@ export type Effect =
   /** A scroll of enchantment gave an item its power; a scroll of upgrade drove one out. */
   | { type: 'imbued'; hero: string; item: Item }
   | { type: 'disenchanted'; hero: string; item: Item }
+  /** The armour kit made a hero's armour into class armour; a class armour's special ability was used. */
+  | { type: 'classArmor'; hero: string; item: Item }
+  | { type: 'special'; hero: string; ability: 'leap' | 'moltenEarth' | 'smokeBomb' | 'blades'; from: number; to: number }
   /** A dwarf monk knocked the weapon out of a hero's hands; it lies at their feet. */
   | { type: 'disarmed'; depth: number; hero: string; mob: string; item: Item }
   /** A hero jumped into a chasm on `depth` and landed on the depth below. */

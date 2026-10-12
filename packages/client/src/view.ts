@@ -521,6 +521,18 @@ export class View {
           audio.play('evoke');
           if (effect.hero === myId) this.say(t.transmuted(itemName(world, effect.from), itemName(world, effect.to)), COLORS.highlight, now);
           break;
+        case 'classArmor':
+          audio.play('evoke');
+          if (effect.hero === myId) this.say(t.classArmorMade(itemName(world, effect.item)), COLORS.highlight, now);
+          break;
+        case 'special':
+          audio.play(effect.ability === 'smokeBomb' ? 'puff' : effect.ability === 'moltenEarth' ? 'burning' : effect.ability === 'leap' ? 'rocks' : 'miss');
+          if (effect.ability === 'smokeBomb') {
+            this.flashes.push({ cell: effect.from, start: now, color: '200, 200, 200', duration: 600 });
+            this.puppets.delete(effect.hero);
+          }
+          if (effect.hero === myId) this.say(t.specialUsed[effect.ability]!, COLORS.highlight, now);
+          break;
         case 'mined':
           if (effect.depth !== this.depth) break;
           this.flashes.push({ cell: effect.pos, start: now, color: '255, 210, 90', duration: 500 });

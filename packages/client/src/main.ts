@@ -274,7 +274,7 @@ const heapAt = (world: World, depth: number, pos: number): boolean =>
   (world.floors[depth]?.heaps ?? []).some((heap) => heap.pos === pos);
 
 /** Aiming a thrown weapon or a wand: the next tap on the map picks the target. */
-let aim: { index: number; kind: 'throw' | 'zap' } | null = null;
+let aim: { index: number; kind: 'throw' | 'zap' | 'special' } | null = null;
 
 /** The backpack slot shown in the quickslot: the first thrown weapon or wand. */
 function quickIndex(hero: Hero): number {
@@ -576,7 +576,8 @@ function tapCell(cell: number): void {
   if (aim) {
     const shot = aim;
     aim = null;
-    if (cell !== me.pos && me.items[shot.index]) send({ type: shot.kind, item: shot.index, target: cell }, performance.now());
+    if (shot.kind === 'special') send({ type: 'special', target: cell }, performance.now());
+    else if (cell !== me.pos && me.items[shot.index]) send({ type: shot.kind, item: shot.index, target: cell }, performance.now());
     return;
   }
 

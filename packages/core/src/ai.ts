@@ -138,7 +138,10 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
   if (mob.kind === 'burningFist') burst(ctx, mob.pos, 'fire', 1, true);
   if (mob.kind === 'dm300') ventGas(ctx, mob);
 
-  const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map), mobSight(mob, ctx.depth));
+  // Blinded (a rogue's smoke bomb), it sees no one.
+  const fov = (mob.blind ?? 0) > 0
+    ? new Array<boolean>(LENGTH).fill(false)
+    : castShadow(mob.pos, terrainBlocksSight(ctx.level.map), mobSight(mob, ctx.depth));
   const justAlerted = mob.alerted;
   mob.alerted = false;
   const enemy = chooseEnemy(ctx, mob, fov);
@@ -589,6 +592,8 @@ export function ballistica(ctx: Ctx, from: number, to: number, hitChars = true):
 }
 
 function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean {
+  // Rooted, it cannot move a step.
+  if ((mob.rooted ?? 0) > 0) return false;
   if (mob.kind === 'goo') mob.pumped = false;
   // Scorpio.getCloser: a hunting scorpio keeps its distance, to sting from afar.
   if (baseKind(mob.kind) === 'scorpio' && mob.state === 'hunting') return mob.enemySeen && getFurther(ctx, mob, target) === 'moved';

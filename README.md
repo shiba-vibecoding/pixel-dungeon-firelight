@@ -76,7 +76,10 @@ Yendor on depth 26:
 - Four hero classes with their original starting kits and perks, and their
   subclasses: Tengu leaves a Tome of Mastery for each hero, to become a
   gladiator or berserker, battlemage or warlock, freerunner or assassin, sniper
-  or warden.
+  or warden. The King of Dwarves leaves an armour kit, which turns the armour
+  worn into class armour with a special ability for a third of the hero's
+  health: the warrior's heroic leap, the mage's molten earth, the rogue's
+  smoke bomb, the huntress's spectral blades.
 - Solo runs saved on the device; a daily dungeon with a global leaderboard and
   shareable results.
 - Co-op: invite friends by a Telegram link; everyone plays in the same dungeon.
@@ -94,7 +97,7 @@ Clouds of toxic and paralytic gas (from traps, potions, DM-300, rotberries and
 armour of stench) spread through open cells, never through walls or closed
 doors, thin out a little every turn, and act on whoever breathes them.
 
-Not ported yet: the armour kit and class armour; bags (seed
+Not ported yet: bags (seed
 pouch, scroll holder, wand holster, keyring); the dew vial; the honeypot and
 its bees; wraiths rising from cursed remains; the ghost's other errand (the
 fetid rat); the Rat King; cooked mystery meat; Lloyd's beacon, the

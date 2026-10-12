@@ -1,10 +1,12 @@
 import {
-  armorStats, type Hero, type Item, itemDef, itemSprite, magicMissileDamage, missileStats, SCROLL_RUNES, wandMaxCharges,
+  armorStats, CLASS_ARMOR, CLASS_ARMOR_OF, type Hero, type HeroClass, type Item, itemDef, type ItemKind, itemSprite, magicMissileDamage, missileStats, SCROLL_RUNES, wandMaxCharges,
   weaponStats, type World,
 } from '@pd/core';
 import { t } from './i18n';
 
 /* How items are called and described, given what the party knows. */
+
+const CLASS_OF = Object.fromEntries(Object.entries(CLASS_ARMOR_OF).map(([cls, kind]) => [kind, cls])) as Partial<Record<ItemKind, HeroClass>>;
 
 export function isKnown(world: World, item: Item): boolean {
   const category = itemDef(item.kind).category;
@@ -46,6 +48,7 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
     const stats = armorStats(item);
     return [
       t.armorInfo(stats.dr, stats.str), ...(item.glyph ? [t.glyphInfo[item.glyph]] : []), ...(item.cursed ? [t.cursedInfo] : []),
+      ...(CLASS_ARMOR.includes(item.kind) ? [t.classArmorInfo[CLASS_OF[item.kind]!], t.specialCost] : []),
       ...(stats.str > hero.str ? [t.tooHeavy] : []),
     ];
   }

@@ -149,6 +149,8 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
 export function mobConditions(ctx: Ctx, mob: Mob): boolean {
   if ((mob.slowed ?? 0) > 0) mob.slowed!--;
   if ((mob.crippled ?? 0) > 0) mob.crippled!--;
+  if ((mob.rooted ?? 0) > 0) mob.rooted!--;
+  if ((mob.blind ?? 0) > 0) mob.blind!--;
   // Bleeding: it hurts every turn, and eases, until it stops.
   if ((mob.bleeding ?? 0) > 0) {
     mob.bleeding = ctx.rng.intRange(Math.trunc(mob.bleeding! / 2), mob.bleeding!);

@@ -16,7 +16,7 @@ import type { RunState } from './run';
 
 export type ItemCategory =
   | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
-  | 'tome' | 'quest' | 'ankh';
+  | 'tome' | 'quest' | 'ankh' | 'kit';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -87,6 +87,12 @@ export const ITEMS = {
   'armor.mail': armor(3, 26),
   'armor.scale': armor(4, 27),
   'armor.plate': armor(5, 28),
+  // Class armour (ClassArmor), made with the armour kit out of whatever armour the hero wore:
+  // as good as that armour, and with a special ability of its class.
+  'armor.warrior': armor(6, 97),
+  'armor.mage': armor(6, 98),
+  'armor.rogue': armor(6, 96),
+  'armor.huntress': armor(6, 99),
 
   // Thrown: darts are lost when they hit and fall to the floor when they
   // miss; the boomerang always comes back.
@@ -158,6 +164,8 @@ export const ITEMS = {
   'tome.mastery': { category: 'tome', sprite: 82 },
   /** Lit, it lets one see further in the dark halls for a while. */
   torch: { category: 'torch', sprite: 84 },
+  /** The King of Dwarves' legacy: it turns the armour worn into the hero's class armour. */
+  'kit.armor': { category: 'kit', sprite: 86 },
   /** Brings its bearer back to life once, at a price: everything else in the pack, and all gold. */
   ankh: { category: 'ankh', sprite: 1 },
   /** The Amulet of Yendor, at the very bottom of the dungeon. */
@@ -187,6 +195,8 @@ export interface Item {
   bloody?: boolean;
   /** Worse than plain, and cursed: once worn, it will not come off until the curse is lifted. */
   cursed?: boolean;
+  /** Class armour: the armour it was made from, whose protection it keeps. */
+  base?: ItemKind;
 }
 
 /* Enchantments and glyphs (Weapon.Enchantment, Armor.Glyph) */
@@ -270,7 +280,7 @@ export function itemPrice(item: Item, known: boolean): number {
       if (item.kind === 'weapon.pickaxe') return 0;
       return levelled(Math.trunc(20 * 2 ** (def.tier! - 1) * (item.enchant ? 1.5 : 1)));
     case 'armor':
-      return levelled(Math.trunc(10 * 2 ** (def.tier! - 1) * (item.glyph ? 1.5 : 1)));
+      return levelled(Math.trunc(10 * 2 ** (itemDef(item.base ?? item.kind).tier! - 1) * (item.glyph ? 1.5 : 1)));
     case 'potion':
       return (known ? POTION_PRICES[item.kind] ?? 20 : 20) * item.qty;
     case 'scroll':
@@ -366,7 +376,8 @@ export function weaponStats(item: Item): WeaponStats {
 }
 
 export function armorStats(item: Item): { dr: number; str: number } {
-  const tier = itemDef(item.kind).tier!;
+  // Class armour protects as the armour it was made from.
+  const tier = itemDef(item.base ?? item.kind).tier!;
   // Armor.DR: a glyph adds a level's worth of protection.
   return { dr: Math.max(tier * (2 + item.level + (item.glyph ? 1 : 0)), 0), str: 7 + tier * 2 - item.level };
 }

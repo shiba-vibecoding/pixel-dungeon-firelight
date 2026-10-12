@@ -442,6 +442,10 @@ export interface Mob {
   amok?: number;
   /** A magic sheep: turns left before it fades away. */
   lifespan?: number;
+  /** Turns left of being held fast where it stands (a mage's molten earth), and of seeing nothing (a smoke bomb). */
+  blind?: number;
+  /** Turns left of being held fast where it stands (a mage's molten earth). */
+  rooted?: number;
   /** Turns left of moving at half speed (a javelin's wound), and how hard it still bleeds (a tomahawk's). */
   crippled?: number;
   bleeding?: number;

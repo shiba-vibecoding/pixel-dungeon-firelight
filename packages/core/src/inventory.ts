@@ -19,6 +19,7 @@ import { plant, SEED_PLANTS } from './plants';
 import { zapWand } from './wands';
 import { mine, mineProblem, TIME_TO_MINE } from './smith';
 import { transmute } from './transmute';
+import { applyArmorKit, CLASS_ARMOR, CLASS_ARMOR_OF, classSpecial, specialProblem, TIME_TO_APPLY_KIT } from './classArmor';
 import type { World } from './world';
 
 /*
@@ -45,10 +46,12 @@ export type InventoryAction =
   /** Read the Tome of Mastery and master one of the two ways of the hero's class. */
   | { type: 'master'; item: number; subclass: SubClass }
   /** Mine the vein of dark gold next to the hero with the blacksmith's pickaxe. */
-  | { type: 'mine' };
+  | { type: 'mine' }
+  /** The special ability of the class armour worn: a cell for the warrior's leap and the rogue's smoke bomb. */
+  | { type: 'special'; target?: number };
 
 const INVENTORY_ACTIONS: ReadonlySet<string> = new Set([
-  'pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master', 'mine',
+  'pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master', 'mine', 'special',
 ]);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
@@ -92,6 +95,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     return heap.kind === 'forSale' ? 'that is for sale' : null;
   }
   if (action.type === 'mine') return mineProblem(world, hero);
+  if (action.type === 'special') return specialProblem(world, hero, action.target);
   if (action.type === 'remove') {
     if (!Number.isInteger(action.ring) || !hero.rings[action.ring]) return 'no such ring';
     if (hero.rings[action.ring]!.cursed) return CURSED;
@@ -111,7 +115,10 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (category !== 'potion' && category !== 'scroll' && category !== 'food' && category !== 'torch') return 'that cannot be used';
+      if (category !== 'potion' && category !== 'scroll' && category !== 'food' && category !== 'torch' && category !== 'kit') {
+        return 'that cannot be used';
+      }
+      if (category === 'kit' && CLASS_ARMOR.includes(hero.armor.kind)) return 'your armour is already a class armour';
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
       // The blacksmith's pickaxe is a tool: no scroll improves it.
       if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
@@ -123,6 +130,8 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if (category !== 'weapon' && category !== 'armor' && category !== 'ring') return 'that cannot be equipped';
       // A cursed item, once worn, will not come off (EquipableItem.doUnequip).
       if (category === 'ring') return hero.rings.length >= 2 && hero.rings.every((ring) => ring.cursed) ? CURSED : null;
+      // ClassArmor.doEquip: class armour is for its own class only.
+      if (CLASS_ARMOR.includes(item.kind) && item.kind !== CLASS_ARMOR_OF[hero.heroClass]) return 'that armour is not made for you';
       return hero[category]?.cursed ? CURSED : null;
     }
     case 'drop':
@@ -155,10 +164,16 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
     case 'mine':
       mine(ctx, hero);
       return TIME_TO_MINE;
+    case 'special':
+      return classSpecial(ctx, hero, action.target);
     case 'use':
       if (itemDef(hero.items[action.item]!.kind).category === 'food') {
         eat(ctx, hero, action.item);
         return TIME_TO_EAT;
+      }
+      if (itemDef(hero.items[action.item]!.kind).category === 'kit') {
+        applyArmorKit(ctx, hero, action.item);
+        return TIME_TO_APPLY_KIT;
       }
       if (itemDef(hero.items[action.item]!.kind).category === 'torch') {
         // Torch.execute: lit, it lights the way for a good while.
