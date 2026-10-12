@@ -1,5 +1,5 @@
 import {
-  adjacent, blockers, distance, type Mob, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
+  adjacent, blockers, distance, type Mob, trapAt, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
   HEAP_SPRITES,
   type Hero, type Item, type Level,
   heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
@@ -39,6 +39,7 @@ import { Scenery } from './scenery';
 import { Feedback } from './feedback';
 import { Finds, MapControls } from './mapui';
 import { type TipContent, Tooltip } from './tooltip';
+import { type HintId, hints } from './hints';
 import { preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
@@ -860,6 +861,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
         item.kind.startsWith('ring.') || item.kind.startsWith('wand.') || item.kind === 'potion.strength' || item.kind === 'scroll.upgrade');
     }
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
+    if (world && me) learnFromEffect(world, me, effect);
     // Goo winding up: a warning nobody can miss, while there is still time to step back.
     if (effect.type === 'pumped' && me && effect.depth === me.depth) toast(t.gooPumpsTip, { tone: 'warn' });
     // Hunger kills quietly in the original's log: here it says what to do, and with what.
@@ -1301,6 +1303,80 @@ canvas.addEventListener('wheel', (event) => {
   zoomTo(Math.round(zoom.target) - Math.sign(wheelSum), toDevice(event.clientX, event.clientY));
   wheelSum = 0;
 }, { passive: false });
+
+/* Learning mode: a word about each thing the first time it is met (hints.ts) */
+
+hints.attach(document.getElementById('ui')!);
+
+const HINT_CATEGORIES: ReadonlySet<string> = new Set([
+  'potion', 'scroll', 'weapon', 'armor', 'ring', 'wand', 'food', 'seed', 'missile', 'bomb', 'key', 'gold', 'vial', 'bag',
+  'ankh', 'honeypot', 'torch', 'tome', 'kit', 'beacon', 'weightstone',
+]);
+const NPCS: ReadonlySet<string> = new Set(['ghost', 'wandmaker', 'blacksmith', 'imp', 'ratKing']);
+const BOSS_DEPTHS: ReadonlySet<number> = new Set([5, 10, 15, 20, 25]);
+
+/** An item's picture for a hint card. */
+const itemPicture = (sprite: number) => (): HTMLElement => {
+  const icon = document.createElement('i');
+  icon.className = 'pd-item';
+  icon.style.setProperty('--ix', String(sprite % 8));
+  icon.style.setProperty('--iy', String(Math.floor(sprite / 8)));
+  return icon;
+};
+
+/** What the player sees for the first time, after each turn: monsters, items, traps, doors, stairs, wells... */
+function learnFromSight(world: World, me: Hero, level: Level, visible: readonly boolean[]): void {
+  if (!hints.enabled || !isAlive(me)) return;
+  const floor = world.floors[me.depth];
+  for (const mob of floor?.mobs ?? []) {
+    if (!visible[mob.pos]) continue;
+    if (mob.state === 'passive') {
+      if (NPCS.has(mob.kind)) hints.first('npc', () => portrait(mob.kind));
+      if (mob.kind === 'shopkeeper') hints.first('shop', () => portrait(mob.kind));
+    } else if (mob.state !== 'sleeping') {
+      hints.first('monster', () => portrait(mob.kind));
+    }
+  }
+  if (me.hp > 0 && me.hp < me.ht * 0.4) hints.first('lowHealth');
+  for (const heap of floor?.heaps ?? []) {
+    if (!visible[heap.pos] || heap.kind === 'hidden') continue;
+    if (heap.kind === 'heap') hints.first('floorItem', itemPicture(itemSprite(heap.items[0]!, world.run.labels)));
+    else if (heap.kind !== 'forSale') hints.first('container', itemPicture(HEAP_SPRITES[heap.kind]));
+  }
+  for (let cell = 0; cell < visible.length; cell++) {
+    if (!visible[cell]) continue;
+    const terrain = level.map[cell]!;
+    // A trap one can see: a hidden one says nothing.
+    if (trapAt(terrain) && !hasFlag(terrain, F.SECRET)) hints.first('trap');
+    if (terrain === T.LOCKED_DOOR) hints.first('lockedDoor');
+    if (terrain === T.WELL) hints.first('well');
+    if (terrain === T.ALCHEMY) hints.first('alchemy');
+  }
+  if (visible[level.exit] && me.depth < 26) hints.first('stairs');
+  if (level.altar && visible[level.altar.pos]) hints.first('altar');
+  if (me.depth >= 2) hints.first('secret');
+  if (BOSS_DEPTHS.has(me.depth)) hints.first('boss');
+  if (world.turn > 60) hints.first('examine');
+  if (session?.mode === 'online' && world.heroes.some((h) => h.id !== me.id && h.depth === me.depth && visible[h.pos])) {
+    hints.first('companion', () => portrait(world.heroes.find((h) => h.id !== me.id)!.heroClass));
+  }
+}
+
+/** What happens to the player for the first time: an item of a kind picked up, a wound, hunger, a level gained. */
+function learnFromEffect(world: World, me: Hero, effect: Effect): void {
+  if (!hints.enabled) return;
+  const mine = session?.myId;
+  if (effect.type === 'pickedUp' && effect.hero === mine) {
+    const category = itemDef(effect.item.kind).category;
+    if (HINT_CATEGORIES.has(category)) hints.first(category as HintId, itemPicture(itemSprite(effect.item, world.run.labels)));
+  }
+  if ((effect.type === 'dew' || effect.type === 'dewCollected') && effect.hero === mine) hints.first('dew');
+  if (effect.type === 'attack' && effect.target === mine && effect.hit && effect.damage > 0) hints.first('attacked');
+  if (effect.type === 'hunger' && effect.hero === mine) hints.first('hungry');
+  if (effect.type === 'levelUp' && effect.hero === mine) hints.first('levelUp');
+  if (effect.type === 'shop' && effect.hero === mine) hints.first('shop');
+  void me;
+}
 
 /* Hover tooltips: a mouse over the map or a button says what is there (design system v12) */
 
@@ -1944,6 +2020,7 @@ function tick(now: number): void {
     visible = visibleCells(world, me.depth);
     bakedKey = key;
 
+    learnFromSight(world, me, level, visible);
     // A newly spotted awake monster stops a walk, as in the original.
     const inSight = new Set(
       (world.floors[me.depth]?.mobs ?? [])
@@ -2099,6 +2176,7 @@ function tick(now: number): void {
   if (walk.goal === me.pos) walk.goal = null;
   const foe = isAlive(me) ? attackTarget(world, me) : null;
   placeHover();
+  hints.pump();
   if (overlayOpen() && hover.cell >= 0) hideHover();
   mapControls.indicators(
     foe ? { key: `${foe.id}:${foe.kind}`, portrait: () => portrait(foe.kind) } : null,
@@ -2121,7 +2199,10 @@ function tick(now: number): void {
       netlog(`waited ${(lasted / 1000).toFixed(1)} s for ${loggedWait.count} companion(s)`);
       if (lasted > 4000 && session.mode === 'online') sendNetlog('long wait');
     }
-    if (waitingNow > 0) netlog(`waiting for ${waitingNow} companion(s)`);
+    if (waitingNow > 0) {
+    netlog(`waiting for ${waitingNow} companion(s)`);
+    hints.first('waiting');
+  }
     loggedWait.count = waitingNow;
     loggedWait.since = now;
   }

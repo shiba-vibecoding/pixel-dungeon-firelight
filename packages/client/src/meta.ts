@@ -6,6 +6,7 @@ import { itemInfo, itemName } from './itemtext';
 import { type FxMode, quality } from './quality';
 import { el, info, show, sprites, windowOf } from './screens';
 import { canFullscreen, haptics, isFullscreen, openExternal, setFullscreen } from './telegram';
+import { hints } from './hints';
 
 /*
  * The windows around the game rather than in it (design system v9): the
@@ -160,6 +161,15 @@ export function showSettings(options: SettingsOptions): void {
     switchRow(t.meta.vibration, t.meta.vibrationNote, haptics.on, (on) => haptics.set(on)),
   );
   const modes: ReadonlyArray<readonly [FxMode, string]> = (['auto', 'full', 'light'] as const).map((m) => [m, t.meta.fxModes[m]] as const);
+  const learning = group(
+    t.meta.learning,
+    switchRow(t.meta.hints, t.meta.hintsNote, hints.enabled, (on) => hints.setEnabled(on)),
+    linkRow(t.meta.hintsAgain, () => {
+      hints.reset();
+      hints.setEnabled(true);
+      showSettings(options);
+    }),
+  );
   const game = group(
     t.meta.game,
     el(
@@ -209,7 +219,7 @@ export function showSettings(options: SettingsOptions): void {
       el(
         'div',
         { className: 'pd-scroll pd-settings' },
-        el('div', { className: 'pd-col' }, sound, game),
+        el('div', { className: 'pd-col' }, sound, game, learning),
         el('div', { className: 'pd-col' }, more, reset),
       ),
     ),

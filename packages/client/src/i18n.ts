@@ -909,6 +909,10 @@ const en = {
     game: 'Game',
     effects: 'Effects',
     shake: 'Screen shake',
+    learning: 'Learning',
+    hints: 'Hints for beginners',
+    hintsNote: 'A word about each new thing, once',
+    hintsAgain: 'Show all hints again',
     shakeNote: 'On heavy blows and explosions',
     fxModes: { auto: 'Auto', full: 'Full', light: 'Light' } as Record<'auto' | 'full' | 'light', string>,
     fxNotes: {
@@ -1834,6 +1838,10 @@ const ru: Strings = {
     game: 'Игра',
     effects: 'Эффекты',
     shake: 'Тряска экрана',
+    learning: 'Обучение',
+    hints: 'Подсказки новичку',
+    hintsNote: 'Коротко о каждой новой вещи, один раз',
+    hintsAgain: 'Показать все подсказки заново',
     shakeNote: 'От сильных ударов и взрывов',
     fxModes: { auto: 'Авто', full: 'Полные', light: 'Лёгкие' },
     fxNotes: {
