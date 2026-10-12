@@ -6,7 +6,7 @@ import {
 } from './actors';
 import { attack, CRIPPLE_TURNS, hurt } from './combat';
 import {
-  canEnter, charAt, type Ctx, dropItem, type Effect, enterCell, exploredCells, type Floor, freeCellNear, heroesOn,
+  canEnter, type Char, charAt, type Ctx, dropItem, type Effect, enterCell, exploredCells, type Floor, freeCellNear, heroesOn,
   heroView, isPassable, isWater, leaveCell, observe,
   swapsWithHero,
 } from './floor';
@@ -25,7 +25,7 @@ import { type ItemRef, reforge, reforgeProblem, type SmithQuest, spawnBlacksmith
 import { spawnWandmaker, talkToWandmaker, type WandQuest, wandFromWandmaker, wandRewardProblem } from './wandmaker';
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
-import { adjacent, cellX, cellY, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
+import { adjacent, cellX, cellY, distance, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { breakStairsRoom } from './level/halls-boss';
 import { RoomType } from './level/room';
 import { discover, F, hasFlag, T } from './level/terrain';
@@ -246,10 +246,32 @@ export function visibleCells(world: World, depth: number): boolean[] {
   return visible;
 }
 
-/** True when no awake monster is in the hero's sight. */
+/**
+ * Companions in a corridor step past each other: walking into a companion
+ * swaps places with them, unless they are held fast (rooted, paralysed) or
+ * could not stand where the walker was. In the original a hero walked
+ * alone; in a party, a friend in a doorway must never wall the others in.
+ */
+function swapsWithCompanion(world: World, hero: Hero, other: Char): boolean {
+  if (!('heroClass' in other) || other === hero || !isAlive(other)) return false;
+  if (other.rooted > 0 || other.paralysed > 0) return false;
+  return heroCanEnter(levelAt(world, hero.depth), other, hero.pos);
+}
+
+/** How near a monster hunting someone else must be to threaten this hero too (it may turn on them). */
+const THREAT_REACH = 2;
+
+/**
+ * True when no monster in the hero's sight is after them: none hunts them, and
+ * none hunting a companion stands right by. Only a threatened hero holds up
+ * companions who have already decided (co-op turns, see advance): a hero who
+ * merely sees a fight elsewhere rests through it until their player acts, so a
+ * party is not run in lockstep by every monster anyone can see.
+ */
 export function isSafe(world: World, hero: Hero): boolean {
   const fov = heroView(world, hero);
-  return !floorAt(world, hero.depth).mobs.some((mob) => mob.state !== 'sleeping' && mob.state !== 'passive' && fov[mob.pos]);
+  return !floorAt(world, hero.depth).mobs.some((mob) =>
+    mob.state === 'hunting' && fov[mob.pos] && (mob.enemy === hero.id || distance(mob.pos, hero.pos) <= THREAT_REACH));
 }
 
 /** Why an action is impossible right now, or null if it is fine. */
@@ -272,7 +294,10 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
         return keyFor(hero, 'key.skeleton') >= 0 ? null : 'the way down is locked';
       }
       if (!heroCanEnter(level, hero, action.to) || !adjacent(hero.pos, action.to)) return 'cannot move there';
-      return charAt(world, hero.depth, action.to) && !swapsWithHero(charAt(world, hero.depth, action.to)) ? 'cell is occupied' : null;
+      {
+        const there = charAt(world, hero.depth, action.to);
+        return there && !swapsWithHero(there) && !swapsWithCompanion(world, hero, there) ? 'cell is occupied' : null;
+      }
     case 'attack': {
       const mob = mobById(world, hero.depth, action.target);
       if (!mob) return 'no such enemy';
@@ -616,7 +641,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       hero.pos = to;
       leaveCell(world, level, hero.depth, from);
       enterCell(level, hero.pos);
-      if (wanderer && swapsWithHero(wanderer)) {
+      if (wanderer && (swapsWithHero(wanderer) || swapsWithCompanion(world, hero, wanderer))) {
         wanderer.pos = from;
         enterCell(level, from);
       }

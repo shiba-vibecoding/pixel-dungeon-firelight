@@ -35,8 +35,11 @@ describe('shared world', () => {
     const [a, b] = world.heroes;
     expect(act(world, 'a', { type: 'move', to: a!.pos + 5 }).ok).toBe(false);
     expect(act(world, 'a', { type: 'move', to: 0 }).ok).toBe(false);
-    if (Math.abs(a!.pos - b!.pos) <= 33) {
-      expect(act(world, 'a', { type: 'move', to: b!.pos })).toEqual({ ok: false, reason: 'cell is occupied' });
+    // A companion next to the hero is no obstacle: they swap places (see the co-op tests).
+    const bob = b!.pos;
+    if (Math.abs(a!.pos - bob) <= 33) {
+      b!.rooted = 3;
+      expect(act(world, 'a', { type: 'move', to: bob })).toEqual({ ok: false, reason: 'cell is occupied' });
     }
     expect(act(world, 'nobody', { type: 'wait' }).ok).toBe(false);
   });

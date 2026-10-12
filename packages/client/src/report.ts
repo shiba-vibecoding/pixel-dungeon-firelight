@@ -43,6 +43,24 @@ export function report(kind: string, message: string, stack?: string, context: C
   }
 }
 
+/** Sends a co-op session's log (netlog.ts); false when there is nowhere to send it. */
+export function reportLog(message: string, log: string, context: Context = {}): boolean {
+  if (!endpoint) return false;
+  let facts: Context = {};
+  try {
+    facts = about();
+  } catch {
+    // Without them, then.
+  }
+  const body = JSON.stringify({ kind: 'coop-log', message: message.slice(0, 500), log: log.slice(-12_000), context: { build, ...facts, ...context } });
+  try {
+    if (!navigator.sendBeacon?.(endpoint, body)) void fetch(endpoint, { method: 'POST', body, keepalive: true }).catch(() => undefined);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 /** Starts listening; `server` is the co-op server's ws(s) address, `context` what to say about the moment. */
 export function startReporting(server: string, context: () => Context): void {
   if (!server) return;

@@ -370,10 +370,10 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     return;
   }
   if (itemDef(item.kind).category === 'seed') {
-    // Plant.Seed.onThrow: it takes root where it lands.
+    // Plant.Seed.onThrow: it takes root where it lands; tossed, it lands where it was aimed.
     const kind = item.kind;
     if (--item.qty <= 0) hero.items.splice(index, 1);
-    const end = ballistica(ctx, hero.pos, target).at(-1)!;
+    const end = ballistica(ctx, hero.pos, target, false, true).at(-1)!;
     ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: kind });
     // Into an alchemy pot, it goes into the brew instead; into a chasm, it falls.
     if (ctx.level.map[end] === T.ALCHEMY) {

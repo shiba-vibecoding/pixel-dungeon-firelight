@@ -56,8 +56,16 @@ export interface Puppet {
   fromY?: number;
   /** A diagonal step past a wall's corner bends towards the open side (world pixels of the curve's pull), so it never cuts through the wall. */
   bend?: { x: number; y: number };
-  /** The step before this one, still being walked when this one was queued behind it (see sync). */
-  prev?: { fromX: number; fromY: number; to: number; moveStart: number; bend?: { x: number; y: number } };
+  /**
+   * The cell the step on screen heads for, when the walker is shown behind the world (`to` is
+   * where it really is); and the steps still to show after it, one cell each. Monsters move a
+   * cell per turn, and turns can come faster than steps are drawn (a companion acting, a rest):
+   * they are shown one after another, a little quicker while behind, never skipped.
+   */
+  aim?: number;
+  queue?: Array<{ cell: number; bend?: { x: number; y: number } }>;
+  /** How long the step on screen takes (ms): STEP_MS, less while catching up. */
+  moveDur?: number;
   /** A hero's Pixel-Mart look (effect, the patron's star); undefined for monsters. */
   look?: Look;
   /** Hero class or monster kind. */
@@ -153,9 +161,9 @@ function cornerBend(map: readonly number[] | undefined, from: number, to: number
 
 /** Where a step from (fromX, fromY) to a cell, started at `start`, has got to by `now`; round a corner if it bends. */
 function segment(
-  fromX: number, fromY: number, to: number, start: number, bend: { x: number; y: number } | undefined, now: number,
+  fromX: number, fromY: number, to: number, start: number, dur: number, bend: { x: number; y: number } | undefined, now: number,
 ): { x: number; y: number } {
-  const k = Math.min(1, Math.max(0, (now - start) / STEP_MS));
+  const k = Math.min(1, Math.max(0, (now - start) / dur));
   const toX = cellX(to) * TILE;
   const toY = cellY(to) * TILE;
   if (bend && k < 1) {
@@ -164,6 +172,32 @@ function segment(
     return { x: a * fromX + b * bend.x + c * toX, y: a * fromY + b * bend.y + c * toY };
   }
   return { x: fromX + (toX - fromX) * k, y: fromY + (toY - fromY) * k };
+}
+
+/** Steps a walker may be shown behind the world before the oldest are cut short. */
+const MAX_BEHIND = 4;
+
+/**
+ * Moves a walker on to its next queued step once the one on screen is done, straight on from
+ * where it ended; with steps piling up it walks quicker, to catch up with the world.
+ */
+function advance(puppet: Puppet, now: number): void {
+  const queue = puppet.queue;
+  while (queue && queue.length > 0 && now >= puppet.moveStart + (puppet.moveDur ?? STEP_MS)) {
+    const next = queue.shift()!;
+    const reached = puppet.aim ?? puppet.to;
+    const end = puppet.moveStart + (puppet.moveDur ?? STEP_MS);
+    puppet.from = reached;
+    puppet.fromX = cellX(reached) * TILE;
+    puppet.fromY = cellY(reached) * TILE;
+    puppet.aim = next.cell;
+    puppet.bend = next.bend;
+    // Never quicker than a third of a step, and never more than a few steps behind: the oldest are cut short.
+    while (queue.length > MAX_BEHIND) queue.shift();
+    puppet.moveDur = STEP_MS / Math.min(3, 1 + 0.5 * queue.length);
+    // Never further behind than half a step: a long pause (a hidden tab) does not replay a whole walk.
+    puppet.moveStart = Math.max(end, now - puppet.moveDur / 2);
+  }
 }
 
 /** When a region's intro starts to fade (cards.ts, TIMELINES.intro). */
@@ -271,34 +305,36 @@ export class View {
         }
         this.puppets.set(id, puppet);
       } else if (puppet.to !== pos) {
-        const at = this.cellOf(puppet, now);
-        // The next step starts from where the walker is now, so a walk flows from cell to cell without a jolt.
-        const here = this.position(puppet, now);
-        if (cellX(pos) !== cellX(puppet.to)) puppet.flip = cellX(pos) < cellX(puppet.to);
-        const walking = puppet.anim === 'run' && now - puppet.moveStart < STEP_MS + WALK_GRACE_MS;
-        // The next step of a walk follows the last one exactly where and when it ends, whether it came a
-        // little late (no standstill at the cell) or early (queued behind it: steps from the room may come
-        // in a bunch), so a walk keeps one even pace from cell to cell.
-        const end = puppet.moveStart + STEP_MS;
-        const chained = walking && now - end < STEP_MS / 2 && adjacent(pos, puppet.to);
-        const bend = cornerBend(world.levels[this.depth]?.map, puppet.to, pos);
-        if (chained) {
-          // Still walking the last step: it is kept to be finished first (only one waits; an older one is cut short).
-          puppet.prev = now < end
-            ? { fromX: puppet.fromX ?? cellX(puppet.from) * TILE, fromY: puppet.fromY ?? cellY(puppet.from) * TILE, to: puppet.to, moveStart: puppet.moveStart, bend: puppet.bend }
-            : undefined;
-          puppet.fromX = cellX(puppet.to) * TILE;
-          puppet.fromY = cellY(puppet.to) * TILE;
-          // Far behind (a burst after a stall): catch up rather than lag ever further behind the world.
+        const map = world.levels[this.depth]?.map;
+        // Where the walker will stand once what is on screen has played out.
+        const shown = puppet.queue?.[puppet.queue.length - 1]?.cell ?? puppet.aim ?? puppet.to;
+        const end = puppet.moveStart + (puppet.moveDur ?? STEP_MS);
+        const walking = puppet.anim === 'run' && (now - end < WALK_GRACE_MS || (puppet.queue?.length ?? 0) > 0);
+        if (cellX(pos) !== cellX(shown)) puppet.flip = cellX(pos) < cellX(shown);
+        if (adjacent(pos, shown) && (now < end || (puppet.queue?.length ?? 0) > 0)) {
+          // A step while the last is still on screen: it waits its turn (see advance), however fast turns come.
+          (puppet.queue ??= []).push({ cell: pos, bend: cornerBend(map, shown, pos) });
+        } else if (adjacent(pos, shown) && walking && now - end < STEP_MS / 2) {
+          // The next step of a walk, a little late: it starts where and when the last one ended, without a standstill.
+          puppet.fromX = cellX(shown) * TILE;
+          puppet.fromY = cellY(shown) * TILE;
+          puppet.from = shown;
+          puppet.aim = pos;
+          puppet.bend = cornerBend(map, shown, pos);
           puppet.moveStart = Math.max(end, now - STEP_MS / 2);
+          puppet.moveDur = STEP_MS;
         } else {
-          puppet.prev = undefined;
+          // A fresh start, or a jump (a blink, a push): from wherever the walker is shown now.
+          const here = this.position(puppet, now);
+          puppet.from = this.cellOf(puppet, now);
           puppet.fromX = here.x;
           puppet.fromY = here.y;
+          puppet.aim = pos;
+          puppet.queue = [];
+          puppet.bend = adjacent(pos, puppet.from) ? cornerBend(map, puppet.from, pos) : undefined;
           puppet.moveStart = now;
+          puppet.moveDur = STEP_MS;
         }
-        puppet.bend = bend;
-        puppet.from = chained ? puppet.to : at;
         puppet.to = pos;
         // Legs keep their stride along a walk; only a walk's first step starts the run anew.
         if (puppet.alive && puppet.anim !== 'attack' && !walking) {
@@ -354,11 +390,12 @@ export class View {
     for (const [id, puppet] of this.puppets) {
       if (!seen.has(id) && (puppet.alive || now >= puppet.removeAt)) this.puppets.delete(id);
     }
+    for (const puppet of this.puppets.values()) advance(puppet, now);
 
     // Finished one-off animations fall back to idle (or keep running while moving).
     for (const puppet of this.puppets.values()) {
       if (!puppet.alive) continue;
-      const moving = now - puppet.moveStart < STEP_MS + WALK_GRACE_MS;
+      const moving = now - puppet.moveStart < (puppet.moveDur ?? STEP_MS) + WALK_GRACE_MS || (puppet.queue?.length ?? 0) > 0;
       if (puppet.anim === 'run' && !moving) {
         puppet.anim = 'idle';
         puppet.animStart = now;
@@ -380,19 +417,34 @@ export class View {
   /** How long my hero's step has still to go (ms; 0 or less when standing): the walk sends the next step as it ends. */
   stepLeft(id: string, now: number): number {
     const puppet = this.puppets.get(id);
-    return puppet ? puppet.moveStart + STEP_MS - now : 0;
+    return puppet ? puppet.moveStart + (puppet.moveDur ?? STEP_MS) + (puppet.queue?.length ?? 0) * STEP_MS - now : 0;
+  }
+
+  /**
+   * How long the monsters in sight still have to walk on screen (ms): playing alone, the hero
+   * waits for them before the next turn, as the original's actors waited for their sprites,
+   * so a rest or a long action never makes them dash or skip across the floor.
+   */
+  othersLeft(visible: readonly boolean[], now: number): number {
+    let left = 0;
+    for (const puppet of this.puppets.values()) {
+      if (puppet.isHero || !puppet.alive) continue;
+      if (!visible[puppet.to] && !(puppet.aim !== undefined && visible[puppet.aim])) continue;
+      left = Math.max(left, puppet.moveStart + (puppet.moveDur ?? STEP_MS) + (puppet.queue?.length ?? 0) * STEP_MS - now);
+    }
+    return left;
   }
 
   /** Interpolated position in world pixels. */
   position(puppet: Puppet, now: number): { x: number; y: number } {
-    // A step queued behind the last one: the last one first.
-    const prev = puppet.prev;
-    if (prev && now < puppet.moveStart) return segment(prev.fromX, prev.fromY, prev.to, prev.moveStart, prev.bend, now);
-    return segment(puppet.fromX ?? cellX(puppet.from) * TILE, puppet.fromY ?? cellY(puppet.from) * TILE, puppet.to, puppet.moveStart, puppet.bend, now);
+    return segment(
+      puppet.fromX ?? cellX(puppet.from) * TILE, puppet.fromY ?? cellY(puppet.from) * TILE, puppet.aim ?? puppet.to,
+      puppet.moveStart, puppet.moveDur ?? STEP_MS, puppet.bend, now,
+    );
   }
 
   private cellOf(puppet: Puppet, now: number): number {
-    return now - puppet.moveStart >= STEP_MS / 2 ? puppet.to : puppet.from;
+    return now - puppet.moveStart >= (puppet.moveDur ?? STEP_MS) / 2 ? puppet.aim ?? puppet.to : puppet.from;
   }
 
   /** A hero busy with their hands (drinking, reading, eating): the operate animation, as in the original. */

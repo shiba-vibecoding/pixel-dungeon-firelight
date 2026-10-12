@@ -280,7 +280,14 @@ export function heroView(world: World, hero: Hero): boolean[] {
   // Blinded, a hero sees no further than arm's reach.
   const distance = (hero.blind ?? 0) > 0 ? 1
     : hero.light > 0 ? Math.max(heroSight(world, hero.depth), LIGHT_DISTANCE) : heroSight(world, hero.depth);
-  return castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map), distance);
+  const fov = castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map), distance);
+  // Arm's reach is always seen, round a corner or into a doorway too: whatever can strike the hero
+  // (anything next to them may) is never an unseen blow.
+  for (const n of NEIGHBOURS8) {
+    const cell = hero.pos + n;
+    if (cell >= 0 && cell < LENGTH && Math.abs((cell % WIDTH) - (hero.pos % WIDTH)) <= 1) fov[cell] = true;
+  }
+  return fov;
 }
 
 export function exploredCells(world: World, depth: number): boolean[] {

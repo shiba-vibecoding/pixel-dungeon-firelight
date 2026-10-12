@@ -43,7 +43,8 @@ function randomAction(world: World, id: string, rng: Rng): Action {
     case 6: return { type: 'drop', item };
     case 7: return { type: 'pickup' };
     case 8: return { type: 'special', target };
-    case 9: return { type: 'beacon', item, mode: rng.int(2) === 0 ? 'set' : 'return' };
+    // The beacon, when the hero has one: a random slot would hardly ever hit it.
+    case 9: return { type: 'beacon', item: Math.max(0, hero.items.findIndex((i) => i.kind === 'beacon')), mode: rng.int(2) === 0 ? 'set' : 'return' };
     case 10: return { type: 'balance', item, imbue: rng.int(2) === 0 ? 'speed' : 'accuracy' };
     case 11: return hero.pos === level.exit ? { type: 'descend' } : { type: 'move', to: hero.pos + rng.element(NEIGHBOURS8)! };
     case 12: return { type: 'faceCurse' };

@@ -56,9 +56,9 @@ export interface Env {
 }
 
 /** A room left without players this long is deleted, dungeon and all. */
-export const ROOM_TTL_MS = 30 * 24 * 3600_000;
+const ROOM_TTL_MS = 30 * 24 * 3600_000;
 /** A day's leaderboard is kept this long after its day. */
-export const BOARD_TTL_MS = 60 * 24 * 3600_000;
+const BOARD_TTL_MS = 60 * 24 * 3600_000;
 
 /** Stores a report; never fails what it is reporting on. `address` is a client's, for the per-address limit. */
 async function storeReport(env: Env, report: Report, address?: string): Promise<number> {

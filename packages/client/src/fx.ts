@@ -98,7 +98,9 @@ class Fx {
 
   shake(power: number, ms: number, now: number): void {
     // Reduced motion (the system setting): the view never shakes.
-    if (quality.reducedMotion) return;
+    if (quality.reducedMotion || quality.shake <= 0) return;
+    // As hard as the player likes it (the settings' shake, 0 to 1; 0.6 is the old strength).
+    power *= quality.shake / 0.6;
     // A stronger or longer shake takes over; a weaker one does not cut a strong one short.
     const left = Math.max(0, this.shakeUntil - now);
     if (power >= this.shakePower * (left / Math.max(1, this.shakeUntil - this.shakeStart)) || now >= this.shakeUntil) {

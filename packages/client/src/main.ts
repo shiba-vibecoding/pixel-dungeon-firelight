@@ -31,6 +31,7 @@ import {
 } from './screens';
 import { mart } from './mart';
 import { eraseDevice, showChallenges, showJournal, showSettings } from './meta';
+import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
 import { type Launch, Motion } from './motion';
@@ -474,6 +475,13 @@ function openMenu(): void {
       if (world && me) showJournal({ world, hero: me, onClose: openMenu });
     },
     onSettings: () => settings(openMenu),
+    onReport: session?.mode === 'online'
+      ? () => {
+        hideOverlay();
+        netlog('-- the player reports a problem');
+        toast(sendNetlog('player report', true) ? t.reportSent : t.reportFailed);
+      }
+      : undefined,
     onMart: () => showMart({ heroClass: myClass(), onClose: hideOverlay }),
     onTreat: () => showTreat(hideOverlay),
     onExit: toTitle,
@@ -548,6 +556,16 @@ function send(action: Parameters<Session['send']>[0], now: number): void {
   session!.send(action);
 }
 
+/**
+ * A companion stands in that cell and is walking (on screen): stepping in would swap places
+ * with them and send them back a cell, so the walk waits for them instead. A companion
+ * standing still is swapped with (see the core's swapsWithCompanion).
+ */
+function companionOnTheMove(world: World, me: Hero, cell: number): boolean {
+  const other = world.heroes.find((h) => h !== me && h.depth === me.depth && h.pos === cell && isAlive(h));
+  return !!other && view.stepLeft(other.id, fx.now) > -250;
+}
+
 /** How early (ms) the next step of a walk is sent before the last one ends on screen: about a frame. */
 const FRAME_AHEAD_MS = 17;
 
@@ -561,13 +579,17 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
   const ahead = threats.size === 0 && walking ? session!.stepAhead : null;
   // Alone, the next step goes as the last one ends on screen (a frame early, so it follows on without a
   // pause or a hurried catch-up); online the room's answer starts each step, so the clock paces them.
-  const due = session!.mode === 'solo' && !walk.resting
-    ? view.stepLeft(session!.myId, fx.now) <= FRAME_AHEAD_MS && now - walk.lastSent >= STEP_MS / 2
+  // Alone, the monsters in sight finish their steps on screen first, too (see View.othersLeft).
+  const due = session!.mode === 'solo'
+    ? (walk.resting || view.stepLeft(session!.myId, fx.now) <= FRAME_AHEAD_MS) && view.othersLeft(visible, fx.now) <= FRAME_AHEAD_MS
+      && now - walk.lastSent >= (walk.resting ? 0 : STEP_MS / 2)
     : now - walk.lastSent >= pace;
   if (!me || !isAlive(me) || (session!.busy && ahead === null) || overlayOpen() || !due) return;
   if (ahead !== null) {
     // An arrow held down goes on from where the last step leads, as long as the way is open.
-    const next = walk.queue.shift() ?? ahead + held.dx + held.dy * WIDTH;
+    const upcoming = walk.queue[0] ?? ahead + held.dx + held.dy * WIDTH;
+    if (companionOnTheMove(world, me, upcoming)) return;
+    const next = walk.queue.shift() ?? upcoming;
     const level = levelAt(world, me.depth);
     const open = findPath(level, ahead, next, occupiedCells(world, me.depth), exploredCells(world, me.depth), (me.levitating ?? 0) > 0);
     if (!adjacent(ahead, next) || open?.length !== 1) walk.reset();
@@ -604,6 +626,8 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
   }
 
   if (walk.queue.length > 0) {
+    // A companion walking just ahead is followed, not swapped with: wait for them to step on.
+    if (companionOnTheMove(world, me, walk.queue[0]!)) return;
     const next = walk.queue.shift()!;
     if (!adjacent(me.pos, next) || occupiedCells(world, me.depth).has(next)) {
       walk.reset();
@@ -696,8 +720,9 @@ function useStairs(world: World, stairs: 'descend' | 'ascend', now: number): voi
 /** Cells taken by living characters on a depth, except `except`. */
 function occupiedCells(world: World, depth: number, except = -1): Set<number> {
   const cells = new Set<number>();
+  // Companions step aside too (swapping places), unless they are held fast.
   for (const hero of world.heroes) {
-    if (hero.depth === depth && isAlive(hero) && hero.id !== session!.myId) cells.add(hero.pos);
+    if (hero.depth === depth && isAlive(hero) && hero.id !== session!.myId && (hero.rooted > 0 || hero.paralysed > 0)) cells.add(hero.pos);
   }
   // The ghost and magic sheep step aside: the hero swaps places with them.
   for (const mob of world.floors[depth]?.mobs ?? []) if (!swapsWithHero(mob)) cells.add(mob.pos);
@@ -745,6 +770,12 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
         item.kind.startsWith('ring.') || item.kind.startsWith('wand.') || item.kind === 'potion.strength' || item.kind === 'scroll.upgrade');
     }
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
+    // Hunger kills quietly in the original's log: here it says what to do, and with what.
+    if (effect.type === 'hunger' && effect.hero === myId && world && me) {
+      const food = me.items.find((item) => itemDef(item.kind).category === 'food');
+      const tip = effect.state === 'starving' ? t.starvingTip : t.hungryTip;
+      toast(food ? `${tip} ${t.eatThis(itemName(world, food))}` : tip, { tone: 'warn', ...(food ? { item: itemSprite(food, world.run.labels) } : {}) });
+    }
     const hurt =
       (effect.type === 'attack' && effect.target === myId) ||
       (effect.type === 'hurt' && effect.who === myId) ||
@@ -1309,10 +1340,17 @@ function resize(): void {
   const shrink = Math.max(1, Math.ceil(Math.sqrt((wide * tall) / budget)));
   canvas.width = Math.round(wide / shrink);
   canvas.height = Math.round(tall / shrink);
-  // About 12 tiles across the narrow side, at an integer zoom for crisp pixels; out to the whole
-  // level across it, in to twice as close.
+  // The size of a pixel comes from the screen, not the window: about 12 tiles across a phone's
+  // narrow side, 16 across a monitor's. Resizing a window on a computer then shows more or less
+  // of the dungeon, as the desktop original does, instead of zooming it. Integer zoom, for crisp
+  // pixels; out to the whole level across the window, in to twice as close.
   const narrow = Math.min(canvas.width, canvas.height);
-  zoom.base = Math.max(1, Math.round(narrow / (TILE * 12)));
+  const fine = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
+  const screenNarrow = Math.min(screen.width || canvas.clientWidth, screen.height || canvas.clientHeight);
+  // A small window (Telegram's on a computer) still shows at least 9 tiles across.
+  const windowNarrow = Math.min(canvas.clientWidth, canvas.clientHeight);
+  const cssScale = Math.max(1, Math.min(Math.round(screenNarrow / (TILE * (fine ? 16 : 12))), Math.floor(windowNarrow / (TILE * 9))));
+  zoom.base = Math.max(1, Math.round((cssScale * dpr) / shrink));
   zoom.min = Math.max(1, Math.min(zoom.base, Math.floor(narrow / (TILE * WIDTH))));
   zoom.max = Math.max(zoom.base + 2, zoom.base * 2);
   zoom.target = clampZoom(zoom.base + zoom.delta);
@@ -1421,6 +1459,8 @@ const CAMERA_LAG_MS = 85;
 let lastFrame = 0;
 /** Since when the party has been waiting for my move (0: it is not), and whether I have been told. */
 let holdingSince = 0;
+/** The wait for companions last written in the co-op log. */
+const loggedWait = { count: 0, since: 0 };
 let holdingFelt = false;
 
 /** The middle of the free band, in device pixels, eased from frame to frame; -1 until known. */
@@ -1764,6 +1804,18 @@ function tick(now: number): void {
     busySince && now - busySince > 400
       ? blockers(world).filter((id) => id !== me.id).map((id) => heroById(world, id)?.name ?? '?')
       : [];
+  // Waits, written in the co-op log: how many companions and how long (a long one sends the log).
+  const waitingNow = waitingFor.length;
+  if (waitingNow !== loggedWait.count) {
+    if (loggedWait.count > 0) {
+      const lasted = now - loggedWait.since;
+      netlog(`waited ${(lasted / 1000).toFixed(1)} s for ${loggedWait.count} companion(s)`);
+      if (lasted > 6000 && session.mode === 'online') sendNetlog('long wait');
+    }
+    if (waitingNow > 0) netlog(`waiting for ${waitingNow} companion(s)`);
+    loggedWait.count = waitingNow;
+    loggedWait.since = now;
+  }
   // The other way round: the party is held up by me. Said (and felt) once it lasts a moment.
   const holdingUp = session.mode === 'online' && isAlive(me) && !session.busy && blockers(world).includes(me.id);
   if (holdingUp) {

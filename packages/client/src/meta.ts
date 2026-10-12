@@ -1,5 +1,6 @@
 import { type Hero, type Item, itemDef, type ItemKind, ITEMS, itemSprite, RoomType, T, type World } from '@pd/core';
 import { audio } from './audio';
+import { fx } from './fx';
 import { lang, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { type FxMode, quality } from './quality';
@@ -172,6 +173,7 @@ export function showSettings(options: SettingsOptions): void {
       }),
       fxNote,
     ),
+    stepsRow(t.meta.shake, () => quality.shake, (v) => quality.setShake(v), () => fx.shake(3, 240, fx.now)),
     canFullscreen() && switchRow(t.fullscreen, null, isFullscreen(), (on) => setFullscreen(on)),
     el(
       'div',

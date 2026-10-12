@@ -14,6 +14,18 @@ import { botAction, checkInvariants, skeletonKey, unblock } from './helpers';
 const BOSSES = new Set(['goo', 'tengu', 'dm300', 'king', 'yog', 'rottingFist', 'burningFist']);
 
 export function step(world: World, id = 'p'): Action {
+  const action = plan(world, id);
+  // Companions swap places when one walks into the other; two bots bound for the same cell would
+  // swap for ever, so the second gives way, as people do.
+  if (action.type === 'move') {
+    const hero = heroById(world, id)!;
+    const other = world.heroes.find((h) => h.id !== id && h.depth === hero.depth && h.pos === action.to && isAlive(h));
+    if (other && id > other.id) return { type: 'wait' };
+  }
+  return action;
+}
+
+function plan(world: World, id: string): Action {
   const hero = heroById(world, id)!;
   const floor = floorAt(world, hero.depth);
   const level = levelAt(world, hero.depth);

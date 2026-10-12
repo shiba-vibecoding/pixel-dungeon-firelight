@@ -497,6 +497,8 @@ export interface MenuOptions {
   onSettings(): void;
   onMart(): void;
   onTreat(): void;
+  /** Sends the co-op session's log with a word from the player; absent alone. */
+  onReport?: () => void;
   onExit(): void;
 }
 
@@ -512,6 +514,7 @@ export function showMenu(options: MenuOptions): void {
         el('div', { className: 'pd-row' }, button(t.meta.journal, options.onJournal), button(t.help, options.onHelp)),
         el('div', { className: 'pd-row' }, button(t.badges, options.onBadges), button(t.mart, options.onMart)),
         button(t.meta.settings, options.onSettings),
+        options.onReport && button(t.reportProblem, options.onReport, 'quiet'),
         button(t.treat, options.onTreat, 'quiet'),
         button(t.toMenu, options.onExit, 'quiet'),
       ),

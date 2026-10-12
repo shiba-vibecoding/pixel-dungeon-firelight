@@ -20,6 +20,8 @@ export interface Report {
   kind: string;
   message: string;
   stack?: string;
+  /** A co-op session's own log (kind 'coop-log'): what the player's game saw, line by line. */
+  log?: string;
   /** Free-form facts about the moment: mode, depth, build, platform. */
   context?: Record<string, string | number | boolean>;
   /** The same report again: counted, not stored twice. */
@@ -36,6 +38,8 @@ export const MAX_REPORT_BYTES = 16 * 1024;
 /** A stack is kept to its first lines; the rest is the same few frames of the runtime. */
 const STACK_CHARS = 1500;
 const STACK_LINES = 20;
+/** A co-op log is kept whole up to this many characters (its last ones, if longer). */
+export const LOG_CHARS = 12_000;
 
 /** How many reports one address may send within REPORT_WINDOW_MS; a broken client in a loop must not drown the rest. */
 export const REPORTS_PER_WINDOW = 30;
@@ -60,7 +64,8 @@ export function parseReport(body: unknown, now: number): Report | null {
       else if (typeof value === 'string') context[key.slice(0, 24)] = value.slice(0, 160);
     }
   }
-  return { at: now, kind, message, ...(raw.stack ? { stack: shortStack(raw.stack) } : {}), context };
+  const log = kind === 'coop-log' && raw.log ? String(raw.log).slice(-LOG_CHARS) : '';
+  return { at: now, kind, message, ...(raw.stack ? { stack: shortStack(raw.stack) } : {}), ...(log ? { log } : {}), context };
 }
 
 /** A stack cut to its first lines and a bounded length. */

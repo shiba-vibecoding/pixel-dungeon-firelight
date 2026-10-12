@@ -52,6 +52,11 @@ for (const r of [...reports].sort((a, b) => (b.last ?? b.at) - (a.last ?? a.at))
   console.log(`\n${when} UTC  [${r.kind}]${times}  ${r.message}`);
   if (r.context && Object.keys(r.context).length) console.log(`  ${Object.entries(r.context).map(([k, v]) => `${k}=${v}`).join('  ')}`);
   if (r.stack) console.log(`  ${r.stack.split('\n').slice(0, 6).join('\n  ')}`);
+  // Co-op logs: the whole of it with --logs, else a pointer to it.
+  if (r.log) console.log(process.argv.includes('--logs') ? `  ${r.log.split('
+').join('
+  ')}` : `  (co-op log: ${r.log.split('
+').length} lines; run with --logs to see it)`);
 }
 if (args.includes('--clear')) {
   await fetch(`${server}/reports`, { method: 'DELETE', headers });

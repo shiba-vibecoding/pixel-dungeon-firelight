@@ -644,8 +644,11 @@ function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
 /**
  * Ballistica.cast: the cells a straight line from `from` passes on its way to
  * `to`, ending at the first character or sight-blocking cell, or before a wall.
+ * `lob`: tossed high, over heads and through tall grass, as a seed is (a port's
+ * change: in the original a seed stopped at the first blade of grass or
+ * companion in the way, never where the player meant to plant it).
  */
-export function ballistica(ctx: Ctx, from: number, to: number, hitChars = true): number[] {
+export function ballistica(ctx: Ctx, from: number, to: number, hitChars = true, lob = false): number[] {
   const { world, depth, level } = ctx;
   let dx = cellX(to) - cellX(from);
   let dy = cellY(to) - cellY(from);
@@ -670,6 +673,14 @@ export function ballistica(ctx: Ctx, from: number, to: number, hitChars = true):
     if (!hasFlag(terrain, F.PASSABLE) && !hasFlag(terrain, F.AVOID)) {
       trace.pop();
       return trace;
+    }
+    if (lob) {
+      // A door or a statue in the way: it drops before it.
+      if (hasFlag(terrain, F.SOLID)) {
+        trace.pop();
+        return trace;
+      }
+      continue;
     }
     if (hasFlag(terrain, F.LOS_BLOCKING) || (hitChars && charAt(world, depth, cell))) return trace;
   }

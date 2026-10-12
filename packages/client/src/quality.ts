@@ -32,6 +32,24 @@ class Quality {
   private average = 16;
   private watched = 0;
   readonly reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** How hard the view shakes on heavy blows, 0 to 1: some like it, some do not (the settings, kept on this device). */
+  shake = ((): number => {
+    try {
+      const value = Number(localStorage.getItem('pd-shake'));
+      return localStorage.getItem('pd-shake') !== null && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.6;
+    } catch {
+      return 0.6;
+    }
+  })();
+
+  setShake(level: number): void {
+    this.shake = level;
+    try {
+      localStorage.setItem('pd-shake', String(level));
+    } catch {
+      // For this session only.
+    }
+  }
 
   get light(): boolean {
     return this.mode === 'light' || (this.mode === 'auto' && this.demoted);

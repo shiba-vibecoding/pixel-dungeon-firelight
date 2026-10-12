@@ -3,6 +3,7 @@ import {
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
 } from '@pd/core';
 import { guestSecret } from './guest';
+import { netlog, sendNetlog, startNetlog } from './netlog';
 import { report } from './report';
 
 /*
@@ -223,6 +224,9 @@ export function onlineSession(options: OnlineOptions): Session {
       const follows = action.type === 'move' && session.stepAhead !== null;
       if (session.busy && !follows) return;
       inFlight++;
+      sentAt.push(performance.now());
+      // Steps are many: only the rest are written down one by one (steps go into the summary).
+      if (action.type !== 'move') netlog(`act ${action.type}${inFlight > 1 ? ` (${inFlight} on the way)` : ''}`);
       ahead = action.type === 'move' && (inFlight === 1 || ahead !== null) ? action.to : null;
       transmit({ type: 'act', action });
     },
@@ -273,11 +277,14 @@ export function onlineSession(options: OnlineOptions): Session {
         seq = message.seq;
         inFlight = 0;
         ahead = null;
+        sentAt.length = 0;
+        netlog(`snapshot seq ${message.seq}, ${message.world.heroes.length} heroes, ${message.online.length} online`);
         session.generation++;
         break;
       case 'event': {
         if (!session.world || message.seq !== seq + 1) {
           // Missed an event: start over from a fresh snapshot.
+          netlog(`missed event: got ${message.seq} after ${seq}; sync`);
           transmit({ type: 'sync' });
           return;
         }
@@ -289,11 +296,17 @@ export function onlineSession(options: OnlineOptions): Session {
           // The room took this action, so a world that refuses it has drifted from the room's:
           // start over from the room's own, and say so.
           report('desync', `${message.event.type === 'act' ? message.event.action.type : message.event.type}: ${result.reason}`);
+          netlog(`desync: ${message.event.type === 'act' ? message.event.action.type : message.event.type}: ${result.reason}`);
+          sendNetlog('desync');
           transmit({ type: 'sync' });
           return;
         }
         if (message.event.type === 'restart') session.generation++;
-        if (message.event.type === 'act' && message.event.heroId === session.myId) inFlight = Math.max(0, inFlight - 1);
+        if (message.event.type === 'act' && message.event.heroId === session.myId) {
+          inFlight = Math.max(0, inFlight - 1);
+          const at = sentAt.shift();
+          if (at !== undefined) noteRtt(performance.now() - at, message.event.action.type);
+        }
         if (inFlight === 0) ahead = null;
         break;
       }
@@ -311,6 +324,8 @@ export function onlineSession(options: OnlineOptions): Session {
       case 'rejected':
         // Steps sent after a refused one are refused too, or soon will be: the walk stops here.
         inFlight = Math.max(0, inFlight - 1);
+        sentAt.shift();
+        netlog(`refused: ${message.reason}`);
         ahead = null;
         pending.push({ type: 'interrupted', hero: session.myId, reason: message.reason });
         break;
@@ -331,11 +346,13 @@ export function onlineSession(options: OnlineOptions): Session {
     }
     const ws = new WebSocket(url);
     socket = ws;
+    netlog(`connecting${failures ? ` (try ${failures + 1})` : ''}`);
     let opened = false;
     ws.onopen = () => {
       opened = true;
       failures = 0;
       lastHeard = performance.now();
+      netlog('open');
       session.status = '';
       if (myLook) transmit({ type: 'look', look: myLook });
     };
@@ -353,8 +370,11 @@ export function onlineSession(options: OnlineOptions): Session {
     };
     ws.onclose = (event) => {
       if (socket !== ws) return;
+      netlog(`closed ${event.code}${event.reason ? ` ${event.reason}` : ''}${opened ? '' : ' (never opened)'}`);
+      if (opened && !closed && !away && event.code !== 1000 && event.code < 4000) sendNetlog(`dropped ${event.code}`);
       inFlight = 0;
       ahead = null;
+      sentAt.length = 0;
       if (closed || away) return;
       // A room that cannot be reached (refused, or the network) is worth knowing about once it keeps happening.
       if (!opened && ++failures === 3) report('socket', `cannot connect: close ${event.code}${event.reason ? ` ${event.reason}` : ''}`, undefined, { telegram: Boolean(options.initData) });
@@ -426,6 +446,8 @@ export function onlineSession(options: OnlineOptions): Session {
   const pinger = window.setInterval(() => {
     if (closed || away || socket?.readyState !== WebSocket.OPEN) return;
     if (performance.now() - lastHeard > SILENCE_MS) {
+      netlog(`silent for ${Math.round((performance.now() - lastHeard) / 1000)} s: reconnecting`);
+      sendNetlog('silent line');
       reconnectNow();
       return;
     }
@@ -437,6 +459,7 @@ export function onlineSession(options: OnlineOptions): Session {
     if (document.hidden) {
       // A moment out of sight keeps the room; a while, and the party goes on without waiting for me.
       awayTimer = window.setTimeout(() => {
+        netlog('hidden: leaving the room for now');
         away = true;
         socket?.close(1000, 'away');
       }, AWAY_MS);
@@ -444,18 +467,36 @@ export function onlineSession(options: OnlineOptions): Session {
     }
     if (away) {
       away = false;
+      netlog('shown again: back to the room');
       reconnectNow();
     } else if (socket?.readyState === WebSocket.OPEN && performance.now() - lastHeard > PING_MS * 1.5) {
       // Back from a short absence: make sure the line survived it.
       socket.send('ping');
     }
   };
+  /** When my actions were sent, oldest first, to time the room's answers. */
+  const sentAt: number[] = [];
+  /** Answers over the last stretch, written down as one line every so often (and the slow ones each). */
+  const rtts: number[] = [];
+  let summaryAt = performance.now();
+  const noteRtt = (ms: number, kind: string): void => {
+    rtts.push(ms);
+    if (ms > 1500) netlog(`slow answer: ${kind} after ${Math.round(ms)} ms`);
+    const now = performance.now();
+    if (now - summaryAt < 15_000) return;
+    const sorted = [...rtts].sort((a, b) => a - b);
+    netlog(`${Math.round((now - summaryAt) / 1000)} s: ${rtts.length} actions, answer median ${Math.round(sorted[Math.floor(sorted.length / 2)] ?? 0)} ms, worst ${Math.round(sorted[sorted.length - 1] ?? 0)} ms`);
+    rtts.length = 0;
+    summaryAt = now;
+  };
+
   const onOnline = (): void => {
     if (!closed && !away && socket?.readyState !== WebSocket.OPEN) reconnectNow();
   };
   document.addEventListener('visibilitychange', onVisibility);
   addEventListener('online', onOnline);
 
+  startNetlog(`co-op session: room ${options.room.length} chars, ${options.initData ? 'telegram' : 'guest'}, ${navigator.onLine ? 'online' : 'offline'}`);
   connect();
   return session;
 }
