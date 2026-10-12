@@ -68,6 +68,13 @@ export interface Puppet {
   label: string;
   hp: number;
   ht: number;
+  /** A melee lunge: when it began, and how far towards the target (world pixels). */
+  lungeStart?: number;
+  lungeX?: number;
+  lungeY?: number;
+  /** Burning or poisoned: embers or bubbles rise off it. */
+  burning?: boolean;
+  poisoned?: boolean;
 }
 
 export interface Floater {
@@ -77,6 +84,8 @@ export interface Floater {
   x: number;
   y: number;
   start: number;
+  /** Bigger for a heavy blow. */
+  scale?: number;
 }
 
 export interface LogLine {
@@ -178,6 +187,8 @@ export class View {
           hero.invisible > 0,
         );
         const puppet = this.puppets.get(hero.id)!;
+        puppet.burning = hero.burning > 0;
+        puppet.poisoned = hero.poison > 0;
         puppet.row = itemDef(hero.armor.kind).tier ?? 0;
         puppet.label = hero.id === myId ? '' : hero.name;
       }
@@ -193,6 +204,9 @@ export class View {
       place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht,
         // A statue biding its time shows no sign of sleep.
         mob.state === 'sleeping' && mob.kind !== 'statue', mob.pumped);
+      const puppet = this.puppets.get(mob.id)!;
+      puppet.burning = (mob.burning ?? 0) > 0;
+      puppet.poisoned = (mob.poison ?? 0) > 0;
     }
     for (const [id, puppet] of this.puppets) {
       if (!seen.has(id) && (puppet.alive || now >= puppet.removeAt)) this.puppets.delete(id);

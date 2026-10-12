@@ -10,6 +10,10 @@ import {
 import * as core from '@pd/core';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
+import { fx } from './fx';
+import { ambientFx, effectFx } from './fx-events';
+/** The visual clock's last reading, for frame-to-frame particle steps. */
+let lastVisual = 0;
 import { type BadgeId, badgeText, checkBadges, countGame } from './badges';
 import { audio } from './audio';
 import { BUFF_ICONS, heroBuffs, Hud } from './hud';
@@ -909,10 +913,16 @@ function tick(now: number): void {
     return;
   }
 
+  // The visual clock: real time, slowed for a moment by a heavy blow's hit-stop.
+  const vnow = fx.time(now);
+  const dt = lastVisual ? vnow - lastVisual : 0;
+  lastVisual = vnow;
+
   if (session.generation !== seenGeneration || me.depth !== view.depth) {
     if (session.generation !== seenGeneration) deathShown = -1;
     seenGeneration = session.generation;
     view.reset(me.depth);
+    fx.reset();
     walk.reset();
     bakedKey = '';
     threats = new Set();
@@ -924,6 +934,8 @@ function tick(now: number): void {
   if (lastPlace.generation === session.generation && isAlive(me)) {
     if (me.depth !== lastPlace.depth) {
       audio.play(justFell ? 'falling' : 'descend');
+      // A new depth comes up out of the dark.
+      fx.flash('0, 0, 0', 1, 650, vnow);
       // GameScene's greetings: the depth, a new region, and the level's feeling.
       view.say(justFell ? t.fell(me.depth) : me.depth > lastPlace.depth ? t.descended(me.depth) : t.ascended(me.depth));
       justFell = false;
@@ -970,16 +982,20 @@ function tick(now: number): void {
 
   const effects = session.drain();
   if (effects.length > 0) {
-    view.apply(effects, world, session.myId, now);
+    view.apply(effects, world, session.myId, vnow);
+    for (const effect of effects) effectFx(effect, view, world, session.myId, vnow);
     handleMyEffects(effects, session.myId);
   }
-  view.sync(world, now, session.myId);
+  view.sync(world, vnow, session.myId);
   step(world, now, visible);
+  fx.update(vnow, dt);
+  ambientFx(view, vnow, dt);
 
   const mine = view.puppets.get(me.id);
-  const at = mine ? view.position(mine, now) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
-  camera.x = Math.round(at.x + TILE / 2 - canvas.width / camera.zoom / 2);
-  camera.y = Math.round(at.y + TILE / 2 - canvas.height / camera.zoom / 2);
+  const at = mine ? view.position(mine, vnow) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
+  const kick = fx.shakeOffset(vnow);
+  camera.x = Math.round(at.x + TILE / 2 - canvas.width / camera.zoom / 2) + kick.x;
+  camera.y = Math.round(at.y + TILE / 2 - canvas.height / camera.zoom / 2) + kick.y;
   // What lies hidden (the phantom fish) is not drawn until found.
   const heaps = (world.floors[me.depth]?.heaps ?? []).filter((heap) => heap.kind !== 'hidden').map((heap) => ({
     pos: heap.pos,
@@ -995,8 +1011,9 @@ function tick(now: number): void {
   const scene = {
     level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, plants, gas, seeAll: me.mindVision > 0,
       ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
+    focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
   };
-  render(ctx, scene, view, session.myId, assets, camera, now);
+  render(ctx, scene, view, session.myId, assets, camera, vnow);
 
   // Who the dungeon is waiting for, once my action has been queued for a moment.
   if (session.busy) busySince ||= now;
@@ -1109,5 +1126,5 @@ if (import.meta.env.DEV) {
       await new Promise((resolve) => setTimeout(resolve, 33));
     }
   };
-  Object.assign(window, { __pd: { get session() { return session; }, camera, view, walk, advance, play, resize, core } });
+  Object.assign(window, { __pd: { get session() { return session; }, camera, view, walk, advance, play, resize, core, fx } });
 }

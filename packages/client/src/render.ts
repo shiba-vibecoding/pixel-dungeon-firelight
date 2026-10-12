@@ -1,6 +1,7 @@
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
+import { fx } from './fx';
 
 /* Canvas renderer for the world, using the original 16px tiles and sprites. */
 
@@ -43,8 +44,10 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   const frame = frameAt(anims[anim], now - puppet.animStart);
   const sx = (frame % sheet.cols) * sheet.w;
   const sy = (Math.floor(frame / sheet.cols) + puppet.row) * sheet.h;
-  const dx = Math.round(x + (TILE - sheet.w) / 2);
-  const dy = Math.round(y + TILE - sheet.h);
+  // A melee lunge: forward and back again in a blink.
+  const lunge = puppet.lungeStart !== undefined && now - puppet.lungeStart < LUNGE_MS ? Math.sin((Math.PI * (now - puppet.lungeStart)) / LUNGE_MS) : 0;
+  const dx = Math.round(x + (TILE - sheet.w) / 2 + lunge * (puppet.lungeX ?? 0));
+  const dy = Math.round(y + TILE - sheet.h + lunge * (puppet.lungeY ?? 0));
 
   ctx.save();
   if (puppet.invisible) ctx.globalAlpha = 0.4;
@@ -77,6 +80,8 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   ctx.restore();
 }
 
+const LUNGE_MS = 150;
+
 function drawHealth(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y: number): void {
   const top = Math.round(y + TILE - puppet.sprite.sheet.h - 3);
   const left = Math.round(x + 2);
@@ -104,6 +109,8 @@ export interface Scene {
   seeAll: boolean;
   /** Where an altar's sacrificial fire burns, while it does. */
   altar?: number;
+  /** The hero's position in world pixels, around which the view is lit. */
+  focus?: { x: number; y: number };
 }
 
 export function render(
@@ -186,6 +193,10 @@ export function render(
     ctx.fillRect((i % WIDTH) * TILE, Math.trunc(i / WIDTH) * TILE, TILE, TILE);
   }
 
+  // Splats on the floor, where it can be seen.
+  const seen = (x: number, y: number): boolean => visible[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true;
+  fx.drawDecals(ctx, now, seen);
+
   // Characters, back to front. Monsters only show where the party can see.
   const shown = [...view.puppets.values()]
     .filter((puppet) => puppet.isHero || scene.seeAll || visible[puppet.to] || visible[puppet.from])
@@ -223,6 +234,8 @@ export function render(
     }
   }
 
+  fx.draw(ctx, now, seen);
+
   // Floating numbers and words, drawn at screen resolution so text stays crisp.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.textAlign = 'center';
@@ -249,6 +262,9 @@ export function render(
     const age = (now - floater.start) / 1200;
     const sx = (floater.x - camera.x) * camera.zoom;
     const sy = (floater.y - 2 - age * 14 - camera.y) * camera.zoom;
+    // Numbers pop in large and settle; a heavy blow's stays bigger.
+    const pop = 1 + Math.max(0, 1 - (now - floater.start) / 140) * 0.6;
+    ctx.font = `${Math.round(6 * camera.zoom * (floater.scale ?? 1) * pop)}px ${FONT}`;
     ctx.globalAlpha = age < 0.6 ? 1 : (1 - age) / 0.4;
     ctx.strokeStyle = '#000';
     ctx.strokeText(floater.text, sx, sy);
@@ -256,6 +272,20 @@ export function render(
     ctx.fillText(floater.text, sx, sy);
   }
   ctx.globalAlpha = 1;
+
+  // The hero's light: the edges of the view sink into the dark.
+  if (scene.focus) {
+    const fx0 = (scene.focus.x - camera.x) * camera.zoom;
+    const fy0 = (scene.focus.y - camera.y) * camera.zoom;
+    const inner = TILE * camera.zoom * 3;
+    const outer = Math.max(canvas.width, canvas.height) * 0.7;
+    const shade = ctx.createRadialGradient(fx0, fy0, inner, fx0, fy0, outer);
+    shade.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    shade.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  fx.drawScreen(ctx, canvas.width, canvas.height, now);
 
   // "Boss slain" banner, fading in and out.
   const age = now - view.bannerStart;
