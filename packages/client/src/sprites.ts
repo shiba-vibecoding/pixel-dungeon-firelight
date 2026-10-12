@@ -58,6 +58,15 @@ const HERO_ANIMS: Record<AnimName, Animation> = {
   operate: anim(8, [16, 17, 16, 17]),
 };
 
+const IMP_SPRITE = {
+  w: 12,
+  h: 14,
+  anims: basic(
+    anim(10, [0, 1, 2, 3, 0, 1, 2, 3, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 3, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4], true),
+    anim(20, [0], true), anim(10, [0]), anim(10, [0, 3, 2, 1, 0, 3, 2, 1, 0]),
+  ),
+};
+
 const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimName, Animation> }> = {
   rat: {
     w: 16,
@@ -213,14 +222,8 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
     h: 8,
     anims: basic(anim(5, [4, 4, 4, 4, 4, 5, 5], true), anim(12, [0, 1, 2, 3], true), anim(15, [6, 5, 7]), anim(10, [8])),
   },
-  imp: {
-    w: 12,
-    h: 14,
-    anims: basic(
-      anim(10, [0, 1, 2, 3, 0, 1, 2, 3, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 3, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4], true),
-      anim(20, [0], true), anim(10, [0]), anim(10, [0, 3, 2, 1, 0, 3, 2, 1, 0]),
-    ),
-  },
+  imp: IMP_SPRITE,
+  impShopkeeper: IMP_SPRITE,
   // The rare variants share their kind's sheet, further along it.
   // FetidRatSprite is the rat's; CursePersonificationSprite the wraith's.
   fetidRat: {
@@ -342,7 +345,7 @@ export async function loadAssets(base: string): Promise<Assets> {
   const mob = (kind: MobKind): CharSprite => {
     const spec = MOB_SPRITES[kind];
     // A mirror image is drawn with its hero's own sheet (see View.sync); the warrior's stands in here.
-    const image = kind === 'mirror' ? 'warrior' : kind === 'fetidRat' ? 'rat' : kind === 'curse' ? 'wraith' : baseKind(kind);
+    const image = kind === 'mirror' ? 'warrior' : kind === 'fetidRat' ? 'rat' : kind === 'curse' ? 'wraith' : kind === 'impShopkeeper' ? 'imp' : baseKind(kind);
     return { sheet: sheet(images[image as (typeof names)[number]], spec.w, spec.h), anims: spec.anims };
   };
   return {

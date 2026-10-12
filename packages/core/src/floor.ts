@@ -199,6 +199,8 @@ export type Effect =
   | { type: 'dewCollected'; hero: string; full: boolean }
   | { type: 'vial'; hero: string; amount: number }
   | { type: 'vialSaved'; hero: string }
+  /** The imp of the last shop greets the heroes. */
+  | { type: 'greeting'; depth: number; mob: string }
   /** A bomb went off. */
   | { type: 'exploded'; depth: number; pos: number }
   /** A weapon balanced with a weightstone. */

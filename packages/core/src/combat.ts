@@ -1,5 +1,5 @@
 import {
-  baseKind, BRUTE_ENRAGED_DAMAGE, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
+  baseKind, BRUTE_ENRAGED_DAMAGE, isShopkeeper, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
   maxExp, type Mob, MOBS, mobStats, ringBonus,
 } from './actors';
 import {
@@ -273,7 +273,7 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
   if (!isAlive(victim)) return;
   // The sad ghost cannot be harmed; the shopkeeper will not stay to be.
   if (!isHero(victim) && victim.state === 'passive') {
-    if (victim.kind === 'shopkeeper') shopkeeperFlees(ctx, victim);
+    if (isShopkeeper(victim)) shopkeeperFlees(ctx, victim);
     return;
   }
   const by = typeof source === 'string' ? null : source;

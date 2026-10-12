@@ -1,9 +1,9 @@
 import {
-  baseKind, createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, isAlive, type Mob, type MobState, MOBS, mobStats, rollMob,
+  baseKind, createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, isAlive, isShopkeeper, type Mob, type MobState, MOBS, mobStats, rollMob,
 } from './actors';
 import { attack, hurt } from './combat';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
-import { charAt, type Ctx, enterCell, heroesOn, isPassable, isWater, leaveCell } from './floor';
+import { charAt, type Ctx, enterCell, heroesOn, heroView, isPassable, isWater, leaveCell } from './floor';
 import { type Item, itemDef, ItemGenerator, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
 import { KING_PEDESTALS } from './level/city-boss';
@@ -84,7 +84,12 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
   }
   // The shopkeeper minds the shop; the sad ghost drifts about the level at
   // half speed, never after anyone.
-  if (mob.state === 'passive' && (mob.kind === 'shopkeeper' || mob.kind === 'wandmaker' || mob.kind === 'imp' || mob.kind === 'blacksmith' || mob.kind === 'ratKing')) {
+  // ImpShopkeeper.act: the imp greets the first hero to see him.
+  if (mob.kind === 'impShopkeeper' && !mob.greeted && heroesOn(ctx.world, ctx.depth).some((hero) => heroView(ctx.world, hero)[mob.pos])) {
+    mob.greeted = true;
+    ctx.effects.push({ type: 'greeting', depth: ctx.depth, mob: mob.id });
+  }
+  if (mob.state === 'passive' && (isShopkeeper(mob) || mob.kind === 'wandmaker' || mob.kind === 'imp' || mob.kind === 'blacksmith' || mob.kind === 'ratKing')) {
     spend(mob, TICK);
     return;
   }
@@ -799,7 +804,9 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
     return level.ratKing === undefined ? [goo] : [goo, createMob(nextMobId(world), 'ratKing', level.ratKing, 'passive', 0)];
   }
   const mobs: Mob[] = [];
-  if (level.shopkeeper !== undefined) mobs.push(createMob(nextMobId(world), 'shopkeeper', level.shopkeeper, 'passive', 0));
+  if (level.shopkeeper !== undefined) {
+    mobs.push(createMob(nextMobId(world), level.depth >= 21 ? 'impShopkeeper' : 'shopkeeper', level.shopkeeper, 'passive', 0));
+  }
   if (level.statue !== undefined) mobs.push(animatedStatue(world, level, rng));
   for (const pos of level.piranhas ?? []) {
     const piranha = createMob(nextMobId(world), 'piranha', pos, 'sleeping', 0);

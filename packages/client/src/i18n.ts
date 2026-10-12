@@ -5,12 +5,12 @@ import type { BuffName } from './hud';
 
 const EN_ENCHANTMENTS: Record<Enchantment, string> = {
   fire: 'blazing', poison: 'venomous', death: 'grim', paralysis: 'stunning', leech: 'vampiric', slow: 'chilling',
-  shock: 'shocking', instability: 'unstable', horror: 'eldritch', luck: 'lucky',
+  shock: 'shocking', instability: 'unstable', horror: 'eldritch', luck: 'lucky', tempering: 'tempered',
 };
 const EN_GLYPHS: Record<Glyph, string> = {
   bounce: 'bounce', affection: 'affection', antiEntropy: 'anti-entropy', multiplicity: 'multiplicity', potential: 'potential',
   metabolism: 'metabolism',
-  stench: 'stench', viscosity: 'viscosity', displacement: 'displacement', entanglement: 'entanglement',
+  stench: 'stench', viscosity: 'viscosity', displacement: 'displacement', entanglement: 'entanglement', autoRepair: 'auto-repair',
 };
 /** Russian adjectives agree with the weapon: masculine, feminine and neuter forms. */
 const RU_ENCHANTMENTS: Record<Enchantment, readonly [string, string, string]> = {
@@ -24,12 +24,13 @@ const RU_ENCHANTMENTS: Record<Enchantment, readonly [string, string, string]> = 
   instability: ['нестабильный', 'нестабильная', 'нестабильное'],
   horror: ['жуткий', 'жуткая', 'жуткое'],
   luck: ['счастливый', 'счастливая', 'счастливое'],
+  tempering: ['закалённый', 'закалённая', 'закалённое'],
 };
 const RU_GENDERS: Partial<Record<ItemKind, 1 | 2>> = { 'weapon.mace': 1, 'weapon.glaive': 1, 'weapon.spear': 2 };
 const RU_GLYPHS: Record<Glyph, string> = {
   bounce: 'отскока', affection: 'привязанности', antiEntropy: 'антиэнтропии', multiplicity: 'множественности', potential: 'потенциала',
   metabolism: 'метаболизма',
-  stench: 'зловония', viscosity: 'вязкости', displacement: 'смещения', entanglement: 'опутывания',
+  stench: 'зловония', viscosity: 'вязкости', displacement: 'смещения', entanglement: 'опутывания', autoRepair: 'самопочинки',
 };
 
 const en = {
@@ -51,7 +52,7 @@ const en = {
     rottingFist: 'rotting fist', burningFist: 'burning fist', larva: "god's larva", mimic: 'mimic',
     statue: 'animated statue', piranha: 'giant piranha', imp: 'ambitious imp', sheep: 'sheep', blacksmith: 'troll blacksmith', mirror: 'mirror image',
     albino: 'albino rat', bandit: 'crazy bandit', shielded: 'shielded brute', senior: 'senior monk', acidic: 'acidic scorpio',
-    fetidRat: 'fetid rat', curse: 'curse personification', ratKing: 'rat king', wraith: 'wraith', bee: 'golden bee',
+    fetidRat: 'fetid rat', curse: 'curse personification', ratKing: 'rat king', wraith: 'wraith', bee: 'golden bee', impShopkeeper: 'ambitious imp',
   } as Record<MobKind, string>,
   isMimic: 'This is a mimic!',
   yogNotice: 'Hope is an illusion...',
@@ -461,6 +462,7 @@ const en = {
   ateOk: 'That food tasted ok.',
   shatterPot: 'Shatter',
   inBags: 'In bags and on the key ring:',
+  impGreeting: 'Hello, friend!',
   dewCollected: 'You collected a dewdrop into your dew vial.',
   vialFull: 'Your dew vial is full!',
   vialSaved: 'The dew vial was emptied to heal your wounds.',
@@ -672,6 +674,7 @@ const en = {
     instability: 'Every blow carries some other enchantment.',
     horror: 'Its blows may send the foe fleeing in terror.',
     luck: 'Its blows tend to land harder.',
+    tempering: 'It is well tempered, and keeps its edge.',
   } as Record<Enchantment, string>,
   glyphInfo: {
     bounce: 'Attackers may be thrown back.',
@@ -684,11 +687,12 @@ const en = {
     viscosity: 'A blow may be taken slowly, a point a turn.',
     displacement: 'A blow may fling you elsewhere in sight.',
     entanglement: 'Roots may hold you fast and harden your skin.',
+    autoRepair: 'It keeps itself in good repair.',
   } as Record<Glyph, string>,
   /** Floated over the hero when a glyph acts. */
   glyphShort: {
     bounce: 'bounce', affection: 'charm', antiEntropy: 'frost', multiplicity: 'twin', potential: 'zap', metabolism: 'mend', stench: 'stench',
-    viscosity: 'deferred', displacement: 'blink', entanglement: 'roots',
+    viscosity: 'deferred', displacement: 'blink', entanglement: 'roots', autoRepair: 'repair',
   } as Record<Glyph, string>,
   killedBy: (cause: string) => `Killed by ${cause}.`,
   runStats: (lvl: number, gold: number, kills: number) => `Level ${lvl} · ${gold} gold · ${kills} foes slain`,
@@ -742,7 +746,7 @@ const ru: Strings = {
     statue: 'ожившая статуя', piranha: 'гигантская пиранья', imp: 'амбициозный бес', sheep: 'овца', blacksmith: 'тролль-кузнец', mirror: 'зеркальный образ',
     albino: 'крыса-альбинос', bandit: 'безумный бандит', shielded: 'гнолл-громила со щитом', senior: 'старший монах',
     acidic: 'кислотный скорпион',
-    fetidRat: 'зловонная крыса', curse: 'олицетворение проклятия', ratKing: 'крысиный король', wraith: 'призрак', bee: 'золотая пчела',
+    fetidRat: 'зловонная крыса', curse: 'олицетворение проклятия', ratKing: 'крысиный король', wraith: 'призрак', bee: 'золотая пчела', impShopkeeper: 'амбициозный бес',
   },
   isMimic: 'Это мимик!',
   yogNotice: 'Надежда — это иллюзия...',
@@ -1147,6 +1151,7 @@ const ru: Strings = {
   ateOk: 'На вкус неплохо.',
   shatterPot: 'Разбить',
   inBags: 'В сумках и на связке ключей:',
+  impGreeting: 'Привет, друг!',
   dewCollected: 'Вы собрали росу во флягу.',
   vialFull: 'Ваша фляга для росы полна!',
   vialSaved: 'Фляга для росы опустела, исцелив ваши раны.',
@@ -1354,6 +1359,7 @@ const ru: Strings = {
     instability: 'Каждый удар несёт какие-то другие чары.',
     horror: 'Удары этим оружием могут обратить врага в бегство.',
     luck: 'Удары этим оружием обычно приходятся сильнее.',
+    tempering: 'Оружие хорошо закалено и не тупится.',
   },
   glyphInfo: {
     bounce: 'Нападающих может отбросить назад.',
@@ -1366,10 +1372,11 @@ const ru: Strings = {
     viscosity: 'Удар может растянуться: по очку урона за ход.',
     displacement: 'Удар может перебросить вас в другое место в поле зрения.',
     entanglement: 'Корни могут удержать вас на месте и укрепить кожу.',
+    autoRepair: 'Доспех сам поддерживает себя в порядке.',
   },
   glyphShort: {
     bounce: 'отскок', affection: 'чары', antiEntropy: 'холод', multiplicity: 'двойник', potential: 'разряд', metabolism: 'лечение', stench: 'вонь',
-    viscosity: 'отсрочка', displacement: 'скачок', entanglement: 'корни',
+    viscosity: 'отсрочка', displacement: 'скачок', entanglement: 'корни', autoRepair: 'починка',
   },
   killedBy: (cause) => `Причина гибели: ${cause}.`,
   runStats: (lvl, gold, kills) => `Уровень ${lvl} · золото ${gold} · побеждено врагов: ${kills}`,

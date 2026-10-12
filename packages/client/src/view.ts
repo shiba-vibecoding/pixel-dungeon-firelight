@@ -36,7 +36,7 @@ const BURST_COLORS = {
 /** ItemSprite.Glowing: the colour each enchantment shines with. */
 const ENCHANT_COLORS: Record<Enchantment, string> = {
   fire: '255, 68, 0', poison: '68, 0, 170', death: '40, 40, 40', paralysis: '255, 255, 68', leech: '170, 0, 40', slow: '0, 68, 255',
-  shock: '255, 255, 255', instability: '255, 255, 255', horror: '90, 90, 90', luck: '0, 255, 0',
+  shock: '255, 255, 255', instability: '255, 255, 255', horror: '90, 90, 90', luck: '0, 255, 0', tempering: '204, 136, 136',
 };
 export const TILE = 16;
 
@@ -711,6 +711,9 @@ export class View {
           break;
         case 'vialSaved':
           if (effect.hero === myId) this.say(t.vialSaved, COLORS.warning, now);
+          break;
+        case 'greeting':
+          if (effect.depth === this.depth) this.say(`${t.mobs.impShopkeeper}: «${t.impGreeting}»`, COLORS.default, now);
           break;
         case 'bee':
           if (effect.depth === this.depth) {

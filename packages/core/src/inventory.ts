@@ -1,5 +1,5 @@
 import {
-  BACKPACK_SIZE, beckon, createMob, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
+  BACKPACK_SIZE, beckon, createMob, isShopkeeper, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
   SUBCLASSES,
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
@@ -319,7 +319,7 @@ const haggles = (hero: Hero): boolean => hero.rings.some((ring) => ring.kind ===
 
 /** A shopkeeper standing next to the hero, ready to trade. */
 export function shopkeeperBeside(world: World, hero: Hero): boolean {
-  return (world.floors[hero.depth]?.mobs ?? []).some((mob) => mob.kind === 'shopkeeper' && adjacent(mob.pos, hero.pos));
+  return (world.floors[hero.depth]?.mobs ?? []).some((mob) => isShopkeeper(mob) && adjacent(mob.pos, hero.pos));
 }
 
 /** MissileWeapon.onThrow: a hit uses the dart up, a miss leaves it on the floor; the boomerang returns. */

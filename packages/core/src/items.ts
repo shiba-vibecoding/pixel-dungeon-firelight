@@ -229,21 +229,21 @@ export interface Item {
 /* Enchantments and glyphs (Weapon.Enchantment, Armor.Glyph) */
 
 export type Enchantment =
-  | 'fire' | 'poison' | 'death' | 'paralysis' | 'leech' | 'slow' | 'shock' | 'instability' | 'horror' | 'luck';
+  | 'fire' | 'poison' | 'death' | 'paralysis' | 'leech' | 'slow' | 'shock' | 'instability' | 'horror' | 'luck' | 'tempering';
 
 /** How often each enchantment comes up. */
 const ENCHANTMENT_CHANCES: ReadonlyArray<readonly [Enchantment, number]> = [
   ['fire', 10], ['poison', 10], ['death', 1], ['paralysis', 2], ['leech', 1], ['slow', 2], ['shock', 6], ['instability', 3],
-  ['horror', 2], ['luck', 2],
+  ['horror', 2], ['luck', 2], ['tempering', 3],
 ];
 
 export type Glyph =
   | 'bounce' | 'affection' | 'antiEntropy' | 'potential' | 'metabolism' | 'stench' | 'viscosity' | 'displacement' | 'entanglement'
-  | 'multiplicity';
+  | 'multiplicity' | 'autoRepair';
 
 const GLYPHS: readonly Glyph[] = [
   'bounce', 'affection', 'antiEntropy', 'multiplicity', 'potential', 'metabolism', 'stench', 'viscosity', 'displacement',
-  'entanglement',
+  'entanglement', 'autoRepair',
 ];
 
 /** Enchantment.random, never the one the weapon already has. */

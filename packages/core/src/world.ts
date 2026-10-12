@@ -1,7 +1,7 @@
 import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
 import {
   awareness, createHero, createMob, type Hero, heroAttackDelay, heroSpeed, hungerGrowth, hungerStep, HUNGRY, isAlive,
-  isStarving, type Mob, type PlayerInfo, ringBonus, STARVING,
+  isShopkeeper, isStarving, type Mob, type PlayerInfo, ringBonus, STARVING,
 } from './actors';
 import { attack, CRIPPLE_TURNS, hurt } from './combat';
 import {
@@ -574,7 +574,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       if (mob.state === 'passive') {
         // Not a fight: a word with the sad ghost, or business with the
         // shopkeeper; it takes no time.
-        if (mob.kind === 'shopkeeper') ctx.effects.push({ type: 'shop', hero: hero.id });
+        if (isShopkeeper(mob)) ctx.effects.push({ type: 'shop', hero: hero.id });
         else if (mob.kind === 'wandmaker') talkToWandmaker(ctx, hero);
         else if (mob.kind === 'imp') talkToImp(ctx, hero);
         else if (mob.kind === 'blacksmith') talkToSmith(ctx, hero);

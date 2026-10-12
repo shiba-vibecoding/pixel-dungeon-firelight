@@ -63,9 +63,9 @@ Yendor on depth 26:
   enchantment, terror, psionic blast, mirror image and remove curse), unknown
   until used, and shared
   knowledge in a party; all melee weapons and armour with upgrades and
-  strength requirements, and the ten weapon enchantments (blazing, venomous,
-  grim, stunning, vampiric, chilling, shocking, unstable, eldritch, lucky) and
-  ten armour glyphs of the original; thrown weapons (darts, curare and
+  strength requirements, and the eleven weapon enchantments (blazing,
+  venomous, grim, stunning, vampiric, chilling, shocking, unstable, eldritch,
+  lucky, tempered) and eleven armour glyphs of the original; thrown weapons (darts, curare and
   incendiary darts, javelins, shuriken, tomahawks) and the boomerang; wands of
   magic missile, firebolt, lightning, poison, slowness, teleportation, blink,
   disintegration, avalanche, amok, reach, flock (magic sheep) and regrowth,
@@ -119,10 +119,14 @@ Bags from the shops (a seed pouch, a scroll holder, a wand holster) hold
 their kind without taking room in the backpack, out of reach of fire and
 thieves; keys never take room, as every hero carries a key ring.
 
-Every item, monster, quest and room of the original is now in. Where this
-port differs on purpose: co-op throughout; golden bees and mirror images
-are ignored by monsters rather than fought; Lloyd's beacon is not blocked by
-companions standing next to its bearer.
+Not ported yet: the wandmaker's third errand (the phantom fish); the altar
+room's sacrificial fire and the scroll of wipe out.
+
+Where this port differs on purpose: co-op throughout; golden bees and mirror
+images are ignored by monsters rather than fought; Lloyd's beacon is not
+blocked by companions standing next to its bearer; nothing wears out, so
+tempered weapons and armour of auto-repair are as good as plain ones (and
+auto-repair costs no gold).
 
 ## How co-op works
 

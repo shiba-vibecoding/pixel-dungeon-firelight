@@ -126,6 +126,9 @@ export function weaponProc(ctx: Ctx, hero: Hero, mob: Mob, damage: number): void
       strike(mob, best - damage);
       return;
     }
+    case 'tempering':
+      // Tempering: in the original it keeps the weapon from wearing out; nothing wears out in this port.
+      return;
   }
 }
 
@@ -247,6 +250,10 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
       hero.rooted = Math.max(hero.rooted, 5 - Math.trunc(level / 5));
       hero.earthroot = { pos: hero.pos, level: Math.max(hero.earthroot?.pos === hero.pos ? hero.earthroot.level : 0, 5 * (level + 1)) };
       shown();
+      return damage;
+    case 'autoRepair':
+      // AutoRepair: in the original it keeps the armour from wearing out, at a few coins a blow;
+      // nothing wears out in this port, so it does nothing.
       return damage;
   }
 }
