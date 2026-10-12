@@ -1,4 +1,4 @@
-import { F, hasFlag, type Mob, type MobKind, T, trapAt } from '@pd/core';
+import { F, hasFlag, type Mob, type MobKind, type PlantKind, T, trapAt } from '@pd/core';
 import { lang } from './i18n';
 
 /*
@@ -98,6 +98,50 @@ const SAME_AS: Partial<Record<MobKind, MobKind>> = {
 export function mobDescription(mob: Mob): string {
   const table = lang === 'ru' ? RU_MOBS : EN_MOBS;
   return table[mob.kind] ?? table[SAME_AS[mob.kind] ?? mob.kind] ?? '';
+}
+
+const EN_PLANTS: Record<PlantKind, readonly [string, string]> = {
+  firebloom: ['Firebloom', 'When something touches a Firebloom, it bursts into flames.'],
+  icecap: ['Icecap', 'Touched, an Icecap lets out a pollen that freezes everything around.'],
+  sorrowmoss: ['Sorrowmoss', 'A Sorrowmoss is a flower (not a moss) with razor-sharp petals, coated with a deadly venom.'],
+  dreamweed: ['Dreamweed', 'Touched, a Dreamweed lets out a glittering cloud of confusing gas.'],
+  sungrass: ['Sungrass', 'Sungrass is renowned for the healing properties of its sap.'],
+  earthroot: ['Earthroot', 'When a creature touches an Earthroot, its roots make a kind of natural armour around it.'],
+  fadeleaf: ['Fadeleaf', 'Touching a Fadeleaf will teleport any creature to a random place on the level.'],
+  rotberry: ['Rotberry', 'The berries of this shrub taste like sweet, sweet death.'],
+};
+
+const RU_PLANTS: Record<PlantKind, readonly [string, string]> = {
+  firebloom: ['Огнецвет', 'Когда что-нибудь касается огнецвета, он вспыхивает пламенем.'],
+  icecap: ['Ледянка', 'Если коснуться ледянки, она выпускает пыльцу, которая замораживает всё вокруг.'],
+  sorrowmoss: ['Скорбный мох', 'Скорбный мох — это цветок (а не мох) с острыми как бритва лепестками, покрытыми смертельным ядом.'],
+  dreamweed: ['Дрём-трава', 'Если коснуться дрём-травы, она выпускает сверкающее облако дурманящего газа.'],
+  sungrass: ['Солнечная трава', 'Сок солнечной травы славится своими целебными свойствами.'],
+  earthroot: ['Земляной корень', 'Когда существо касается земляного корня, корни образуют вокруг него что-то вроде природной брони.'],
+  fadeleaf: ['Блеклист', 'Прикосновение к блеклисту переносит любое существо в случайное место на уровне.'],
+  rotberry: ['Гнилоягодник', 'Ягоды этого кустарника на вкус как сладкая, сладкая смерть.'],
+};
+
+/** WellWater.tileDesc: what power the well's water holds. */
+const WELLS: Record<'en' | 'ru', Record<'health' | 'awareness' | 'transmutation', string>> = {
+  en: {
+    health: 'The power of health radiates from the water of this well. Take a sip from it to heal your wounds.',
+    awareness: 'The power of knowledge radiates from the water of this well. Take a sip from it to reveal the secrets of this level and of your pack.',
+    transmutation: 'The power of change radiates from the water of this well. Throw an item into it to turn it into something else.',
+  },
+  ru: {
+    health: 'От воды этого колодца исходит сила здоровья. Сделайте глоток, чтобы исцелить раны.',
+    awareness: 'От воды этого колодца исходит сила знания. Сделайте глоток, чтобы раскрыть тайны этого уровня и своего рюкзака.',
+    transmutation: 'От воды этого колодца исходит сила перемен. Бросьте в него предмет, чтобы превратить его во что-то другое.',
+  },
+};
+
+export const wellText = (water: 'health' | 'awareness' | 'transmutation'): string => WELLS[lang === 'ru' ? 'ru' : 'en'][water];
+
+/** Plant.desc: what grows there, and what it does. */
+export function plantText(kind: PlantKind): { name: string; desc: string } {
+  const [name, desc] = (lang === 'ru' ? RU_PLANTS : EN_PLANTS)[kind];
+  return { name, desc };
 }
 
 type Tile =

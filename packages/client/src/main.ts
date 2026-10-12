@@ -8,7 +8,7 @@ import {
   type World, charAt,
 } from '@pd/core';
 import * as core from '@pd/core';
-import { mobDescription, tileText } from './examine';
+import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { audio } from './audio';
 import { BUFF_ICONS, heroBuffs, Hud } from './hud';
@@ -736,8 +736,11 @@ function examineCell(pos: number): void {
     }
     return;
   }
-  const { name, desc } = tileText(levelAt(world, me.depth).map[pos]!);
-  showInfo(name, [desc], hideOverlay);
+  const plant = world.floors[me.depth]?.plants?.find((p) => p.pos === pos);
+  const level = levelAt(world, me.depth);
+  const { name, desc } = plant ? plantText(plant.kind) : tileText(level.map[pos]!);
+  const well = level.map[pos] === T.WELL ? level.wells.find((w) => w.pos === pos) : undefined;
+  showInfo(name, [well ? wellText(well.water) : desc], hideOverlay);
 }
 
 function startResting(): void {
