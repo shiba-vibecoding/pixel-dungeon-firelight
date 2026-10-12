@@ -63,6 +63,7 @@ export const ITEMS = {
   'scroll.enchantment': { category: 'scroll' },
   'scroll.terror': { category: 'scroll' },
   'scroll.psionicBlast': { category: 'scroll' },
+  'scroll.mirrorImage': { category: 'scroll' },
 
   'weapon.knuckles': weapon(1, 16, 1, 0.5),
   'weapon.dagger': weapon(1, 19, 1.2),
@@ -188,12 +189,13 @@ const ENCHANTMENT_CHANCES: ReadonlyArray<readonly [Enchantment, number]> = [
   ['horror', 2], ['luck', 2],
 ];
 
-/** The original's glyph of multiplicity, which conjures mirror images, is not ported. */
 export type Glyph =
-  | 'bounce' | 'affection' | 'antiEntropy' | 'potential' | 'metabolism' | 'stench' | 'viscosity' | 'displacement' | 'entanglement';
+  | 'bounce' | 'affection' | 'antiEntropy' | 'potential' | 'metabolism' | 'stench' | 'viscosity' | 'displacement' | 'entanglement'
+  | 'multiplicity';
 
 const GLYPHS: readonly Glyph[] = [
-  'bounce', 'affection', 'antiEntropy', 'potential', 'metabolism', 'stench', 'viscosity', 'displacement', 'entanglement',
+  'bounce', 'affection', 'antiEntropy', 'multiplicity', 'potential', 'metabolism', 'stench', 'viscosity', 'displacement',
+  'entanglement',
 ];
 
 /** Enchantment.random, never the one the weapon already has. */
@@ -238,7 +240,7 @@ const POTION_PRICES: Partial<Record<ItemKind, number>> = {
 };
 const SCROLL_PRICES: Partial<Record<ItemKind, number>> = {
   'scroll.identify': 30, 'scroll.teleportation': 40, 'scroll.mapping': 25, 'scroll.lullaby': 50,
-  'scroll.upgrade': 50, 'scroll.recharging': 40, 'scroll.enchantment': 60, 'scroll.terror': 50, 'scroll.psionicBlast': 80,
+  'scroll.upgrade': 50, 'scroll.recharging': 40, 'scroll.enchantment': 60, 'scroll.terror': 50, 'scroll.psionicBlast': 80, 'scroll.mirrorImage': 40,
 };
 const FOOD_PRICES: Partial<Record<ItemKind, number>> = { 'food.ration': 10, 'food.pasty': 20, 'food.meat': 5 };
 
@@ -405,7 +407,7 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
   // image; upgrade only comes as guaranteed finds.
   scroll: [
     ['scroll.identify', 30], ['scroll.teleportation', 10], ['scroll.recharging', 10], ['scroll.mapping', 15],
-    ['scroll.challenge', 12], ['scroll.terror', 8], ['scroll.lullaby', 8], ['scroll.psionicBlast', 4],
+    ['scroll.challenge', 12], ['scroll.terror', 8], ['scroll.lullaby', 8], ['scroll.psionicBlast', 4], ['scroll.mirrorImage', 6],
     ['scroll.enchantment', 1],
   ],
   weapon: [

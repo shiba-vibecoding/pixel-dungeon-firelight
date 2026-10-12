@@ -557,6 +557,14 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         else if (mob.kind === 'imp') talkToImp(ctx, hero);
         else if (mob.kind === 'blacksmith') talkToSmith(ctx, hero);
         else if (mob.kind === 'sheep') ctx.effects.push({ type: 'baa', depth: hero.depth, mob: mob.id });
+        else if (mob.kind === 'mirror') {
+          // MirrorImage.interact: the hero and the image swap places.
+          const from = hero.pos;
+          hero.pos = mob.pos;
+          mob.pos = from;
+          enterCell(level, hero.pos);
+          spend(ctx, hero, 1 / heroSpeed(hero));
+        }
         else talkToGhost(ctx, hero);
         break;
       }

@@ -130,6 +130,8 @@ export type Effect =
   | { type: 'avalanche'; depth: number; cells: number[] }
   /** Magic sheep appear on these cells (wand of flock); one fades away; one is spoken to. */
   | { type: 'flock'; depth: number; cells: number[] }
+  /** Mirror images of a hero appear on these cells. */
+  | { type: 'mirrored'; depth: number; hero: string; cells: number[] }
   | { type: 'faded'; depth: number; mob: string; pos: number }
   | { type: 'baa'; depth: number; mob: string }
   /** Something thrown by a monster (Tengu's shuriken), drawn with an item sprite. */

@@ -4,6 +4,7 @@ import {
 import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
 import { fearless, TERROR_TURNS } from './enchant';
+import { conjureImages } from './allies';
 import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, landItem, leaveCell } from './floor';
 import {
   buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
@@ -626,6 +627,10 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
       ctx.effects.push({ type: 'imbued', hero: hero.id, item: imbued });
       break;
     }
+    case 'scroll.mirrorImage':
+      // ScrollOfMirrorImage: up to three twins of the reader.
+      conjureImages(ctx, hero, 3);
+      break;
     case 'scroll.terror': {
       // Every monster in sight flees from the reader.
       const fov = heroView(world, hero);

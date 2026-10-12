@@ -61,6 +61,10 @@ function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
 }
 
 export function mobAct(ctx: Ctx, mob: Mob): void {
+  if (mob.kind === 'mirror') {
+    imageAct(ctx, mob);
+    return;
+  }
   // A magic sheep just stands there, until it fades away.
   if (mob.kind === 'sheep') {
     mob.lifespan = (mob.lifespan ?? 0) - TICK;
@@ -212,6 +216,32 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
       return;
     }
   }
+}
+
+/**
+ * MirrorImage.act: after the nearest monster in sight, with its hero's skill
+ * and strength; having struck, it is gone. With nothing to fight, it keeps
+ * close to its hero.
+ */
+function imageAct(ctx: Ctx, mob: Mob): void {
+  const image = mob.image!;
+  const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map), viewDistance(ctx.depth));
+  let foe: Mob | undefined;
+  for (const other of ctx.floor.mobs) {
+    if (other === mob || other.state === 'passive' || !fov[other.pos] || !isAlive(other)) continue;
+    if (!foe || distance(mob.pos, other.pos) < distance(mob.pos, foe.pos)) foe = other;
+  }
+  if (foe && adjacent(mob.pos, foe.pos)) {
+    attack(ctx, mob, foe, { attack: image.attack, damage: [Math.trunc(image.damage / 2), image.damage] });
+    ctx.floor.mobs.splice(ctx.floor.mobs.indexOf(mob), 1);
+    leaveCell(ctx.world, ctx.level, ctx.depth, mob.pos);
+    ctx.effects.push({ type: 'faded', depth: ctx.depth, mob: mob.id, pos: mob.pos });
+    return;
+  }
+  const owner = heroesOn(ctx.world, ctx.depth).find((hero) => hero.id === image.owner);
+  const goal = foe?.pos ?? (owner && distance(owner.pos, mob.pos) > 2 ? owner.pos : -1);
+  if (goal !== -1 && getCloser(ctx, mob, goal, fov)) spend(mob, 1 / MOBS[mob.kind].speed);
+  else spend(mob, TICK);
 }
 
 /** Amok: it falls upon whoever is nearest in sight, monster or hero. */

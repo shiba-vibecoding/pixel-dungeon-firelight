@@ -247,6 +247,7 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
     h: 17,
     anims: basic(anim(12, [14, 14, 14, 14, 14, 14, 14, 14, 15, 16, 15, 16, 15, 16], true), anim(4, [19, 20], true), anim(15, [14, 17, 18]), anim(12, [14, 21, 22, 23, 24])),
   },
+  mirror: { w: 12, h: 15, anims: HERO_ANIMS },
   blacksmith: {
     w: 13,
     h: 16,
@@ -314,7 +315,9 @@ export async function loadAssets(base: string): Promise<Assets> {
   const hero = (image: HTMLImageElement): CharSprite => ({ sheet: sheet(image, 12, 15), anims: HERO_ANIMS });
   const mob = (kind: MobKind): CharSprite => {
     const spec = MOB_SPRITES[kind];
-    return { sheet: sheet(images[baseKind(kind) as (typeof names)[number]], spec.w, spec.h), anims: spec.anims };
+    // A mirror image is drawn with its hero's own sheet (see View.sync); the warrior's stands in here.
+    const image = kind === 'mirror' ? 'warrior' : baseKind(kind);
+    return { sheet: sheet(images[image as (typeof names)[number]], spec.w, spec.h), anims: spec.anims };
   };
   return {
     tiles: [images.tiles0, images.tiles1, images.tiles2, images.tiles3, images.tiles4],

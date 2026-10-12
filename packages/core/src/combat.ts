@@ -247,7 +247,7 @@ function split(ctx: Ctx, swarm: Mob, damage: number): void {
 }
 
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred' | 'bleeding' | 'dry';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred' | 'bleeding' | 'dry' | 'multiplicity';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;

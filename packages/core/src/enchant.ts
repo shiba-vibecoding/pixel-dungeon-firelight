@@ -1,4 +1,5 @@
 import { baseKind, type Hero, heroDamageRoll, isAlive, isStarving, type Mob, type MobKind, MOBS, STARVING } from './actors';
+import { conjureImages } from './allies';
 import { hurt } from './combat';
 import { charAt, type Ctx, enterCell, heroView, isPassable, isWater, leaveCell, observe } from './floor';
 import { type Glyph, randomEnchantment } from './items';
@@ -175,6 +176,16 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
       if (!isWater(ctx.level.map[hero.pos]!)) hero.burning = Math.max(hero.burning, BURNING_TURNS);
       shown();
       return damage;
+    case 'multiplicity': {
+      // An image of the hero springs out of the armour, at a price in blood.
+      if (rng.int(Math.trunc(level / 2) + 6) < 5) return damage;
+      if (conjureImages(ctx, hero, 1).length === 0) return damage;
+      shown();
+      const cost = rng.intRange(1, Math.max(1, Math.trunc(hero.ht / 6)));
+      ctx.effects.push({ type: 'hurt', depth, who: hero.id, damage: cost });
+      hurt(ctx, hero, cost, 'multiplicity');
+      return damage;
+    }
     case 'potential': {
       // Lightning arcs back at the attacker, and some of it through the hero.
       if (!near || damage < 1 || rng.int(level + 7) < 6) return damage;

@@ -129,6 +129,49 @@ describe('enchantments and glyphs', () => {
   });
 });
 
+describe('mirror images', () => {
+  it('a scroll of mirror image conjures twins that go for the nearest monster and vanish once they strike', () => {
+    const world = solo();
+    const hero = heroById(world, 'p')!;
+    hero.attackSkill = 100000;
+    hero.items = [createItem('scroll.mirrorImage')];
+    const rat = ratBeside(world, 100000);
+    rat.state = 'sleeping';
+    const result = act(world, 'p', { type: 'use', item: 0 });
+    const images = floorAt(world, 1).mobs.filter((m) => m.kind === 'mirror');
+    expect(result.ok && result.effects.some((e) => e.type === 'mirrored')).toBe(true);
+    expect(images.length).toBeGreaterThan(0);
+    expect(images.length).toBeLessThanOrEqual(3);
+    for (let i = 0; i < 10; i++) act(world, 'p', { type: 'search' });
+    expect(rat.hp).toBeLessThan(100000);
+    expect(floorAt(world, 1).mobs.filter((m) => m.kind === 'mirror').length).toBeLessThan(images.length);
+  });
+
+  it('walking into one swaps places with it; armour of multiplicity may conjure one', () => {
+    const world = solo();
+    const hero = heroById(world, 'p')!;
+    hero.items = [createItem('scroll.mirrorImage')];
+    act(world, 'p', { type: 'use', item: 0 });
+    const image = floorAt(world, 1).mobs.find((m) => m.kind === 'mirror')!;
+    const [at, was] = [image.pos, hero.pos];
+    act(world, 'p', { type: 'attack', target: image.id });
+    expect(hero.pos).toBe(at);
+    expect(image.pos).toBe(was);
+
+    const world2 = solo();
+    const hero2 = heroById(world2, 'p')!;
+    Object.assign(hero2, { defenseSkill: 0, hp: 5000, ht: 5000 });
+    hero2.armor = { ...createItem('armor.cloth', 1, 0), glyph: 'multiplicity' };
+    ratBeside(world2, 100000, 'golem');
+    let conjured = false;
+    for (let i = 0; i < 80 && !conjured; i++) {
+      const result = act(world2, 'p', { type: 'wait' });
+      conjured = result.ok && result.effects.some((e) => e.type === 'mirrored');
+    }
+    expect(conjured).toBe(true);
+  });
+});
+
 describe('the remaining scrolls and potions', () => {
   it('terror drives off whatever is in sight; a psionic blast hurts it and blinds the reader', () => {
     let world = solo();

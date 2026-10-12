@@ -8,7 +8,8 @@ const EN_ENCHANTMENTS: Record<Enchantment, string> = {
   shock: 'shocking', instability: 'unstable', horror: 'eldritch', luck: 'lucky',
 };
 const EN_GLYPHS: Record<Glyph, string> = {
-  bounce: 'bounce', affection: 'affection', antiEntropy: 'anti-entropy', potential: 'potential', metabolism: 'metabolism',
+  bounce: 'bounce', affection: 'affection', antiEntropy: 'anti-entropy', multiplicity: 'multiplicity', potential: 'potential',
+  metabolism: 'metabolism',
   stench: 'stench', viscosity: 'viscosity', displacement: 'displacement', entanglement: 'entanglement',
 };
 /** Russian adjectives agree with the weapon: masculine, feminine and neuter forms. */
@@ -26,7 +27,8 @@ const RU_ENCHANTMENTS: Record<Enchantment, readonly [string, string, string]> = 
 };
 const RU_GENDERS: Partial<Record<ItemKind, 1 | 2>> = { 'weapon.mace': 1, 'weapon.glaive': 1, 'weapon.spear': 2 };
 const RU_GLYPHS: Record<Glyph, string> = {
-  bounce: 'отскока', affection: 'привязанности', antiEntropy: 'антиэнтропии', potential: 'потенциала', metabolism: 'метаболизма',
+  bounce: 'отскока', affection: 'привязанности', antiEntropy: 'антиэнтропии', multiplicity: 'множественности', potential: 'потенциала',
+  metabolism: 'метаболизма',
   stench: 'зловония', viscosity: 'вязкости', displacement: 'смещения', entanglement: 'опутывания',
 };
 
@@ -47,7 +49,7 @@ const en = {
     elemental: 'fire elemental', monk: 'dwarf monk', warlock: 'dwarf warlock', golem: 'golem', king: 'King of Dwarves',
     undead: 'undead dwarf', succubus: 'succubus', eye: 'evil eye', scorpio: 'scorpio', yog: 'Yog-Dzewa',
     rottingFist: 'rotting fist', burningFist: 'burning fist', larva: "god's larva", mimic: 'mimic',
-    statue: 'animated statue', piranha: 'giant piranha', imp: 'ambitious imp', sheep: 'sheep', blacksmith: 'troll blacksmith',
+    statue: 'animated statue', piranha: 'giant piranha', imp: 'ambitious imp', sheep: 'sheep', blacksmith: 'troll blacksmith', mirror: 'mirror image',
     albino: 'albino rat', bandit: 'crazy bandit', shielded: 'shielded brute', senior: 'senior monk', acidic: 'acidic scorpio',
   } as Record<MobKind, string>,
   isMimic: 'This is a mimic!',
@@ -182,6 +184,7 @@ const en = {
     'scroll.enchantment': 'Scroll of Enchantment',
     'scroll.terror': 'Scroll of Terror',
     'scroll.psionicBlast': 'Scroll of Psionic Blast',
+    'scroll.mirrorImage': 'Scroll of Mirror Image',
     'scroll.identify': 'Scroll of Identify',
     'scroll.teleportation': 'Scroll of Teleportation',
     'scroll.mapping': 'Scroll of Magic Mapping',
@@ -273,6 +276,7 @@ const en = {
       + 'but everything else in your pack is lost, and all your gold.',
     'scroll.terror': 'A flash of red light: every monster in sight flees in terror.',
     'scroll.psionicBlast': 'Hurts every creature in sight, and blinds them and the reader for a while.',
+    'scroll.mirrorImage': 'Up to three illusory twins of the reader, who go for the nearest monster and vanish once they strike.',
     'scroll.identify': 'Tells what one unknown potion or scroll in your pack is.',
     'scroll.teleportation': 'Moves you to a random place on the level.',
     'scroll.mapping': 'Reveals the layout of the level and its hidden doors.',
@@ -375,6 +379,7 @@ const en = {
   },
   mine: 'Mine',
   bareHanded: 'fists',
+  mirrored: (n: number) => (n === 1 ? 'A mirror image of you appears!' : `${n} mirror images of you appear!`),
   disarmed: (monk: string, weapon: string) => `The ${monk} knocks the ${weapon} out of your hands! Pick it up and wield it again.`,
   pickaxeInfo: (bloody: boolean): string => bloody
     ? "The troll blacksmith's pickaxe, stained with a bat's blood."
@@ -533,7 +538,7 @@ const en = {
   } as Record<BuffName, string>,
   causes: {
     poison: 'poison', burning: 'fire', ooze: 'caustic ooze', lightning: 'lightning', gripping: 'a gripping trap', hunger: 'starvation',
-    bones: 'an explosion of bones', gas: 'toxic gas', fall: 'a fall into the chasm', deferred: 'deferred damage', bleeding: 'bleeding',
+    bones: 'an explosion of bones', gas: 'toxic gas', fall: 'a fall into the chasm', deferred: 'deferred damage', bleeding: 'bleeding', multiplicity: 'armour of multiplicity',
   } as Record<string, string>,
   // Weapon.Enchantment and Armor.Glyph: what they are called and what they do.
   enchantName: (name: string, enchant: Enchantment, _kind: ItemKind): string => `${EN_ENCHANTMENTS[enchant]} ${name}`,
@@ -554,6 +559,7 @@ const en = {
     bounce: 'Attackers may be thrown back.',
     affection: 'Attackers may be charmed, and you a little too.',
     antiEntropy: 'Attackers may freeze, but you may catch fire.',
+    multiplicity: 'A blow may conjure a mirror image of you, at a price in blood.',
     potential: 'Lightning may strike back at attackers, and through you.',
     metabolism: 'Blows taken may heal you, at the cost of hunger.',
     stench: 'Attackers may be enveloped in toxic gas.',
@@ -563,7 +569,7 @@ const en = {
   } as Record<Glyph, string>,
   /** Floated over the hero when a glyph acts. */
   glyphShort: {
-    bounce: 'bounce', affection: 'charm', antiEntropy: 'frost', potential: 'zap', metabolism: 'mend', stench: 'stench',
+    bounce: 'bounce', affection: 'charm', antiEntropy: 'frost', multiplicity: 'twin', potential: 'zap', metabolism: 'mend', stench: 'stench',
     viscosity: 'deferred', displacement: 'blink', entanglement: 'roots',
   } as Record<Glyph, string>,
   killedBy: (cause: string) => `Killed by ${cause}.`,
@@ -615,7 +621,7 @@ const ru: Strings = {
     elemental: 'огненный элементаль', monk: 'гном-монах', warlock: 'гном-чернокнижник', golem: 'голем', king: 'Король гномов',
     undead: 'мёртвый гном', succubus: 'суккуб', eye: 'злобный глаз', scorpio: 'скорпион', yog: 'Йог-Дзева',
     rottingFist: 'гниющий кулак', burningFist: 'горящий кулак', larva: 'личинка бога', mimic: 'мимик',
-    statue: 'ожившая статуя', piranha: 'гигантская пиранья', imp: 'амбициозный бес', sheep: 'овца', blacksmith: 'тролль-кузнец',
+    statue: 'ожившая статуя', piranha: 'гигантская пиранья', imp: 'амбициозный бес', sheep: 'овца', blacksmith: 'тролль-кузнец', mirror: 'зеркальный образ',
     albino: 'крыса-альбинос', bandit: 'безумный бандит', shielded: 'гнолл-громила со щитом', senior: 'старший монах',
     acidic: 'кислотный скорпион',
   },
@@ -748,6 +754,7 @@ const ru: Strings = {
     'scroll.enchantment': 'Свиток Зачарования',
     'scroll.terror': 'Свиток Ужаса',
     'scroll.psionicBlast': 'Свиток Псионического Взрыва',
+    'scroll.mirrorImage': 'Свиток Зеркального Образа',
     'scroll.identify': 'Свиток Опознания',
     'scroll.teleportation': 'Свиток Телепортации',
     'scroll.mapping': 'Свиток Волшебной Карты',
@@ -839,6 +846,7 @@ const ru: Strings = {
       + 'невредимым — но всё остальное в рюкзаке пропадёт, как и всё золото.',
     'scroll.terror': 'Вспышка красного света: все монстры в поле зрения в ужасе бегут.',
     'scroll.psionicBlast': 'Ранит всех существ в поле зрения и ненадолго ослепляет их и читающего.',
+    'scroll.mirrorImage': 'До трёх призрачных двойников читающего: они бросаются на ближайшего монстра и исчезают, нанеся удар.',
     'scroll.identify': 'Раскрывает, что за неизвестное зелье или свиток у вас в рюкзаке.',
     'scroll.teleportation': 'Переносит вас в случайное место уровня.',
     'scroll.mapping': 'Открывает план уровня и его потайные двери.',
@@ -941,6 +949,7 @@ const ru: Strings = {
   },
   mine: 'Добыть руду',
   bareHanded: 'кулаки',
+  mirrored: (n) => (n === 1 ? 'Появляется ваш зеркальный образ!' : `Появляются ваши зеркальные образы: ${n}!`),
   disarmed: (monk, weapon) => `${capitalize(monk)} выбивает у вас из рук: ${weapon}! Подберите и снова возьмите в руки.`,
   pickaxeInfo: (bloody) => bloody ? 'Кирка тролля-кузнеца, в крови летучей мыши.' : 'Кирка тролля-кузнеца: инструмент, чтобы колоть камень, и оружие на крайний случай. В пещерах нажмите на тёмную жилу рядом с собой, чтобы добыть руду.',
   nothingToReforge: 'У вас нет двух вещей одного вида, которые можно перековать.',
@@ -1097,7 +1106,7 @@ const ru: Strings = {
   },
   causes: {
     poison: 'яд', burning: 'огонь', ooze: 'едкая слизь', lightning: 'молния', gripping: 'капкан', hunger: 'голод',
-    bones: 'взрыв костей', gas: 'ядовитый газ', fall: 'падение в пропасть', deferred: 'отложенный урон', bleeding: 'кровотечение',
+    bones: 'взрыв костей', gas: 'ядовитый газ', fall: 'падение в пропасть', deferred: 'отложенный урон', bleeding: 'кровотечение', multiplicity: 'доспех множественности',
   },
   enchantName: (name, enchant, kind) => `${RU_ENCHANTMENTS[enchant][RU_GENDERS[kind] ?? 0]} ${name}`,
   glyphName: (name, glyph) => `${name} ${RU_GLYPHS[glyph]}`,
@@ -1117,6 +1126,7 @@ const ru: Strings = {
     bounce: 'Нападающих может отбросить назад.',
     affection: 'Нападающих может очаровать — а заодно немного и вас.',
     antiEntropy: 'Нападающие могут замёрзнуть, но вы можете загореться.',
+    multiplicity: 'Удар может породить ваш зеркальный образ — ценой вашей крови.',
     potential: 'Молния может ударить в ответ — и пройти через вас.',
     metabolism: 'Удары могут вас подлечить ценой голода.',
     stench: 'Нападающих может окутать ядовитый газ.',
@@ -1125,7 +1135,7 @@ const ru: Strings = {
     entanglement: 'Корни могут удержать вас на месте и укрепить кожу.',
   },
   glyphShort: {
-    bounce: 'отскок', affection: 'чары', antiEntropy: 'холод', potential: 'разряд', metabolism: 'лечение', stench: 'вонь',
+    bounce: 'отскок', affection: 'чары', antiEntropy: 'холод', multiplicity: 'двойник', potential: 'разряд', metabolism: 'лечение', stench: 'вонь',
     viscosity: 'отсрочка', displacement: 'скачок', entanglement: 'корни',
   },
   killedBy: (cause) => `Причина гибели: ${cause}.`,

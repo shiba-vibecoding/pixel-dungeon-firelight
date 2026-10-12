@@ -183,6 +183,13 @@ export class View {
       }
     }
     for (const mob of world.floors[this.depth]?.mobs ?? []) {
+      // A mirror image looks like its hero, only fainter.
+      const twin = mob.image && world.heroes.find((hero) => hero.id === mob.image!.owner);
+      if (twin) {
+        place(mob.id, 'mirror', this.assets.heroes[twin.heroClass], false, mob.pos, mob.hp, mob.ht, false, false, true);
+        this.puppets.get(mob.id)!.row = itemDef(twin.armor.kind).tier ?? 0;
+        continue;
+      }
       place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht,
         // A statue biding its time shows no sign of sleep.
         mob.state === 'sleeping' && mob.kind !== 'statue', mob.pumped);
@@ -511,6 +518,12 @@ export class View {
           audio.play('rocks', 1.3, 0.5);
           break;
         case 'smith':
+          break;
+        case 'mirrored':
+          if (effect.depth !== this.depth) break;
+          for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '200, 220, 255', duration: 500 });
+          audio.play('teleport', 1.2, 0.6);
+          if (effect.hero === myId) this.say(t.mirrored(effect.cells.length), COLORS.default, now);
           break;
         case 'flock':
           if (effect.depth !== this.depth) break;

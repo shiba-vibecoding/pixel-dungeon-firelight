@@ -58,11 +58,11 @@ Yendor on depth 26:
 - Items: gold, which buys from the shop; potions (including toxic gas,
   paralytic gas, liquid flame and frost, which can be thrown, levitation to
   float over traps and chasms, and purification) and scrolls (including
-  enchantment, terror and psionic blast), unknown until used, and shared
+  enchantment, terror, psionic blast and mirror image), unknown until used, and shared
   knowledge in a party; all melee weapons and armour with upgrades and
   strength requirements, and the ten weapon enchantments (blazing, venomous,
   grim, stunning, vampiric, chilling, shocking, unstable, eldritch, lucky) and
-  nine armour glyphs of the original; darts and the boomerang; wands of
+  ten armour glyphs of the original; darts and the boomerang; wands of
   magic missile, firebolt, lightning, poison, slowness, teleportation, blink,
   disintegration, avalanche, amok, reach, flock (magic sheep) and regrowth,
   known by their wood until used; rings of mending, detection, shadows,
@@ -84,10 +84,8 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: cursed items and the scroll of remove curse; the scroll of
-mirror image and the glyph of multiplicity (there are no allies yet); the
-potion of might; and gas clouds
-(gas acts at once on everyone within reach instead).
+Not ported yet: cursed items and the scroll of remove curse; the potion of
+might; and gas clouds (gas acts at once on everyone within reach instead).
 
 ## How co-op works
 
