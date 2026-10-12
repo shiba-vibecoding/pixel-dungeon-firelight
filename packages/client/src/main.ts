@@ -27,7 +27,7 @@ import { bakeLevel, type Camera, patchLevel, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
-  showHistory, showMenu, showRankings, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
+  refreshBackpack, showHistory, showMenu, showRankings, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
 import { mart } from './mart';
 import { eraseDevice, showChallenges, showJournal, showSettings } from './meta';
@@ -1793,6 +1793,9 @@ function tick(now: number): void {
   const effects = session.drain();
   if (effects.length > 0) {
     view.apply(effects, world, session.myId, vnow);
+    // The backpack, if open, shows the pack as it is now (an item put on, dropped, picked up).
+    const mine = session.myId;
+    if (effects.some((e) => ('hero' in e && e.hero === mine) || ('who' in e && e.who === mine))) refreshBackpack(world, me);
     for (const effect of effects) effectFx(effect, view, world, session.myId, vnow);
     motion.effects(effects, world, me.depth, (e) => itemSprite(e.item, world.run.labels));
     scenery.effects(effects, me.depth, vnow);

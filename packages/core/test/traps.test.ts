@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  act, addHero, canEnter, charAt, createMob, createWorld, F, findPath, floorAt, hasFlag, heroById, levelAt,
+  act, addHero, canEnter, charAt, createItem, createMob, createWorld, F, findPath, floorAt, hasFlag, heroById, levelAt,
   NEIGHBOURS8, T, type World,
   WIDTH,
 } from '../src/index';
@@ -23,6 +23,15 @@ function besideTrap(trap: number, seed = 6): { world: World; cell: number } {
 }
 
 describe('traps', () => {
+  it('go off under a thrown dart that lands on them, as Level.drop presses the cell', () => {
+    const { world, cell } = besideTrap(T.TOXIC_TRAP);
+    const hero = heroById(world, 'p')!;
+    hero.items.push(createItem('missile.dart', 1));
+    const result = act(world, 'p', { type: 'throw', item: hero.items.length - 1, target: cell });
+    expect(result.ok && result.effects).toContainEqual({ type: 'trap', depth: 1, pos: cell, kind: 'toxic', hero: '' });
+    expect(levelAt(world, 1).map[cell]).toBe(T.INACTIVE_TRAP);
+  });
+
   it('poison darts hurt a little every turn, and a spent trap stays harmless', () => {
     const { world, cell } = besideTrap(T.SECRET_POISON_TRAP);
     const hero = heroById(world, 'p')!;

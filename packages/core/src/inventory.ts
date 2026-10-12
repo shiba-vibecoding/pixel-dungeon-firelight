@@ -17,8 +17,8 @@ import {
 import { discoverable } from './level/flags';
 import { adjacent, LENGTH, NEIGHBOURS4, NEIGHBOURS8, NEIGHBOURS9 } from './level/geometry';
 import { discover, F, hasFlag, T } from './level/terrain';
-import { type Burst, burst, immuneTo } from './traps';
-import { plant, SEED_PLANTS } from './plants';
+import { type Burst, burst, immuneTo, trapAt, triggerTrap } from './traps';
+import { plant, SEED_PLANTS, stepOnPlant } from './plants';
 import { zapWand } from './wands';
 import { mine, mineProblem, TIME_TO_MINE } from './smith';
 import { transmute } from './transmute';
@@ -435,7 +435,20 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     burst(ctx, end, 'fire', 0);
     return;
   }
-  if (!boomerang && !hit) landItem(ctx, end, thrown);
+  if (!boomerang && !hit) {
+    landItem(ctx, end, thrown);
+    pressUnderItem(ctx, end);
+  }
+}
+
+/**
+ * Level.drop's press(cell, null): an item landing on a trap sets it off, and on a plant sets it
+ * off too (the old trick of clearing a trap with a thrown dart). Not on a chasm: it falls through.
+ */
+function pressUnderItem(ctx: Ctx, pos: number): void {
+  if (hasFlag(ctx.level.map[pos]!, F.PIT)) return;
+  if (trapAt(ctx.level.map[pos]!)) triggerTrap(ctx, null, pos);
+  stepOnPlant(ctx, null, pos);
 }
 
 /** MissileWeapon.proc: what each kind of thrown weapon does besides its damage. */

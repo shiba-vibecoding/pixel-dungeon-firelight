@@ -1079,20 +1079,56 @@ export interface BackpackOptions {
   pick?: { title: string; targets: readonly ItemRef[]; onPick(ref: ItemRef): void; onCancel(): void };
 }
 
-export function showBackpack(options: BackpackOptions): void {
+/** What is chosen in the backpack: an item in the pack (by slot) or one worn. */
+type BagChoice = { index: number } | { worn: 'weapon' | 'armor' } | { ring: number };
+
+/** The backpack open now and what is chosen in it, so it can be drawn again as the world changes. */
+let openBag: { options: BackpackOptions; choice: BagChoice | null } | null = null;
+
+/** Draws the open backpack again (after an action that keeps it open, or anything that changed the pack). */
+export function refreshBackpack(world: World, hero: Hero): void {
+  if (!openBag || !overlayOpen() || !root.querySelector('.pd-bag-sheet')) {
+    openBag = null;
+    return;
+  }
+  showBackpack({ ...openBag.options, world, hero }, openBag.choice);
+}
+
+/** The item a choice points at, if it is still there. */
+function chosenItem(hero: Hero, choice: BagChoice | null): Item | undefined {
+  if (!choice) return undefined;
+  if ('index' in choice) return hero.items[choice.index];
+  if ('ring' in choice) return hero.rings[choice.ring];
+  return choice.worn === 'weapon' ? hero.weapon ?? undefined : hero.armor;
+}
+
+/**
+ * The backpack (WndBag), as one sheet: the worn things and the pack above, and below them
+ * the chosen item — what it is and what can be done with it — without leaving the backpack.
+ * Putting on, taking off, dropping or setting a quick slot keeps it open; drinking, eating,
+ * reading, throwing and zapping close it, for the dungeon to answer. A long press on an item
+ * does its first action at once.
+ */
+export function showBackpack(options: BackpackOptions, choice: BagChoice | null = null): void {
   const { world, hero, pick } = options;
   const targets = new Set((pick?.targets ?? []).map(String));
-  const open = (item: Item, index: number | null, ring?: number): void => {
-    if (!pick) {
-      showItem({ ...options, item, index, ring });
+  if (!pick) openBag = { options, choice };
+  // A choice that no longer holds (the item went) is forgotten.
+  if (!chosenItem(hero, choice)) choice = null;
+  const choose = (next: BagChoice): void => {
+    if (pick) {
+      const ref: ItemRef = 'index' in next ? next.index : 'ring' in next ? (next.ring === 0 ? 'ring0' : 'ring1') : next.worn;
+      if (targets.has(String(ref))) pick.onPick(ref);
       return;
     }
-    const ref: ItemRef = index !== null ? index : ring !== undefined ? (ring === 0 ? 'ring0' : 'ring1') : item === hero.armor ? 'armor' : 'weapon';
-    if (targets.has(String(ref))) pick.onPick(ref);
+    showBackpack(options, next);
   };
-  /** In the selector, what cannot be chosen is dimmed. */
-  const mark = (node: HTMLElement, ref: ItemRef): HTMLElement => {
+  const same = (a: BagChoice | null, b: BagChoice): boolean => JSON.stringify(a) === JSON.stringify(b);
+  /** In the selector, what cannot be chosen is dimmed; the chosen item is framed in gold. */
+  const mark = (node: HTMLElement, ref: ItemRef, here: BagChoice): HTMLElement => {
     if (pick && !targets.has(String(ref)) && node.tagName === 'BUTTON') node.classList.add('disabled');
+    if (!pick && same(choice, here)) node.classList.add('selected');
+    if (!pick && node.tagName === 'BUTTON') longPress(node, () => firstAction({ ...options, item: chosenItem(hero, here)!, ...where(here) }));
     return node;
   };
   // The backpack's own slots, then whatever lies in bags or on the key ring.
@@ -1102,7 +1138,8 @@ export function showBackpack(options: BackpackOptions): void {
   const grid = el('div', { className: 'pd-grid' });
   for (let i = 0; i < Math.max(BACKPACK_SIZE, loose.length); i++) {
     const entry = loose[i];
-    grid.append(mark(slot(world, entry?.item, entry ? { hero, onClick: () => open(entry.item, entry.index) } : {}), entry?.index ?? -1));
+    const node = slot(world, entry?.item, entry ? { hero, onClick: () => choose({ index: entry.index }) } : {});
+    grid.append(entry ? mark(node, entry.index, { index: entry.index }) : node);
   }
   const coin = picture('coin', 16, 14);
   const head = el(
@@ -1112,34 +1149,79 @@ export function showBackpack(options: BackpackOptions): void {
     el('span', { className: 'pd-stat gold' }, coin, String(hero.gold)),
     el('span', { className: 'pd-stat' }, el('span', { className: 'pd-stat-label', textContent: t.strength }), String(hero.str)),
   );
+  const worn = (item: Item | undefined, placeholder: number, ref: ItemRef, here: BagChoice): HTMLElement =>
+    item
+      ? mark(slot(world, item, { hero, equipped: true, onClick: () => choose(here) }), ref, here)
+      : slot(world, undefined, { hero, equipped: true, placeholder });
   const equip = el(
     'div',
     { className: 'pd-equip' },
     // Bare-handed after a monk's blow: the weapon's silhouette.
-    mark(slot(world, hero.weapon ?? undefined, { hero, equipped: true, placeholder: 5, onClick: () => hero.weapon && open(hero.weapon, null) }), 'weapon'),
-    mark(slot(world, hero.armor, { hero, equipped: true, placeholder: 6, onClick: () => open(hero.armor, null) }), 'armor'),
-    ...[0, 1].map((i) => {
-      const ring = hero.rings[i];
-      return mark(slot(world, ring, { hero, equipped: true, placeholder: 7, onClick: () => ring && open(ring, null, i) }), i === 0 ? 'ring0' : 'ring1');
-    }),
+    worn(hero.weapon ?? undefined, 5, 'weapon', { worn: 'weapon' }),
+    worn(hero.armor, 6, 'armor', { worn: 'armor' }),
+    ...[0, 1].map((i) => worn(hero.rings[i], 7, i === 0 ? 'ring0' : 'ring1', { ring: i })),
   );
+  const close = pick ? pick.onCancel : (): void => {
+    openBag = null;
+    options.onClose();
+  };
+  const item = chosenItem(hero, choice);
+  const detail = pick
+    ? info(t.pickTarget, 'pd-note center')
+    : item && choice
+      ? itemDetail({ ...options, item, ...where(choice) })
+      : info(t.bagHint, 'pd-note center pd-bag-hint');
   const box = el(
     'section',
-    { className: 'pd-window' },
+    { className: 'pd-window pd-bag-sheet' },
     head,
-    equip,
-    grid,
-    ...(bagged.length > 0
-      ? [
-          el('div', { className: 'pd-bagrow-title' }, info(t.inBags, 'pd-note')),
-          el('div', { className: 'pd-bagrow' }, ...bagged.map(({ item, index }) => mark(slot(world, item, { hero, onClick: () => open(item, index) }), index))),
-        ]
-      : []),
-    pick && info(t.pickTarget, 'pd-note center'),
-    closeButton(pick ? pick.onCancel : options.onClose),
+    el(
+      'div',
+      { className: 'pd-scroll pd-bag-items' },
+      equip,
+      grid,
+      ...(bagged.length > 0
+        ? [
+            el('div', { className: 'pd-bagrow-title' }, info(t.inBags, 'pd-note')),
+            el('div', { className: 'pd-bagrow' }, ...bagged.map(({ item: bagItem, index }) => mark(slot(world, bagItem, { hero, onClick: () => choose({ index }) }), index, { index }))),
+          ]
+        : []),
+    ),
+    el('div', { className: 'pd-bag-detail' }, detail),
+    closeButton(close),
   );
   box.setAttribute('role', 'dialog');
-  show(box, pick ? pick.onCancel : options.onClose);
+  // Drawn again over itself (a choice, an action), it does not come in again.
+  if (root.querySelector('.pd-bag-sheet')) box.classList.add('still');
+  show(box, close);
+}
+
+/** Where a choice sits, as the item window's options say it. */
+function where(choice: BagChoice): { index: number | null; ring?: number } {
+  return 'index' in choice ? { index: choice.index } : 'ring' in choice ? { index: null, ring: choice.ring } : { index: null };
+}
+
+/** A long press (half a second, without moving) does `act` instead of the tap. */
+function longPress(node: HTMLElement, act: () => void): void {
+  let timer = 0;
+  let fired = false;
+  const cancel = (): void => window.clearTimeout(timer);
+  node.addEventListener('pointerdown', () => {
+    fired = false;
+    cancel();
+    timer = window.setTimeout(() => {
+      fired = true;
+      audio.play('click');
+      act();
+    }, 500);
+  });
+  for (const type of ['pointerup', 'pointerleave', 'pointercancel']) node.addEventListener(type, cancel);
+  // The click that ends a long press is not a tap.
+  node.addEventListener('click', (event) => {
+    if (!fired) return;
+    event.stopImmediatePropagation();
+    event.preventDefault();
+  }, { capture: true });
 }
 
 interface ItemOptions extends BackpackOptions {
@@ -1150,19 +1232,58 @@ interface ItemOptions extends BackpackOptions {
   ring?: number;
 }
 
+/** The chosen item's panel: its picture and name, what it is, and its actions. */
+function itemDetail(options: ItemOptions): HTMLElement {
+  const { world, hero, item, index } = options;
+  const { main, more, danger } = itemActions(options);
+  const title = el('div', { className: 'pd-titles' }, el('h2', { className: 'pd-heading', textContent: capitalize(itemName(world, item)) }));
+  const box = el(
+    'div',
+    { className: 'pd-bag-chosen' },
+    el('header', { className: 'pd-window-head' }, slot(world, item, { hero, equipped: index === null }), title),
+    el('div', { className: 'pd-bag-text' }, ...describedItem(world, hero, item)),
+    (main.length > 0 || more.length > 0 || danger.length > 0) && actions(main, more, danger),
+  );
+  titleFor(world, item, box);
+  return box;
+}
+
+/** A long press: the item's first action (drink, eat, read, put on...), if it has one. */
+function firstAction(options: ItemOptions): void {
+  if (!options.item) return;
+  const first = itemActions(options).main[0];
+  if (first instanceof HTMLButtonElement) first.click();
+}
+
+/** The old item window, kept for what still opens an item on its own: now the backpack with it chosen. */
 function showItem(options: ItemOptions): void {
+  const choice: BagChoice = options.index !== null ? { index: options.index } : options.ring !== undefined ? { ring: options.ring } : { worn: options.item === options.hero.armor ? 'armor' : 'weapon' };
+  showBackpack(options, choice);
+}
+
+/**
+ * What can be done with an item, as the design lays out actions: the first red, the rest
+ * stone, dropping last. `act` closes the backpack (the dungeon answers); `stay` keeps it open.
+ */
+function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLElement[]; danger: HTMLElement[] } {
   const { world, hero, item, index } = options;
   const category = itemDef(item.kind).category;
-  const back = (): void => showBackpack(options);
   const act = (action: Action): void => {
+    openBag = null;
     options.onAction(action);
     options.onClose();
   };
+  /** Done, the backpack stays open, drawn anew once the pack has changed (see refreshBackpack). */
+  const stay = (action: Action, next: BagChoice | null = null): void => {
+    if (openBag) openBag.choice = next;
+    options.onAction(action);
+    refreshBackpack(options.world, options.hero);
+  };
   const aimWith = (kind: 'throw' | 'zap' | 'special', at: number): void => {
+    openBag = null;
     options.onClose();
     options.onAim(at, kind);
   };
-  // What the item is for comes first and red; the rest are stone; dropping it goes last.
   const main: HTMLElement[] = [];
   const more: HTMLElement[] = [];
   const danger: HTMLElement[] = [];
@@ -1189,7 +1310,7 @@ function showItem(options: ItemOptions): void {
               title: t.pickTitle[item.kind as 'scroll.upgrade' | 'scroll.enchantment' | 'scroll.identify'] ?? t.read,
               targets,
               onPick: (on) => act({ type: 'use', item: index, on }),
-              onCancel: () => showItem(options),
+              onCancel: () => showBackpack(options, { index }),
             },
           }));
       } else {
@@ -1197,7 +1318,8 @@ function showItem(options: ItemOptions): void {
       }
     }
     if (category === 'weapon' || category === 'armor' || category === 'ring') {
-      use(category === 'ring' ? t.putOn : t.equip, () => act({ type: 'equip', item: index }));
+      const worn: BagChoice = category === 'ring' ? { ring: hero.rings.length < 2 ? hero.rings.length : 0 } : { worn: category === 'armor' ? 'armor' : 'weapon' };
+      use(category === 'ring' ? t.putOn : t.equip, () => stay({ type: 'equip', item: index }, worn));
     }
     if (category === 'beacon') {
       // LloydsBeacon: set it here, or go back to where it was set.
@@ -1207,7 +1329,7 @@ function showItem(options: ItemOptions): void {
     if (category === 'weightstone' && hero.weapon) {
       // Weightstone.WndBalance: the weapon in hand, balanced the way it is not yet.
       for (const imbue of ['speed', 'accuracy'] as const) {
-        if (hero.weapon.imbue !== imbue) use(t.balanceFor[imbue], () => act({ type: 'balance', item: index, imbue }));
+        if (hero.weapon.imbue !== imbue) use(t.balanceFor[imbue], () => stay({ type: 'balance', item: index, imbue }, { worn: 'weapon' }));
       }
     }
     if (category === 'wipeout') use(t.read, () => act({ type: 'use', item: index }));
@@ -1222,25 +1344,19 @@ function showItem(options: ItemOptions): void {
     if (quickUse(item.kind) && !inQuickslot(hero, item)) {
       more.push(button(t.toQuickslot, () => {
         chooseQuickslot(item.kind);
-        back();
+        refreshBackpack(world, hero);
       }));
     }
-    danger.push(button(t.dropItem, () => act({ type: 'drop', item: index }), 'danger'));
+    danger.push(button(t.dropItem, () => stay({ type: 'drop', item: index }), 'danger'));
   } else if (options.ring !== undefined) {
     const ring = options.ring;
-    use(t.takeOff, () => act({ type: 'remove', ring }));
+    use(t.takeOff, () => stay({ type: 'remove', ring }));
   } else if (item === hero.armor && item.kind === CLASS_ARMOR_OF[hero.heroClass]) {
     // ClassArmor.doSpecial: the leap and the smoke bomb want a cell; the others act at once.
     const aimed = hero.heroClass === 'warrior' || hero.heroClass === 'rogue';
     use(t.specials[hero.heroClass], () => (aimed ? aimWith('special', -1) : act({ type: 'special' })));
   }
-  const box = windowOf(
-    { title: capitalize(itemName(world, item)), icon: slot(world, item, { hero, equipped: index === null }), onClose: back },
-    ...describedItem(world, hero, item),
-    (main.length > 0 || more.length > 0 || danger.length > 0) && actions(main, more, danger),
-  );
-  titleFor(world, item, box);
-  show(box, back);
+  return { main, more, danger };
 }
 
 /** TomeOfMastery: the two ways of the hero's class, as equal cards; the choice can wait. */

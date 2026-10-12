@@ -53,17 +53,17 @@ const near = (ctx: Ctx, pos: number, radius: number): Char[] => [
   ...ctx.floor.mobs.filter((m) => m.state !== 'passive' && distance(m.pos, pos) <= radius),
 ];
 
-/** Level.press / mobPress: whoever steps on a plant sets it off. */
-export function stepOnPlant(ctx: Ctx, who: Char, pos: number): void {
+/** Level.press / mobPress: whoever steps on a plant sets it off; so does an item landing on it (`who` null). */
+export function stepOnPlant(ctx: Ctx, who: Char | null, pos: number): void {
   const found = ctx.floor.plants?.find((p) => p.pos === pos);
   if (!found) return;
   // Flying creatures pass over plants without touching them.
-  if (!isHero(who) && MOBS[who.kind].flying) return;
+  if (who && !isHero(who) && MOBS[who.kind].flying) return;
   ctx.floor.plants = ctx.floor.plants!.filter((p) => p !== found);
-  ctx.effects.push({ type: 'plantTriggered', depth: ctx.depth, pos, kind: found.kind, who: who.id });
+  ctx.effects.push({ type: 'plantTriggered', depth: ctx.depth, pos, kind: found.kind, who: who?.id ?? '' });
   const { world, depth, level, rng } = ctx;
   // Plant.activate and wither: a warden draws bark from it, and now and then a seed or a dewdrop.
-  if (isHero(who) && who.subclass === 'warden') {
+  if (who && isHero(who) && who.subclass === 'warden') {
     who.barkskin = Math.max(who.barkskin, Math.trunc(who.ht / 3));
     if (rng.int(5) === 0) dropItem(ctx.floor, pos, new ItemGenerator(rng, depth).of('seed'));
     if (rng.int(5) === 0) dropItem(ctx.floor, pos, createItem('dew'));
@@ -82,23 +82,24 @@ export function stepOnPlant(ctx: Ctx, who: Char, pos: number): void {
       freezeHeaps(ctx, pos, 1);
       break;
     case 'sorrowmoss':
-      who.poison = Math.max(who.poison ?? 0, 4 + Math.trunc(depth / 2));
+      if (who) who.poison = Math.max(who.poison ?? 0, 4 + Math.trunc(depth / 2));
       break;
     case 'dreamweed':
       // A cloud of confusion gas: everyone in it staggers about for a while.
       for (const char of near(ctx, pos, 2)) char.dizzy = Math.max(char.dizzy ?? 0, DIZZY_TURNS);
       break;
     case 'sungrass':
-      if (isHero(who)) {
+      if (who && isHero(who)) {
         who.sungrass = pos;
         who.sungrassTime = 0;
       }
       break;
     case 'earthroot':
-      if (isHero(who)) who.earthroot = { pos, level: who.ht };
+      if (who && isHero(who)) who.earthroot = { pos, level: who.ht };
       break;
     case 'fadeleaf': {
       // The one who stepped on it is carried off somewhere else on the level.
+      if (!who) break;
       const to = randomRespawnCell(rng, world, level, (cell) => cell !== who.pos);
       if (to === -1 || charAt(world, depth, to)) break;
       const from = who.pos;
@@ -112,7 +113,7 @@ export function stepOnPlant(ctx: Ctx, who: Char, pos: number): void {
     case 'rotberry':
       // Its berries taste like sweet, sweet death: a cloud of toxic gas, roots for whoever stepped on it, and its seed.
       burst(ctx, pos, 'toxic', 2, false, 100);
-      if (isHero(who)) who.rooted = Math.max(who.rooted, 3);
+      if (who && isHero(who)) who.rooted = Math.max(who.rooted, 3);
       dropItem(ctx.floor, pos, createItem('seed.rotberry'));
       break;
   }

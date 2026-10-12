@@ -95,17 +95,21 @@ function around(ctx: Ctx, pos: number, radius: number): Char[] {
   return chars;
 }
 
-export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
+/**
+ * Level.press: a trap goes off under whoever steps on it, or under an item that lands on it
+ * (`hero` null: thrown or dropped there; then only what needs no victim happens).
+ */
+export function triggerTrap(ctx: Ctx, hero: Hero | null, pos: number): void {
   const { level, rng, depth } = ctx;
   const kind = trapAt(level.map[pos]!);
   if (!kind) return;
   level.map[pos] = T.INACTIVE_TRAP;
   exploredCells(ctx.world, depth)[pos] = true;
-  ctx.effects.push({ type: 'trap', depth, pos, kind, hero: hero.id });
+  ctx.effects.push({ type: 'trap', depth, pos, kind, hero: hero?.id ?? '' });
 
   switch (kind) {
     case 'poison':
-      hero.poison = Math.max(hero.poison, 4 + Math.trunc(depth / 2));
+      if (hero) hero.poison = Math.max(hero.poison, 4 + Math.trunc(depth / 2));
       break;
     case 'toxic':
     case 'paralytic':
@@ -120,12 +124,14 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
       for (const mob of ctx.floor.mobs) beckon(mob, pos);
       break;
     case 'lightning': {
+      if (!hero) break;
       const damage = Math.max(1, rng.intBetween(Math.trunc(hero.hp / 3), Math.trunc((2 * hero.hp) / 3)));
       ctx.effects.push({ type: 'hurt', depth, who: hero.id, damage });
       hurt(ctx, hero, damage, 'lightning');
       break;
     }
     case 'gripping': {
+      if (!hero) break;
       const damage = Math.max(0, depth + 3 - rng.intRange(0, Math.trunc(heroArmor(hero) / 2)));
       ctx.effects.push({ type: 'hurt', depth, who: hero.id, damage });
       hurt(ctx, hero, damage, 'gripping');

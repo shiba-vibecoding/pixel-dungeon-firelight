@@ -109,6 +109,32 @@ canvas#game {
 .pd-mapbtn.attack::before { display: none; }
 .pd-mapbtn.attack .pd-portrait { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
 .pd-mapbtn.attack .pd-portrait canvas { max-width: 36px; max-height: 36px; }
+/*
+ * The backpack as one sheet: on a phone it fills the bottom of the screen (the dungeon stays
+ * in sight above), with big slots; the chosen item's panel sits under the pack.
+ */
+#overlay:has(> .pd-bag-sheet) { align-items: flex-end; }
+.pd-bag-sheet {
+  --slot: min(64px, calc((100vw - 84px) / 5));
+  max-width: 480px; max-height: 92%;
+  gap: var(--space-2);
+}
+.pd-bag-sheet .pd-slot > .pd-item { --u: 3px; }
+#overlay.open > .pd-window.still { animation: none; }
+@media (max-width: 380px) { .pd-bag-sheet .pd-slot > .pd-item { --u: 2px; } }
+.pd-bag-sheet .pd-bag-items { display: flex; flex-direction: column; gap: var(--space-2); flex: 0 1 auto; min-height: 96px; }
+.pd-bag-sheet .pd-bag-detail { flex: 0 0 auto; border-top: 2px solid var(--stone-600, #4a4740); padding-top: var(--space-2); max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
+.pd-bag-chosen { display: flex; flex-direction: column; gap: var(--space-2); }
+.pd-bag-chosen .pd-window-head .pd-slot { --slot: 52px; }
+.pd-bag-text { display: flex; flex-direction: column; gap: var(--space-1); }
+.pd-bag-hint { padding: var(--space-2) 0; }
+@media (min-width: 880px) {
+  /* A wide screen: the pack and the chosen item side by side. */
+  #overlay:has(> .pd-bag-sheet) { align-items: center; }
+  .pd-bag-sheet { max-width: 860px; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: var(--space-4); }
+  .pd-bag-sheet > .pd-bag-head { grid-column: 1 / -1; }
+  .pd-bag-sheet .pd-bag-detail { border-top: 0; border-left: 2px solid var(--stone-600, #4a4740); padding: 0 0 0 var(--space-4); max-height: none; min-width: 300px; }
+}
 .pd-coach {
   position: absolute; z-index: var(--z-hud, 10); transform: translate(-50%, calc(-100% - 10px)); pointer-events: none;
   padding: 4px 10px; background: var(--stone-900, #1f1d1d); border: 2px solid var(--gold-deep, #ffcc66); color: var(--gold, #ffeba4);
