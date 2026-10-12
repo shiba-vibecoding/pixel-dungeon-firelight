@@ -43,6 +43,7 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
     const [min, max] = magicMissileDamage(item);
     return [t.itemInfo[item.kind] ?? '', t.wandDamage(min, max), t.charges(item.charges ?? 0, wandMaxCharges(item))];
   }
+  if (category === 'key') return [t.keyInfo(item.depth ?? 0)];
   if (category === 'gold') return [];
   return [isKnown(world, item) ? (t.itemInfo[item.kind] ?? '') : t.unknownInfo];
 }

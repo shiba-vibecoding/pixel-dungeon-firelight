@@ -27,7 +27,17 @@ export enum HeapType {
  * are rolled later from their own random streams, so changing item tables
  * never reshapes a dungeon and every seed keeps its layout.
  */
-export type ItemSpec = { roll: 'random' } | { roll: 'gold' };
+export type ItemSpec =
+  | { roll: 'random' }
+  | { roll: 'gold' }
+  /** A few loose coins (Gold(Random.IntRange(1, 3))). */
+  | { roll: 'coins' }
+  /** From one of the categories, keeping the best of `tries` rolls by upgrade level. */
+  | { roll: 'category'; categories: ReadonlyArray<'weapon' | 'armor' | 'scroll'>; tries: number }
+  /** The iron key to this level's locked room. */
+  | { roll: 'key' };
+
+export type WellWater = 'health' | 'awareness';
 
 export interface ItemSpawn {
   pos: number;
@@ -52,6 +62,10 @@ export class LevelBuilder {
   /** Special rooms placed on this level, in placement order. */
   readonly usedSpecials: RoomType[] = [];
   readonly items: ItemSpawn[] = [];
+  /** Items to drop anywhere on the level (Level.itemsToSpawn), such as keys. */
+  readonly toSpawn: ItemSpec[] = [];
+  /** Magic wells and their water. */
+  readonly wells: Array<{ pos: number; water: WellWater }> = [];
 
   constructor(
     readonly rng: Rng,

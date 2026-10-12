@@ -1,6 +1,6 @@
 import { deriveSeed, Rng, Stream } from '../rng';
 import { type RunState, useSpecial } from '../run';
-import { Feeling, isBossDepth, type ItemSpawn, LevelBuilder } from './builder';
+import { Feeling, isBossDepth, type ItemSpawn, type ItemSpec, LevelBuilder, type WellWater } from './builder';
 import { stitchTerrain } from './flags';
 import { PAINTERS } from './painters';
 import { buildRegularLevel } from './regular';
@@ -26,6 +26,10 @@ export interface Level {
   rooms: RoomInfo[];
   /** Item drops requested by the layout, rolled later from the item stream. */
   items: ItemSpawn[];
+  /** Items to drop anywhere on the level, such as the key to a locked room. */
+  toSpawn: ItemSpec[];
+  /** Magic wells that still hold water. */
+  wells: Array<{ pos: number; water: WellWater }>;
   secretDoors: number;
 }
 
@@ -91,6 +95,8 @@ export function generateLevel(run: RunState, depth: number): Level {
       exit: level.exit,
       rooms: level.rooms.map(({ left, top, right, bottom, type }) => ({ left, top, right, bottom, type })),
       items: level.items,
+      toSpawn: level.toSpawn,
+      wells: level.wells,
       secretDoors: level.secretDoors,
     };
   }

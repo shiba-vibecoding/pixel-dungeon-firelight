@@ -8,7 +8,8 @@ import {
   isWater, leaveCell, observe,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
-import { createItems, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
+import { createItems, itemDef, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
+import { discoverable } from './level/flags';
 import { trapAt, triggerTrap } from './traps';
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
@@ -161,6 +162,9 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
     case 'search':
       return null;
     case 'move':
+      if (Number.isInteger(action.to) && adjacent(hero.pos, action.to) && level.map[action.to] === T.LOCKED_DOOR) {
+        return keyFor(hero) >= 0 ? null : 'the door is locked';
+      }
       if (!canEnter(level, action.to) || !adjacent(hero.pos, action.to)) return 'cannot move there';
       return charAt(world, hero.depth, action.to) ? 'cell is occupied' : null;
     case 'attack': {
@@ -369,6 +373,12 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
     }
 
     case 'move': {
+      if (level.map[action.to] === T.LOCKED_DOOR) {
+        // The iron key turns in the lock and stays there.
+        hero.items.splice(keyFor(hero), 1);
+        level.map[action.to] = T.DOOR;
+        ctx.effects.push({ type: 'unlocked', depth: hero.depth, pos: action.to, hero: hero.id });
+      }
       const from = hero.pos;
       hero.pos = action.to;
       leaveCell(world, level, hero.depth, from);
@@ -376,6 +386,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       spend(ctx, hero, 1 / heroSpeed(hero));
       // The step is done, then the trap goes off.
       if (trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
+      if (level.map[hero.pos] === T.WELL) drinkFromWell(ctx, hero);
       search(ctx, hero, false);
       break;
     }
@@ -403,6 +414,41 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       break;
   }
   if (isAlive(hero)) observe(world, hero);
+}
+
+/** The backpack slot of an iron key for the hero's current depth, or -1. */
+function keyFor(hero: Hero): number {
+  return hero.items.findIndex((item) => item.kind === 'key.iron' && item.depth === hero.depth);
+}
+
+/**
+ * WellWater: water of health heals and cures; water of awareness reveals the
+ * level and what the hero carries. A well runs dry once drunk from.
+ */
+function drinkFromWell(ctx: Ctx, hero: Hero): void {
+  const { level, world } = ctx;
+  const index = level.wells.findIndex((well) => well.pos === hero.pos);
+  level.map[hero.pos] = T.EMPTY_WELL;
+  if (index < 0) return;
+  const { water } = level.wells.splice(index, 1)[0]!;
+  if (water === 'health') {
+    hero.hp = hero.ht;
+    hero.poison = 0;
+    hero.burning = 0;
+    hero.ooze = -1;
+  } else {
+    for (const item of hero.items) {
+      const category = itemDef(item.kind).category;
+      if ((category === 'potion' || category === 'scroll') && !world.known.includes(item.kind)) world.known.push(item.kind);
+    }
+    const explored = exploredCells(world, hero.depth);
+    discoverable(level.map).forEach((open, i) => {
+      if (!open) return;
+      explored[i] = true;
+      if (hasFlag(level.map[i]!, F.SECRET)) level.map[i] = discover(level.map[i]!);
+    });
+  }
+  ctx.effects.push({ type: 'well', hero: hero.id, water });
 }
 
 /**
@@ -482,7 +528,9 @@ export function findPath(
     for (const n of NEIGHBOURS8) {
       const next = cell + n;
       if (next < 0 || next >= LENGTH || previous.has(next) || !adjacent(cell, next)) continue;
-      if (!canEnter(level, next) || (blocked.has(next) && next !== to)) continue;
+      // A locked door may end a path: walking into it unlocks it with a key.
+      const lockedGoal = next === to && level.map[next] === T.LOCKED_DOOR;
+      if ((!canEnter(level, next) && !lockedGoal) || (blocked.has(next) && next !== to)) continue;
       // Walk around visible traps, unless one is where the player wants to go.
       if (next !== to && hasFlag(level.map[next]!, F.AVOID)) continue;
       if (known && !known[next]) continue;

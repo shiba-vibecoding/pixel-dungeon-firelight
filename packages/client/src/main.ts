@@ -400,6 +400,10 @@ function tapCell(cell: number): void {
     return;
   }
   if (!explored[cell]) return;
+  if (level.map[cell] === T.LOCKED_DOOR && !me.items.some((i) => i.kind === 'key.iron' && i.depth === me.depth)) {
+    view.say(t.locked, '#ff8800');
+    return;
+  }
   walk.queue = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored) ?? [];
   if (walk.queue.length === 0) return;
   walk.pickup = heapAt(world, me.depth, cell);
@@ -551,7 +555,10 @@ function tick(now: number): void {
     drawBackdrop(now);
     hud.draw(
       ctx,
-      { me: placeholderHero, party: [], online: [], waitingFor: [], status: session.status, log: [], buffs: [], quick: null },
+      {
+        me: placeholderHero, party: [], online: [], waitingFor: [], status: session.status, log: [], buffs: [], quick: null,
+        keys: 0,
+      },
       now,
     );
     return;
@@ -646,6 +653,7 @@ function tick(now: number): void {
         ...(me.burning > 0 ? [BUFF_ICONS.fire] : []),
         ...(me.paralysed > 0 ? [BUFF_ICONS.paralysis] : []),
       ],
+      keys: me.items.filter((i) => i.kind === 'key.iron' && i.depth === me.depth).length,
       quick: quickItem
         ? {
             sprite: itemSprite(quickItem, world.run.labels),

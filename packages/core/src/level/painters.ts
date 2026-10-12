@@ -1,6 +1,6 @@
 import { Feeling, HeapType, isBossDepth, type LevelBuilder } from './builder';
 import { cell, type Point } from './geometry';
-import { DoorType, type Room, RoomType } from './room';
+import { type Door, DoorType, type Room, RoomType } from './room';
 import { T } from './terrain';
 
 /* Room painters: each one turns a room rectangle into terrain. */
@@ -305,7 +305,182 @@ function paintPassage(level: LevelBuilder, room: Room): void {
   setDoors(room, DoorType.TUNNEL);
 }
 
+/* --- Special rooms --- */
+
+/** The one door of a special room (they are all dead ends). */
+const entranceOf = (room: Room): Door => room.doors()[0]!;
+
+/** A random empty cell in the room without anything dropped on it yet. */
+function freeSpot(level: LevelBuilder, room: Room): number {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const pos = room.random(level.rng);
+    if (level.map[pos] === T.EMPTY && !level.items.some((spawn) => spawn.pos === pos)) return pos;
+  }
+  return room.random(level.rng);
+}
+
+function lockWithKey(level: LevelBuilder, room: Room): void {
+  entranceOf(room).set(DoorType.LOCKED);
+  level.toSpawn.push({ roll: 'key' });
+}
+
+/** TreasuryPainter: gold under a statue's gaze, in heaps or chests. */
+function paintTreasury(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY, 1);
+  const c = room.center(rng);
+  level.setXY(c.x, c.y, T.STATUE);
+  const heap = rng.int(2) === 0 ? HeapType.CHEST : HeapType.HEAP;
+  const n = rng.intRange(2, 3);
+  for (let i = 0; i < n; i++) level.dropItem(freeSpot(level, room), heap, { roll: 'gold' });
+  if (heap === HeapType.HEAP) {
+    for (let i = 0; i < 6; i++) level.dropItem(freeSpot(level, room), HeapType.HEAP, { roll: 'coins' });
+  }
+  lockWithKey(level, room);
+}
+
+/** ArmoryPainter: three or four weapons and armour. */
+function paintArmory(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY, 1);
+  const door = entranceOf(room);
+  const side = rng.int(2) === 0;
+  const statue =
+    door.x === room.left ? { x: room.right - 1, y: side ? room.top + 1 : room.bottom - 1 }
+    : door.x === room.right ? { x: room.left + 1, y: side ? room.top + 1 : room.bottom - 1 }
+    : door.y === room.top ? { x: side ? room.left + 1 : room.right - 1, y: room.bottom - 1 }
+    : { x: side ? room.left + 1 : room.right - 1, y: room.top + 1 };
+  level.setXY(statue.x, statue.y, T.STATUE);
+  const n = 3 + (rng.int(4) === 0 ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    level.dropItem(freeSpot(level, room), HeapType.HEAP, { roll: 'category', categories: ['armor', 'weapon'], tries: 1 });
+  }
+  lockWithKey(level, room);
+}
+
+/** LibraryPainter: bookshelves, statues by the door, a few scrolls. */
+function paintLibrary(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY, 1);
+  const door = entranceOf(room);
+  let a: { x: number; y: number };
+  let b: { x: number; y: number };
+  if (door.x === room.left) {
+    a = { x: room.left + 1, y: door.y - 1 };
+    b = { x: room.left + 1, y: door.y + 1 };
+    level.fill(room.right - 1, room.top + 1, 1, room.height() - 1, T.BOOKSHELF);
+  } else if (door.x === room.right) {
+    a = { x: room.right - 1, y: door.y - 1 };
+    b = { x: room.right - 1, y: door.y + 1 };
+    level.fill(room.left + 1, room.top + 1, 1, room.height() - 1, T.BOOKSHELF);
+  } else if (door.y === room.top) {
+    a = { x: door.x + 1, y: room.top + 1 };
+    b = { x: door.x - 1, y: room.top + 1 };
+    level.fill(room.left + 1, room.bottom - 1, room.width() - 1, 1, T.BOOKSHELF);
+  } else {
+    a = { x: door.x + 1, y: room.bottom - 1 };
+    b = { x: door.x - 1, y: room.bottom - 1 };
+    level.fill(room.left + 1, room.top + 1, room.width() - 1, 1, T.BOOKSHELF);
+  }
+  for (const p of [a, b]) {
+    if (level.map[cell(p.x, p.y)] === T.EMPTY) level.setXY(p.x, p.y, T.STATUE);
+  }
+  const n = rng.intRange(2, 3);
+  for (let i = 0; i < n; i++) {
+    level.dropItem(freeSpot(level, room), HeapType.HEAP, { roll: 'category', categories: ['scroll'], tries: 1 });
+  }
+  lockWithKey(level, room);
+}
+
+/** CryptPainter: a tomb with the best of four armours, watched by statues. */
+function paintCrypt(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY, 1);
+  const c = room.center(rng);
+  let { x: cx, y: cy } = c;
+  const door = entranceOf(room);
+  lockWithKey(level, room);
+  if (door.x === room.left) {
+    level.setXY(room.right - 1, room.top + 1, T.STATUE);
+    level.setXY(room.right - 1, room.bottom - 1, T.STATUE);
+    cx = room.right - 2;
+  } else if (door.x === room.right) {
+    level.setXY(room.left + 1, room.top + 1, T.STATUE);
+    level.setXY(room.left + 1, room.bottom - 1, T.STATUE);
+    cx = room.left + 2;
+  } else if (door.y === room.top) {
+    level.setXY(room.left + 1, room.bottom - 1, T.STATUE);
+    level.setXY(room.right - 1, room.bottom - 1, T.STATUE);
+    cy = room.bottom - 2;
+  } else {
+    level.setXY(room.left + 1, room.top + 1, T.STATUE);
+    level.setXY(room.right - 1, room.top + 1, T.STATUE);
+    cy = room.top + 2;
+  }
+  level.dropItem(cell(cx, cy), HeapType.TOMB, { roll: 'category', categories: ['armor'], tries: 4 });
+}
+
+/** MagicWellPainter: a well of healing or awareness in the middle. */
+function paintMagicWell(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY, 1);
+  const c = room.center(rng);
+  level.setXY(c.x, c.y, T.WELL);
+  // The original also has water of transmutation; it is not ported yet.
+  const water = rng.oneOf(['awareness', 'health', 'health'] as const);
+  level.wells.push({ pos: cell(c.x, c.y), water });
+  entranceOf(room).set(DoorType.REGULAR);
+}
+
+/** TrapsPainter: a floor of gas traps with a prize at the far end. */
+function paintTraps(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  // The original sometimes makes it a chasm crossed by levitation; that is not ported.
+  const trap = rng.oneOf([T.TOXIC_TRAP, T.TOXIC_TRAP, T.TOXIC_TRAP, T.PARALYTIC_TRAP, T.PARALYTIC_TRAP, T.SUMMONING_TRAP]);
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, trap, 1);
+  const door = entranceOf(room);
+  door.set(DoorType.REGULAR);
+  let x: number;
+  let y: number;
+  if (door.x === room.left) {
+    x = room.right - 1;
+    y = room.top + Math.trunc(room.height() / 2);
+    level.fill(x, room.top + 1, 1, room.height() - 1, T.EMPTY);
+  } else if (door.x === room.right) {
+    x = room.left + 1;
+    y = room.top + Math.trunc(room.height() / 2);
+    level.fill(x, room.top + 1, 1, room.height() - 1, T.EMPTY);
+  } else if (door.y === room.top) {
+    x = room.left + Math.trunc(room.width() / 2);
+    y = room.bottom - 1;
+    level.fill(room.left + 1, y, room.width() - 1, 1, T.EMPTY);
+  } else {
+    x = room.left + Math.trunc(room.width() / 2);
+    y = room.top + 1;
+    level.fill(room.left + 1, y, room.width() - 1, 1, T.EMPTY);
+  }
+  const prize = { roll: 'category', categories: ['weapon', 'armor'], tries: 4 } as const;
+  if (rng.int(3) === 0) {
+    level.dropItem(cell(x, y), HeapType.CHEST, prize);
+  } else {
+    level.setXY(x, y, T.PEDESTAL);
+    level.dropItem(cell(x, y), HeapType.HEAP, prize);
+  }
+}
+
 export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painter>([
+  [RoomType.TREASURY, paintTreasury],
+  [RoomType.ARMORY, paintArmory],
+  [RoomType.LIBRARY, paintLibrary],
+  [RoomType.CRYPT, paintCrypt],
+  [RoomType.MAGIC_WELL, paintMagicWell],
+  [RoomType.TRAPS, paintTraps],
   [RoomType.STANDARD, paintStandard],
   [RoomType.ENTRANCE, paintEntrance],
   [RoomType.EXIT, paintExit],

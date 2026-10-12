@@ -1,3 +1,4 @@
+import { HeapType, type ItemSpec } from './level/builder';
 import type { Level, RoomInfo } from './level/generate';
 import { LENGTH, WIDTH } from './level/geometry';
 import { RoomType } from './level/room';
@@ -12,7 +13,7 @@ import type { RunState } from './run';
  * upgrade levels. Wands, rings, seeds, food and thrown weapons come later.
  */
 
-export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand';
+export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'key';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -69,6 +70,8 @@ export const ITEMS = {
   'missile.dart': { category: 'missile', sprite: 31 },
   'missile.boomerang': { category: 'missile', sprite: 106 },
   'wand.magicMissile': { category: 'wand', sprite: 3 },
+  /** Opens the locked room of the level it was found on. */
+  'key.iron': { category: 'key', sprite: 9 },
 } as const satisfies Record<string, ItemDef>;
 
 export type ItemKind = keyof typeof ITEMS;
@@ -82,6 +85,8 @@ export interface Item {
   /** Wands: charges left, and time spent towards the next one. */
   charges?: number;
   recharge?: number;
+  /** Keys: the depth whose door they open. */
+  depth?: number;
 }
 
 export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
@@ -285,7 +290,36 @@ function randomDropCell(rng: Rng, level: Level): number {
   return -1;
 }
 
-/** RegularLevel.createItems, plus the drops the layout asked for (graveyards' tombs). */
+const HEAP_KINDS: Readonly<Partial<Record<HeapType, HeapKind>>> = {
+  [HeapType.CHEST]: 'chest',
+  [HeapType.MIMIC]: 'chest',
+  [HeapType.TOMB]: 'tomb',
+  [HeapType.SKELETON]: 'skeleton',
+};
+
+/** Rolls what a painter asked for. */
+function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: number): Item {
+  switch (spec.roll) {
+    case 'random':
+      return generator.random();
+    case 'gold':
+      return rollGold(rng, depth);
+    case 'coins':
+      return createItem('gold', rng.intRange(1, 3));
+    case 'key':
+      return { ...createItem('key.iron'), depth };
+    case 'category': {
+      let best: Item | null = null;
+      for (let i = 0; i < spec.tries; i++) {
+        const item = generator.of(rng.oneOf(spec.categories));
+        if (!best || item.level > best.level) best = item;
+      }
+      return best!;
+    }
+  }
+}
+
+/** RegularLevel.createItems, plus the drops the layout asked for (special rooms, graves). */
 export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean): Heap[] {
   const heaps: Heap[] = [];
   const drop = (pos: number, kind: HeapKind, item: Item): void => {
@@ -314,8 +348,11 @@ export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean
     drop(randomDropCell(rng, level), 'heap', createItem('scroll.upgrade'));
   }
 
+  for (const spec of level.toSpawn) {
+    drop(randomDropCell(rng, level), 'heap', rollSpec(spec, generator, rng, level.depth));
+  }
   for (const spawn of level.items) {
-    drop(spawn.pos, 'tomb', spawn.item.roll === 'gold' ? rollGold(rng, level.depth) : generator.random());
+    drop(spawn.pos, HEAP_KINDS[spawn.heap] ?? 'heap', rollSpec(spawn.item, generator, rng, level.depth));
   }
   return heaps;
 }

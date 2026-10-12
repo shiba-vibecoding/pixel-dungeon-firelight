@@ -375,6 +375,17 @@ export class View {
         case 'scroll':
           this.say(effect.kind === 'challenge' ? t.challenge : t.lullaby, COLORS.warning, now);
           break;
+        case 'unlocked':
+          audio.play('unlock');
+          if (effect.hero === myId) this.say(t.unlocked, COLORS.default, now);
+          break;
+        case 'well':
+          audio.play('drink');
+          if (effect.hero === myId) {
+            this.say(effect.water === 'health' ? t.wellHealth : t.wellAwareness, COLORS.positive, now);
+            haptic('success');
+          }
+          break;
         case 'thrown':
           if (effect.depth === this.depth) this.shoot(effect.from, effect.to, itemDef(effect.item).sprite ?? 31, now);
           break;

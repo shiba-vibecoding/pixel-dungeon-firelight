@@ -146,14 +146,19 @@ describe('the backpack', () => {
     expect(isAlive(mob) && mob.state).toBe('sleeping');
   });
 
-  it('keeps standard rooms for loot', () => {
-    const world = createWorld(9);
-    const level = levelAt(world, 2);
-    const standard = level.rooms.filter((r) => r.type === RoomType.STANDARD);
-    for (const heap of floorAt(world, 2).heaps.filter((h) => h.kind !== 'tomb')) {
-      const x = heap.pos % 32;
-      const y = Math.trunc(heap.pos / 32);
-      expect(standard.some((r) => x > r.left && x < r.right && y > r.top && y < r.bottom)).toBe(true);
+  it('keeps loot in rooms, never at the entrance or in corridors', () => {
+    for (let seed = 1; seed <= 15; seed++) {
+      const world = createWorld(seed * 31);
+      for (let depth = 1; depth <= 4; depth++) {
+        const level = levelAt(world, depth);
+        for (const heap of floorAt(world, depth).heaps) {
+          const x = heap.pos % 32;
+          const y = Math.trunc(heap.pos / 32);
+          const room = level.rooms.find((r) => x > r.left && x < r.right && y > r.top && y < r.bottom);
+          expect(room, `heap at ${heap.pos} on depth ${depth}`).toBeDefined();
+          expect([RoomType.ENTRANCE, RoomType.TUNNEL, RoomType.PASSAGE]).not.toContain(room!.type);
+        }
+      }
     }
   });
 });

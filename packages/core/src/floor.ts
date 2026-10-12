@@ -1,6 +1,7 @@
 import { type Hero, isAlive, type Mob } from './actors';
 import { castShadow, terrainBlocksSight } from './fov';
 import type { Heap, HeapKind, Item, ItemKind } from './items';
+import type { WellWater } from './level/builder';
 import type { TrapKind } from './traps';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
@@ -74,6 +75,8 @@ export type Effect =
   | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
   | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
   | { type: 'zapped'; depth: number; from: number; to: number }
+  | { type: 'unlocked'; depth: number; pos: number; hero: string }
+  | { type: 'well'; hero: string; water: WellWater }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };
 
@@ -126,7 +129,7 @@ export function canEnter(level: Level, pos: number): boolean {
   const x = pos % WIDTH;
   if (pos < WIDTH || pos >= LENGTH - WIDTH || x === 0 || x === WIDTH - 1) return false;
   const terrain = level.map[pos]!;
-  return hasFlag(terrain, F.PASSABLE) || (hasFlag(terrain, F.AVOID) && !hasFlag(terrain, F.PIT) && terrain !== T.WELL);
+  return hasFlag(terrain, F.PASSABLE) || (hasFlag(terrain, F.AVOID) && !hasFlag(terrain, F.PIT));
 }
 
 /** Ground monsters walk on: they step around traps. */

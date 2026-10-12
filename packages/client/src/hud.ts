@@ -33,6 +33,8 @@ export interface HudState {
   buffs: readonly number[];
   /** The quickslot: a thrown weapon or a wand, ready to use. */
   quick: { sprite: number; label: string; aiming: boolean } | null;
+  /** Iron keys for the current depth. */
+  keys: number;
 }
 
 /** Buff icons in buffs.png (BuffIndicator). */
@@ -168,6 +170,7 @@ export class Hud {
     // Text at device resolution.
     this.text(ctx, String(me.lvl), 27.5, T + 31, 8, '#ffeba4', 'center');
     this.text(ctx, String(me.depth), W - 42, T + 11.5, 8, '#cacfc2', 'right');
+    if (state.keys > 0) this.text(ctx, String(state.keys), W - 26, T + 11.5, 8, '#cacfc2', 'right');
     this.text(ctx, `${Math.max(0, me.hp)}/${me.ht}`, 34 + state.buffs.length * 8, T + 17, 7, '#ffffff', 'left');
 
     let y = T + 40;
