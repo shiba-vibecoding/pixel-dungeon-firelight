@@ -74,6 +74,16 @@ describe('enchantments and glyphs', () => {
     expect(hero.hp).toBeGreaterThan(1);
   });
 
+  it('a grim weapon does not simply slay Yog-Dzewa, and only wounds the other bosses', () => {
+    const world = solo();
+    const hero = heroById(world, 'p')!;
+    Object.assign(hero, { attackSkill: 100000 });
+    hero.weapon = { ...createItem('weapon.dagger', 1, 2000), enchant: 'death' };
+    const yog = ratBeside(world, 100000, 'yog');
+    strike(world, yog, 3);
+    expect(yog.hp).toBeGreaterThan(90000);
+  });
+
   it('an eldritch weapon sends its victim fleeing', () => {
     const world = solo();
     const hero = heroById(world, 'p')!;

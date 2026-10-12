@@ -12,6 +12,7 @@ import { earthrootAbsorbs } from './plants';
 import { impQuestKill } from './imp';
 import { questKill } from './quest';
 import { T } from './level/terrain';
+import { isBossDepth } from './level/builder';
 
 /*
  * Melee combat as in Char.attack: an accuracy roll against an evasion roll,
@@ -116,7 +117,12 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   }
   // Hero.attackProc and defenseProc: an enchanted weapon's blow, an inscribed armour's answer.
   if (isHero(attacker) && !isHero(defender) && !thrown) weaponProc(ctx, attacker, defender, damage);
-  if (isHero(defender) && !isHero(attacker)) damage = armorProc(ctx, attacker, defender, damage);
+  if (isHero(defender) && !isHero(attacker)) {
+    const mark = ctx.effects.length;
+    damage = armorProc(ctx, attacker, defender, damage);
+    // The glyph's backlash may have felled its wearer, or an ankh raised them anew: the blow is spent.
+    if (!isAlive(defender) || ctx.effects.slice(mark).some((e) => e.type === 'resurrected')) return true;
+  }
   if (!isHero(defender) && defender.kind === 'swarm') split(ctx, defender, damage);
   // Acidic.defenseProc: striking it splashes acid back on the striker.
   if (!isHero(defender) && defender.kind === 'acidic' && isHero(attacker) && damage > 0) {
@@ -200,7 +206,7 @@ const isFist = (mob: Mob): boolean => mob.kind === 'rottingFist' || mob.kind ===
 
 /** Thief.steal: a whole stack from the pack (never a key or a quest item), then off it runs. */
 function steal(ctx: Ctx, thief: Mob, hero: Hero): void {
-  const loot = hero.items.filter((item) => item.kind !== 'key.iron' && itemDef(item.kind).category !== 'quest');
+  const loot = hero.items.filter((item) => itemDef(item.kind).category !== 'key' && itemDef(item.kind).category !== 'quest');
   if (loot.length === 0) return;
   const item = ctx.rng.element(loot)!;
   hero.items.splice(hero.items.indexOf(item), 1);
@@ -229,7 +235,7 @@ function split(ctx: Ctx, swarm: Mob, damage: number): void {
 }
 
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred' | 'bleeding';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred' | 'bleeding' | 'dry';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
@@ -423,7 +429,8 @@ function heroDied(ctx: Ctx, hero: Hero): void {
 }
 
 /**
- * Hero.resurrect, with an ankh: back on their feet at the stairs, whole and
+ * Hero.resurrect, with an ankh: back on their feet at the stairs (or where
+ * they fell, on a boss's level), whole and
  * rid of every ailment, but with nothing left in the pack except keys and
  * quest items, no gold, and no experience towards the next level.
  */
@@ -432,11 +439,15 @@ function resurrect(ctx: Ctx, hero: Hero): void {
   hero.items = hero.items.filter((item) => ['key', 'quest', 'tome'].includes(itemDef(item.kind).category));
   Object.assign(hero, {
     hp: hero.ht, gold: 0, exp: 0, killedBy: null, intent: null, ooze: -1, poison: 0, burning: 0, paralysed: 0, rooted: 0,
-    slowed: 0, weakened: 0, crippled: 0, charmed: 0, charmedBy: null, hunger: 0, deferred: 0, blind: 0, bleeding: 0,
+    slowed: 0, weakened: 0, crippled: 0, charmed: 0, charmedBy: null, hunger: 0, deferred: 0, blind: 0, bleeding: 0, dizzy: 0,
+    levitating: 0,
   });
-  leaveCell(world, level, depth, hero.pos);
-  hero.pos = freeCellNear(world, level, depth, level.entrance);
-  enterCell(level, hero.pos);
+  // On a boss's level the hero gets up where they fell: the stairs may be sealed off from the fight.
+  if (!isBossDepth(depth)) {
+    leaveCell(world, level, depth, hero.pos);
+    hero.pos = freeCellNear(world, level, depth, level.entrance);
+    enterCell(level, hero.pos);
+  }
   observe(world, hero);
   ctx.effects.push({ type: 'resurrected', hero: hero.id });
 }

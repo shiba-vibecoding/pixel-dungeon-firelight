@@ -1,4 +1,4 @@
-import { createMob, type Hero, heroArmor, isAlive, type Mob, rollMob } from './actors';
+import { beckon, createMob, type Hero, heroArmor, isAlive, type Mob, rollMob } from './actors';
 import { hurt } from './combat';
 import { charAt, type Char, type Ctx, exploredCells, heroesOn, isHero, isPassable, isWater } from './floor';
 import { distance, NEIGHBOURS8 } from './level/geometry';
@@ -108,11 +108,7 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
       burst(ctx, pos, 'fire', 0);
       break;
     case 'alarm':
-      for (const mob of ctx.floor.mobs) {
-        if (mob.state === 'passive') continue;
-        if (mob.state !== 'hunting') mob.state = 'wandering';
-        mob.target = pos;
-      }
+      for (const mob of ctx.floor.mobs) beckon(mob, pos);
       break;
     case 'lightning': {
       const damage = Math.max(1, rng.intBetween(Math.trunc(hero.hp / 3), Math.trunc((2 * hero.hp) / 3)));

@@ -89,6 +89,11 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
     }
     return;
   }
+  // Piranha.act: out of the water, a piranha dies.
+  if (mob.kind === 'piranha' && !isWater(ctx.level.map[mob.pos]!)) {
+    hurt(ctx, mob, mob.hp, 'dry');
+    return;
+  }
   // Poisoned or paralysed by a trap's gas.
   if (mobConditions(ctx, mob)) {
     spend(mob, TICK);
@@ -98,7 +103,7 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
   if ((mob.dizzy ?? 0) > 0) {
     mob.dizzy!--;
     const to = staggerTarget(ctx, mob.pos);
-    if (isPassable(ctx.level, to) && !charAt(ctx.world, ctx.depth, to)) moveMob(ctx, mob, to);
+    if (canStand(ctx, mob, to) && !charAt(ctx.world, ctx.depth, to)) moveMob(ctx, mob, to);
     spend(mob, TICK);
     return;
   }

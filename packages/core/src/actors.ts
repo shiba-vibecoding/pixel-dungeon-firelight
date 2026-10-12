@@ -436,6 +436,13 @@ export interface Mob {
   lifespan?: number;
 }
 
+/** Mob.beckon: called towards a spot. Statue.beckon: an animated statue does not stir for it. */
+export function beckon(mob: Mob, pos: number): void {
+  if (mob.state === 'passive' || (mob.kind === 'statue' && mob.state === 'sleeping')) return;
+  if (mob.state !== 'hunting') mob.state = 'wandering';
+  mob.target = pos;
+}
+
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {
   const ht = MOBS[kind].ht;
   return { id, kind, pos, hp: ht, ht, state, target: -1, enemy: null, enemySeen: false, alerted: false, time };

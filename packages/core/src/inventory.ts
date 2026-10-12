@@ -1,9 +1,9 @@
 import {
-  BACKPACK_SIZE, createMob, type Hero, heroRangedSkill, maxExp, mobStats, STARVING, type SubClass, SUBCLASSES,
+  BACKPACK_SIZE, beckon, createMob, type Hero, heroRangedSkill, maxExp, mobStats, STARVING, type SubClass, SUBCLASSES,
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
-import { TERROR_TURNS } from './enchant';
+import { fearless, TERROR_TURNS } from './enchant';
 import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, landItem, leaveCell } from './floor';
 import {
   buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
@@ -177,7 +177,8 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
     }
     case 'drop': {
       const item = hero.items.splice(action.item, 1)[0]!;
-      dropItem(ctx.floor, hero.pos, item);
+      // Floating over a chasm, it falls through.
+      landItem(ctx, hero.pos, item);
       ctx.effects.push({ type: 'dropped', hero: hero.id, item });
       if (ctx.level.map[hero.pos] === T.ALCHEMY) brew(ctx, hero.pos);
       return TIME_TO_DROP;
@@ -462,10 +463,7 @@ function springMimic(ctx: Ctx, hero: Hero, heap: Heap): boolean {
 /** Rotberry.Seed.collect: picked, the seed lets out a roar that brings the whole level running. */
 function rotberryRoar(ctx: Ctx, hero: Hero): void {
   const roused = ctx.floor.mobs.filter((mob) => mob.state !== 'passive');
-  for (const mob of roused) {
-    if (mob.state !== 'hunting') mob.state = 'wandering';
-    mob.target = hero.pos;
-  }
+  for (const mob of roused) beckon(mob, hero.pos);
   ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'challenge', count: roused.length });
 }
 
@@ -566,11 +564,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     }
     case 'scroll.challenge': {
       // Every monster on the level comes for the reader.
-      for (const mob of ctx.floor.mobs) {
-        if (mob.state === 'passive') continue;
-        if (mob.state !== 'hunting') mob.state = 'wandering';
-        mob.target = hero.pos;
-      }
+      for (const mob of ctx.floor.mobs) beckon(mob, hero.pos);
       ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'challenge', count: ctx.floor.mobs.length });
       break;
     }
@@ -618,7 +612,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     case 'scroll.terror': {
       // Every monster in sight flees from the reader.
       const fov = heroView(world, hero);
-      const frightened = ctx.floor.mobs.filter((mob) => fov[mob.pos] && mob.state !== 'passive');
+      const frightened = ctx.floor.mobs.filter((mob) => fov[mob.pos] && mob.state !== 'passive' && !fearless(mob));
       for (const mob of frightened) {
         mob.terror = TERROR_TURNS;
         mob.terrorOf = hero.id;
@@ -630,7 +624,8 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     case 'scroll.psionicBlast': {
       // Everyone in sight is struck and blinded for a while, the reader too.
       const fov = heroView(world, hero);
-      const struck = ctx.floor.mobs.filter((mob) => fov[mob.pos] && mob.state !== 'passive');
+      // Yog-Dzewa is beyond its reach (Yog's IMMUNITIES).
+      const struck = ctx.floor.mobs.filter((mob) => fov[mob.pos] && mob.state !== 'passive' && mob.kind !== 'yog');
       ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'psionic', count: struck.length });
       for (const mob of struck) {
         mob.dizzy = Math.max(mob.dizzy ?? 0, ctx.rng.intBetween(3, 6));

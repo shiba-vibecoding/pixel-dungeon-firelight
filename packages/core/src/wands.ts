@@ -7,6 +7,7 @@ import { type Item, magicMissileDamage } from './items';
 import { distance, LENGTH, NEIGHBOURS8 } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
 import { burst } from './traps';
+import { unshakeable } from './enchant';
 
 /*
  * The wands (Wand and its kinds), zapped at a cell. A bolt flies until it
@@ -123,7 +124,8 @@ export function zapWand(ctx: Ctx, hero: Hero, wand: Item, target: number): void 
       victim.pos = pos;
       leaveCell(world, level, depth, from);
       enterCell(level, pos);
-      victim.state = 'wandering';
+      // Anything but a statue biding its time is left wandering about.
+      if (victim.kind !== 'statue' || victim.state !== 'sleeping') victim.state = 'wandering';
       victim.target = -1;
       ctx.effects.push({ type: 'jumped', depth, mob: victim.id, from, to: pos });
       return;
@@ -206,7 +208,7 @@ export function zapWand(ctx: Ctx, hero: Hero, wand: Item, target: number): void 
       const end = ballistica(ctx, hero.pos, target).at(-1)!;
       fx(end, 'amok');
       const victim = mobAt(ctx, end);
-      if (victim && victim.state !== 'passive') {
+      if (victim && victim.state !== 'passive' && !unshakeable(victim)) {
         victim.amok = Math.max(victim.amok ?? 0, 3 + power);
         if (victim.state === 'sleeping') victim.state = 'hunting';
       }

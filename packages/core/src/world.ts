@@ -218,6 +218,7 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       return hero.pos === level.exit ? null : 'not on the stairs';
     case 'jump':
       if (hero.rooted > 0) return 'you are rooted';
+      if ((hero.levitating ?? 0) > 0) return 'you are floating';
       if (!Number.isInteger(action.to) || !adjacent(hero.pos, action.to) || !hasFlag(level.map[action.to]!, F.PIT)) {
         return 'no chasm there';
       }
@@ -890,9 +891,9 @@ function landingCell(world: World, depth: number, rng: Rng, intoPit: boolean): n
 
 /** Dungeon.dropToChasm: what fell into a chasm turns up somewhere on the depth below. */
 function itemsFall(world: World, depth: number): void {
+  if (isBossDepth(depth + 1) || depth + 1 >= DEEPEST_AVAILABLE) return;
   const items = world.floors[depth]!.falling ?? [];
   delete world.floors[depth]!.falling;
-  if (items.length === 0 || isBossDepth(depth + 1) || depth + 1 > DEEPEST_AVAILABLE) return;
   const floor = floorAt(world, depth + 1);
   const rng = new Rng(floor.rng);
   for (const item of items) dropItem(floor, landingCell(world, depth + 1, rng, false), item);

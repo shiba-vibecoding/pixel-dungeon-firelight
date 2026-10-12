@@ -45,6 +45,20 @@ describe('the ankh', () => {
     expect(hero.hp).toBeLessThanOrEqual(0);
     expect(world.over).toBe(true);
   });
+
+  it("on a boss's level, the hero rises where they fell: the stairs may be cut off from the fight", () => {
+    const world = createWorld(5);
+    addHero(world, { id: 'p', name: 'P', heroClass: 'warrior' });
+    const hero = heroById(world, 'p')!;
+    const level = levelAt(world, 10);
+    // Somewhere well away from the stairs.
+    const spot = level.map.findIndex((t, c) => (t === T.EMPTY_SP || t === T.EMPTY) && Math.abs(c - level.entrance) > 64);
+    Object.assign(hero, { depth: 10, pos: spot, time: floorAt(world, 10).now, hp: 1, poison: 50 });
+    hero.items = [createItem('ankh')];
+    act(world, 'p', { type: 'wait' });
+    expect(hero.hp).toBe(hero.ht);
+    expect(hero.pos).toBe(spot);
+  });
 });
 
 describe('statue, pool and vault rooms', () => {
@@ -63,6 +77,31 @@ describe('statue, pool and vault rooms', () => {
     for (let i = 0; i < 300 && statue.hp > 0; i++) act(world, 'p', { type: 'attack', target: statue.id });
     expect(statue.hp).toBeLessThanOrEqual(0);
     expect(floorAt(world, depth).heaps.some((heap) => heap.items.some((item) => item.kind === weapon && item.enchant))).toBe(true);
+  });
+
+  it('a statue does not stir when monsters are called, nor at a grim blow does a boss simply die', () => {
+    const { world, depth } = withRoom(RoomType.STATUE);
+    const statue = floorAt(world, depth).mobs.find((mob) => mob.kind === 'statue')!;
+    const level = levelAt(world, depth);
+    heroAt(world, depth, level.entrance);
+    const hero = heroById(world, 'p')!;
+    hero.items = [createItem('scroll.challenge')];
+    const at = statue.pos;
+    act(world, 'p', { type: 'use', item: 0 });
+    for (let i = 0; i < 5; i++) act(world, 'p', { type: 'wait' });
+    expect(statue.state).toBe('sleeping');
+    expect(statue.pos).toBe(at);
+  });
+
+  it('a piranha out of the water dies', () => {
+    const { world, depth } = withRoom(RoomType.POOL);
+    const level = levelAt(world, depth);
+    heroAt(world, depth, level.entrance);
+    const piranha = floorAt(world, depth).mobs.find((mob) => mob.kind === 'piranha')!;
+    const land = level.map.findIndex((t, c) => t === T.EMPTY && !floorAt(world, depth).mobs.some((m) => m.pos === c) && c !== level.entrance);
+    piranha.pos = land;
+    for (let i = 0; i < 5; i++) act(world, 'p', { type: 'wait' });
+    expect(floorAt(world, depth).mobs.includes(piranha)).toBe(false);
   });
 
   it('piranhas guard a pool and never leave its water', () => {

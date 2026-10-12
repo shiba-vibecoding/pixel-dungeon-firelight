@@ -1,6 +1,6 @@
-import { type Hero, heroDamageRoll, isAlive, isStarving, type Mob, MOBS, STARVING } from './actors';
+import { baseKind, type Hero, heroDamageRoll, isAlive, isStarving, type Mob, type MobKind, MOBS, STARVING } from './actors';
 import { hurt } from './combat';
-import { charAt, type Ctx, enterCell, heroView, isPassable, isWater, leaveCell } from './floor';
+import { charAt, type Ctx, enterCell, heroView, isPassable, isWater, leaveCell, observe } from './floor';
 import { type Glyph, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
 import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
@@ -17,6 +17,15 @@ import { burst } from './traps';
 export const TERROR_TURNS = 10;
 const FROST_TURNS = 5;
 const BURNING_TURNS = 8;
+
+/** IMMUNITIES and RESISTANCES: who shrugs off a grim blow, and who takes only some of it. */
+const DEATH_IMMUNE: ReadonlySet<MobKind> = new Set(['yog', 'skeleton']);
+const DEATH_RESISTANT: ReadonlySet<MobKind> = new Set(['goo', 'tengu', 'dm300', 'king', 'statue', 'eye', 'warlock']);
+/** Those who know no fear (Terror among their IMMUNITIES), and those no magic drives amok. */
+const FEARLESS: ReadonlySet<MobKind> = new Set(['yog', 'rottingFist', 'burningFist', 'golem', 'monk', 'brute', 'eye']);
+const UNSHAKEABLE: ReadonlySet<MobKind> = new Set(['yog', 'golem', 'monk']);
+export const fearless = (mob: Mob): boolean => FEARLESS.has(baseKind(mob.kind));
+export const unshakeable = (mob: Mob): boolean => UNSHAKEABLE.has(baseKind(mob.kind));
 
 /** Poison.set(n) hurts n/3+1 a turn, less and less; here poison hurts 1 a turn, for as many turns as that adds up to. */
 function poisonTurns(duration: number): number {
@@ -55,9 +64,9 @@ export function weaponProc(ctx: Ctx, hero: Hero, mob: Mob, damage: number): void
       return;
     case 'death':
       // Grim: now and then, death outright.
-      if (rng.int(level + 100) < 92) return;
+      if (rng.int(level + 100) < 92 || DEATH_IMMUNE.has(baseKind(mob.kind))) return;
       shown();
-      strike(mob, mob.hp);
+      strike(mob, DEATH_RESISTANT.has(baseKind(mob.kind)) ? rng.intRange(0, mob.hp) : mob.hp);
       return;
     case 'paralysis':
       if (rng.int(level + 8) < 7) return;
@@ -102,7 +111,7 @@ export function weaponProc(ctx: Ctx, hero: Hero, mob: Mob, damage: number): void
     }
     case 'horror':
       // Eldritch: the victim flees in terror.
-      if (rng.int(level + 5) < 4) return;
+      if (rng.int(level + 5) < 4 || fearless(mob)) return;
       mob.terror = TERROR_TURNS;
       mob.terrorOf = hero.id;
       shown();
@@ -136,6 +145,7 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
       if (!near || rng.int(level + 5) < 4) return damage;
       const to = mob.pos + (mob.pos - hero.pos);
       if (to < 0 || to >= LENGTH || !adjacent(mob.pos, to) || charAt(world, depth, to) || !isPassable(ctx.level, to)) return damage;
+      if (mob.kind === 'piranha' && !isWater(ctx.level.map[to]!)) return damage;
       shown();
       const from = mob.pos;
       mob.pos = to;
@@ -214,6 +224,7 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
         leaveCell(world, ctx.level, depth, from);
         enterCell(ctx.level, pos);
         shown();
+        observe(world, hero);
         ctx.effects.push({ type: 'teleported', hero: hero.id });
         break;
       }
