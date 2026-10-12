@@ -41,7 +41,7 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   const anim = puppet.anim === 'idle' && puppet.pumped ? 'pump' : puppet.anim;
   const frame = frameAt(anims[anim], now - puppet.animStart);
   const sx = (frame % sheet.cols) * sheet.w;
-  const sy = Math.floor(frame / sheet.cols) * sheet.h;
+  const sy = (Math.floor(frame / sheet.cols) + puppet.row) * sheet.h;
   const dx = Math.round(x + (TILE - sheet.w) / 2);
   const dy = Math.round(y + TILE - sheet.h);
 
@@ -196,6 +196,21 @@ export function render(
   ctx.font = `${Math.round(6 * camera.zoom)}px ${FONT}`;
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(2, camera.zoom);
+  // Companions' names above their heads.
+  ctx.font = `${Math.round(5 * camera.zoom)}px ${FONT}`;
+  for (const { puppet, x, y } of shown) {
+    if (!puppet.label || !puppet.alive) continue;
+    const sx = (x + TILE / 2 - camera.x) * camera.zoom;
+    const sy = (y + TILE - puppet.sprite.sheet.h - 2 - camera.y) * camera.zoom;
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = '#000';
+    ctx.strokeText(puppet.label, sx, sy);
+    ctx.fillStyle = '#ffeba4';
+    ctx.fillText(puppet.label, sx, sy);
+  }
+  ctx.globalAlpha = 1;
+  ctx.font = `${Math.round(6 * camera.zoom)}px ${FONT}`;
+
   for (const floater of view.floaters) {
     const age = (now - floater.start) / 1200;
     const sx = (floater.x - camera.x) * camera.zoom;

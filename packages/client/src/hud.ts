@@ -1,4 +1,4 @@
-import { type Hero, isAlive, maxExp } from '@pd/core';
+import { type Hero, isAlive, itemDef, maxExp } from '@pd/core';
 import { t } from './i18n';
 import { FONT } from './render';
 import { type Assets, ICONS } from './sprites';
@@ -119,7 +119,7 @@ export class Hud {
     const me = state.me;
     if (isAlive(me)) {
       const sheet = assets.heroes[me.heroClass].sheet.image;
-      ctx.drawImage(sheet, 1, 0, 11, 15, 10, 8, 11, 15);
+      ctx.drawImage(sheet, 1, (itemDef(me.armor.kind).tier ?? 0) * 15, 11, 15, 10, 8, 11, 15);
       if (me.hp <= me.ht / 4) {
         ctx.fillStyle = `rgba(204, 0, 0, ${0.25 + 0.15 * Math.sin(now / 150)})`;
         ctx.fillRect(10, 8, 11, 15);

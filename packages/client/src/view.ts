@@ -36,6 +36,10 @@ export interface Puppet {
   pumped: boolean;
   /** A hero under a potion of invisibility. */
   invisible: boolean;
+  /** Row of the sprite sheet: heroes are drawn in their armour's tier. */
+  row: number;
+  /** Shown above companions in a party. */
+  label: string;
   hp: number;
   ht: number;
 }
@@ -96,7 +100,7 @@ export class View {
    * Brings puppets in line with the world for the depth being shown. Call
    * after apply(), so monsters killed in this update can still play dead.
    */
-  sync(world: World, now: number): void {
+  sync(world: World, now: number, myId = ''): void {
     const seen = new Set<string>();
     const place = (
       id: string, kind: string, sprite: CharSprite, isHero: boolean, pos: number, hp: number, ht: number, sleeping: boolean,
@@ -108,7 +112,8 @@ export class View {
       if (!puppet) {
         puppet = {
           id, kind, sprite, isHero, from: pos, to: pos, moveStart: 0, flip: false, anim: 'idle', animStart: now,
-          alive: hp > 0, removeAt: Infinity, flashUntil: 0, alertUntil: 0, sleeping, pumped, invisible, hp, ht,
+          alive: hp > 0, removeAt: Infinity, flashUntil: 0, alertUntil: 0, sleeping, pumped, invisible, row: 0, label: '',
+          hp, ht,
         };
         if (!puppet.alive) {
           puppet.anim = 'die';
@@ -145,6 +150,9 @@ export class View {
           hero.id, hero.heroClass, this.assets.heroes[hero.heroClass], true, hero.pos, hero.hp, hero.ht, false, false,
           hero.invisible > 0,
         );
+        const puppet = this.puppets.get(hero.id)!;
+        puppet.row = itemDef(hero.armor.kind).tier ?? 0;
+        puppet.label = hero.id === myId ? '' : hero.name;
       }
     }
     for (const mob of world.floors[this.depth]?.mobs ?? []) {

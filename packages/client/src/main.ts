@@ -602,7 +602,7 @@ function tick(now: number): void {
     view.apply(effects, world, session.myId, now);
     handleMyEffects(effects, session.myId);
   }
-  view.sync(world, now);
+  view.sync(world, now, session.myId);
   step(world, now, visible);
 
   const mine = view.puppets.get(me.id);
