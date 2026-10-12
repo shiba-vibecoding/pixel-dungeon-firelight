@@ -188,22 +188,31 @@ export class Hud {
 
     const notice = state.status || (state.waitingFor.length > 0 ? t.waitingFor(state.waitingFor.join(', ')) : '');
     if (notice) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.font = `${Math.round(7 * ui)}px ${FONT}`;
+      const lines = this.wrap(ctx, notice, (W - 24) * ui);
+      const top = T + 44 + state.party.length * 10;
       const [sx, sy, w, h] = ICONS.busy;
       ctx.setTransform(ui, 0, 0, ui, 0, 0);
       ctx.save();
-      ctx.translate(W / 2 - 4 - notice.length * 1.6, T + 42 + state.party.length * 10);
+      ctx.translate(8, top - 2);
       ctx.rotate(now / 300);
       ctx.drawImage(assets.icons, sx, sy, w, h, -w / 2, -h / 2, w, h);
       ctx.restore();
-      this.text(ctx, notice, W / 2 + 2, T + 44 + state.party.length * 10, 7, COLORS.highlight, 'center');
+      lines.forEach((line, i) => this.text(ctx, line, W / 2 + 4, top + i * 9, 7, COLORS.highlight, 'center'));
     }
 
-    // Message log above the toolbar; old lines fade away.
-    const lines = state.log.filter((line) => now - line.time < 8000).slice(-4);
-    lines.forEach((line, i) => {
+    // Message log above the toolbar, wrapped to the screen; old lines fade away.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = `${Math.round(8 * ui)}px ${FONT}`;
+    const rows: Array<{ text: string; color: string; alpha: number }> = [];
+    for (const line of state.log.filter((l) => now - l.time < 8000).slice(-4)) {
       const age = now - line.time;
       const alpha = age < 6000 ? 1 : 1 - (age - 6000) / 2000;
-      this.text(ctx, line.text, 3, B - 29 - (lines.length - 1 - i) * 10, 8, line.color, 'left', alpha);
+      for (const text of this.wrap(ctx, line.text, (W - 6) * ui)) rows.push({ text, color: line.color, alpha });
+    }
+    rows.slice(-5).forEach((row, i, shown) => {
+      this.text(ctx, row.text, 3, B - 29 - (shown.length - 1 - i) * 10, 8, row.color, 'left', row.alpha);
     });
     if (this.bottom > 0) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -211,6 +220,23 @@ export class Hud {
       ctx.fillRect(0, B * ui, W * ui + ui, this.bottom * ui + ui);
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  /** Splits text into lines no wider than `width` device pixels, at spaces. */
+  private wrap(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
+    const lines: string[] = [];
+    let line = '';
+    for (const word of text.split(' ')) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (line && ctx.measureText(candidate).width > width) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
   }
 
   private text(
