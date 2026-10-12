@@ -124,7 +124,7 @@ describe('enchantments and glyphs', () => {
     expect(hero.armor.glyph).toBeDefined();
     expect(armorStats(hero.armor).dr).toBeGreaterThan(plain);
     const result = act(world, 'p', { type: 'use', item: 0, target: 'weapon' });
-    expect(hero.weapon.enchant).toBeDefined();
+    expect(hero.weapon!.enchant).toBeDefined();
     expect(result.ok && result.effects.some((e) => e.type === 'imbued')).toBe(true);
   });
 });

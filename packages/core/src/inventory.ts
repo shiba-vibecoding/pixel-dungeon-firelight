@@ -108,7 +108,9 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
       // The blacksmith's pickaxe is a tool: no scroll improves it.
       if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
-        hero.weapon.kind === 'weapon.pickaxe' && world.known.includes(item.kind)) return 'the pickaxe cannot be improved';
+        hero.weapon?.kind === 'weapon.pickaxe' && world.known.includes(item.kind)) return 'the pickaxe cannot be improved';
+      if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
+        !hero.weapon && world.known.includes(item.kind)) return 'you hold no weapon';
       return null;
     case 'equip':
       return category === 'weapon' || category === 'armor' || category === 'ring' ? null : 'that cannot be equipped';
@@ -180,7 +182,10 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         return TIME_TO_EQUIP;
       }
       const slot = itemDef(item.kind).category as 'weapon' | 'armor';
-      hero.items[action.item] = hero[slot];
+      // Bare-handed, nothing goes back into the pack.
+      const old = hero[slot];
+      if (old) hero.items[action.item] = old;
+      else hero.items.splice(action.item, 1);
       hero[slot] = item;
       ctx.effects.push({ type: 'equipped', hero: hero.id, item });
       return TIME_TO_EQUIP;
@@ -601,6 +606,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     }
     case 'scroll.upgrade': {
       const upgraded = hero[target];
+      if (!upgraded) break;
       // Weapon.upgrade(false): the clash of magics may drive an enchantment out of a well-upgraded item.
       if ((upgraded.enchant || upgraded.glyph) && upgraded.level > 0 && ctx.rng.int(upgraded.level) > 0) {
         delete upgraded.enchant;
@@ -614,6 +620,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     case 'scroll.enchantment': {
       // ScrollOfEnchantment: a new enchantment for the weapon, or a new glyph for the armour.
       const imbued = hero[target];
+      if (!imbued) break;
       if (target === 'weapon') imbued.enchant = randomEnchantment(ctx.rng, imbued.enchant);
       else imbued.glyph = randomGlyph(ctx.rng, imbued.glyph);
       ctx.effects.push({ type: 'imbued', hero: hero.id, item: imbued });

@@ -37,7 +37,8 @@ Yendor on depth 26:
 - Monsters with the original stats and behaviour: rats, gnoll scouts, sewer
   crabs; skeletons that explode, thieves that steal and run, swarms of flies
   that split, gnoll shamans with lightning, vampire bats, gnoll brutes, cave
-  spinners with their venom; fire elementals, dwarf monks, dwarf warlocks whose
+  spinners with their venom; fire elementals, dwarf monks that can knock the
+  weapon out of your hands, dwarf warlocks whose
   shadow bolts weaken, and golems; succubi that charm and blink, evil eyes whose
   gaze pierces, and scorpios that sting from afar and cripple; and mimics,
   chests that bite. One in thirty rats, thieves, brutes, monks and scorpios is a
@@ -85,7 +86,7 @@ Yendor on depth 26:
 
 Not ported yet: cursed items and the scroll of remove curse; the scroll of
 mirror image and the glyph of multiplicity (there are no allies yet); the
-potion of might; dwarf monks disarming; and gas clouds
+potion of might; and gas clouds
 (gas acts at once on everyone within reach instead).
 
 ## How co-op works

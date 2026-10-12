@@ -3,7 +3,8 @@ import {
   maxExp, type Mob, MOBS, mobStats, ringBonus,
 } from './actors';
 import {
-  charAt, type Char, type Ctx, dropItem, enterCell, freeCellNear, heroesOn, isHero, isPassable, isWater, leaveCell, observe,
+  charAt, type Char, type Ctx, dropItem, enterCell, freeCellNear, heroesOn, isHero, isPassable, isWater, landItem, leaveCell,
+  observe,
 } from './floor';
 import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold, wandMaxCharges } from './items';
 import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
@@ -86,6 +87,13 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
       // Scorpio.attackProc: half its stings cripple.
       // Albino.attackProc: half its bites leave the hero bleeding.
       if (attacker.kind === 'albino' && ctx.rng.int(2) === 0 && damage > 0) defender.bleeding = Math.max(defender.bleeding ?? 0, damage);
+      // Monk.attackProc: one blow in six knocks the weapon out of the hero's hands (knuckledusters stay on).
+      if (baseKind(attacker.kind) === 'monk' && ctx.rng.int(6) === 0 && defender.weapon && defender.weapon.kind !== 'weapon.knuckles') {
+        const weapon = defender.weapon;
+        defender.weapon = null;
+        landItem(ctx, defender.pos, weapon);
+        ctx.effects.push({ type: 'disarmed', depth: ctx.depth, hero: defender.id, mob: attacker.id, item: weapon });
+      }
       // Senior.attackProc: now and then a blow stuns.
       if (attacker.kind === 'senior' && ctx.rng.int(10) === 0) defender.paralysed = Math.max(defender.paralysed, 1);
       if (baseKind(attacker.kind) === 'scorpio' && ctx.rng.int(2) === 0) {
@@ -137,7 +145,7 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
   hurt(ctx, defender, damage, attacker);
   // Pickaxe.proc: a vampire bat slain with the pickaxe leaves its blood on it, as the blacksmith wants.
-  if (isHero(attacker) && attacker.weapon.kind === 'weapon.pickaxe' && !thrown && !isHero(defender) && defender.kind === 'bat' && !isAlive(defender)) {
+  if (isHero(attacker) && attacker.weapon?.kind === 'weapon.pickaxe' && !thrown && !isHero(defender) && defender.kind === 'bat' && !isAlive(defender)) {
     attacker.weapon.bloody = true;
   }
   // Hero.defenseProc: a ring of thorns turns some of the blow back on the attacker.

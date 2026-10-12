@@ -374,6 +374,8 @@ const en = {
     busy: 'I\'m busy. Get lost!',
   },
   mine: 'Mine',
+  bareHanded: 'fists',
+  disarmed: (monk: string, weapon: string) => `The ${monk} knocks the ${weapon} out of your hands! Pick it up and wield it again.`,
   pickaxeInfo: (bloody: boolean): string => bloody
     ? "The troll blacksmith's pickaxe, stained with a bat's blood."
     : "The troll blacksmith's pickaxe: a tool for breaking rocks, and a weapon at a pinch. Tap a dark vein beside you in the caves to mine it.",
@@ -938,6 +940,8 @@ const ru: Strings = {
     busy: 'Я занят. Проваливай!',
   },
   mine: 'Добыть руду',
+  bareHanded: 'кулаки',
+  disarmed: (monk, weapon) => `${capitalize(monk)} выбивает у вас из рук: ${weapon}! Подберите и снова возьмите в руки.`,
   pickaxeInfo: (bloody) => bloody ? 'Кирка тролля-кузнеца, в крови летучей мыши.' : 'Кирка тролля-кузнеца: инструмент, чтобы колоть камень, и оружие на крайний случай. В пещерах нажмите на тёмную жилу рядом с собой, чтобы добыть руду.',
   nothingToReforge: 'У вас нет двух вещей одного вида, которые можно перековать.',
   reforgePair: (better, worse) => `Перековать: ${better} + ${worse}`,

@@ -594,7 +594,7 @@ function tapCell(cell: number): void {
   }
   if (!explored[cell]) return;
   // A vein of dark gold beside the hero, with the blacksmith's pickaxe at hand: mine it.
-  const pickaxe = me.weapon.kind === 'weapon.pickaxe' || me.items.some((i) => i.kind === 'weapon.pickaxe');
+  const pickaxe = me.weapon?.kind === 'weapon.pickaxe' || me.items.some((i) => i.kind === 'weapon.pickaxe');
   if (level.map[cell] === T.WALL_DECO && adjacent(me.pos, cell) && pickaxe && me.depth >= 11 && me.depth <= 15) {
     send({ type: 'mine' }, performance.now());
     return;

@@ -500,6 +500,11 @@ export class View {
           for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '150, 140, 120', duration: 900 });
           audio.play('rocks');
           break;
+        case 'disarmed':
+          if (effect.hero === myId) {
+            this.say(t.disarmed(t.mobs[mobKind(effect.depth, effect.mob, 'monk')], itemName(world, effect.item)), COLORS.negative, now);
+          }
+          break;
         case 'mined':
           if (effect.depth !== this.depth) break;
           this.flashes.push({ cell: effect.pos, start: now, color: '255, 210, 90', duration: 500 });

@@ -36,8 +36,8 @@ function poisonTurns(duration: number): number {
 
 /** Weapon.proc: what the hero's enchanted weapon does as a blow lands, before its damage. */
 export function weaponProc(ctx: Ctx, hero: Hero, mob: Mob, damage: number): void {
-  let enchant = hero.weapon.enchant;
-  if (!enchant || !isAlive(mob)) return;
+  let enchant = hero.weapon?.enchant;
+  if (!hero.weapon || !enchant || !isAlive(mob)) return;
   const { rng, depth, level: map } = ctx;
   // Instability: every blow, some other enchantment.
   if (enchant === 'instability') enchant = randomEnchantment(rng, 'instability');

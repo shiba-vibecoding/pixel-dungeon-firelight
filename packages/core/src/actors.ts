@@ -1,4 +1,4 @@
-import { armorStats, createItem, type Item, type ItemKind, missileStats, weaponStats } from './items';
+import { armorStats, createItem, type Item, type ItemKind, missileStats, type WeaponStats, weaponStats } from './items';
 import type { Rng } from './rng';
 import type { Action } from './world';
 
@@ -65,7 +65,8 @@ export interface Hero {
   regen: number;
   /** Caustic ooze from Goo: time since it last burned, or -1 when clean. Water washes it off. */
   ooze: number;
-  weapon: Item;
+  /** The weapon in hand; none after a monk's disarming blow, until the hero takes one up again. */
+  weapon: Item | null;
   armor: Item;
   /** Rings worn, two at most. */
   rings: Item[];
@@ -199,8 +200,13 @@ export const isStarving = (hero: Hero): boolean => hero.hunger >= STARVING;
 export const FURY_LEVEL = 0.4;
 export const isHungry = (hero: Hero): boolean => hero.hunger >= HUNGRY;
 
+/** The numbers of the weapon in hand, or of bare fists (Hero.damageRoll without a weapon: 1 to STR-9). */
+export function heroWeapon(hero: Hero): WeaponStats {
+  return hero.weapon ? weaponStats(hero.weapon) : { min: 1, max: Math.max(1, heroStr(hero) - 9), str: 0, accuracy: 1, delay: 1 };
+}
+
 export function heroAttackSkill(hero: Hero): number {
-  const weapon = weaponStats(hero.weapon);
+  const weapon = heroWeapon(hero);
   const encumbrance = weapon.str - heroStr(hero);
   const factor = encumbrance > 0 ? f32(weapon.accuracy / 1.5 ** encumbrance) : f32(weapon.accuracy);
   // RingOfAccuracy: 1.4 times as accurate a level.
@@ -246,11 +252,11 @@ export function heroSpeed(hero: Hero): number {
 }
 
 export function heroDamageRoll(hero: Hero, rng: Rng): number {
-  const weapon = weaponStats(hero.weapon);
-  let damage = rng.normalIntRange(weapon.min, weapon.max);
+  const weapon = heroWeapon(hero);
+  let damage = hero.weapon ? rng.normalIntRange(weapon.min, weapon.max) : rng.intRange(weapon.min, weapon.max);
   // Fury: a berserker badly hurt hits half as hard again.
   if (hero.subclass === 'berserker' && hero.hp > 0 && hero.hp <= hero.ht * FURY_LEVEL) damage = Math.trunc(damage * 1.5);
-  if (hero.heroClass !== 'huntress') {
+  if (hero.heroClass !== 'huntress' && hero.weapon) {
     const excess = heroStr(hero) - weapon.str;
     if (excess > 0) {
       damage += rng.intRange(0, excess);
@@ -260,7 +266,7 @@ export function heroDamageRoll(hero: Hero, rng: Rng): number {
 }
 
 export function heroAttackDelay(hero: Hero): number {
-  const weapon = weaponStats(hero.weapon);
+  const weapon = heroWeapon(hero);
   const encumbrance = weapon.str - heroStr(hero);
   return encumbrance > 0 ? f32(weapon.delay * 1.2 ** encumbrance) : weapon.delay;
 }

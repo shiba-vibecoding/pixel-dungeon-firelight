@@ -326,7 +326,7 @@ export interface ReforgeOptions {
 export function showReforge(options: ReforgeOptions): void {
   const { world, hero } = options;
   const owned: Array<{ ref: ItemRef; item: Item }> = [
-    { ref: 'weapon' as ItemRef, item: hero.weapon },
+    ...(hero.weapon ? [{ ref: 'weapon' as ItemRef, item: hero.weapon }] : []),
     { ref: 'armor' as ItemRef, item: hero.armor },
     ...hero.items.map((item, index) => ({ ref: index as ItemRef, item })),
   ].filter(({ item }) => {
@@ -539,7 +539,8 @@ export function showBackpack(options: BackpackOptions): void {
       el(
         'div',
         { className: 'pd-row equipped' },
-        slot(world, hero.weapon, () => open(hero.weapon, null), t.equippedLabel),
+        // Bare-handed after a monk's blow: an empty slot.
+        slot(world, hero.weapon ?? undefined, hero.weapon ? () => open(hero.weapon!, null) : undefined, hero.weapon ? t.equippedLabel : t.bareHanded),
         slot(world, hero.armor, () => open(hero.armor, null), t.equippedLabel),
         ...[0, 1].map((i) => {
           const ring = hero.rings[i];

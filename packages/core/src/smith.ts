@@ -35,7 +35,7 @@ export const TIME_TO_MINE = 2;
 export type ItemRef = number | 'weapon' | 'armor';
 
 export function itemAt(hero: Hero, ref: ItemRef): Item | undefined {
-  return ref === 'weapon' ? hero.weapon : ref === 'armor' ? hero.armor : Number.isInteger(ref) ? hero.items[ref] : undefined;
+  return ref === 'weapon' ? hero.weapon ?? undefined : ref === 'armor' ? hero.armor : Number.isInteger(ref) ? hero.items[ref] : undefined;
 }
 
 /** Blacksmith.Quest: whoever stands at the forge the layout put him at. */
@@ -46,18 +46,17 @@ export function spawnBlacksmith(world: World, level: Level, mobs: Mob[], rng: Rn
 }
 
 const hasPickaxe = (hero: Hero): boolean =>
-  hero.weapon.kind === 'weapon.pickaxe' || hero.items.some((item) => item.kind === 'weapon.pickaxe');
+  hero.weapon?.kind === 'weapon.pickaxe' || hero.items.some((item) => item.kind === 'weapon.pickaxe');
 
 const pickaxeOf = (hero: Hero): Item | undefined =>
-  hero.weapon.kind === 'weapon.pickaxe' ? hero.weapon : hero.items.find((item) => item.kind === 'weapon.pickaxe');
+  hero.weapon?.kind === 'weapon.pickaxe' ? hero.weapon : hero.items.find((item) => item.kind === 'weapon.pickaxe');
 
 const oreOf = (hero: Hero): number => hero.items.find((item) => item.kind === 'quest.ore')?.qty ?? 0;
 
-/** Takes the pickaxe back: out of the hero's hands (for their old weapon, if they kept one) or out of the pack. */
+/** Takes the pickaxe back: out of the hero's hands (leaving them bare-handed) or out of the pack. */
 function returnPickaxe(hero: Hero): void {
-  if (hero.weapon.kind === 'weapon.pickaxe') {
-    const spare = hero.items.findIndex((item) => itemDef(item.kind).category === 'weapon' && item.kind !== 'weapon.pickaxe');
-    hero.weapon = spare >= 0 ? hero.items.splice(spare, 1)[0]! : createItem('weapon.knuckles');
+  if (hero.weapon?.kind === 'weapon.pickaxe') {
+    hero.weapon = null;
   } else {
     hero.items.splice(hero.items.findIndex((item) => item.kind === 'weapon.pickaxe'), 1);
   }

@@ -255,3 +255,29 @@ describe('rare variants', () => {
     expect(hero.hp).toBeLessThan(before);
   });
 });
+
+describe('dwarf monks', () => {
+  it("may knock the weapon out of the hero's hands, who then fights bare-handed", () => {
+    const world = pacify(createWorld(4));
+    addHero(world, { id: 'p', name: 'P', heroClass: 'warrior' });
+    const hero = heroById(world, 'p')!;
+    Object.assign(hero, { hp: 5000, ht: 5000, defenseSkill: 0 });
+    const monk = createMob('#monk', 'monk', freeNeighbour(world, 1, hero.pos), 'hunting', floorAt(world, 1).now);
+    Object.assign(monk, { enemy: 'p', target: hero.pos, enemySeen: true, hp: 100000, ht: 100000 });
+    floorAt(world, 1).mobs.push(monk);
+    const sword = hero.weapon!;
+    for (let i = 0; i < 200 && hero.weapon; i++) act(world, 'p', { type: 'wait' });
+    expect(hero.weapon).toBeNull();
+    const heap = floorAt(world, 1).heaps.find((h) => h.pos === hero.pos)!;
+    expect(heap.items).toContain(sword);
+    // Bare fists still strike.
+    expect(act(world, 'p', { type: 'attack', target: '#monk' }).ok).toBe(true);
+    // Picked up and wielded again, nothing is lost.
+    floorAt(world, 1).mobs = [];
+    act(world, 'p', { type: 'pickup' });
+    const index = hero.items.indexOf(sword);
+    expect(act(world, 'p', { type: 'equip', item: index }).ok).toBe(true);
+    expect(hero.weapon).toBe(sword);
+    expect(hero.items).not.toContain(sword);
+  });
+});

@@ -78,6 +78,8 @@ export type Effect =
   /** A scroll of enchantment gave an item its power; a scroll of upgrade drove one out. */
   | { type: 'imbued'; hero: string; item: Item }
   | { type: 'disenchanted'; hero: string; item: Item }
+  /** A dwarf monk knocked the weapon out of a hero's hands; it lies at their feet. */
+  | { type: 'disarmed'; depth: number; hero: string; mob: string; item: Item }
   /** A hero jumped into a chasm on `depth` and landed on the depth below. */
   | { type: 'fell'; hero: string; depth: number; pos: number }
   | { type: 'searched'; hero: string }

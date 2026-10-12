@@ -74,7 +74,7 @@ describe('the troll blacksmith', () => {
     talk(world, depth);
     const pick = hero.items.findIndex((i) => i.kind === 'weapon.pickaxe');
     act(world, 'p', { type: 'equip', item: pick });
-    expect(hero.weapon.kind).toBe('weapon.pickaxe');
+    expect(hero.weapon!.kind).toBe('weapon.pickaxe');
     expect(talk(world, depth)).toEqual({ type: 'smith', hero: 'p', line: 'noBlood' });
     const level = levelAt(world, depth);
     const pos = NEIGHBOURS8.map((n) => hero.pos + n).find((c) => canEnter(level, c) && !charAt(world, depth, c))!;
@@ -82,9 +82,9 @@ describe('the troll blacksmith', () => {
     Object.assign(bat, { hp: 1, enemy: 'p' });
     floorAt(world, depth).mobs.push(bat);
     act(world, 'p', { type: 'attack', target: '#bat' });
-    expect(hero.weapon.bloody).toBe(true);
+    expect(hero.weapon!.bloody).toBe(true);
     expect(talk(world, depth)).toEqual({ type: 'smith', hero: 'p', line: 'completed' });
-    expect(hero.weapon.kind).not.toBe('weapon.pickaxe');
+    expect(hero.weapon?.kind).not.toBe('weapon.pickaxe');
   });
 
   it('then reforges two items of a kind into one, a level better, once', () => {
