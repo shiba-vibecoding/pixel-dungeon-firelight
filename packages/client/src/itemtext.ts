@@ -39,6 +39,7 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
     const stats = weaponStats(item);
     return [
       t.weaponInfo(stats.min, stats.max, stats.str), ...(item.enchant ? [t.enchantInfo[item.enchant]] : []),
+      ...(item.imbue ? [t.imbueInfo[item.imbue]] : []),
       ...(item.kind === 'weapon.pickaxe' ? [t.pickaxeInfo(!!item.bloody)] : []),
       ...(item.cursed ? [t.cursedInfo] : []),
       ...(stats.str > hero.str ? [t.tooHeavy] : []),

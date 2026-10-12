@@ -341,7 +341,7 @@ function paintTreasury(level: LevelBuilder, room: Room): void {
   lockWithKey(level, room);
 }
 
-/** ArmoryPainter: three or four weapons and armour. */
+/** ArmoryPainter: three or four weapons and armour, or now and then a few bombs. */
 function paintArmory(level: LevelBuilder, room: Room): void {
   const { rng } = level;
   level.fillRect(room, T.WALL);
@@ -356,7 +356,8 @@ function paintArmory(level: LevelBuilder, room: Room): void {
   level.setXY(statue.x, statue.y, T.STATUE);
   const n = 3 + (rng.int(4) === 0 ? 1 : 0);
   for (let i = 0; i < n; i++) {
-    level.dropItem(freeSpot(level, room), HeapType.HEAP, { roll: 'category', categories: ['armor', 'weapon'], tries: 1 });
+    const prize: ItemSpec = rng.int(6) === 0 ? { roll: 'bombs' } : { roll: 'category', categories: ['armor', 'weapon'], tries: 1 };
+    level.dropItem(freeSpot(level, room), HeapType.HEAP, prize);
   }
   lockWithKey(level, room);
 }
@@ -449,9 +450,8 @@ function paintStorage(level: LevelBuilder, room: Room): void {
  * ShopPainter: the wares laid out along the walls, starting opposite the
  * door, and the shopkeeper among them. Depth 6 sells a quarterstaff or a
  * spear and leather armour, depth 11 a sword or a mace and mail armour;
- * both potions, scrolls and food. The seed pouch, scroll holder,
- * weightstone, scroll of remove curse and ankh of the original are not
- * ported yet.
+ * both potions, scrolls and food, and a weightstone. The seed pouch,
+ * scroll holder and wand holster of the original are not ported yet.
  */
 function paintShop(level: LevelBuilder, room: Room): void {
   const { rng } = level;
@@ -481,6 +481,7 @@ function paintShop(level: LevelBuilder, room: Room): void {
     : level.depth < 16 ? [pick('weapon.sword', 'weapon.mace'), 'armor.mail']
     : level.depth < 21 ? [pick('weapon.longsword', 'weapon.battleAxe'), 'armor.scale']
     : [rng.oneOf(['weapon.glaive', 'weapon.warHammer', 'armor.plate'] as ItemKind[]), 'torch', 'torch'];
+  if (level.depth < 21) gear.push('weightstone');
   const wares: ItemSpec[] = [
     ...gear.map((kind): ItemSpec => ({ roll: 'kind', kind })),
     { roll: 'kind', kind: 'potion.healing' },
@@ -488,10 +489,11 @@ function paintShop(level: LevelBuilder, room: Room): void {
     { roll: 'category', categories: ['potion'], tries: 1 },
     { roll: 'category', categories: ['potion'], tries: 1 },
     { roll: 'kind', kind: 'scroll.identify' },
+    { roll: 'kind', kind: 'scroll.removeCurse' },
     { roll: 'kind', kind: 'scroll.mapping' },
     { roll: 'category', categories: ['scroll'], tries: 1 },
-    { roll: 'kind', kind: 'food.ration' },
-    { roll: 'kind', kind: 'food.ration' },
+    { roll: 'kind', kind: 'food.overpriced' },
+    { roll: 'kind', kind: 'food.overpriced' },
     // Shops also keep an ankh, for those who fear the end.
     { roll: 'kind', kind: 'ankh' },
   ];

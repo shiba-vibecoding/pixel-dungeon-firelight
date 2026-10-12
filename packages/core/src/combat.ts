@@ -30,7 +30,7 @@ function defenseSkill(char: Char): number {
   return char.enemySeen ? mobStats(char).defense : 0;
 }
 
-function armor(char: Char): number {
+export function charArmor(char: Char): number {
   return isHero(char) ? heroArmor(char) : mobStats(char).dr;
 }
 
@@ -60,7 +60,7 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   // A sniper's thrown weapons find the weak points in any armour.
   const thrown = override.damage !== undefined;
   const sniping = isHero(attacker) && attacker.subclass === 'sniper' && thrown;
-  const reduction = sniping ? 0 : ctx.rng.intRange(0, armor(defender));
+  const reduction = sniping ? 0 : ctx.rng.intRange(0, charArmor(defender));
   let damage = Math.max(damageRoll(ctx, attacker, override.damage) - reduction, 0);
   if (isHero(attacker) && !isHero(defender)) damage = masteredBlow(ctx, attacker, defender, damage, thrown);
   // Goo's touch may leave caustic ooze that burns until washed off in water.
@@ -247,7 +247,7 @@ function split(ctx: Ctx, swarm: Mob, damage: number): void {
 }
 
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred' | 'bleeding' | 'dry' | 'multiplicity';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred' | 'bleeding' | 'dry' | 'multiplicity' | 'bomb';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
@@ -422,7 +422,7 @@ function explode(ctx: Ctx, skeleton: Mob): void {
     const victim = charAt(ctx.world, ctx.depth, skeleton.pos + n);
     if (!victim || !isAlive(victim)) continue;
     const [min, max] = MOBS.skeleton.damage;
-    const damage = Math.max(0, ctx.rng.normalIntRange(min, max) - ctx.rng.intRange(0, Math.trunc(armor(victim) / 2)));
+    const damage = Math.max(0, ctx.rng.normalIntRange(min, max) - ctx.rng.intRange(0, Math.trunc(charArmor(victim) / 2)));
     ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: victim.id, damage });
     hurt(ctx, victim, damage, isHero(victim) ? 'bones' : skeleton);
   }

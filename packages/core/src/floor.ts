@@ -182,6 +182,13 @@ export type Effect =
   | { type: 'repaired'; depth: number; mob: string }
   /** A dewdrop picked up, and the health it gave. */
   | { type: 'dew'; hero: string; amount: number }
+  /** Scrolls burnt up and meat cooked on a heap; a hero's scroll or meat caught fire in the pack. */
+  | { type: 'heapBurnt'; depth: number; pos: number }
+  | { type: 'burntUp'; hero: string; kind: ItemKind }
+  /** A bomb went off. */
+  | { type: 'exploded'; depth: number; pos: number }
+  /** A weapon balanced with a weightstone. */
+  | { type: 'balanced'; hero: string; item: Item }
   /** Terrain burnt down to embers, opening what it blocked. */
   | { type: 'burnt'; depth: number; pos: number }
   /** A thrown potion breaking; `identified` when what came out taught the party what it was. */

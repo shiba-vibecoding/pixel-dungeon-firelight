@@ -673,8 +673,9 @@ export class View {
         case 'ate':
           audio.play('eat');
           if (effect.hero === myId) {
-            this.say(effect.kind === 'food.meat' ? t.ateMeat : t.ateFood, COLORS.default, now);
-            if (effect.outcome) this.say(t.meat[effect.outcome], COLORS.warning, now);
+            this.say(effect.kind === 'food.meat' ? t.ateMeat : effect.kind === 'food.overpriced' ? t.ateOk : t.ateFood, COLORS.default, now);
+            // Mystery meat's surprises are bad ones; frozen carpaccio's are good.
+            if (effect.outcome) this.say(t.meat[effect.outcome], effect.kind === 'food.meat' ? COLORS.warning : COLORS.positive, now);
           }
           break;
         case 'hunger':
@@ -688,7 +689,21 @@ export class View {
           if (effect.amount > 0) this.float(effect.hero, `+${effect.amount}`, COLORS.positive, now);
           break;
         case 'burnt':
+        case 'heapBurnt':
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.pos, start: now });
+          break;
+        case 'burntUp':
+          if (effect.hero === myId) this.say(t.burntUp(itemName(world, { kind: effect.kind, qty: 1, level: 0 })), COLORS.warning, now);
+          break;
+        case 'exploded':
+          if (effect.depth === this.depth) {
+            audio.play('blast');
+            this.flashes.push({ cell: effect.pos, start: now, duration: 400 });
+          }
+          break;
+        case 'balanced':
+          audio.play('miss');
+          if (effect.hero === myId && effect.item.imbue) this.say(t.balanced[effect.item.imbue], COLORS.positive, now);
           break;
         case 'interrupted': {
           // Only the reasons worth telling: a refused move into a wall says nothing.

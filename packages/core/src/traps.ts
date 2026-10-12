@@ -4,11 +4,11 @@ import { charAt, type Char, type Ctx, exploredCells, heroesOn, isHero, isPassabl
 import { distance, NEIGHBOURS8 } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
 import { clearGas, seedGas } from './gas';
+import { burnHeaps, chillPack, freezeHeaps } from './cooking';
 
 /*
  * Traps (levels/traps): set off by stepping on them, visible or hidden; then
- * they are spent. The gas traps of the original spread a cloud; here the
- * cloud's effect lands at once on everyone within two cells.
+ * they are spent. The gas traps let out a cloud that spreads (gas.ts).
  */
 
 export type TrapKind = 'toxic' | 'fire' | 'paralytic' | 'poison' | 'alarm' | 'lightning' | 'gripping' | 'summoning';
@@ -73,8 +73,11 @@ export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS, s
       char.burning = 0;
     }
     if (kind === 'purity' && isHero(char)) char.gasImmune = Math.max(char.gasImmune ?? 0, PURE_TURNS);
+    if (kind === 'frost' && isHero(char) && !immuneTo(char, 'frost')) chillPack(ctx, char);
   }
+  if (kind === 'frost') freezeHeaps(ctx, pos, radius);
   if (kind !== 'fire') return;
+  burnHeaps(ctx, pos, radius);
   // Whatever can burn nearby burns down to embers: grass, doors, barricades, bookshelves.
   for (let cell = 0; cell < level.map.length; cell++) {
     if (distance(cell, pos) <= radius + 1 && hasFlag(level.map[cell]!, F.FLAMABLE)) {

@@ -38,7 +38,7 @@ describe('traps', () => {
     const { world, cell } = besideTrap(T.PARALYTIC_TRAP);
     const hero = heroById(world, 'p')!;
     const level = levelAt(world, 1);
-    const rat = createMob('#90', 'rat', NEIGHBOURS8.map((n) => cell + n).find((c) => canEnter(level, c) && hasFlag(level.map[c]!, F.PASSABLE) && !charAt(world, 1, c) && c !== hero.pos)!, 'hunting', 0);
+    const rat = createMob('#90', 'rat', NEIGHBOURS8.map((n) => cell + n).find((c) => canEnter(level, c) && hasFlag(level.map[c]!, F.PASSABLE) && level.map[c] !== T.DOOR && !charAt(world, 1, c) && c !== hero.pos)!, 'hunting', 0);
     floorAt(world, 1).mobs.push(rat);
     const result = act(world, 'p', { type: 'move', to: cell });
     // The paralysed turns pass at once, for as long as the cloud lingers and a

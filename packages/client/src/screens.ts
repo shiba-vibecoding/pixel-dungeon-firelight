@@ -629,8 +629,15 @@ function showItem(options: ItemOptions): void {
     if (category === 'weapon' || category === 'armor' || category === 'ring') {
       actions.push(button(category === 'ring' ? t.putOn : t.equip, () => act({ type: 'equip', item: index }), 'primary'));
     }
-    if (category === 'missile' || category === 'wand') {
-      const kind = category === 'missile' ? 'throw' : 'zap';
+    if (category === 'weightstone' && hero.weapon) {
+      // Weightstone.WndBalance: the weapon in hand, balanced the way it is not yet.
+      for (const imbue of ['speed', 'accuracy'] as const) {
+        if (hero.weapon.imbue === imbue) continue;
+        actions.push(button(t.balanceFor[imbue], () => act({ type: 'balance', item: index, imbue }), 'primary'));
+      }
+    }
+    if (category === 'missile' || category === 'wand' || category === 'bomb') {
+      const kind = category === 'wand' ? 'zap' : 'throw';
       actions.push(
         button(kind === 'throw' ? t.throwItem : t.zap, () => {
           options.onClose();

@@ -72,7 +72,10 @@ Yendor on depth 26:
   power, accuracy, evasion, satiety, haste, elements, thorns, haggler and
   herbalism, two worn at once, known by their gem until worn a while; seeds of
   firebloom, icecap, sorrowmoss, dreamweed, sungrass, earthroot and fadeleaf
-  (and the wandmaker's rotberry), which grow where they are thrown.
+  (and the wandmaker's rotberry), which grow where they are thrown; bombs;
+  weightstones to balance a weapon for speed or accuracy; rations, pasties,
+  overpriced rations and mystery meat, which fire chargrills and frost turns
+  into carpaccio.
 - Four hero classes with their original starting kits and perks, and their
   subclasses: Tengu leaves a Tome of Mastery for each hero, to become a
   gladiator or berserker, battlemage or warlock, freerunner or assassin, sniper
@@ -90,6 +93,8 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
+Fire burns scrolls, lying about or in a burning hero's pack.
+
 Worse-than-plain gear is cursed: once worn, it will not come off until a
 scroll of remove curse (or of upgrade) lifts the curse.
 
@@ -100,8 +105,7 @@ doors, thin out a little every turn, and act on whoever breathes them.
 Not ported yet: bags (seed
 pouch, scroll holder, wand holster, keyring); the dew vial; the honeypot and
 its bees; wraiths rising from cursed remains; the ghost's other errand (the
-fetid rat); the Rat King; cooked mystery meat; Lloyd's beacon, the
-weightstone and the overpriced ration; bombs.
+fetid rat); the Rat King; Lloyd's beacon.
 
 ## How co-op works
 

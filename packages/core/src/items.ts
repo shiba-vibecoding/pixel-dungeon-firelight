@@ -16,7 +16,7 @@ import type { RunState } from './run';
 
 export type ItemCategory =
   | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
-  | 'tome' | 'quest' | 'ankh' | 'kit';
+  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -146,6 +146,15 @@ export const ITEMS = {
   'food.ration': { category: 'food', sprite: 4, energy: 260 },
   'food.pasty': { category: 'food', sprite: 112, energy: 360 },
   'food.meat': { category: 'food', sprite: 113, energy: 100 },
+  // Mystery meat cooked by fire or frozen by frost (ChargrilledMeat, FrozenCarpaccio), and the
+  // shops' smaller, dearer ration (OverpricedRation).
+  'food.steak': { category: 'food', sprite: 114, energy: 100 },
+  'food.carpaccio': { category: 'food', sprite: 116, energy: 100 },
+  'food.overpriced': { category: 'food', sprite: 115, energy: 100 },
+  /** Thrown, it blows up where it lands (Bomb). */
+  bomb: { category: 'bomb', sprite: 124 },
+  /** Balances a melee weapon for speed or for accuracy (Weightstone). */
+  weightstone: { category: 'weightstone', sprite: 123 },
   /** Shaken from tall grass; heals whoever picks it up. */
   dew: { category: 'dew', sprite: 81 },
   /** Opens the locked room of the level it was found on. */
@@ -197,6 +206,8 @@ export interface Item {
   cursed?: boolean;
   /** Class armour: the armour it was made from, whose protection it keeps. */
   base?: ItemKind;
+  /** Melee weapons: balanced with a weightstone, for speed or for accuracy (Weapon.imbue). */
+  imbue?: 'speed' | 'accuracy';
 }
 
 /* Enchantments and glyphs (Weapon.Enchantment, Armor.Glyph) */
@@ -240,7 +251,7 @@ export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
   return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || category === 'torch' ||
-    category === 'seed' || (category === 'missile' && kind !== 'missile.boomerang') || kind === 'quest.token' || kind === 'quest.ore';
+    category === 'seed' || category === 'bomb' || category === 'weightstone' || (category === 'missile' && kind !== 'missile.boomerang') || kind === 'quest.token' || kind === 'quest.ore';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
@@ -266,7 +277,9 @@ const SCROLL_PRICES: Partial<Record<ItemKind, number>> = {
 const MISSILE_PRICES: Partial<Record<ItemKind, number>> = {
   'missile.dart': 2, 'missile.curare': 12, 'missile.incendiary': 10, 'missile.javelin': 15, 'missile.shuriken': 15, 'missile.tomahawk': 20,
 };
-const FOOD_PRICES: Partial<Record<ItemKind, number>> = { 'food.ration': 10, 'food.pasty': 20, 'food.meat': 5 };
+const FOOD_PRICES: Partial<Record<ItemKind, number>> = {
+  'food.ration': 10, 'food.pasty': 20, 'food.meat': 5, 'food.steak': 5, 'food.carpaccio': 10, 'food.overpriced': 20,
+};
 
 /** Item.price; unknown potions and scrolls fetch a plain price. 0 for what cannot be sold. */
 export function itemPrice(item: Item, known: boolean): number {
@@ -299,6 +312,10 @@ export function itemPrice(item: Item, known: boolean): number {
       return 10 * item.qty;
     case 'ankh':
       return 50 * item.qty;
+    case 'bomb':
+      return 10 * item.qty;
+    case 'weightstone':
+      return 40 * item.qty;
     default:
       return 0;
   }
@@ -370,8 +387,9 @@ export function weaponStats(item: Item): WeaponStats {
     min: tier + item.level,
     max: Math.trunc(f32(f32((tier * tier - tier + 10) / f32(accuracy)) * f32(delay))) + item.level * tier,
     str: (def.str ?? 8 + tier * 2) - item.level,
-    accuracy,
-    delay,
+    // Weapon.imbue: balanced for accuracy, half as accurate again; for speed, it strikes in six tenths of the time.
+    accuracy: item.imbue === 'accuracy' ? f32(accuracy * 1.5) : accuracy,
+    delay: item.imbue === 'speed' ? f32(delay * 0.6) : delay,
   };
 }
 
@@ -611,6 +629,9 @@ function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: num
       return { ...createItem('key.golden'), depth };
     case 'liquidFlame':
       return createItem('potion.liquidFlame');
+    case 'bombs':
+      // Bomb.random: one to three.
+      return createItem('bomb', rng.intRange(1, 3));
     case 'kind':
       return createItem(spec.kind);
     case 'category': {

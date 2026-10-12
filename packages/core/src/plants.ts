@@ -5,6 +5,7 @@ import { createItem, ItemGenerator, type ItemKind } from './items';
 import { distance, LENGTH } from './level/geometry';
 import { T } from './level/terrain';
 import { burst } from './traps';
+import { chillPack, freezeHeaps } from './cooking';
 
 /*
  * Plants (Plant and its kinds): a seed thrown somewhere takes root there, and
@@ -76,7 +77,9 @@ export function stepOnPlant(ctx: Ctx, who: Char, pos: number): void {
       for (const char of near(ctx, pos, 1)) {
         char.paralysed = Math.max(char.paralysed ?? 0, FROZEN_TURNS);
         char.burning = 0;
+        if (isHero(char)) chillPack(ctx, char);
       }
+      freezeHeaps(ctx, pos, 1);
       break;
     case 'sorrowmoss':
       who.poison = Math.max(who.poison ?? 0, 4 + Math.trunc(depth / 2));

@@ -41,6 +41,8 @@ export type ItemSpec =
   | { roll: 'goldenKey' }
   /** A potion of liquid flame, to burn the way into a storage room. */
   | { roll: 'liquidFlame' }
+  /** A few bombs, an armoury's prize now and then. */
+  | { roll: 'bombs' }
   /** One particular item, such as the wares of a shop. */
   | { roll: 'kind'; kind: ItemKind };
 

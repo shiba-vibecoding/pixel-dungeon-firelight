@@ -3,7 +3,7 @@ import {
   SUBCLASSES,
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
-import { attack, CRIPPLE_TURNS, earnExp, hurt } from './combat';
+import { attack, charArmor, CRIPPLE_TURNS, earnExp, hurt } from './combat';
 import { fearless, TERROR_TURNS } from './enchant';
 import { conjureImages } from './allies';
 import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, isWater, landItem, leaveCell } from './floor';
@@ -12,7 +12,7 @@ import {
   magicMissileDamage, missileStats, randomEnchantment, randomGlyph, wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
-import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
+import { adjacent, LENGTH, NEIGHBOURS8, NEIGHBOURS9 } from './level/geometry';
 import { discover, F, hasFlag, T } from './level/terrain';
 import { type Burst, burst, immuneTo } from './traps';
 import { plant, SEED_PLANTS } from './plants';
@@ -48,10 +48,12 @@ export type InventoryAction =
   /** Mine the vein of dark gold next to the hero with the blacksmith's pickaxe. */
   | { type: 'mine' }
   /** The special ability of the class armour worn: a cell for the warrior's leap and the rogue's smoke bomb. */
-  | { type: 'special'; target?: number };
+  | { type: 'special'; target?: number }
+  /** Balance a melee weapon with a weightstone, for speed or accuracy: the one in the pack at weapon, or the one in hand. */
+  | { type: 'balance'; item: number; weapon?: number; imbue: 'speed' | 'accuracy' };
 
 const INVENTORY_ACTIONS: ReadonlySet<string> = new Set([
-  'pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master', 'mine', 'special',
+  'pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master', 'mine', 'special', 'balance',
 ]);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
@@ -68,6 +70,8 @@ const TIME_TO_DROP = 1;
 const TIME_TO_THROW = 1;
 const TIME_TO_ZAP = 1;
 const TIME_TO_EAT = 3;
+/** Weightstone.TIME_TO_APPLY. */
+const TIME_TO_BALANCE = 2;
 /** TomeOfMastery.TIME_TO_READ. */
 const TIME_TO_READ_TOME = 10;
 /** Light.DURATION. */
@@ -136,6 +140,13 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     }
     case 'drop':
       return null;
+    case 'balance': {
+      if (category !== 'weightstone') return 'that is no weightstone';
+      if (action.imbue !== 'speed' && action.imbue !== 'accuracy') return 'bad choice';
+      const weapon = action.weapon === undefined ? hero.weapon : Number.isInteger(action.weapon) ? hero.items[action.weapon] : undefined;
+      if (!weapon || itemDef(weapon.kind).category !== 'weapon') return 'choose a melee weapon';
+      return weapon.imbue === action.imbue ? 'it is balanced that way already' : null;
+    }
     case 'master':
       if (item.kind !== 'tome.mastery') return 'that is no tome';
       if (hero.subclass) return 'you have already mastered a way';
@@ -145,7 +156,9 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       return itemPrice(item, world.known.includes(item.kind)) > 0 ? null : 'nobody would buy that';
     case 'throw':
     case 'zap': {
-      const fits = action.type === 'throw' ? category === 'missile' || category === 'potion' || category === 'seed' : category === 'wand';
+      const fits = action.type === 'throw'
+        ? category === 'missile' || category === 'potion' || category === 'seed' || category === 'bomb'
+        : category === 'wand';
       if (!fits) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
       if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
         return 'bad target';
@@ -166,6 +179,15 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       return TIME_TO_MINE;
     case 'special':
       return classSpecial(ctx, hero, action.target);
+    case 'balance': {
+      // Weightstone.apply: the stone is used up, and the weapon balanced the chosen way.
+      const weapon = action.weapon === undefined ? hero.weapon! : hero.items[action.weapon]!;
+      const stone = hero.items[action.item]!;
+      weapon.imbue = action.imbue;
+      if (--stone.qty <= 0) hero.items.splice(action.item, 1);
+      ctx.effects.push({ type: 'balanced', hero: hero.id, item: weapon });
+      return TIME_TO_BALANCE;
+    }
     case 'use':
       if (itemDef(hero.items[action.item]!.kind).category === 'food') {
         eat(ctx, hero, action.item);
@@ -283,6 +305,10 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     throwPotion(ctx, hero, index, target);
     return;
   }
+  if (itemDef(item.kind).category === 'bomb') {
+    throwBomb(ctx, hero, index, target);
+    return;
+  }
   if (itemDef(item.kind).category === 'seed') {
     // Plant.Seed.onThrow: it takes root where it lands.
     const kind = item.kind;
@@ -352,6 +378,39 @@ function missileProc(ctx: Ctx, thrown: Item, victim: Mob): void {
       if (damage > 0) victim.bleeding = Math.max(victim.bleeding ?? 0, damage);
       break;
     }
+  }
+}
+
+/**
+ * Bomb.onThrow: its fuse lit as it is thrown, it blows up where it lands
+ * (unless it falls down a chasm), hurting and stunning everyone next to it and
+ * burning down whatever can burn there.
+ */
+function throwBomb(ctx: Ctx, hero: Hero, index: number, target: number): void {
+  const { world, depth, level, rng } = ctx;
+  const bomb = hero.items[index]!;
+  if (--bomb.qty <= 0) hero.items.splice(index, 1);
+  const end = ballistica(ctx, hero.pos, target).at(-1)!;
+  ctx.effects.push({ type: 'thrown', depth, from: hero.pos, to: end, item: 'bomb' });
+  if (hasFlag(level.map[end]!, F.PIT)) {
+    landItem(ctx, end, createItem('bomb'));
+    return;
+  }
+  ctx.effects.push({ type: 'exploded', depth, pos: end });
+  for (const n of NEIGHBOURS9) {
+    const cell = end + n;
+    if (cell < 0 || cell >= LENGTH) continue;
+    if (hasFlag(level.map[cell]!, F.FLAMABLE)) {
+      level.map[cell] = T.EMBERS;
+      ctx.effects.push({ type: 'burnt', depth, pos: cell });
+    }
+    const char = charAt(world, depth, cell);
+    if (!char || !isAlive(char)) continue;
+    const damage = rng.intRange(1 + depth, 10 + depth * 2) - rng.intRange(0, charArmor(char));
+    if (damage <= 0) continue;
+    ctx.effects.push({ type: 'hurt', depth, who: char.id, damage });
+    hurt(ctx, char, damage, isHero(char) ? 'bomb' : hero);
+    if (isAlive(char)) char.paralysed = Math.max(char.paralysed ?? 0, 2);
   }
 }
 
@@ -480,8 +539,8 @@ function brew(ctx: Ctx, pos: number): void {
   ctx.effects.push({ type: 'brewed', depth: ctx.depth, pos });
 }
 
-/** What mystery meat can do to whoever eats it. */
-export type MeatOutcome = 'hot' | 'legs' | 'unwell' | 'stuffed';
+/** What mystery meat can do to whoever eats it, and what frozen carpaccio can. */
+export type MeatOutcome = 'hot' | 'legs' | 'unwell' | 'stuffed' | 'invisible' | 'barkskin' | 'refreshed' | 'better';
 
 /**
  * Food.execute: hunger goes away; warriors also get some health back and
@@ -511,6 +570,18 @@ function eat(ctx: Ctx, hero: Hero, index: number): void {
     if (outcome === 'legs') hero.rooted = Math.max(hero.rooted, ROOTED_TURNS);
     if (outcome === 'unwell') hero.poison = Math.max(hero.poison, Math.trunc(hero.ht / 5));
     if (outcome === 'stuffed') hero.slowed = Math.max(hero.slowed, SLOWED_TURNS);
+  }
+  if (kind === 'food.carpaccio') {
+    // FrozenCarpaccio.execute: four times in five, something good besides.
+    outcome = (['invisible', 'barkskin', 'refreshed', 'better', null] as const)[ctx.rng.int(5)]!;
+    if (outcome === 'invisible') hero.invisible = Math.max(hero.invisible, INVISIBILITY_DURATION);
+    if (outcome === 'barkskin') hero.barkskin = Math.max(hero.barkskin, Math.trunc(hero.ht / 4));
+    if (outcome === 'refreshed') Object.assign(hero, { poison: 0, crippled: 0, weakened: 0, bleeding: 0 });
+    if (outcome === 'better' && hero.hp < hero.ht) {
+      const amount = Math.min(Math.trunc(hero.ht / 4), hero.ht - hero.hp);
+      hero.hp += amount;
+      ctx.effects.push({ type: 'healed', hero: hero.id, amount });
+    }
   }
   ctx.effects.push({ type: 'ate', hero: hero.id, kind, outcome });
 }

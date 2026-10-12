@@ -15,6 +15,7 @@ import { discoverable } from './level/flags';
 import { type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
 import { evolveGas } from './gas';
+import { scorchPack } from './cooking';
 import { type ImpQuest, impRewardProblem, ringFromImp, spawnImp, talkToImp } from './imp';
 import { type ItemRef, reforge, reforgeProblem, type SmithQuest, spawnBlacksmith, talkToSmith } from './smith';
 import { spawnWandmaker, talkToWandmaker, type WandQuest, wandFromWandmaker, wandRewardProblem } from './wandmaker';
@@ -458,6 +459,8 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
         const damage = ctx.rng.intRange(1, 3 + Math.trunc(hero.depth / 4));
         ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage });
         hurt(ctx, hero, damage, 'burning');
+        // Burning.act: something in the pack may catch.
+        if (isAlive(hero)) scorchPack(ctx, hero);
       }
       hero.burning = Math.max(0, hero.burning - time);
     }
