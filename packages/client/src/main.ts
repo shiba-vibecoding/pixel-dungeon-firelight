@@ -35,6 +35,7 @@ import { quality } from './quality';
 import { type Launch, Motion } from './motion';
 import { Scenery } from './scenery';
 import { Feedback } from './feedback';
+import { Finds, MapControls } from './mapui';
 import { preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
@@ -160,6 +161,26 @@ const hud = new Hud({
     if (hero) toast(`${hero.name} · ${t.classes[hero.heroClass]} · ${t.newDepth(hero.depth)}`, { tone: 'ally' });
   },
 });
+/** The map's buttons over the log (zoom, the whole level, back to the hero) and the finds' stack (mapui.ts). */
+const mapControls = new MapControls(document.getElementById('ui')!, {
+  zoomIn: () => zoomTo(Math.round(zoom.target) + 1, null),
+  zoomOut: () => zoomTo(Math.round(zoom.target) - 1, null),
+  whole: () => {
+    // Out as far as it goes, the level's middle in the middle of the view.
+    const world = session?.world;
+    const me = world && heroById(world, session!.myId);
+    zoomTo(zoom.min, null);
+    if (me) {
+      pan.x = (WIDTH * TILE) / 2 - (cellX(me.pos) * TILE + TILE / 2);
+      pan.y = (HEIGHT * TILE) / 2 - (cellY(me.pos) * TILE + TILE / 2);
+      pan.home = false;
+    }
+  },
+  home: () => {
+    pan.home = true;
+  },
+});
+const finds = new Finds(document.getElementById('ui')!);
 /** Something was picked up since the backpack was last opened. */
 let newLoot = false;
 
@@ -616,8 +637,13 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'fell' && effect.hero === myId) justFell = true;
     // Hero.interrupt: an item breaking stops whatever the hero was doing.
     if (effect.type === 'worn' && effect.hero === myId && effect.state === 'broken') walk.reset();
-    // What flies into the backpack is motion.ts's: from wherever it lay.
+    // What flies into the backpack is motion.ts's: from wherever it lay. The find shows a moment under the HUD.
     if (effect.type === 'pickedUp' && effect.hero === myId && effect.item.kind !== 'gold') newLoot = true;
+    if (effect.type === 'pickedUp' && effect.hero === myId && world) {
+      const item = effect.item;
+      finds.show(item.kind === 'gold' ? 'gold' : `${item.kind}:${item.level}`, itemSprite(item, world.run.labels), capitalize(itemName(world, item)),
+        item.kind.startsWith('ring.') || item.kind.startsWith('wand.') || item.kind === 'potion.strength' || item.kind === 'scroll.upgrade');
+    }
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     const hurt =
       (effect.type === 'attack' && effect.target === myId) ||
@@ -1387,6 +1413,8 @@ function tick(now: number): void {
       // GameScene's greetings: the depth, a new region, and the level's feeling.
       view.say(justFell ? t.fell(me.depth) : me.depth > lastPlace.depth ? t.descended(me.depth) : t.ascended(me.depth));
       justFell = false;
+      // Down into a new region: its card.
+      if (me.depth > lastPlace.depth && me.depth % 5 === 1) view.enterRegion(me.depth, vnow);
       if (me.depth === 6 && lastPlace.depth === 5) view.say(t.enterPrison, '#ffff44');
       if (me.depth === 11 && lastPlace.depth === 10) view.say(t.enterCaves, '#ffff44');
       if (me.depth === 16 && lastPlace.depth === 15) view.say(t.enterCity, '#ffff44');
@@ -1419,6 +1447,8 @@ function tick(now: number): void {
       }
     }
   }
+  // Setting out: the sewers' card.
+  if (lastPlace.generation !== session.generation && me.depth === 1 && world.turn < 3) view.enterRegion(1, vnow);
   lastPlace = { generation: session.generation, depth: me.depth, pos: me.pos };
 
   const key = `${me.depth}:${world.turn}:${session.generation}`;
@@ -1572,6 +1602,10 @@ function tick(now: number): void {
   };
   render(ctx, scene, view, session.myId, assets, camera, vnow);
   placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom);
+  mapControls.update(
+    Math.round(zoom.target) < zoom.max, Math.round(zoom.target) > zoom.min, Math.hypot(pan.x, pan.y) > TILE * 1.5 && !pan.home,
+    document.querySelector<HTMLElement>('#ui .pd-log')?.offsetHeight ?? 120,
+  );
 
   // Who the dungeon is waiting for, once my action has been queued for a moment.
   if (session.busy) busySince ||= now;

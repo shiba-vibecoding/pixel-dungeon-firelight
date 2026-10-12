@@ -1,7 +1,7 @@
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
-import { bossCard, floatNumber, levelCard, nameplate, slainCard } from './cards';
+import { bossCard, depthCard, floatNumber, levelCard, nameplate, slainCard } from './cards';
 import { fx } from './fx';
 import { CHEST_ANIMS, type HeapLook } from './motion';
 import { drawFrame, frameAt as sheetFrame, regionIndex, sheet, tintedImage } from './worldsheets';
@@ -427,6 +427,16 @@ export function render(
     const x = (scene.focus.x - camera.x) * camera.zoom;
     const y = (scene.focus.y - camera.y) * camera.zoom - TILE * camera.zoom * 3;
     if (!levelCard(ctx, t.levelCard(card.lvl), x, y, now - card.start, px)) view.levelCard = null;
+  }
+
+  // A new region on the way down: «Depth 6» and the region's name beside its emblem.
+  const descent = view.depthCard;
+  const emblems = sheet('ui-map');
+  if (descent && emblems) {
+    const region = regionIndex(descent.depth);
+    if (!depthCard(ctx, t.depthTitle(descent.depth), t.regionNames[region] ?? '', emblems.image, region, middle, canvas.width, now - descent.start, px)) {
+      view.depthCard = null;
+    }
   }
 
   // A boss's title card as it notices the party: its name and epithet on a band across the free middle.

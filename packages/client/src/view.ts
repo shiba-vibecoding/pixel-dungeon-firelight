@@ -148,6 +148,8 @@ export class View {
   bossIntro: { kind: MobKind; start: number } | null = null;
   /** My level-up card: the new level, and when it appeared. */
   levelCard: { lvl: number; start: number } | null = null;
+  /** A new region's card on the way down: the depth, and when it appeared. */
+  depthCard: { depth: number; start: number } | null = null;
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
   projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string }> = [];
 
@@ -163,6 +165,11 @@ export class View {
     this.bossIntro = null;
     this.levelCard = null;
     this.projectiles = [];
+  }
+
+  /** Coming into a region (or setting out): its card, over the band in the middle. */
+  enterRegion(depth: number, now: number): void {
+    this.depthCard = { depth, start: now };
   }
 
   /**
