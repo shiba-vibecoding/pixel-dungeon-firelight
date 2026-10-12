@@ -193,6 +193,8 @@ export type Effect =
   | { type: 'beacon'; hero: string; mode: 'set' | 'return' }
   /** Disturbed remains: wraiths rose, or the curse fell on whoever disturbed them. */
   | { type: 'wraiths'; depth: number; pos: number }
+  /** A honeypot broke at rom, and a golden bee flew out to pos. */
+  | { type: 'bee'; depth: number; pos: number; from: number }
   /** A bomb went off. */
   | { type: 'exploded'; depth: number; pos: number }
   /** A weapon balanced with a weightstone. */

@@ -584,8 +584,8 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
           ctx.effects.push({ type: 'ratKing', hero: hero.id, line: mob.awake ? 'busy' : 'notSleeping' });
           mob.awake = true;
         }
-        else if (mob.kind === 'mirror') {
-          // MirrorImage.interact: the hero and the image swap places.
+        else if (mob.kind === 'mirror' || mob.kind === 'bee') {
+          // MirrorImage.interact and Bee.interact: the hero and the ally swap places.
           const from = hero.pos;
           hero.pos = mob.pos;
           mob.pos = from;

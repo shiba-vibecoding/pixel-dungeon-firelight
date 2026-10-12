@@ -649,7 +649,8 @@ function showItem(options: ItemOptions): void {
         actions.push(button(t.balanceFor[imbue], () => act({ type: 'balance', item: index, imbue }), 'primary'));
       }
     }
-    if (category === 'missile' || category === 'wand' || category === 'bomb') {
+    if (category === 'honeypot') actions.push(button(t.shatterPot, () => act({ type: 'use', item: index })));
+    if (category === 'missile' || category === 'wand' || category === 'bomb' || category === 'honeypot') {
       const kind = category === 'wand' ? 'zap' : 'throw';
       actions.push(
         button(kind === 'throw' ? t.throwItem : t.zap, () => {

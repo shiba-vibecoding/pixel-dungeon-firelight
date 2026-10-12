@@ -74,6 +74,7 @@ Yendor on depth 26:
   herbalism, two worn at once, known by their gem until worn a while; seeds of
   firebloom, icecap, sorrowmoss, dreamweed, sungrass, earthroot and fadeleaf
   (and the wandmaker's rotberry), which grow where they are thrown; bombs;
+  honeypots, whose golden bee fights for a while for whoever broke the pot;
   weightstones to balance a weapon for speed or accuracy; rations, pasties,
   overpriced rations and mystery meat, which fire chargrills and frost turns
   into carpaccio; Lloyd's beacon (Goo's, now and then), which takes its
@@ -110,7 +111,7 @@ something cursed among its belongings takes half the health of whoever
 disturbs it.
 
 Not ported yet: bags (seed pouch, scroll holder, wand holster, keyring); the
-dew vial; the honeypot and its bees.
+dew vial.
 
 ## How co-op works
 

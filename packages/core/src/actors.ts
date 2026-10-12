@@ -291,7 +291,7 @@ export type MobKind =
   | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva' | 'mimic'
   | 'statue' | 'piranha' | 'imp' | 'sheep' | 'blacksmith' | 'mirror'
   | 'albino' | 'bandit' | 'shielded' | 'senior' | 'acidic'
-  | 'fetidRat' | 'curse' | 'ratKing' | 'wraith';
+  | 'fetidRat' | 'curse' | 'ratKing' | 'wraith' | 'bee';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -366,6 +366,8 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   curse: { name: 'curse personification', ht: 16, attack: 12, defense: 12, damage: [3, 5], dr: 1, exp: 0, maxLvl: 5, speed: 0.5, flying: true },
   /** A vengeful spirit out of disturbed remains: one blow kills it, but it is very hard to hit (its numbers grow with the depth). */
   wraith: { name: 'wraith', ht: 1, attack: 11, defense: 55, damage: [1, 4], dr: 0, exp: 0, maxLvl: 30, speed: 1, flying: true },
+  /** Out of a honeypot: it fights for whoever broke it, and lives a turn less every turn (its numbers grow with the depth). */
+  bee: { name: 'golden bee', ht: 20, attack: 10, defense: 10, damage: [2, 5], dr: 0, exp: 0, maxLvl: 0, speed: 1, flying: true },
   /** Asleep (or so he says) in his hidden treasury beside Goo's lair. */
   ratKing: { name: 'rat king', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 2 },
   piranha: { name: 'giant piranha', ht: 15, attack: 22, defense: 12, damage: [1, 6], dr: 1, exp: 0, maxLvl: 30, speed: 2 },
@@ -381,6 +383,10 @@ export function mobStats(mob: Mob): MobStats {
       ...MOBS.statue, ht: 15 + depth * 5, attack: Math.trunc((9 + depth) * weapon.accuracy), defense: 4 + depth,
       damage: [weapon.min, weapon.max], dr: depth, attackDelay: weapon.delay,
     };
+  }
+  if (mob.kind === 'bee') {
+    const ht = (3 + depth) * 5;
+    return { ...MOBS.bee, ht, attack: 9 + depth, defense: 9 + depth, damage: [Math.trunc(ht / 10), Math.trunc(ht / 4)] };
   }
   if (mob.kind === 'wraith') return { ...MOBS.wraith, attack: 10 + depth, defense: (10 + depth) * 5, damage: [1, 3 + depth] };
   if (mob.kind === 'curse') return { ...MOBS.curse, ht: 10 + depth * 3, attack: 10 + depth, defense: 10 + depth };

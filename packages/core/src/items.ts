@@ -16,7 +16,7 @@ import type { RunState } from './run';
 
 export type ItemCategory =
   | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
-  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone' | 'beacon';
+  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone' | 'beacon' | 'honeypot';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -151,6 +151,8 @@ export const ITEMS = {
   'food.steak': { category: 'food', sprite: 114, energy: 100 },
   'food.carpaccio': { category: 'food', sprite: 116, energy: 100 },
   'food.overpriced': { category: 'food', sprite: 115, energy: 100 },
+  /** Shattered, it lets out a golden bee that fights for whoever broke it, for a while (Honeypot). */
+  honeypot: { category: 'honeypot', sprite: 125 },
   /** Thrown, it blows up where it lands (Bomb). */
   bomb: { category: 'bomb', sprite: 124 },
   /** Goo's legacy now and then: takes its bearer back to a place set beforehand (LloydsBeacon). */
@@ -257,7 +259,7 @@ export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
   return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || category === 'torch' ||
-    category === 'seed' || category === 'bomb' || category === 'weightstone' || (category === 'missile' && kind !== 'missile.boomerang') || kind === 'quest.token' || kind === 'quest.ore';
+    category === 'seed' || category === 'bomb' || category === 'honeypot' || category === 'weightstone' || (category === 'missile' && kind !== 'missile.boomerang') || kind === 'quest.token' || kind === 'quest.ore';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
@@ -322,6 +324,8 @@ export function itemPrice(item: Item, known: boolean): number {
       return 50 * item.qty;
     case 'bomb':
       return 10 * item.qty;
+    case 'honeypot':
+      return 50 * item.qty;
     case 'weightstone':
       return 40 * item.qty;
     default:
@@ -456,13 +460,13 @@ export function itemSprite(item: Item, labels: Labels): number {
 /* Generator */
 
 /** Categories the generator picks from; thrown weapons come with the weapons. */
-type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand' | 'ring' | 'seed';
+type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand' | 'ring' | 'seed' | 'misc';
 
 const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
-  ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['wand', 4], ['ring', 2], ['seed', 5], ['gold', 50],
+  ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['wand', 4], ['ring', 2], ['seed', 5], ['gold', 50], ['misc', 5],
 ];
 
-const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
+const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food' | 'misc'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
   // Strength only comes as guaranteed finds, and might out of a well of transmutation.
   potion: [
     ['potion.healing', 45], ['potion.experience', 4], ['potion.toxicGas', 15], ['potion.paralyticGas', 10],
@@ -542,6 +546,8 @@ export class ItemGenerator {
   of(category: GeneratedCategory): Item {
     if (category === 'gold') return rollGold(this.rng, this.depth);
     if (category === 'food') return rollFood(this.rng);
+    // Generator.Category.MISC: two bombs to every honeypot; bombs come one to three at a time.
+    if (category === 'misc') return this.rng.chances([2, 1]) === 0 ? createItem('bomb', this.rng.intRange(1, 3)) : createItem('honeypot');
     const table = KIND_CHANCES[category];
     const kind = table[this.rng.chances(table.map(([, chance]) => chance))]![0];
     // Dart.random: a handful of them.

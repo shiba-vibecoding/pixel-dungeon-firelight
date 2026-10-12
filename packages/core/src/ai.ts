@@ -66,6 +66,10 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
     imageAct(ctx, mob);
     return;
   }
+  if (mob.kind === 'bee') {
+    beeAct(ctx, mob);
+    return;
+  }
   // A magic sheep just stands there, until it fades away.
   if (mob.kind === 'sheep') {
     mob.lifespan = (mob.lifespan ?? 0) - TICK;
@@ -246,6 +250,45 @@ function imageAct(ctx: Ctx, mob: Mob): void {
   }
   const owner = heroesOn(ctx.world, ctx.depth).find((hero) => hero.id === image.owner);
   const goal = foe?.pos ?? (owner && distance(owner.pos, mob.pos) > 2 ? owner.pos : -1);
+  if (goal !== -1 && getCloser(ctx, mob, goal, fov)) spend(mob, 1 / MOBS[mob.kind].speed);
+  else spend(mob, TICK);
+}
+
+/** Bee.viewDistance. */
+const BEE_SIGHT = 4;
+
+/**
+ * Bee.act: a golden bee lives a turn less with every turn. It sticks to the
+ * monster it went for, or picks one in sight; with none, it keeps by the
+ * nearest hero. Like a mirror image, monsters pay it no heed.
+ */
+function beeAct(ctx: Ctx, mob: Mob): void {
+  if (--mob.hp <= 0) {
+    ctx.floor.mobs.splice(ctx.floor.mobs.indexOf(mob), 1);
+    leaveCell(ctx.world, ctx.level, ctx.depth, mob.pos);
+    ctx.effects.push({ type: 'faded', depth: ctx.depth, mob: mob.id, pos: mob.pos });
+    return;
+  }
+  const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map), BEE_SIGHT);
+  const hostile = (other: Mob): boolean => other !== mob && other.state !== 'passive' && isAlive(other);
+  let foe = ctx.floor.mobs.find((other) => other.id === mob.enemy && hostile(other));
+  if (!foe) {
+    foe = ctx.rng.element(ctx.floor.mobs.filter((other) => hostile(other) && fov[other.pos]));
+    mob.enemy = foe?.id ?? null;
+  }
+  if (foe && adjacent(mob.pos, foe.pos)) {
+    attack(ctx, mob, foe);
+    spend(mob, TICK);
+    return;
+  }
+  let goal = foe?.pos ?? -1;
+  if (goal === -1) {
+    let nearest: Hero | undefined;
+    for (const hero of heroesOn(ctx.world, ctx.depth)) {
+      if (!nearest || distance(mob.pos, hero.pos) < distance(mob.pos, nearest.pos)) nearest = hero;
+    }
+    if (nearest && !adjacent(nearest.pos, mob.pos)) goal = nearest.pos;
+  }
   if (goal !== -1 && getCloser(ctx, mob, goal, fov)) spend(mob, 1 / MOBS[mob.kind].speed);
   else spend(mob, TICK);
 }

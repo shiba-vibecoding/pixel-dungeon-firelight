@@ -701,6 +701,12 @@ export class View {
             this.flashes.push({ cell: effect.pos, start: now, duration: 400 });
           }
           break;
+        case 'bee':
+          if (effect.depth === this.depth) {
+            audio.play('shatter');
+            audio.play('bee');
+          }
+          break;
         case 'wraiths':
           audio.play('cursed');
           if (effect.depth === this.depth) {

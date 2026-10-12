@@ -121,7 +121,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (category !== 'potion' && category !== 'scroll' && category !== 'food' && category !== 'torch' && category !== 'kit') {
+      if (category !== 'potion' && category !== 'scroll' && category !== 'food' && category !== 'torch' && category !== 'kit' && category !== 'honeypot') {
         return 'that cannot be used';
       }
       if (category === 'kit' && CLASS_ARMOR.includes(hero.armor.kind)) return 'your armour is already a class armour';
@@ -159,7 +159,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     case 'throw':
     case 'zap': {
       const fits = action.type === 'throw'
-        ? category === 'missile' || category === 'potion' || category === 'seed' || category === 'bomb'
+        ? category === 'missile' || category === 'potion' || category === 'seed' || category === 'bomb' || category === 'honeypot'
         : category === 'wand';
       if (!fits) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
       if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
@@ -194,6 +194,13 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       if (itemDef(hero.items[action.item]!.kind).category === 'food') {
         eat(ctx, hero, action.item);
         return TIME_TO_EAT;
+      }
+      if (itemDef(hero.items[action.item]!.kind).category === 'honeypot') {
+        // Honeypot.execute: shattered right where the hero stands.
+        const pot = hero.items[action.item]!;
+        if (--pot.qty <= 0) hero.items.splice(action.item, 1);
+        shatterHoneypot(ctx, hero.pos);
+        return TIME_TO_THROW;
       }
       if (itemDef(hero.items[action.item]!.kind).category === 'kit') {
         applyArmorKit(ctx, hero, action.item);
@@ -309,6 +316,15 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
   }
   if (itemDef(item.kind).category === 'bomb') {
     throwBomb(ctx, hero, index, target);
+    return;
+  }
+  if (itemDef(item.kind).category === 'honeypot') {
+    // Honeypot.onThrow: it breaks where it lands, unless it falls down a chasm.
+    if (--item.qty <= 0) hero.items.splice(index, 1);
+    const end = ballistica(ctx, hero.pos, target).at(-1)!;
+    ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: 'honeypot' });
+    if (hasFlag(ctx.level.map[end]!, F.PIT)) landItem(ctx, end, createItem('honeypot'));
+    else shatterHoneypot(ctx, end);
     return;
   }
   if (itemDef(item.kind).category === 'seed') {
@@ -533,6 +549,25 @@ function spawnWraith(ctx: Ctx, pos: number): boolean {
   ctx.floor.mobs.push(wraith);
   enterCell(ctx.level, pos);
   return true;
+}
+
+/**
+ * Honeypot.shatter: out flies a golden bee, where the pot broke or, if
+ * someone stands there, on a free cell beside.
+ */
+function shatterHoneypot(ctx: Ctx, pos: number): void {
+  const { world, depth, level, rng, floor } = ctx;
+  let at = pos;
+  if (charAt(world, depth, pos)) {
+    at = rng.element(NEIGHBOURS4.map((n) => pos + n).filter((c) => isPassable(level, c) && !charAt(world, depth, c))) ?? -1;
+  }
+  if (at === -1) return;
+  const bee = createMob(`#${++world.nextId}`, 'bee', at, 'passive', floor.now + 1);
+  bee.level = depth;
+  bee.ht = bee.hp = mobStats(bee).ht;
+  floor.mobs.push(bee);
+  enterCell(level, at);
+  ctx.effects.push({ type: 'bee', depth, pos: at, from: pos });
 }
 
 /** Wraith.SPAWN_DELAY. */
