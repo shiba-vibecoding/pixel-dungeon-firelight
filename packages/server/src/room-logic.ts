@@ -21,8 +21,14 @@ export interface Delivery {
   message: ServerMessage;
 }
 
-/** Bumped whenever the saved world format changes; older rooms start afresh. */
+/** Bumped whenever the saved world format changes; older rooms are brought up to date by MIGRATIONS, or start afresh. */
 export const STATE_FORMAT = 31;
+
+/**
+ * How a room saved in an older format is brought up to date: each step takes a world of format
+ * N to N + 1 (as the client's solo saves, session.ts). Optional fields added need no step.
+ */
+const MIGRATIONS: Readonly<Record<number, (world: World) => void>> = {};
 
 export interface RoomState {
   format: number;
@@ -69,9 +75,11 @@ export class RoomLogic {
     return new RoomLogic({ format: STATE_FORMAT, world: createWorld(seed), seq: 0, holdingSince: {} }, newSeed);
   }
 
-  /** A saved room, or a fresh one if it was saved in an older format. */
+  /** A saved room, brought up to this format; a fresh one if there is none or it is too old to carry on. */
   static restore(saved: RoomState | undefined, seed: number): RoomLogic {
-    return saved?.format === STATE_FORMAT ? new RoomLogic(saved) : RoomLogic.create(seed);
+    if (!saved) return RoomLogic.create(seed);
+    for (; saved.format < STATE_FORMAT && MIGRATIONS[saved.format]; saved.format++) MIGRATIONS[saved.format]!(saved.world);
+    return saved.format === STATE_FORMAT ? new RoomLogic(saved) : RoomLogic.create(seed);
   }
 
   state(): RoomState {

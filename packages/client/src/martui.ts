@@ -149,6 +149,8 @@ async function purchase(offer: Offer, then: () => void): Promise<void> {
     toast(t.thanksBought, { tone: 'good' });
   } else if (status === 'failed') {
     toast(t.buyFailed, { tone: 'warn' });
+  } else if (status === 'expired') {
+    toast(t.buyExpired, { tone: 'warn' });
   }
   then();
 }

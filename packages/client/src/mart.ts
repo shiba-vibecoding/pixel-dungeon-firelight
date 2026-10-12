@@ -14,6 +14,8 @@ import { initData, inTelegram, openInvoice } from './telegram';
 
 const LOOK_KEY = 'pd-look';
 const DEV_KEY = 'pd-dev-owned';
+/** What the server last said this player owns, so bought looks stay on while it cannot be reached. */
+const OWNED_KEY = 'pd-mart-owned';
 
 /** What is worn: a look for each class, one effect, one frame. */
 interface Worn {
@@ -43,9 +45,9 @@ type Listener = () => void;
 
 class Mart {
   /** Bought looks, by sku. */
-  private owned = new Set<string>(import.meta.env.DEV ? load<string[]>(DEV_KEY, []) : []);
-  private patronUntil = import.meta.env.DEV ? load<number | null>(`${DEV_KEY}-patron`, null) : null;
-  private tipped = 0;
+  private owned = new Set<string>(load<string[]>(import.meta.env.DEV ? DEV_KEY : OWNED_KEY, []));
+  private patronUntil = load<number | null>(import.meta.env.DEV ? `${DEV_KEY}-patron` : `${OWNED_KEY}-patron`, null);
+  private tipped = import.meta.env.DEV ? 0 : load<number>(`${OWNED_KEY}-tipped`, 0);
   private worn: Worn = load<Worn>(LOOK_KEY, { skins: {} });
   private listeners: Listener[] = [];
   private server = '';
@@ -89,6 +91,9 @@ class Mart {
       this.owned = new Set(me.owned);
       this.patronUntil = me.patronUntil;
       this.tipped = me.tipped;
+      save(OWNED_KEY, me.owned);
+      save(`${OWNED_KEY}-patron`, me.patronUntil);
+      save(`${OWNED_KEY}-tipped`, me.tipped);
       this.changed();
     } catch {
       // Offline: what was known stays.
@@ -143,7 +148,7 @@ class Mart {
    * Buys an offer: a Stars invoice in Telegram, then the wallet again. In a
    * development build outside Telegram it is granted on the device at once.
    */
-  async buy(offer: Offer, text: { title: string; description: string }): Promise<'paid' | 'cancelled' | 'failed' | 'pending'> {
+  async buy(offer: Offer, text: { title: string; description: string }): Promise<'paid' | 'cancelled' | 'failed' | 'pending' | 'expired'> {
     if (!inTelegram && import.meta.env.DEV) {
       if (offer.kind === 'patron') {
         this.patronUntil = Date.now() + 30 * 86_400_000;
@@ -163,6 +168,8 @@ class Mart {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData: initData(), sku: offer.sku, ...text }),
       });
+      // Telegram's sign-in data is good for a day: an app left open longer has to be reopened.
+      if (response.status === 401) return 'expired';
       const body = (await response.json()) as { link?: string };
       if (!body.link) return 'failed';
       const status = await openInvoice(body.link);

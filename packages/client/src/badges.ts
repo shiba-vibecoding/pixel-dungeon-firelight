@@ -1,5 +1,6 @@
 import { type Effect, type Hero, type Item, itemDef, ITEMS, type ItemKind, type World } from '@pd/core';
 import { lang } from './i18n';
+import { mergeWith } from './cloud';
 
 /*
  * Badges (Badges): feats remembered on this device across runs. Most are
@@ -114,6 +115,35 @@ function load(): Store {
 }
 
 const store = load();
+
+/** The badges' store again from the device, once the cloud's copy has been folded in (cloud.ts). */
+export function reloadBadges(): void {
+  Object.assign(store, load());
+}
+
+// Two devices' badges are both kept: every list joined, the count of games the larger.
+mergeWith(KEY, (here, cloud) => {
+  try {
+    const a = { ...load(), ...(here ? (JSON.parse(here) as Partial<Store>) : {}) };
+    const b = JSON.parse(cloud) as Partial<Store>;
+    const join = <T>(x: T[] | undefined, y: T[] | undefined): T[] => [...new Set([...(x ?? []), ...(y ?? [])])];
+    const merged: Store = {
+      ...a,
+      earned: join(a.earned, b.earned),
+      rare: join(a.rare, b.rare),
+      boss1: join(a.boss1, b.boss1),
+      boss3: join(a.boss3, b.boss3),
+      victories: join(a.victories, b.victories),
+      deaths: join(a.deaths, b.deaths),
+      games: Math.max(a.games ?? 0, b.games ?? 0),
+      lastRun: Math.max(a.lastRun ?? 0, b.lastRun ?? 0) || undefined,
+      seen: a.seen || b.seen ? join(a.seen, b.seen) : undefined,
+    };
+    return JSON.stringify(merged);
+  } catch {
+    return here;
+  }
+});
 
 function save(): void {
   try {

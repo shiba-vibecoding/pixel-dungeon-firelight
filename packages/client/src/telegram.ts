@@ -23,13 +23,24 @@ interface WebApp {
   };
   BackButton?: { show(): void; hide(): void; onClick(callback: () => void): void };
   onEvent?(event: string, callback: () => void): void;
+  /** Bot API 6.9: a few kilobytes kept on the player's account. */
+  CloudStorage?: CloudStorage;
   /** Bot API 8.0: the Mini App over the whole screen. */
   isFullscreen?: boolean;
   requestFullscreen?(): void;
   exitFullscreen?(): void;
 }
 
+export interface CloudStorage {
+  setItem(key: string, value: string, callback?: (error: string | null, stored?: boolean) => void): void;
+  getItems(keys: string[], callback: (error: string | null, values?: Record<string, string>) => void): void;
+}
+
 const webApp = (globalThis as { Telegram?: { WebApp?: WebApp } }).Telegram?.WebApp;
+
+/** The account's cloud storage, inside a Telegram new enough to have it. */
+export const cloudStorage = (): CloudStorage | null =>
+  webApp && webApp.initData && webApp.isVersionAtLeast?.('6.9') ? (webApp.CloudStorage ?? null) : null;
 
 /** True when running inside Telegram (the script is loaded in browsers too). */
 export const inTelegram = Boolean(webApp?.initData);

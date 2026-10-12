@@ -55,12 +55,37 @@ interface SoloSave {
   world: World;
 }
 
+/**
+ * How a run saved by an older version is brought up to date: each step takes a world of
+ * version N to N + 1. A change that only adds optional fields needs no step (and no new
+ * version); one that renames or reshapes state gets its step here when SAVE_VERSION goes up,
+ * so an update never throws a run away.
+ */
+const MIGRATIONS: Readonly<Record<number, (world: World) => void>> = {};
+
+/** The saved run, brought up to this version; null if there is none, it is over, or it is too old to carry on. */
 export function loadSolo(key: string): World | null {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const save = JSON.parse(raw) as SoloSave;
-    return save.version === SAVE_VERSION && !save.world.over ? save.world : null;
+    let version = save.version;
+    for (; version < SAVE_VERSION && MIGRATIONS[version]; version++) MIGRATIONS[version]!(save.world);
+    return version === SAVE_VERSION && !save.world.over ? save.world : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A run saved by a version too old to carry on, still in its slot: the title says so before a new run replaces it. */
+export function staleSolo(key: string): { depth: number; heroClass: HeroClass } | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const save = JSON.parse(raw) as SoloSave;
+    if (save.version === SAVE_VERSION || save.world?.over || loadSolo(key)) return null;
+    const hero = save.world?.heroes?.[0];
+    return hero ? { depth: hero.depth, heroClass: hero.heroClass } : null;
   } catch {
     return null;
   }
@@ -99,7 +124,8 @@ export function soloSession(key: string | null, heroClass: HeroClass, newSeed: (
       if (world.over) localStorage.removeItem(key);
       else localStorage.setItem(key, JSON.stringify({ version: SAVE_VERSION, world } satisfies SoloSave));
     } catch {
-      // Out of space or storage blocked: the run simply is not kept.
+      // Out of space or storage blocked: the run is not kept, and the player is told (main.ts, once).
+      dispatchEvent(new Event('pd-save-failed'));
     }
   };
   /** Saves once the moves settle (writing after every step of a walk would be wasted). */

@@ -18,7 +18,8 @@ import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
 let lastVisual = 0;
 /** When my hero fell, on the visual clock, or 0 while alive. */
 let fallenAt = 0;
-import { BADGES, type BadgeId, badgeText, checkBadges, countGame, earnedBadges } from './badges';
+import { BADGES, type BadgeId, badgeText, checkBadges, countGame, earnedBadges, reloadBadges } from './badges';
+import { pullCloud, pushCloud } from './cloud';
 import { audio } from './audio';
 import { heroBuffs, Hud, type HudStatus, type QuickState } from './hud';
 import { capitalize, t } from './i18n';
@@ -42,7 +43,7 @@ import { type HintId, hints } from './hints';
 import { preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
-import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
+import { forgetSolo, loadSolo, onlineSession, type Session, soloSession, staleSolo } from './session';
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
@@ -465,6 +466,8 @@ function toTitle(): void {
   hud.show(false);
   const invited = invitedRoom();
   const saved = loadSolo(SOLO_SLOT)?.heroes[0];
+  // A run an update can no longer carry on is not dropped unannounced.
+  const stale = saved ? null : staleSolo(SOLO_SLOT);
   showTitle({
     heroClass,
     invitedRoom: invited && SERVER ? invited : null,
@@ -481,7 +484,10 @@ function toTitle(): void {
     },
     onContinue: () => startSolo('continue'),
     // A new game over a saved one asks first: the saved run is lost.
-    onSolo: () => (saved ? showConfirm(t.meta.newRunTitle, t.meta.newRunText, t.meta.newRunYes, t.meta.cancel, () => startSolo('new'), toTitle) : startSolo('new')),
+    onSolo: () =>
+      saved ? showConfirm(t.meta.newRunTitle, t.meta.newRunText, t.meta.newRunYes, t.meta.cancel, () => startSolo('new'), toTitle)
+      : stale ? showConfirm(t.meta.newRunTitle, t.meta.staleRunText(stale.depth, t.classes[stale.heroClass]), t.meta.newRunYes, t.meta.cancel, () => startSolo('new'), toTitle)
+      : startSolo('new'),
     onCoop: () => {
       const id = newRoomId();
       startOnline(id);
@@ -1319,6 +1325,14 @@ canvas.addEventListener('wheel', (event) => {
 /* Learning mode: a word about each thing the first time it is met (hints.ts) */
 
 hints.attach(document.getElementById('ui')!);
+
+// A run that could not be written (the device out of space) is said once a session, not lost unannounced.
+let saveFailShown = false;
+addEventListener('pd-save-failed', () => {
+  if (saveFailShown) return;
+  saveFailShown = true;
+  toast(t.meta.saveFailed, { tone: 'warn' });
+});
 
 const HINT_CATEGORIES: ReadonlySet<string> = new Set([
   'potion', 'scroll', 'weapon', 'armor', 'ring', 'wand', 'food', 'seed', 'missile', 'bomb', 'key', 'gold', 'vial', 'bag',
@@ -2264,6 +2278,8 @@ function tick(now: number): void {
         mode: dailyRun ? 'daily' : solo ? 'solo' : 'coop',
         date: Date.now(),
       });
+      // The table and the badges follow the account (cloud.ts).
+      pushCloud();
       showRunEnd({
         place,
         victory,
@@ -2294,6 +2310,13 @@ if (invited && SERVER && new URLSearchParams(location.search).has('room')) {
 } else {
   toTitle();
 }
+
+// Badges and the rankings from the player's other devices: on the title at once, once they come.
+void pullCloud().then(() => {
+  reloadBadges();
+  if (!session && document.querySelector('.pd-title-screen')) toTitle();
+  pushCloud();
+});
 
 if (import.meta.env.DEV) {
   // Debug handle for the browser console. advance() runs frames on a virtual

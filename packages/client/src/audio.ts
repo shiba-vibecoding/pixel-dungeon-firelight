@@ -362,8 +362,9 @@ class Audio {
     this.musicVolume = stored('pd-music-volume', 0.6);
     this.soundVolume = stored('pd-sound-volume', 0.8);
     const unlock = (): void => this.unlock();
-    addEventListener('pointerdown', unlock, { capture: true });
-    addEventListener('keydown', unlock, { capture: true });
+    // Safari on iOS lets sound start only from touchend or click, not pointerdown: every one of them
+    // tries, until the context runs.
+    for (const type of ['pointerdown', 'touchend', 'click', 'keydown']) addEventListener(type, unlock, { capture: true });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         // A tune played here needs nothing: its clock stops with the context's.
@@ -376,9 +377,24 @@ class Audio {
     });
   }
 
+  /** A moment of silence played inside the gesture: what finally wakes a context on iOS. */
+  private silence(ctx: AudioContext): void {
+    try {
+      const source = ctx.createBufferSource();
+      source.buffer = ctx.createBuffer(1, 1, 22050);
+      source.connect(ctx.destination);
+      source.start(0);
+    } catch {
+      // Nothing to wake.
+    }
+  }
+
   private unlock(): void {
     if (this.unlocked) {
-      if (this.context?.state === 'suspended' && !document.hidden) void this.context.resume();
+      if (this.context && this.context.state !== 'running' && !document.hidden) {
+        void this.context.resume();
+        this.silence(this.context);
+      }
       return;
     }
     this.unlocked = true;
@@ -386,6 +402,7 @@ class Audio {
       const ctx = new AudioContext();
       this.context = ctx;
       void ctx.resume();
+      this.silence(ctx);
       const compressor = ctx.createDynamicsCompressor();
       compressor.threshold.value = -14;
       compressor.knee.value = 10;

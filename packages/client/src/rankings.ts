@@ -1,4 +1,5 @@
 import type { HeroClass } from '@pd/core';
+import { mergeWith } from './cloud';
 
 /*
  * Rankings: the best runs played on this device, as in the original
@@ -28,6 +29,18 @@ const TABLE_SIZE = 11;
 
 /** Rankings.score: gold collected plus level times the deepest depth times a hundred, twice that for a win. */
 export const runScore = (gold: number, lvl: number, depth: number, won: boolean): number => (gold + lvl * depth * 100) * (won ? 2 : 1);
+
+// Two devices' tables become one: every run once, the best first.
+mergeWith(KEY, (here, cloud) => {
+  try {
+    const list = [...(JSON.parse(here ?? '[]') as RunRecord[]), ...(JSON.parse(cloud) as RunRecord[])];
+    const runs = [...new Map(list.map((r) => [r.key, r])).values()];
+    runs.sort((a, b) => b.score - a.score || a.date - b.date);
+    return JSON.stringify(runs.slice(0, TABLE_SIZE));
+  } catch {
+    return here;
+  }
+});
 
 export function rankings(): RunRecord[] {
   try {
