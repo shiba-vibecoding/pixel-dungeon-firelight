@@ -234,12 +234,12 @@ export class Motion {
       const r = regionIndex(level.depth);
       if (was === T.DOOR && is === T.OPEN_DOOR) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'open', ms: this.animMs(`doors${r}`, 'door', DOOR_OPEN_MS) });
-        audio.play('door_open', 0.95, 0.4, centre(cell));
-        audio.play('creak', 1, 0.3, centre(cell));
+        // The original's own door sound, nothing laid over it.
+        audio.play('door_open', 1, 0.6, centre(cell));
       } else if (was === T.OPEN_DOOR && is === T.DOOR) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'close', ms: this.animMs(`doors${r}`, 'door', DOOR_CLOSE_MS, true) });
-        audio.play('creak', 0.85, 0.18, centre(cell));
-        audio.later(DOOR_CLOSE_MS * 0.8, 'thud', 1, 0.45, centre(cell));
+        // Shutting behind whoever left: only a soft knock of wood as it meets the frame.
+        audio.later(DOOR_CLOSE_MS * 0.7, 'knock', 0.75, 0.22, centre(cell));
       } else if (was === T.HIGH_GRASS && is === T.GRASS) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'trample', ms: this.animMs(`grass${r}`, 'trample', TRAMPLE_MS) });
         const x = (cell % WIDTH) * TILE + TILE / 2;
@@ -432,7 +432,7 @@ export class Motion {
     const y = Math.trunc(pos / WIDTH) * TILE + TILE / 2;
     fx.burst(x, y - 2, at, { count: 14, colors: ['#ffe9a0', '#fff6c0', '#ffffff', '#e0a020'], glow: true, speed: [20, 60], life: [350, 800], rise: 26, drag: 0.35, size: [1, 1], spread: 4 });
     fx.burst(x, y + 4, at, { count: 8, colors: ['rgba(200, 190, 170, 0.8)', 'rgba(150, 140, 120, 0.7)'], speed: [10, 30], life: [300, 520], gravity: 60, drag: 0.3, size: [1, 2], spread: 6 });
-    audio.play('creak', 1.25, 0.3, centre(pos));
+    audio.play('unlock', 1, 0.4, centre(pos));
     audio.later(CHEST_SHAKE_MS, 'sparkle', 1, 0.45, centre(pos));
   }
 
