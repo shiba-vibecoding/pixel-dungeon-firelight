@@ -3,6 +3,7 @@ import { canEnter, charAt, type Ctx, dropItem, enterCell, type Floor, freeCellNe
 import { collect } from './inventory';
 import { createItem, type GeneratedCategory, type Item, itemDef, ItemGenerator, rollFood } from './items';
 import { ARENA_CENTRE, ARENA_DEPTHS, ARENA_RADIUS, ARENA_STANDS, buildArenaLevel, insideArena, ringDistance } from './level/arena';
+import { identify } from './ident';
 import { isBossDepth, LAST_SHOP_DEPTH } from './level/builder';
 import { discoverable } from './level/flags';
 import type { Level } from './level/generate';
@@ -196,6 +197,8 @@ export function arenaPick(ctx: Ctx, hero: Hero, choice: number): void {
   const arena = ctx.world.arena!;
   const item = arena.offers[hero.id]![choice]!;
   delete arena.offers[hero.id];
+  // The offer showed it for what it is: it is taken as such, its kind known to the party.
+  if (identify(ctx.world, item)) ctx.effects.push({ type: 'identified', hero: hero.id, kind: item.kind });
   if (collect(hero, item)) {
     ctx.effects.push({ type: 'pickedUp', hero: hero.id, item });
   } else {
