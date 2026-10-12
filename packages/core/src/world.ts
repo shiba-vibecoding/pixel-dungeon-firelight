@@ -1,3 +1,4 @@
+import { castShadow, terrainBlocksSight } from './fov';
 import { adjacent, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { generateLevel, type Level } from './level/generate';
 import { F, hasFlag, T } from './level/terrain';
@@ -24,6 +25,8 @@ export interface World {
   /** Generated levels by depth; depths are always generated in order. */
   levels: Record<number, Level>;
   heroes: Hero[];
+  /** Cells the party has seen, per depth; shared by all heroes. */
+  explored: Record<number, boolean[]>;
   turn: number;
 }
 
@@ -37,7 +40,7 @@ export type ActionResult = { ok: true } | { ok: false; reason: string };
 export const DEEPEST_AVAILABLE = 4;
 
 export function createWorld(seed: number): World {
-  return { run: createRun(seed), levels: {}, heroes: [], turn: 0 };
+  return { run: createRun(seed), levels: {}, heroes: [], explored: {}, turn: 0 };
 }
 
 export function levelAt(world: World, depth: number): Level {
@@ -53,7 +56,53 @@ export function addHero(world: World, hero: Omit<Hero, 'depth' | 'pos'>): Hero {
   const level = levelAt(world, 1);
   const added: Hero = { ...hero, depth: 1, pos: freeCellNear(world, level, 1, level.entrance) };
   world.heroes.push(added);
+  observe(world, 1);
   return added;
+}
+
+/** Field of view of one hero. */
+export function heroView(world: World, hero: Hero): boolean[] {
+  const level = levelAt(world, hero.depth);
+  return castShadow(hero.pos, terrainBlocksSight(level.map));
+}
+
+/** Everything the party currently sees on a depth. */
+export function visibleCells(world: World, depth: number): boolean[] {
+  const visible = new Array<boolean>(LENGTH).fill(false);
+  for (const hero of world.heroes) {
+    if (hero.depth === depth) {
+      heroView(world, hero).forEach((seen, i) => {
+        if (seen) visible[i] = true;
+      });
+    }
+  }
+  return visible;
+}
+
+export function exploredCells(world: World, depth: number): boolean[] {
+  return (world.explored[depth] ??= new Array<boolean>(LENGTH).fill(false));
+}
+
+/** Adds what the party sees on a depth to its shared map. */
+function observe(world: World, depth: number): void {
+  const explored = exploredCells(world, depth);
+  visibleCells(world, depth).forEach((seen, i) => {
+    if (seen) explored[i] = true;
+  });
+}
+
+/* A door is open while someone stands in it, so it no longer blocks sight. */
+
+function enterCell(level: Level, pos: number): void {
+  if (level.map[pos] === T.DOOR) {
+    level.map[pos] = T.OPEN_DOOR;
+  }
+}
+
+function leaveCell(world: World, level: Level, depth: number, pos: number): void {
+  if (level.map[pos] === T.OPEN_DOOR && !occupied(world, depth, pos)) {
+    level.map[pos] = T.DOOR;
+  }
 }
 
 export function heroById(world: World, id: string): Hero | undefined {
@@ -111,7 +160,10 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
       if (occupied(world, hero.depth, action.to, hero)) {
         return { ok: false, reason: 'cell is occupied' };
       }
+      const from = hero.pos;
       hero.pos = action.to;
+      leaveCell(world, level, hero.depth, from);
+      enterCell(level, hero.pos);
       break;
     }
 
@@ -123,17 +175,32 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
         return { ok: false, reason: 'deeper levels are not ported yet' };
       }
       const next = levelAt(world, hero.depth + 1);
+      const from = hero.pos;
       hero.depth++;
+      leaveCell(world, level, hero.depth - 1, from);
       hero.pos = freeCellNear(world, next, hero.depth, next.entrance);
+      enterCell(next, hero.pos);
       break;
     }
   }
+  observe(world, hero.depth);
   world.turn++;
   return { ok: true };
 }
 
-/** Shortest walkable path (excluding `from`), or null; used by clients for tap-to-move. */
-export function findPath(level: Level, from: number, to: number, blocked: ReadonlySet<number> = new Set()): number[] | null {
+/**
+ * Shortest walkable path (excluding `from`), or null; used by clients for
+ * tap-to-move. With `known`, the path only crosses explored cells, so tapping
+ * never reveals the layout of unexplored areas.
+ */
+export function findPath(
+  level: Level,
+  from: number,
+  to: number,
+  blocked: ReadonlySet<number> = new Set(),
+  known?: readonly boolean[],
+): number[] | null {
+  if (known && !known[to]) return null;
   if (from === to) return [];
   const previous = new Map<number, number>([[from, -1]]);
   const queue = [from];
@@ -143,6 +210,7 @@ export function findPath(level: Level, from: number, to: number, blocked: Readon
       const next = cell + n;
       if (next < 0 || next >= LENGTH || previous.has(next) || !adjacent(cell, next)) continue;
       if (!canEnter(level, next) || (blocked.has(next) && next !== to)) continue;
+      if (known && !known[next]) continue;
       previous.set(next, cell);
       if (next === to) {
         const path = [to];

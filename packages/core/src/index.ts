@@ -7,3 +7,4 @@ export { Feeling, HeapType, type ItemSpawn, type ItemSpec, isBossDepth } from '.
 export { generateLevel, type Level, type RoomInfo } from './level/generate';
 export { discoverable, passable } from './level/flags';
 export * from './world';
+export { castShadow, MAX_VIEW_DISTANCE } from './fov';

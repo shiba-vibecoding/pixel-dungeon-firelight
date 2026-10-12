@@ -1,6 +1,6 @@
 import {
-  act, addHero, cellX, cellY, createWorld, DEEPEST_AVAILABLE, findPath, type Hero, type HeroClass,
-  HEIGHT, heroById, levelAt, WIDTH,
+  act, addHero, cellX, cellY, createWorld, DEEPEST_AVAILABLE, exploredCells, findPath, type Hero, type HeroClass,
+  HEIGHT, heroById, levelAt, visibleCells, WIDTH,
 } from '@pd/core';
 import { bakeLevel, type Camera, type HeroView, loadSprites, render, TILE } from './render';
 
@@ -23,14 +23,20 @@ const world = createWorld(seed);
 const me = addHero(world, { id: 'me', name: 'You', heroClass });
 const sprites = await loadSprites(`${import.meta.env.BASE_URL}assets/`);
 
+// The tile layer is re-baked whenever the world changes (doors open/close).
 let baked = bakeLevel(levelAt(world, me.depth), sprites);
-let bakedDepth = me.depth;
+let bakedTurn = -1;
+let visible: boolean[] = [];
 
 // Walking: queued path cells, one step per STEP_MS, sprite slides between cells.
 let queue: number[] = [];
 let lastStep = 0;
 let from = me.pos;
 let flip = false;
+
+function cellDistance(a: number, b: number): number {
+  return Math.max(Math.abs(cellX(a) - cellX(b)), Math.abs(cellY(a) - cellY(b)));
+}
 
 function hero(): Hero {
   return heroById(world, 'me')!;
@@ -59,7 +65,7 @@ function step(now: number): void {
 function walkTo(target: number): void {
   const current = hero();
   const level = levelAt(world, current.depth);
-  queue = findPath(level, current.pos, target) ?? [];
+  queue = findPath(level, current.pos, target, new Set(), exploredCells(world, current.depth)) ?? [];
 }
 
 canvas.addEventListener('pointerdown', (event) => {
@@ -103,10 +109,11 @@ resize();
 function frame(now: number): void {
   step(now);
   const current = hero();
-  if (current.depth !== bakedDepth) {
+  if (world.turn !== bakedTurn) {
+    if (bakedTurn >= 0 && cellDistance(from, current.pos) > 1) from = current.pos;
     baked = bakeLevel(levelAt(world, current.depth), sprites);
-    bakedDepth = current.depth;
-    from = current.pos;
+    visible = visibleCells(world, current.depth);
+    bakedTurn = world.turn;
   }
 
   const t = Math.min(1, (now - lastStep) / STEP_MS);
@@ -122,7 +129,7 @@ function frame(now: number): void {
   camera.y = Math.round(clamp(y + TILE / 2 - viewH / 2, viewH, HEIGHT * TILE));
 
   const heroes: HeroView[] = [{ heroClass: current.heroClass, x, y, flip, local: true }];
-  render(ctx, levelAt(world, current.depth), baked, heroes, sprites, camera, now);
+  render(ctx, levelAt(world, current.depth), baked, visible, exploredCells(world, current.depth), heroes, sprites, camera, now);
 
   hud.textContent =
     `Depth ${current.depth}/${DEEPEST_AVAILABLE}  ·  seed ${seed}  ·  ${current.heroClass}\n` +

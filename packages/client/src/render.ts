@@ -66,6 +66,8 @@ export function render(
   ctx: CanvasRenderingContext2D,
   level: Level,
   baked: HTMLCanvasElement,
+  visible: readonly boolean[],
+  explored: readonly boolean[],
   heroes: readonly HeroView[],
   sprites: Sprites,
   camera: Camera,
@@ -91,17 +93,11 @@ export function render(
 
   ctx.drawImage(baked, 0, 0);
 
-  // A door someone stands in is drawn open.
-  const columns = sprites.tiles.width / TILE;
-  for (const hero of heroes) {
-    const cellX = Math.round(hero.x / TILE);
-    const cellY = Math.round(hero.y / TILE);
-    if (level.map[cellX + cellY * WIDTH] === T.DOOR) {
-      ctx.drawImage(
-        sprites.tiles, (T.OPEN_DOOR % columns) * TILE, Math.trunc(T.OPEN_DOOR / columns) * TILE,
-        TILE, TILE, cellX * TILE, cellY * TILE, TILE, TILE,
-      );
-    }
+  // Fog of war: unexplored cells are black, remembered ones are dimmed.
+  for (let i = 0; i < LENGTH; i++) {
+    if (visible[i]) continue;
+    ctx.fillStyle = explored[i] ? 'rgba(0, 0, 0, 0.55)' : '#000';
+    ctx.fillRect((i % WIDTH) * TILE, Math.trunc(i / WIDTH) * TILE, TILE, TILE);
   }
 
   const ordered = [...heroes].sort((a, b) => a.y - b.y);
