@@ -41,6 +41,7 @@ import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
+import { CoopMarks } from './coop-marks';
 import {
   backButton, haptic, initData, initTelegram, inTelegram, invitedRoom, launchedForDaily, onLayoutChange, platform, shareDaily,
   shareInvite, telegramName,
@@ -971,6 +972,7 @@ canvas.addEventListener('pointerdown', (event) => {
   if (fingers.size === 1) {
     const at = fingers.get(event.pointerId)!;
     gesture = { kind: 'tap', x: at.x, y: at.y, panX: pan.x, panY: pan.y };
+    armPing();
   } else if (fingers.size === 2) {
     const { dist, mid } = spread();
     gesture = { kind: 'pinch', dist, zoom: camera.zoom, mid };
@@ -1024,6 +1026,28 @@ const lift = (event: PointerEvent): void => {
 };
 canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);
+
+/* Co-op signals (coop-marks.ts): a long press on the map pings that cell for the party. */
+const coop = new CoopMarks(hud.root);
+const LONG_PRESS_MS = 450;
+let pressTimer = 0;
+
+/** Called as a finger comes down: held still long enough, the touch becomes a ping instead of a tap. */
+function armPing(): void {
+  clearTimeout(pressTimer);
+  const started = gesture;
+  if (session?.mode !== 'online' || started?.kind !== 'tap') return;
+  pressTimer = window.setTimeout(() => {
+    // A drag or a pinch, a lifted finger or a new touch each replace the gesture: then it was not a hold.
+    if (gesture !== started || !session?.world || overlayOpen()) return;
+    const x = Math.floor((camera.x + started.x / camera.zoom) / TILE);
+    const y = Math.floor((camera.y + started.y / camera.zoom) / TILE);
+    if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
+    // The touch is spent: lifting the finger walks nowhere.
+    gesture = { kind: 'done' };
+    if (coop.ping(session, view.depth, x + y * WIDTH)) haptic('hit');
+  }, LONG_PRESS_MS);
+}
 
 /** The mouse wheel (and a touchpad's pinch) zooms by steps, round the cursor. */
 let wheelSum = 0;
@@ -1601,6 +1625,7 @@ function tick(now: number): void {
     middle,
   };
   render(ctx, scene, view, session.myId, assets, camera, vnow);
+  coop.frame(ctx, { session, world, view, camera, free, now: vnow });
   placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom);
   mapControls.update(
     Math.round(zoom.target) < zoom.max, Math.round(zoom.target) > zoom.min, Math.hypot(pan.x, pan.y) > TILE * 1.5 && !pan.home,

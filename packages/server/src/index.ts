@@ -7,6 +7,7 @@ import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { type DailyEntry, type DailyResult, Leaderboard, parseResult } from './leaderboard';
 import { type Delivery, RoomLogic, type RoomState } from './room-logic';
 import { parseReport, type Report, ReportStore } from './reports';
+import { SignalLimiter, validSignal } from './signals';
 import { verifyInitData } from './telegram-auth';
 
 export { ReportStore };
@@ -113,6 +114,7 @@ async function authenticate(params: URLSearchParams, env: Env): Promise<PlayerIn
 export class Room extends DurableObject<Env> {
   private logic: RoomLogic | null = null;
   private readonly writer = new ChunkWriter();
+  private readonly signals = new SignalLimiter();
 
   private playerOf(ws: WebSocket): PlayerInfo {
     return ws.deserializeAttachment() as PlayerInfo;
@@ -228,6 +230,10 @@ export class Room extends DurableObject<Env> {
         await this.wear(this.playerOf(ws), message.look ?? {});
         return;
       }
+      if (message.type === 'signal') {
+        this.relay(this.playerOf(ws), message.signal);
+        return;
+      }
       const room = await this.room();
       const deliveries = room.receive(this.playerOf(ws).id, message, Date.now());
       if (message.type === 'sync') {
@@ -245,6 +251,18 @@ export class Room extends DurableObject<Env> {
         await this.failed(again, 'resync');
       }
     }
+  }
+
+  /**
+   * A ping or an emote, passed on to everyone in the room (the sender sees their own as the
+   * others do). It never reaches the world or storage; one that is not a signal, or one too
+   * many in a short while, is dropped without a word.
+   */
+  private relay(player: PlayerInfo, raw: unknown): void {
+    const signal = validSignal(raw);
+    if (!signal || !this.signals.allow(player.id, Date.now())) return;
+    const everyone = this.ctx.getWebSockets().map((ws) => this.playerOf(ws).id);
+    this.deliver([{ to: everyone, message: { type: 'signal', from: player.id, signal } }]);
   }
 
   override async webSocketClose(ws: WebSocket): Promise<void> {

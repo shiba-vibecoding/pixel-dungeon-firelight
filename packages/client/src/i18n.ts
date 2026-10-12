@@ -1,4 +1,4 @@
-import type { Enchantment, Glyph, HeroClass, ItemKind, MobKind, PlantKind, SubClass, TrapKind } from '@pd/core';
+import type { EmoteKind, Enchantment, Glyph, HeroClass, ItemKind, MobKind, PlantKind, SubClass, TrapKind } from '@pd/core';
 import type { BuffName } from './hud';
 
 /* Interface text in Russian and English; the language follows Telegram or the browser. */
@@ -222,6 +222,11 @@ const en = {
   youDied: 'You have fallen',
   youDiedCoop: 'A companion will bring you back by going deeper.',
   partyFell: 'The party has fallen',
+  /** Co-op signals (coop-marks.ts): the button that opens the emotes, and each emote's name. */
+  signalsLabel: 'Signals to the party',
+  emotes: {
+    help: 'Help!', here: 'Over here', wait: 'Wait', attention: 'Look out!', thanks: 'Thanks', hooray: 'Hooray!', heal: 'Heal me', run: 'Run!',
+  } as Record<EmoteKind, string>,
   soloFell: (depth: number) => `You died on depth ${depth}.`,
   tryAgain: 'Try again',
   restartRun: 'New run',
@@ -1044,6 +1049,10 @@ const ru: Strings = {
   youDied: 'Вы пали',
   youDiedCoop: 'Товарищ вернёт вас, спустившись глубже.',
   partyFell: 'Отряд пал',
+  signalsLabel: 'Сигналы отряду',
+  emotes: {
+    help: 'Помогите!', here: 'Сюда', wait: 'Жду', attention: 'Внимание!', thanks: 'Спасибо', hooray: 'Ура!', heal: 'Лечи', run: 'Бежим!',
+  },
   soloFell: (depth) => `Вы погибли на глубине ${depth}.`,
   tryAgain: 'Ещё раз',
   restartRun: 'Новый забег',
