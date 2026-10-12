@@ -32,10 +32,10 @@ Yendor on depth 26:
   spinners with their venom; fire elementals, dwarf monks, dwarf warlocks whose
   shadow bolts weaken, and golems; succubi that charm and blink, evil eyes whose
   gaze pierces, and scorpios that sting from afar and cripple.
-- Bosses: Goo on depth 5, Tengu in its locked arena on depth 10, DM-300 on
-  depth 15, leaking gas and repairing itself, and the King of Dwarves on depth
-  20, raising his undead court, and Yog-Dzewa on depth 25 with its fists and
-  larvae. Picking up the Amulet of Yendor below wins the run.
+- Bosses: Goo on depth 5; Tengu in its locked arena on depth 10; DM-300 on
+  depth 15, leaking gas and repairing itself; the King of Dwarves on depth 20,
+  raising his undead court; Yog-Dzewa on depth 25 with its fists and larvae.
+  Picking up the Amulet of Yendor below wins the run.
 - The sad ghost's quest (the dried rose) on depths 2–4, and the old
   wandmaker's (corpse dust, for a choice of two wands) on depths 7–9.
 - Hunger and food (rations, pasties, mystery meat), regeneration, experience
@@ -57,11 +57,13 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: the blacksmith's and the imp's quests, dwarf monks disarming,
-the ankh, rings, the wands of amok,
-reach, flock and regrowth, seeds and plants, the remaining special rooms (garden, pool, statue,
-laboratory, vault, weak floor), the wandmaker's rotberry errand, hero subclasses, and gas
-clouds (gas acts at once on everyone within reach instead).
+Not ported yet: rings; seeds and plants; the wands of amok, reach, flock and
+regrowth; hero subclasses (the Tome of Mastery); the ankh; the blacksmith's
+and the imp's quests and the wandmaker's rotberry errand; the remaining special
+rooms (garden, pool, statue, laboratory, vault, weak floor) and chasms you can
+fall through; dwarf monks disarming; the rare monster variants (albino rats,
+bandits, fetid rats); and gas clouds (gas acts at once on everyone within reach
+instead).
 
 ## How co-op works
 
