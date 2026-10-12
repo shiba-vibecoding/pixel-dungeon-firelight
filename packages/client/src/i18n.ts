@@ -416,7 +416,7 @@ const en = {
     'potion.purity': 'Drunk, no gas can harm you for a while; thrown, it cleanses the air around.',
     'potion.might': 'A point of strength and five of health, for good.',
     'scroll.recharging': 'Fully recharges the wands in your pack.',
-    'scroll.enchantment': 'Imbues your weapon or armour with a random enchantment.',
+    'scroll.enchantment': 'Imbues a weapon or armour of your choice with a random enchantment.',
     'kit.armor': 'With this kit of small tools and materials, the armour you wear becomes the armour of your class: as good as before, and with a special ability.',
     ankh: 'The ancient symbol of immortality. Die while carrying it and you rise again at the stairs, whole, '
       + 'but everything else in your pack is lost, and all your gold.',
@@ -429,7 +429,7 @@ const en = {
     'scroll.mapping': 'Reveals the layout of the level and its hidden doors.',
     'scroll.challenge': 'A roar that brings every monster on the level to you.',
     'scroll.lullaby': 'Puts every monster in sight to sleep.',
-    'scroll.upgrade': 'Improves your weapon or armour by one level.',
+    'scroll.upgrade': 'Improves an item of your choice by one level: a weapon, armour, a wand or a ring.',
     'missile.dart': 'A light throwing dart. Lost when it hits, left on the floor when it misses.',
     'missile.boomerang': 'Thrown, it always flies back to your hand.',
     'missile.curare': 'A dart tipped with curare: whoever it hits is paralysed for a moment.',
@@ -614,6 +614,9 @@ const en = {
   specialUsed: { leap: 'You leap, and slam down!', moltenEarth: 'The earth around your foes turns molten!', smokeBomb: 'In a puff of smoke, you are elsewhere!', blades: 'A fan of spectral blades flies out!' } as Record<string, string>,
   /** Why the game refused an action, where that is worth telling (keyed by the core's reason). */
   reasons: {
+    'that cannot be upgraded': 'That cannot be upgraded.',
+    'that cannot be enchanted': 'That cannot be enchanted.',
+    'there is nothing to learn about that': 'There is nothing to learn about that.',
     'it is cursed: you cannot take it off': 'It is cursed: once worn, it will not come off.',
     'your pack is full': 'Your pack is full.',
     'not enough gold': "You don't have enough gold.",
@@ -776,6 +779,12 @@ const en = {
   throwItem: 'Throw',
   zap: 'Zap',
   chooseTarget: 'Choose a target',
+  readOn: 'Read on…',
+  /** WndBag's selector titles: what the scroll is to be read on. */
+  pickTitle: {
+    'scroll.upgrade': 'Upgrade an item', 'scroll.enchantment': 'Enchant an item', 'scroll.identify': 'Identify an item',
+  } as Record<'scroll.upgrade' | 'scroll.enchantment' | 'scroll.identify', string>,
+  pickTarget: 'Tap the item to read the scroll on.',
   charges: (left: number, max: number) => `Charges: ${left}/${max}`,
   missileInfo: (min: number, max: number) => `Damage ${min}–${max} when thrown.`,
   wandDamage: (min: number, max: number) => `Damage ${min}–${max}.`,
@@ -1315,7 +1324,7 @@ const ru: Strings = {
     'potion.purity': 'Выпитое, на время защищает от газов; брошенное — очищает воздух вокруг.',
     'potion.might': 'Навсегда добавляет очко силы и пять очков здоровья.',
     'scroll.recharging': 'Полностью заряжает палочки в вашем рюкзаке.',
-    'scroll.enchantment': 'Наделяет ваше оружие или доспех случайными чарами.',
+    'scroll.enchantment': 'Наделяет случайными чарами оружие или доспех на ваш выбор.',
     'kit.armor': 'С этим набором инструментов и материалов надетый доспех становится доспехом вашего класса: не хуже прежнего, да ещё с особым умением.',
     ankh: 'Древний символ бессмертия. Если вы погибнете, имея его при себе, то воскреснете у лестницы целым и '
       + 'невредимым — но всё остальное в рюкзаке пропадёт, как и всё золото.',
@@ -1328,7 +1337,7 @@ const ru: Strings = {
     'scroll.mapping': 'Открывает план уровня и его потайные двери.',
     'scroll.challenge': 'Рёв, который созывает к вам всех монстров уровня.',
     'scroll.lullaby': 'Усыпляет всех монстров в поле зрения.',
-    'scroll.upgrade': 'Улучшает оружие или доспех на один уровень.',
+    'scroll.upgrade': 'Улучшает на один уровень предмет на ваш выбор: оружие, доспех, палочку или кольцо.',
     'missile.dart': 'Лёгкий метательный дротик. Попав, теряется; промахнувшись, падает на пол.',
     'missile.boomerang': 'Брошенный, всегда возвращается в руку.',
     'missile.curare': 'Дротик, смазанный кураре: попав, ненадолго парализует.',
@@ -1509,6 +1518,9 @@ const ru: Strings = {
   beaconDone: 'Маяк установлен здесь: теперь вы можете вернуться сюда в любой момент.',
   specialUsed: { leap: 'Вы прыгаете и обрушиваетесь на землю!', moltenEarth: 'Земля под врагами плавится!', smokeBomb: 'В клубах дыма вы оказываетесь в другом месте!', blades: 'Веер призрачных клинков летит во врагов!' },
   reasons: {
+    'that cannot be upgraded': 'Это нельзя улучшить.',
+    'that cannot be enchanted': 'Это нельзя зачаровать.',
+    'there is nothing to learn about that': 'Об этом и так всё известно.',
     'it is cursed: you cannot take it off': 'Вещь проклята: надетую, её не снять.',
     'your pack is full': 'Рюкзак полон.',
     'not enough gold': 'Не хватает золота.',
@@ -1669,6 +1681,9 @@ const ru: Strings = {
   throwItem: 'Метнуть',
   zap: 'Взмахнуть',
   chooseTarget: 'Выберите цель',
+  readOn: 'Прочитать на…',
+  pickTitle: { 'scroll.upgrade': 'Улучшить предмет', 'scroll.enchantment': 'Зачаровать предмет', 'scroll.identify': 'Опознать предмет' },
+  pickTarget: 'Коснитесь предмета, на котором прочитать свиток.',
   charges: (left, max) => `Заряды: ${left}/${max}`,
   missileInfo: (min, max) => `Урон при броске ${min}–${max}.`,
   wandDamage: (min, max) => `Урон ${min}–${max}.`,

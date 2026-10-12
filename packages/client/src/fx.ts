@@ -74,6 +74,11 @@ class Fx {
    * The visual clock: real time, except during hit-stop, when it crawls
    * for a few dozen milliseconds so a heavy blow lands with weight.
    */
+  /** The visual clock as the last frame left it: for taps and keys between frames, which must not move it on. */
+  get now(): number {
+    return this.visual;
+  }
+
   time(real: number): number {
     if (this.lastReal === 0) {
       this.lastReal = real;

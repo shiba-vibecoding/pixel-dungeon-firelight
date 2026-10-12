@@ -1,5 +1,5 @@
 import {
-  type Action, armorStats, BACKPACK_SIZE, isBroken, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
+  type Action, armorStats, BACKPACK_SIZE, scrollTargets, isBroken, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
   itemSprite, maxExp, type MobKind, SUBCLASSES, wandMaxCharges, weaponStats, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
@@ -1057,6 +1057,9 @@ export function showDailyBoard(loading: Promise<DailyBoard | null>, onClose: () 
   void loading.then((board) => body.replaceChildren(boardView(board)));
 }
 
+/** Scrolls read on one thing the player picks. */
+const TARGETED_SCROLLS = ['scroll.upgrade', 'scroll.enchantment', 'scroll.identify'] as const;
+
 /* Backpack */
 
 export interface BackpackOptions {
@@ -1066,11 +1069,29 @@ export interface BackpackOptions {
   /** Throw or zap the item at a cell the player picks next. */
   onAim(index: number, kind: 'throw' | 'zap' | 'special'): void;
   onClose(): void;
+  /**
+   * WndBag's selector: the backpack with only what a scroll can be read on to tap (worn
+   * things too); the rest dimmed. A tap reads the scroll on it.
+   */
+  pick?: { title: string; targets: readonly ItemRef[]; onPick(ref: ItemRef): void; onCancel(): void };
 }
 
 export function showBackpack(options: BackpackOptions): void {
-  const { world, hero } = options;
-  const open = (item: Item, index: number | null, ring?: number): void => showItem({ ...options, item, index, ring });
+  const { world, hero, pick } = options;
+  const targets = new Set((pick?.targets ?? []).map(String));
+  const open = (item: Item, index: number | null, ring?: number): void => {
+    if (!pick) {
+      showItem({ ...options, item, index, ring });
+      return;
+    }
+    const ref: ItemRef = index !== null ? index : ring !== undefined ? (ring === 0 ? 'ring0' : 'ring1') : item === hero.armor ? 'armor' : 'weapon';
+    if (targets.has(String(ref))) pick.onPick(ref);
+  };
+  /** In the selector, what cannot be chosen is dimmed. */
+  const mark = (node: HTMLElement, ref: ItemRef): HTMLElement => {
+    if (pick && !targets.has(String(ref)) && node.tagName === 'BUTTON') node.classList.add('disabled');
+    return node;
+  };
   // The backpack's own slots, then whatever lies in bags or on the key ring.
   const entries = hero.items.map((item, index) => ({ item, index, bagged: inBag(hero, item) }));
   const loose = entries.filter((entry) => !entry.bagged);
@@ -1078,13 +1099,13 @@ export function showBackpack(options: BackpackOptions): void {
   const grid = el('div', { className: 'pd-grid' });
   for (let i = 0; i < Math.max(BACKPACK_SIZE, loose.length); i++) {
     const entry = loose[i];
-    grid.append(slot(world, entry?.item, entry ? { hero, onClick: () => open(entry.item, entry.index) } : {}));
+    grid.append(mark(slot(world, entry?.item, entry ? { hero, onClick: () => open(entry.item, entry.index) } : {}), entry?.index ?? -1));
   }
   const coin = picture('coin', 16, 14);
   const head = el(
     'header',
     { className: 'pd-bag-head' },
-    el('h2', { className: 'pd-heading', textContent: t.backpack }),
+    el('h2', { className: 'pd-heading', textContent: pick?.title ?? t.backpack }),
     el('span', { className: 'pd-stat gold' }, coin, String(hero.gold)),
     el('span', { className: 'pd-stat' }, el('span', { className: 'pd-stat-label', textContent: t.strength }), String(hero.str)),
   );
@@ -1092,11 +1113,11 @@ export function showBackpack(options: BackpackOptions): void {
     'div',
     { className: 'pd-equip' },
     // Bare-handed after a monk's blow: the weapon's silhouette.
-    slot(world, hero.weapon ?? undefined, { hero, equipped: true, placeholder: 5, onClick: () => hero.weapon && open(hero.weapon, null) }),
-    slot(world, hero.armor, { hero, equipped: true, placeholder: 6, onClick: () => open(hero.armor, null) }),
+    mark(slot(world, hero.weapon ?? undefined, { hero, equipped: true, placeholder: 5, onClick: () => hero.weapon && open(hero.weapon, null) }), 'weapon'),
+    mark(slot(world, hero.armor, { hero, equipped: true, placeholder: 6, onClick: () => open(hero.armor, null) }), 'armor'),
     ...[0, 1].map((i) => {
       const ring = hero.rings[i];
-      return slot(world, ring, { hero, equipped: true, placeholder: 7, onClick: () => ring && open(ring, null, i) });
+      return mark(slot(world, ring, { hero, equipped: true, placeholder: 7, onClick: () => ring && open(ring, null, i) }), i === 0 ? 'ring0' : 'ring1');
     }),
   );
   const box = el(
@@ -1108,13 +1129,14 @@ export function showBackpack(options: BackpackOptions): void {
     ...(bagged.length > 0
       ? [
           el('div', { className: 'pd-bagrow-title' }, info(t.inBags, 'pd-note')),
-          el('div', { className: 'pd-bagrow' }, ...bagged.map(({ item, index }) => slot(world, item, { hero, onClick: () => open(item, index) }))),
+          el('div', { className: 'pd-bagrow' }, ...bagged.map(({ item, index }) => mark(slot(world, item, { hero, onClick: () => open(item, index) }), index))),
         ]
       : []),
-    closeButton(options.onClose),
+    pick && info(t.pickTarget, 'pd-note center'),
+    closeButton(pick ? pick.onCancel : options.onClose),
   );
   box.setAttribute('role', 'dialog');
-  show(box, options.onClose);
+  show(box, pick ? pick.onCancel : options.onClose);
 }
 
 interface ItemOptions extends BackpackOptions {
@@ -1153,12 +1175,20 @@ function showItem(options: ItemOptions): void {
     if (category === 'kit') use(t.applyKit, () => act({ type: 'use', item: index, target: 'armor' }));
     if (category === 'seed') use(t.plantSeed, () => aimWith('throw', index));
     if (category === 'scroll') {
-      if (item.kind === 'scroll.upgrade' && isKnown(world, item)) {
-        use(t.upgradeWeapon, () => act({ type: 'use', item: index, target: 'weapon' }));
-        use(t.upgradeArmor, () => act({ type: 'use', item: index, target: 'armor' }));
-      } else if (item.kind === 'scroll.enchantment' && isKnown(world, item)) {
-        use(t.enchantWeapon, () => act({ type: 'use', item: index, target: 'weapon' }));
-        use(t.enchantArmor, () => act({ type: 'use', item: index, target: 'armor' }));
+      // A known scroll that acts on one thing asks which, from the whole pack and what is worn (WndBag's selector).
+      const targeted = isKnown(world, item) && (TARGETED_SCROLLS as readonly string[]).includes(item.kind);
+      const targets = targeted ? scrollTargets(world, hero, item.kind) : [];
+      if (targeted) {
+        use(t.readOn, () =>
+          showBackpack({
+            ...options,
+            pick: {
+              title: t.pickTitle[item.kind as 'scroll.upgrade' | 'scroll.enchantment' | 'scroll.identify'] ?? t.read,
+              targets,
+              onPick: (on) => act({ type: 'use', item: index, on }),
+              onCancel: () => showItem(options),
+            },
+          }));
       } else {
         use(t.read, () => act({ type: 'use', item: index }));
       }

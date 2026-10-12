@@ -350,7 +350,11 @@ export function render(
   // Characters, back to front. Monsters only show where the party can see.
   const shown = [...view.puppets.values()]
     .filter((puppet) => puppet.isHero || scene.seeAll || visible[puppet.to] || visible[puppet.from])
-    .map((puppet) => ({ puppet, ...view.position(puppet, now) }))
+    .map((puppet) => {
+      // On whole screen pixels, as the map is: a walker between them shimmered against the floor.
+      const at = view.position(puppet, now);
+      return { puppet, x: Math.round(at.x * camera.zoom) / camera.zoom, y: Math.round(at.y * camera.zoom) / camera.zoom };
+    })
     .sort((a, b) => Number(a.puppet.alive) - Number(b.puppet.alive) || a.y - b.y);
   for (const { puppet, x, y } of shown) drawPuppet(ctx, puppet, x, y, now);
 

@@ -14,7 +14,7 @@ export type BadgeId =
   | 'deathGlyph' | 'deathFalling' | 'yasd' | 'boss1' | 'boss2' | 'boss3' | 'boss4' | 'boss1AllClasses' | 'boss3AllSubclasses'
   | 'haggler' | 'thorns' | 'str1' | 'str2' | 'str3' | 'str4' | 'food1' | 'food2' | 'food3' | 'food4' | 'item1' | 'item2' | 'item3'
   | 'item4' | 'rare' | 'victory' | 'victoryAllClasses' | 'combo' | 'cooked1' | 'cooked2' | 'cooked3' | 'cooked4' | 'grim' | 'piranhas'
-  | 'games1' | 'games2' | 'games3' | 'games4';
+  | 'games1' | 'games2' | 'games3' | 'games4' | 'champion';
 
 /** Each badge's icon in badges.png, and its words. */
 export const BADGES: ReadonlyArray<{ id: BadgeId; image: number; en: string; ru: string }> = [
@@ -77,6 +77,7 @@ export const BADGES: ReadonlyArray<{ id: BadgeId; image: number; en: string; ru:
   { id: 'games2', image: 61, en: '100 games played', ru: 'Сыграно 100 игр' },
   { id: 'games3', image: 62, en: '500 games played', ru: 'Сыграно 500 игр' },
   { id: 'games4', image: 63, en: '2000 games played', ru: 'Сыграно 2000 игр' },
+  { id: 'champion', image: 39, en: 'Challenge won', ru: 'Испытание пройдено' },
 ];
 
 export const badgeText = (id: BadgeId): string => {
@@ -226,6 +227,8 @@ export function checkBadges(world: World, me: Hero, effects: readonly Effect[]):
     }
     if (effect.type === 'victory' && effect.hero === me.id) {
       earn('victory');
+      // Badges.validateChampion: the Amulet taken with a challenge on.
+      earn('champion', (world.challenges ?? 0) > 0);
       remember(store.victories, me.heroClass);
     }
     if (effect.type === 'died' && effect.who === me.id && me.killedBy) {

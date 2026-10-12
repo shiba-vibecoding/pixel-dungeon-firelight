@@ -77,9 +77,10 @@ export function forgetSolo(key: string): void {
  * @param key local storage slot, or null not to save
  * @param newSeed seed for a fresh run (also used by restart)
  */
-export function soloSession(key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero'): Session {
+/** @param challenges the challenges of a fresh run (a bit mask; see Challenges in the core) */
+export function soloSession(key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0): Session {
   const fresh = (): World => {
-    const world = createWorld(newSeed());
+    const world = createWorld(newSeed(), challenges);
     addHero(world, { id: 'me', name, heroClass });
     return world;
   };

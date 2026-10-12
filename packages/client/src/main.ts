@@ -332,7 +332,9 @@ function startSolo(mode: 'continue' | 'new' | 'daily'): void {
   if (mode === 'new') forgetSolo(SOLO_SLOT);
   const daily = mode === 'daily';
   const seed = daily ? dailySeed() : randomSeed();
-  enterGame(soloSession(daily ? dailySlot() : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed()), playerName.trim() || telegramName() || t.heroDefault), null);
+  // The daily dungeon is the same for everyone: no challenges there.
+  const chosen = !daily && challengesOpen() ? challenges : 0;
+  enterGame(soloSession(daily ? dailySlot() : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed()), playerName.trim() || telegramName() || t.heroDefault, chosen), null);
   dailyRun = daily;
 }
 
@@ -546,6 +548,9 @@ function send(action: Parameters<Session['send']>[0], now: number): void {
   session!.send(action);
 }
 
+/** How early (ms) the next step of a walk is sent before the last one ends on screen: about a frame. */
+const FRAME_AHEAD_MS = 17;
+
 function step(world: World, now: number, visible: readonly boolean[]): void {
   const me = heroById(world, session!.myId);
   // Resting turns are not paced like steps: there is nothing to animate.
@@ -554,7 +559,12 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
   // from where that one leads: the room's answer takes longer than a step on many networks.
   const walking = walk.queue.length > 0 || (held.code !== '' && !walk.chase && !walk.resting && !walk.stairs && !walk.pickup);
   const ahead = threats.size === 0 && walking ? session!.stepAhead : null;
-  if (!me || !isAlive(me) || (session!.busy && ahead === null) || overlayOpen() || now - walk.lastSent < pace) return;
+  // Alone, the next step goes as the last one ends on screen (a frame early, so it follows on without a
+  // pause or a hurried catch-up); online the room's answer starts each step, so the clock paces them.
+  const due = session!.mode === 'solo' && !walk.resting
+    ? view.stepLeft(session!.myId, fx.now) <= FRAME_AHEAD_MS && now - walk.lastSent >= STEP_MS / 2
+    : now - walk.lastSent >= pace;
+  if (!me || !isAlive(me) || (session!.busy && ahead === null) || overlayOpen() || !due) return;
   if (ahead !== null) {
     // An arrow held down goes on from where the last step leads, as long as the way is open.
     const next = walk.queue.shift() ?? ahead + held.dx + held.dy * WIDTH;
@@ -866,7 +876,7 @@ function tapCell(cell: number, quiet = false): void {
   const visible = visibleCells(world, me.depth);
   const explored = exploredCells(world, me.depth);
   walk.reset();
-  const vnow = fx.time(performance.now());
+  const vnow = fx.now;
   feedback.clear();
   // Aiming a shot, the tapped cell flashes for a blink: the tap was taken.
   if (explored[cell] && !quiet && aim) view.flashes.push({ cell, start: vnow, color: '255, 120, 80', duration: 260 });
@@ -1154,7 +1164,7 @@ canvas.addEventListener('wheel', (event) => {
 function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;
   // A region's intro is read first: the tap that skips it does nothing else.
-  if (view.skipIntro(fx.time(performance.now()))) return;
+  if (view.skipIntro(fx.now)) return;
   const x = Math.floor((camera.x + px / camera.zoom) / TILE);
   const y = Math.floor((camera.y + py / camera.zoom) / TILE);
   if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
@@ -1894,5 +1904,5 @@ if (import.meta.env.DEV) {
       await new Promise((resolve) => setTimeout(resolve, 33));
     }
   };
-  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, audio } });
+  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, audio, tick, held } });
 }
