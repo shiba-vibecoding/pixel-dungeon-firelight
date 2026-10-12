@@ -1,0 +1,67 @@
+import { describe, expect, it } from 'vitest';
+import { act, addHero, createWorld, findPath, heroById, levelAt, type World } from '../src/index';
+
+function twoHeroes(seed = 2026): World {
+  const world = createWorld(seed);
+  addHero(world, { id: 'a', name: 'Alice', heroClass: 'warrior' });
+  addHero(world, { id: 'b', name: 'Bob', heroClass: 'mage' });
+  return world;
+}
+
+/** Walks a hero along a path to `to`, one validated step per turn. */
+function walk(world: World, id: string, to: number): void {
+  const hero = heroById(world, id)!;
+  const others = new Set(world.heroes.filter((h) => h !== hero && h.depth === hero.depth).map((h) => h.pos));
+  const path = findPath(levelAt(world, hero.depth), hero.pos, to, others);
+  expect(path, `path to ${to}`).not.toBeNull();
+  for (const step of path!) {
+    expect(act(world, id, { type: 'move', to: step })).toEqual({ ok: true });
+  }
+}
+
+describe('shared world', () => {
+  it('places joining heroes on distinct cells at the entrance', () => {
+    const world = twoHeroes();
+    const [a, b] = world.heroes;
+    expect(a!.depth).toBe(1);
+    expect(b!.depth).toBe(1);
+    expect(a!.pos).not.toBe(b!.pos);
+  });
+
+  it('rejects moves that are not one step onto free walkable ground', () => {
+    const world = twoHeroes();
+    const [a, b] = world.heroes;
+    expect(act(world, 'a', { type: 'move', to: a!.pos + 5 }).ok).toBe(false);
+    expect(act(world, 'a', { type: 'move', to: 0 }).ok).toBe(false);
+    if (Math.abs(a!.pos - b!.pos) <= 33) {
+      expect(act(world, 'a', { type: 'move', to: b!.pos })).toEqual({ ok: false, reason: 'cell is occupied' });
+    }
+    expect(act(world, 'nobody', { type: 'wait' }).ok).toBe(false);
+  });
+
+  it('lets each hero walk to the stairs and descend independently', () => {
+    const world = twoHeroes();
+    const exit = levelAt(world, 1).exit;
+    expect(act(world, 'a', { type: 'descend' }).ok).toBe(false);
+    walk(world, 'a', exit);
+    expect(act(world, 'a', { type: 'descend' })).toEqual({ ok: true });
+    const a = heroById(world, 'a')!;
+    expect(a.depth).toBe(2);
+    expect(heroById(world, 'b')!.depth).toBe(1);
+    // Bob follows down the same stairs into the same level.
+    walk(world, 'b', exit);
+    expect(act(world, 'b', { type: 'descend' })).toEqual({ ok: true });
+    const b = heroById(world, 'b')!;
+    expect(b.depth).toBe(2);
+    expect(b.pos).not.toBe(a.pos);
+  });
+
+  it('serialises: a JSON copy of the world continues identically', () => {
+    const world = twoHeroes(77);
+    const copy: World = JSON.parse(JSON.stringify(world));
+    walk(world, 'a', levelAt(world, 1).exit);
+    walk(copy, 'a', levelAt(copy, 1).exit);
+    expect(act(world, 'a', { type: 'descend' })).toEqual(act(copy, 'a', { type: 'descend' }));
+    expect(copy).toEqual(world);
+  });
+});

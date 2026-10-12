@@ -1,0 +1,6 @@
+# Keep LF everywhere: CRLF conversion once corrupted compiled game data in the
+# Java port. Images and audio are binary.
+* text=auto eol=lf
+*.png binary
+*.mp3 binary
+*.ogg binary

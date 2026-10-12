@@ -1,0 +1,116 @@
+import { describe, expect, it } from 'vitest';
+import {
+  createRun, F, generateLevel, hasFlag, LENGTH, type Level, NEIGHBOURS4, NEIGHBOURS8, passable, T, WIDTH,
+} from '../src/index';
+import { ascii } from './ascii';
+
+const SEEDS = Array.from({ length: 300 }, (_, i) => i * 7919 + 1);
+
+function generateRun(seed: number): Level[] {
+  const run = createRun(seed);
+  return [1, 2, 3, 4].map((depth) => generateLevel(run, depth));
+}
+
+/**
+ * Cells a hero can eventually walk through: secret doors can be found, and
+ * visible traps ("avoid" cells that are not pits) can be stepped on on purpose.
+ */
+function walkable(map: readonly number[]): boolean[] {
+  const open = passable(map);
+  return map.map(
+    (t, i) =>
+      open[i]! ||
+      t === T.SECRET_DOOR ||
+      t === T.LOCKED_DOOR ||
+      (hasFlag(t, F.AVOID) && !hasFlag(t, F.PIT) && i % WIDTH > 0 && i % WIDTH < WIDTH - 1),
+  );
+}
+
+function reachable(map: readonly number[], from: number): boolean[] {
+  const ok = walkable(map);
+  const seen = new Array<boolean>(LENGTH).fill(false);
+  const queue = [from];
+  seen[from] = true;
+  for (let head = 0; head < queue.length; head++) {
+    const pos = queue[head]!;
+    for (const n of NEIGHBOURS8) {
+      const next = pos + n;
+      if (next >= 0 && next < LENGTH && !seen[next] && ok[next]) {
+        seen[next] = true;
+        queue.push(next);
+      }
+    }
+  }
+  return seen;
+}
+
+describe('sewer level generation', () => {
+  const runs = SEEDS.map((seed) => ({ seed, levels: generateRun(seed) }));
+
+  it('places a distinct entrance and exit', () => {
+    for (const { seed, levels } of runs) {
+      for (const level of levels) {
+        const where = `seed ${seed} depth ${level.depth}`;
+        expect(level.map[level.entrance], where).toBe(T.ENTRANCE);
+        expect(level.map[level.exit], where).toBe(T.EXIT);
+        expect(level.entrance, where).not.toBe(level.exit);
+      }
+    }
+  });
+
+  it('connects the exit and every walkable cell to the entrance', () => {
+    for (const { seed, levels } of runs) {
+      for (const level of levels) {
+        const seen = reachable(level.map, level.entrance);
+        const ok = walkable(level.map);
+        const lost = ok.flatMap((w, i) => (w && !seen[i] ? [i] : []));
+        if (!seen[level.exit] || lost.length > 0) {
+          throw new Error(
+            `seed ${seed} depth ${level.depth}: exit reached=${seen[level.exit]}, ` +
+              `${lost.length} unreachable cells (first ${lost[0]})\n${ascii(level.map)}`,
+          );
+        }
+      }
+    }
+  });
+
+  it('keeps the map border solid', () => {
+    for (const { levels } of runs) {
+      for (const level of levels) {
+        for (let i = 0; i < LENGTH; i++) {
+          const x = i % WIDTH;
+          if (i < WIDTH || i >= LENGTH - WIDTH || x === 0 || x === WIDTH - 1) {
+            expect(hasFlag(level.map[i]!, F.PASSABLE), `cell ${i}`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('sets doors into walls', () => {
+    for (const { seed, levels } of runs) {
+      for (const level of levels) {
+        level.map.forEach((t, i) => {
+          if (t !== T.DOOR && t !== T.SECRET_DOOR) return;
+          const [up, right, down, left] = NEIGHBOURS4.map((n) => hasFlag(level.map[i + n]!, F.SOLID) && level.map[i + n] !== T.DOOR);
+          if (!((up && down) || (left && right))) {
+            throw new Error(`seed ${seed} depth ${level.depth}: door ${i} is not in a wall\n${ascii(level.map)}`);
+          }
+        });
+      }
+    }
+  });
+
+  it('is a pure function of the seed', () => {
+    expect(generateRun(424242)).toEqual(generateRun(424242));
+    expect(generateRun(1)[0]!.map).not.toEqual(generateRun(2)[0]!.map);
+  });
+
+  it('first depth has no traps, no secret doors and no feeling', () => {
+    for (const { levels } of runs) {
+      const first = levels[0]!;
+      expect(first.secretDoors).toBe(0);
+      expect(first.map.some((t) => t >= T.SECRET_TOXIC_TRAP && t <= T.SECRET_SUMMONING_TRAP && hasFlag(t, F.SECRET))).toBe(false);
+    }
+  });
+});
