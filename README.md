@@ -93,7 +93,12 @@ Clouds of toxic and paralytic gas (from traps, potions, DM-300, rotberries and
 armour of stench) spread through open cells, never through walls or closed
 doors, thin out a little every turn, and act on whoever breathes them.
 
-Everything of the original's game content is now ported.
+Not ported yet: the other thrown weapons (javelins, shuriken, tomahawks,
+curare and incendiary darts); the armour kit and class armour; bags (seed
+pouch, scroll holder, wand holster, keyring); the dew vial; the honeypot and
+its bees; wraiths rising from cursed remains; the ghost's other errand (the
+fetid rat); the Rat King; cooked mystery meat; Lloyd's beacon, the
+weightstone and the overpriced ration; bombs.
 
 ## How co-op works
 
