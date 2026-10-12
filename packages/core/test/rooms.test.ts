@@ -4,12 +4,13 @@ import {
 } from '../src/index';
 import { pacify } from './helpers';
 
-/** Cells reachable from the entrance with hidden and locked doors open. */
+/** Cells reachable from the entrance with hidden and locked doors open and barricades burnt. */
 function reachable(world: World, depth: number): Set<number> {
   const level = levelAt(world, depth);
   const open = (c: number): boolean =>
     hasFlag(level.map[c]!, F.PASSABLE) || hasFlag(level.map[c]!, F.AVOID) ||
-    level.map[c] === T.SECRET_DOOR || level.map[c] === T.LOCKED_DOOR;
+    level.map[c] === T.SECRET_DOOR || level.map[c] === T.LOCKED_DOOR || level.map[c] === T.BARRICADE ||
+    level.map[c] === T.BOOKSHELF;
   const seen = new Set([level.entrance]);
   const queue = [level.entrance];
   for (let head = 0; head < queue.length; head++) {
@@ -40,9 +41,15 @@ describe('special rooms', () => {
         const reach = reachable(world, depth);
         for (const heap of heaps) expect(reach.has(heap.pos), `heap at ${heap.pos}`).toBe(true);
         expect(level.wells.every((w) => level.map[w.pos] === T.WELL)).toBe(true);
+        // A storage room comes with the liquid flame to burn its barricade.
+        if (level.rooms.some((room) => room.type === RoomType.STORAGE)) {
+          expect(heaps.flatMap((h) => h.items).some((i) => i.kind === 'potion.liquidFlame')).toBe(true);
+        }
       }
     }
-    for (const type of [RoomType.TREASURY, RoomType.ARMORY, RoomType.LIBRARY, RoomType.CRYPT, RoomType.MAGIC_WELL, RoomType.TRAPS]) {
+    for (const type of [
+      RoomType.TREASURY, RoomType.ARMORY, RoomType.LIBRARY, RoomType.CRYPT, RoomType.MAGIC_WELL, RoomType.TRAPS, RoomType.STORAGE,
+    ]) {
       expect(found.get(type) ?? 0, RoomType[type]).toBeGreaterThan(0);
     }
   });

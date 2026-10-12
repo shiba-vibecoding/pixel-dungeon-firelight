@@ -470,6 +470,10 @@ function tapCell(cell: number): void {
     view.say(t.locked, '#ff8800');
     return;
   }
+  if (level.map[cell] === T.BARRICADE) {
+    view.say(t.barricade, '#ff8800');
+    return;
+  }
   walk.queue = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored) ?? [];
   if (walk.queue.length === 0) return;
   walk.pickup = heapAt(world, me.depth, cell);

@@ -424,6 +424,26 @@ function paintCrypt(level: LevelBuilder, room: Room): void {
   level.dropItem(cell(cx, cy), HeapType.TOMB, { roll: 'category', categories: ['armor'], tries: 4 });
 }
 
+/**
+ * StoragePainter: a store of potions, scrolls, food and gold behind a
+ * barricade, and somewhere on the level a potion of liquid flame to burn it.
+ */
+function paintStorage(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY_SP, 1);
+  const n = rng.intRange(3, 4);
+  for (let i = 0; i < n; i++) {
+    let pos: number;
+    do {
+      pos = room.random(rng);
+    } while (level.map[pos] !== T.EMPTY_SP || level.items.some((spawn) => spawn.pos === pos));
+    level.dropItem(pos, HeapType.HEAP, { roll: 'category', categories: [rng.oneOf(['potion', 'scroll', 'food', 'gold'] as const)], tries: 1 });
+  }
+  entranceOf(room).set(DoorType.BARRICADE);
+  level.toSpawn.push({ roll: 'liquidFlame' });
+}
+
 /** MagicWellPainter: a well of healing or awareness in the middle. */
 function paintMagicWell(level: LevelBuilder, room: Room): void {
   const { rng } = level;
@@ -481,6 +501,7 @@ export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painte
   [RoomType.CRYPT, paintCrypt],
   [RoomType.MAGIC_WELL, paintMagicWell],
   [RoomType.TRAPS, paintTraps],
+  [RoomType.STORAGE, paintStorage],
   [RoomType.STANDARD, paintStandard],
   [RoomType.ENTRANCE, paintEntrance],
   [RoomType.EXIT, paintExit],

@@ -206,13 +206,13 @@ export function itemSprite(item: Item, labels: Labels): number {
 /* Generator */
 
 /** Categories the generator picks from; thrown weapons come with the weapons, wands are not found yet. */
-type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor';
+type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food';
 
 const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
   ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['gold', 50],
 ];
 
-const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
+const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
   // The original also has levitation, purity and frost; strength and might
   // only come as guaranteed finds.
   potion: [
@@ -268,6 +268,7 @@ export class ItemGenerator {
 
   of(category: GeneratedCategory): Item {
     if (category === 'gold') return rollGold(this.rng, this.depth);
+    if (category === 'food') return rollFood(this.rng);
     const table = KIND_CHANCES[category];
     const kind = table[this.rng.chances(table.map(([, chance]) => chance))]![0];
     // Dart.random: a handful of them.
@@ -334,6 +335,8 @@ function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: num
       return createItem('gold', rng.intRange(1, 3));
     case 'key':
       return { ...createItem('key.iron'), depth };
+    case 'liquidFlame':
+      return createItem('potion.liquidFlame');
     case 'category': {
       let best: Item | null = null;
       for (let i = 0; i < spec.tries; i++) {

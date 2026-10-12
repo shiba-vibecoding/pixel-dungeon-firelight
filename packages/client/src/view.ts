@@ -447,6 +447,9 @@ export class View {
             if (effect.state === 'starving') haptic('error');
           }
           break;
+        case 'burnt':
+          if (effect.depth === this.depth) this.flashes.push({ cell: effect.pos, start: now });
+          break;
         case 'interrupted':
         case 'victory':
           break;

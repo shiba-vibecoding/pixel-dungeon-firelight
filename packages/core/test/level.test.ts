@@ -35,7 +35,9 @@ function reachable(map: readonly number[], from: number): boolean[] {
     const pos = queue[head]!;
     for (const n of NEIGHBOURS8) {
       const next = pos + n;
-      if (next >= 0 && next < LENGTH && !seen[next] && ok[next]) {
+      // Barricades (and bookshelves standing in for them) burn away.
+      const burnable = map[next] === T.BARRICADE || map[next] === T.BOOKSHELF;
+      if (next >= 0 && next < LENGTH && !seen[next] && (ok[next] || burnable)) {
         seen[next] = true;
         queue.push(next);
       }

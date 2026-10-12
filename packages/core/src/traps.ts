@@ -2,7 +2,7 @@ import { createMob, type Hero, heroArmor, isAlive, type Mob, rollMob } from './a
 import { hurt } from './combat';
 import { charAt, type Char, type Ctx, exploredCells, heroesOn, isPassable, isWater } from './floor';
 import { distance, NEIGHBOURS8 } from './level/geometry';
-import { T } from './level/terrain';
+import { F, hasFlag, T } from './level/terrain';
 
 /*
  * Traps (levels/traps): set off by stepping on them, visible or hidden; then
@@ -47,9 +47,11 @@ export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS): 
     if (kind === 'fire' && !isWater(level.map[char.pos]!)) char.burning = Math.max(char.burning ?? 0, BURNING_TURNS);
   }
   if (kind !== 'fire') return;
+  // Whatever can burn nearby burns down to embers: grass, doors, barricades, bookshelves.
   for (let cell = 0; cell < level.map.length; cell++) {
-    if (distance(cell, pos) <= radius + 1 && (level.map[cell] === T.GRASS || level.map[cell] === T.HIGH_GRASS)) {
+    if (distance(cell, pos) <= radius + 1 && hasFlag(level.map[cell]!, F.FLAMABLE)) {
       level.map[cell] = T.EMBERS;
+      ctx.effects.push({ type: 'burnt', depth: ctx.depth, pos: cell });
     }
   }
 }

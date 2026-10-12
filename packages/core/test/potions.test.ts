@@ -98,6 +98,29 @@ describe('harmful potions', () => {
   });
 });
 
+describe('fire', () => {
+  it('burns down the barricade of a storage room', () => {
+    for (let seed = 1; seed <= 80; seed++) {
+      const world = pacify(createWorld(seed));
+      for (let depth = 1; depth <= 4; depth++) {
+        const level = levelAt(world, depth);
+        const barricade = level.map.indexOf(T.BARRICADE);
+        if (barricade < 0) continue;
+        addHero(world, { id: 'p', name: 'P', heroClass: 'warrior' });
+        const hero = heroById(world, 'p')!;
+        hero.depth = depth;
+        hero.pos = NEIGHBOURS8.map((n) => barricade + n).find((c) => canEnter(level, c))!;
+        hero.items = [createItem('potion.liquidFlame')];
+        const result = act(world, 'p', { type: 'use', item: 0 });
+        expect(result.ok && result.effects.some((e) => e.type === 'burnt' && e.pos === barricade)).toBe(true);
+        expect(level.map[barricade]).toBe(T.EMBERS);
+        return;
+      }
+    }
+    throw new Error('no storage room found');
+  });
+});
+
 describe('scroll of recharging', () => {
   it('fills every wand', () => {
     const world = solo('mage');
