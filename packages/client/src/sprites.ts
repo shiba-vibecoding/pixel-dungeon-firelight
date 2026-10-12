@@ -311,11 +311,24 @@ export function duration(animation: Animation): number {
   return (animation.frames.length / animation.fps) * 1000;
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
+/**
+ * An image, tried again a few times (a moment apart, past any cache) before giving up: a phone's
+ * network drops a request now and then, and one missing sheet would stop the whole game loading.
+ */
+function loadImage(url: string, attempt = 0): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Failed to load ${url}`));
+    image.onerror = () => {
+      if (attempt >= 3) {
+        reject(new Error(`Failed to load ${url}`));
+        return;
+      }
+      window.setTimeout(() => {
+        const again = `${url}${url.includes('?') ? '&' : '?'}retry=${attempt + 1}`;
+        loadImage(again, attempt + 1).then(resolve, reject);
+      }, 400 * (attempt + 1));
+    };
     image.src = url;
   });
 }
