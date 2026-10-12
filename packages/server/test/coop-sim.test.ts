@@ -45,6 +45,7 @@ class Bot {
   world: World | null = null;
   seq = 0;
   inFlight: { at: number } | null = null;
+  firstDiff = '';
   readonly stats: Stats = { acts: 0, rtt: [], rejected: {}, desyncs: 0, snapshots: 0, idleMs: 0, deaths: 0 };
   private socket!: WebSocket;
   private open = false;
@@ -83,7 +84,11 @@ class Bot {
     switch (message.type) {
       case 'snapshot':
         // A snapshot that is not the first must match what this bot had worked out itself.
-        if (this.world && message.seq === this.seq && JSON.stringify(this.world) !== JSON.stringify(message.world)) this.stats.desyncs++;
+        // Compared by content: the room's world comes out of storage with its keys in another order.
+        if (this.world && message.seq === this.seq && canonical(this.world) !== canonical(message.world)) {
+          this.stats.desyncs++;
+          if (!this.firstDiff) this.firstDiff = diff(this.world, message.world);
+        }
         this.world = message.world;
         this.seq = message.seq;
         this.inFlight = null;
@@ -172,6 +177,23 @@ class Bot {
   }
 }
 
+/** JSON with every object's keys sorted. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : v);
+}
+
+/** Where two worlds first differ, as a path and the two values. */
+function diff(a: unknown, b: unknown, path = ''): string {
+  if (JSON.stringify(a) === JSON.stringify(b)) return '';
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return `${path}: ${JSON.stringify(a)?.slice(0, 120)} vs ${JSON.stringify(b)?.slice(0, 120)}`;
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const found = diff((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], `${path}.${key}`);
+    if (found) return found;
+  }
+  return `${path}: key order`;
+}
+
 const quantile = (values: number[], q: number): number => {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
@@ -195,7 +217,8 @@ describe.skipIf(!SERVER)('co-op party against a live server', () => {
       const me = bot.world && heroById(bot.world, bot.id);
       return `${bot.id}: acts ${s.acts}, rtt p50 ${quantile(s.rtt, 0.5)} p90 ${quantile(s.rtt, 0.9)} p99 ${quantile(s.rtt, 0.99)} max ${quantile(s.rtt, 1)} ms, `
         + `>1s ${slow} (${Math.round((100 * slow) / Math.max(1, s.rtt.length))}%), idle ${Math.round(s.idleMs / 1000)} s, depth ${me?.depth}, `
-        + `deaths ${s.deaths}, desyncs ${s.desyncs}, rejected ${JSON.stringify(s.rejected)}`;
+        + `deaths ${s.deaths}, desyncs ${s.desyncs}, rejected ${JSON.stringify(s.rejected)}${bot.firstDiff ? `
+   first difference ${bot.firstDiff}` : ''}`;
     });
     process.stdout.write(`\nCO-OP SIM ${BOTS} bots, ${SECONDS} s, ${LATENCY} ms each way, room ${room}\n${lines.join('\n')}\n`);
     for (const bot of bots) bot.close();
