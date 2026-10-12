@@ -105,6 +105,11 @@ function leaveCell(world: World, level: Level, depth: number, pos: number): void
   }
 }
 
+/** Adds a hero once; joining again (e.g. after a reconnect) keeps the existing one. */
+export function joinHero(world: World, hero: Omit<Hero, 'depth' | 'pos'>): Hero {
+  return heroById(world, hero.id) ?? addHero(world, hero);
+}
+
 export function heroById(world: World, id: string): Hero | undefined {
   return world.heroes.find((hero) => hero.id === id);
 }

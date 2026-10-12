@@ -8,13 +8,16 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p packages/core && tsc -p packages/core/test && tsc -p packages/client",
-    "dev": "npm run dev -w @pd/client"
+    "typecheck": "tsc -p packages/core && tsc -p packages/core/test && tsc -p packages/client && tsc -p packages/server",
+    "dev": "npm run dev -w @pd/client",
+    "server": "npm run dev -w @pd/server"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261011.1",
     "@types/node": "^26.6.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.149.0"
   }
 }

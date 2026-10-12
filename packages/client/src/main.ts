@@ -1,83 +1,94 @@
 import {
-  act, addHero, cellX, cellY, createWorld, DEEPEST_AVAILABLE, exploredCells, findPath, type Hero, type HeroClass,
-  HEIGHT, heroById, levelAt, visibleCells, WIDTH,
+  cellX, cellY, DEEPEST_AVAILABLE, exploredCells, findPath, type Hero, type HeroClass, HEIGHT, levelAt,
+  visibleCells, WIDTH, type World,
 } from '@pd/core';
 import { bakeLevel, type Camera, type HeroView, loadSprites, render, TILE } from './render';
+import { localSession, onlineSession, type Session } from './session';
 
-/* Single-player playground for the new core: walk the generated sewers. */
+/*
+ * Pixel Dungeon client. Offline by default; with ?room=<name> it joins a co-op
+ * room on the server (VITE_SERVER_URL, ws://127.0.0.1:8787 in development).
+ */
 
 const STEP_MS = 110;
 const HERO_CLASSES: readonly HeroClass[] = ['warrior', 'mage', 'rogue', 'huntress'];
 
 const params = new URLSearchParams(location.search);
-const seed = Number(params.get('seed')) || Math.floor(Math.random() * 2 ** 31);
 const heroClass = (HERO_CLASSES as readonly string[]).includes(params.get('hero') ?? '')
   ? (params.get('hero') as HeroClass)
   : 'warrior';
 
+function playerId(): string {
+  const key = 'pd-player-id';
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+const room = params.get('room');
+const session: Session = room
+  ? onlineSession({
+      server: import.meta.env.VITE_SERVER_URL ?? 'ws://127.0.0.1:8787',
+      room,
+      // ?player= lets two tabs of one browser act as different players.
+      playerId: params.get('player') ?? playerId(),
+      name: params.get('name') ?? 'Hero',
+      heroClass,
+    })
+  : localSession(Number(params.get('seed')) || Math.floor(Math.random() * 2 ** 31), heroClass);
+
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const hud = document.getElementById('hud')!;
-
-const world = createWorld(seed);
-const me = addHero(world, { id: 'me', name: 'You', heroClass });
 const sprites = await loadSprites(`${import.meta.env.BASE_URL}assets/`);
 
-// The tile layer is re-baked whenever the world changes (doors open/close).
-let baked = bakeLevel(levelAt(world, me.depth), sprites);
-let bakedTurn = -1;
-let visible: boolean[] = [];
-
-// Walking: queued path cells, one step per STEP_MS, sprite slides between cells.
+// Walking: the queued path is sent one step at a time; online, the next step
+// waits until the server has confirmed the previous one.
 let queue: number[] = [];
-let lastStep = 0;
-let from = me.pos;
-let flip = false;
+let lastSent = 0;
+let descendWhenArrived = false;
 
-function cellDistance(a: number, b: number): number {
-  return Math.max(Math.abs(cellX(a) - cellX(b)), Math.abs(cellY(a) - cellY(b)));
+function me(world: World): Hero | undefined {
+  return world.heroes.find((hero) => hero.id === session.myId);
 }
 
-function hero(): Hero {
-  return heroById(world, 'me')!;
-}
+function step(world: World, now: number): void {
+  const hero = me(world);
+  if (!hero || session.waiting) return;
 
-function step(now: number): void {
-  if (queue.length === 0 || now - lastStep < STEP_MS) return;
-  const current = hero();
-  const next = queue.shift()!;
-  from = current.pos;
-  if (!act(world, 'me', { type: 'move', to: next }).ok) {
-    queue = [];
+  if (queue.length === 0) {
+    // Arrived on the stairs at the end of a walk: go down.
+    if (descendWhenArrived && hero.pos === levelAt(world, hero.depth).exit) {
+      session.send({ type: 'descend' });
+    }
+    descendWhenArrived = false;
     return;
   }
-  if (cellX(next) !== cellX(from)) flip = cellX(next) < cellX(from);
-  lastStep = now;
+  if (now - lastSent < STEP_MS) return;
 
-  const level = levelAt(world, current.depth);
-  if (queue.length === 0 && current.pos === level.exit) {
-    if (act(world, 'me', { type: 'descend' }).ok) {
-      from = current.pos;
-    }
-  }
-}
-
-function walkTo(target: number): void {
-  const current = hero();
-  const level = levelAt(world, current.depth);
-  queue = findPath(level, current.pos, target, new Set(), exploredCells(world, current.depth)) ?? [];
+  const next = queue.shift()!;
+  lastSent = now;
+  descendWhenArrived = queue.length === 0 && next === levelAt(world, hero.depth).exit;
+  session.send({ type: 'move', to: next });
 }
 
 canvas.addEventListener('pointerdown', (event) => {
+  const world = session.world;
+  const hero = world && me(world);
+  if (!world || !hero) return;
   const rect = canvas.getBoundingClientRect();
   const scale = canvas.width / rect.width;
-  const wx = camera.x + ((event.clientX - rect.left) * scale) / camera.zoom;
-  const wy = camera.y + ((event.clientY - rect.top) * scale) / camera.zoom;
-  const x = Math.floor(wx / TILE);
-  const y = Math.floor(wy / TILE);
-  if (x >= 0 && y >= 0 && x < WIDTH && y < HEIGHT) {
-    walkTo(x + y * WIDTH);
-  }
+  const x = Math.floor((camera.x + ((event.clientX - rect.left) * scale) / camera.zoom) / TILE);
+  const y = Math.floor((camera.y + ((event.clientY - rect.top) * scale) / camera.zoom) / TILE);
+  if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
+  const others = new Set(world.heroes.filter((h) => h !== hero && h.depth === hero.depth).map((h) => h.pos));
+  queue = findPath(levelAt(world, hero.depth), hero.pos, x + y * WIDTH, others, exploredCells(world, hero.depth)) ?? [];
 });
 
 const KEYS: Record<string, [number, number]> = {
@@ -87,9 +98,9 @@ const KEYS: Record<string, [number, number]> = {
 };
 addEventListener('keydown', (event) => {
   const dir = KEYS[event.code];
-  if (dir) {
-    const current = hero();
-    queue = [current.pos + dir[0] + dir[1] * WIDTH];
+  const hero = session.world && me(session.world);
+  if (dir && hero) {
+    queue = [hero.pos + dir[0] + dir[1] * WIDTH];
     event.preventDefault();
   }
 });
@@ -106,39 +117,78 @@ function resize(): void {
 addEventListener('resize', resize);
 resize();
 
+// Smooth movement for every hero: slide from the previous cell to the current one.
+interface Motion {
+  from: number;
+  to: number;
+  depth: number;
+  start: number;
+  flip: boolean;
+}
+const motions = new Map<string, Motion>();
+
+function heroView(hero: Hero, now: number, local: boolean): HeroView {
+  let motion = motions.get(hero.id);
+  if (!motion || motion.depth !== hero.depth) {
+    motion = { from: hero.pos, to: hero.pos, depth: hero.depth, start: 0, flip: false };
+    motions.set(hero.id, motion);
+  } else if (motion.to !== hero.pos) {
+    const flip = cellX(hero.pos) !== cellX(motion.to) ? cellX(hero.pos) < cellX(motion.to) : motion.flip;
+    motion = { from: motion.to, to: hero.pos, depth: hero.depth, start: now, flip };
+    motions.set(hero.id, motion);
+  }
+  const t = Math.min(1, (now - motion.start) / STEP_MS);
+  return {
+    heroClass: hero.heroClass,
+    x: (cellX(motion.from) + (cellX(motion.to) - cellX(motion.from)) * t) * TILE,
+    y: (cellY(motion.from) + (cellY(motion.to) - cellY(motion.from)) * t) * TILE,
+    flip: motion.flip,
+    local,
+  };
+}
+
+let baked: HTMLCanvasElement | null = null;
+let bakedKey = '';
+let visible: boolean[] = [];
+
 function frame(now: number): void {
-  step(now);
-  const current = hero();
-  if (world.turn !== bakedTurn) {
-    if (bakedTurn >= 0 && cellDistance(from, current.pos) > 1) from = current.pos;
-    baked = bakeLevel(levelAt(world, current.depth), sprites);
-    visible = visibleCells(world, current.depth);
-    bakedTurn = world.turn;
+  requestAnimationFrame(frame);
+  const world = session.world;
+  const hero = world && me(world);
+  if (!world || !hero) {
+    hud.textContent = session.status;
+    return;
+  }
+  step(world, now);
+
+  const level = levelAt(world, hero.depth);
+  const key = `${hero.depth}:${world.turn}`;
+  if (key !== bakedKey) {
+    baked = bakeLevel(level, sprites);
+    visible = visibleCells(world, hero.depth);
+    bakedKey = key;
   }
 
-  const t = Math.min(1, (now - lastStep) / STEP_MS);
-  const x = (cellX(from) + (cellX(current.pos) - cellX(from)) * t) * TILE;
-  const y = (cellY(from) + (cellY(current.pos) - cellY(from)) * t) * TILE;
+  const views = world.heroes
+    .filter((other) => other.depth === hero.depth)
+    .map((other) => heroView(other, now, other.id === hero.id));
+  const mine = views.find((view) => view.local)!;
 
-  // Follow the hero, but never show the void beyond the map edges.
-  const viewW = canvas.width / camera.zoom;
-  const viewH = canvas.height / camera.zoom;
-  const clamp = (value: number, view: number, size: number): number =>
-    view >= size ? (size - view) / 2 : Math.min(Math.max(value, 0), size - view);
-  camera.x = Math.round(clamp(x + TILE / 2 - viewW / 2, viewW, WIDTH * TILE));
-  camera.y = Math.round(clamp(y + TILE / 2 - viewH / 2, viewH, HEIGHT * TILE));
+  // Keep the hero centred: near the map edges the void shows, but the hero
+  // never ends up under the thumbs or the HUD.
+  camera.x = Math.round(mine.x + TILE / 2 - canvas.width / camera.zoom / 2);
+  camera.y = Math.round(mine.y + TILE / 2 - canvas.height / camera.zoom / 2);
 
-  const heroes: HeroView[] = [{ heroClass: current.heroClass, x, y, flip, local: true }];
-  render(ctx, levelAt(world, current.depth), baked, visible, exploredCells(world, current.depth), heroes, sprites, camera, now);
+  render(ctx, level, baked!, visible, exploredCells(world, hero.depth), views, sprites, camera, now);
 
-  hud.textContent =
-    `Depth ${current.depth}/${DEEPEST_AVAILABLE}  ·  seed ${seed}  ·  ${current.heroClass}\n` +
-    `Tap a cell or use arrows/WASD; reach > to descend`;
-  requestAnimationFrame(frame);
+  const party = world.heroes
+    .map((h) => `${session.online.includes(h.id) ? '●' : '○'} ${h.name} (${h.heroClass}) d${h.depth}`)
+    .join('\n');
+  hud.textContent = `Depth ${hero.depth}/${DEEPEST_AVAILABLE} · ${session.status}\n${party}`;
 }
 requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
   // Debug handle for the browser console.
-  Object.assign(window, { __pd: { world, camera } });
+  Object.assign(window, { __pd: { session, camera } });
 }
