@@ -233,12 +233,15 @@ const walk = {
   stairs: null as 'descend' | 'ascend' | null,
   /** Pick up what lies at the end of the walk. */
   pickup: false,
+  /** Resting until healed (a long press on the hourglass), stopped by any danger. */
+  resting: false,
   lastSent: 0,
   reset(): void {
     this.queue = [];
     this.chase = null;
     this.stairs = null;
     this.pickup = false;
+    this.resting = false;
   },
 };
 
@@ -285,7 +288,9 @@ function send(action: Parameters<Session['send']>[0], now: number): void {
 
 function step(world: World, now: number, visible: readonly boolean[]): void {
   const me = heroById(world, session!.myId);
-  if (!me || !isAlive(me) || session!.busy || overlayOpen() || now - walk.lastSent < STEP_MS) return;
+  // Resting turns are not paced like steps: there is nothing to animate.
+  const pace = walk.resting ? 0 : STEP_MS;
+  if (!me || !isAlive(me) || session!.busy || overlayOpen() || now - walk.lastSent < pace) return;
   const level = levelAt(world, me.depth);
 
   if (walk.chase) {
@@ -325,6 +330,15 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
     }
   }
 
+  if (walk.resting) {
+    if (me.hp >= me.ht || threats.size > 0) {
+      walk.resting = false;
+    } else {
+      send({ type: 'wait' }, now);
+      return;
+    }
+  }
+
   if (walk.stairs) {
     const stairs = walk.stairs;
     walk.stairs = null;
@@ -355,9 +369,11 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
 
 function handleMyEffects(effects: readonly Effect[], myId: string): void {
   for (const effect of effects) {
-    if ((effect.type === 'interrupted' && effect.hero === myId) || (effect.type === 'attack' && effect.target === myId)) {
+    const hurt = (effect.type === 'attack' && effect.target === myId) || (effect.type === 'hurt' && effect.who === myId);
+    if ((effect.type === 'interrupted' && effect.hero === myId) || hurt) {
       walk.queue = [];
       walk.stairs = null;
+      walk.resting = false;
     }
   }
 }
@@ -438,7 +454,8 @@ canvas.addEventListener('pointerdown', (event) => {
   if (button) audio.play('click');
   if (button && button !== 'quick') aim = null;
   if (button === 'quick') toggleQuickslot();
-  else if (button === 'wait' || button === 'search') act(button);
+  else if (button === 'wait') pressWait();
+  else if (button === 'search') act(button);
   else if (button === 'help') showHelp(hideOverlay);
   else if (button === 'backpack') openBackpack();
   else if (button === 'menu') openMenu();
@@ -448,6 +465,32 @@ canvas.addEventListener('pointerdown', (event) => {
   const y = Math.floor((camera.y + py / camera.zoom) / TILE);
   if (x >= 0 && y >= 0 && x < WIDTH && y < HEIGHT) tapCell(x + y * WIDTH);
 });
+
+/* The hourglass: a tap waits a turn, holding it rests until healed (as in the original). */
+let waitPress: { timer: number; long: boolean } | null = null;
+
+function pressWait(): void {
+  const press = {
+    long: false,
+    timer: window.setTimeout(() => {
+      press.long = true;
+      walk.reset();
+      walk.resting = true;
+      view.say(t.resting, '#cccccc');
+    }, 400),
+  };
+  waitPress = press;
+}
+
+function releaseWait(): void {
+  if (!waitPress) return;
+  clearTimeout(waitPress.timer);
+  if (!waitPress.long) act('wait');
+  waitPress = null;
+}
+
+addEventListener('pointerup', releaseWait);
+addEventListener('pointercancel', releaseWait);
 
 const KEYS: Record<string, [number, number]> = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
@@ -469,6 +512,10 @@ addEventListener('keydown', (event) => {
     tapCell(me.pos + dir[0] + dir[1] * WIDTH);
   } else if (event.code === 'Space' || event.code === 'Numpad5' || event.code === 'Period') {
     act('wait');
+  } else if (event.code === 'KeyR') {
+    walk.reset();
+    walk.resting = true;
+    view.say(t.resting, '#cccccc');
   } else if (event.code === 'KeyF') {
     act('search');
   } else if (event.code === 'KeyI') {

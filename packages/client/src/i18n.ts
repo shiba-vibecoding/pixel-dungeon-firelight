@@ -34,7 +34,7 @@ const en = {
     'Tap an item on the floor to pick it up. The backpack (bottom right) holds your loot: drink, read, equip, drop.',
     'The slot next to the backpack holds darts, a boomerang or a wand: tap it, then the target.',
     'Tap your hero or the magnifier to search for hidden doors and traps.',
-    'The hourglass waits a turn; resting heals.',
+    'The hourglass waits a turn; hold it to rest until healed.',
     'Walk onto the stairs to go deeper. Goo waits on the fifth floor.',
     'In a party, time flows while everyone is safe. In a fight, the dungeon waits for each hero in turn.',
     'A fallen hero rises again when a companion goes deeper. Drop items to share them.',
@@ -186,6 +186,7 @@ const en = {
   missileInfo: (min: number, max: number) => `Damage ${min}–${max} when thrown.`,
   wandDamage: (min: number, max: number) => `Damage ${min}–${max}.`,
   noCharges: 'Your wand fizzles: it is out of charges for now.',
+  resting: 'You rest until healed…',
 };
 
 type Strings = typeof en;
@@ -223,7 +224,7 @@ const ru: Strings = {
     'Нажмите на предмет на полу, чтобы подобрать. В рюкзаке (справа внизу) — выпить, прочитать, надеть, выбросить.',
     'В ячейке рядом с рюкзаком — дротики, бумеранг или палочка: нажмите на неё, затем на цель.',
     'Нажмите на героя или на лупу, чтобы искать потайные двери и ловушки.',
-    'Песочные часы — пропустить ход; отдых лечит.',
+    'Песочные часы — пропустить ход; удерживайте их, чтобы отдыхать до исцеления.',
     'Встаньте на лестницу, чтобы спуститься глубже. На пятом этаже ждёт Жижа.',
     'В отряде время идёт свободно, пока все в безопасности. В бою подземелье ждёт хода каждого героя.',
     'Павший герой встанет снова, когда товарищ спустится глубже. Выбросьте предмет, чтобы отдать его товарищу.',
@@ -376,6 +377,7 @@ const ru: Strings = {
   missileInfo: (min, max) => `Урон при броске ${min}–${max}.`,
   wandDamage: (min, max) => `Урон ${min}–${max}.`,
   noCharges: 'Палочка потрескивает: заряды кончились.',
+  resting: 'Вы отдыхаете, пока не восстановитесь…',
 };
 
 function capitalize(text: string): string {
