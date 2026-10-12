@@ -8,6 +8,7 @@ import {
   type World,
 } from '@pd/core';
 import * as core from '@pd/core';
+import { quickIndex, quickUse } from './quickslot';
 import { audio } from './audio';
 import { BUFF_ICONS, heroBuffs, Hud } from './hud';
 import { t } from './i18n';
@@ -276,14 +277,6 @@ const heapAt = (world: World, depth: number, pos: number): boolean =>
 /** Aiming a thrown weapon or a wand: the next tap on the map picks the target. */
 let aim: { index: number; kind: 'throw' | 'zap' | 'special' } | null = null;
 
-/** The backpack slot shown in the quickslot: the first thrown weapon or wand. */
-function quickIndex(hero: Hero): number {
-  return hero.items.findIndex((item) => {
-    const category = itemDef(item.kind).category;
-    return category === 'missile' || category === 'wand';
-  });
-}
-
 function toggleQuickslot(): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
@@ -300,7 +293,9 @@ function toggleQuickslot(): void {
     return;
   }
   walk.reset();
-  aim = { index, kind: itemDef(item.kind).category === 'wand' ? 'zap' : 'throw' };
+  const use = quickUse(item.kind);
+  if (use === 'use') send({ type: 'use', item: index }, performance.now());
+  else if (use) aim = { index, kind: use };
 }
 
 /** Awake monsters the party could see last frame; a new one interrupts walking. */

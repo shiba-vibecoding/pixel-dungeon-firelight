@@ -3,6 +3,7 @@ import {
   SUBCLASSES, wandMaxCharges, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
+import { chooseQuickslot, isQuickslotted, quickUse } from './quickslot';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
 import { isKnown, itemInfo, itemName, spriteOffset } from './itemtext';
@@ -666,6 +667,13 @@ function showItem(options: ItemOptions): void {
           options.onAim(index, kind);
         }, 'primary'),
       );
+    }
+    // QuickSlot: any item with a use can be kept one tap away.
+    if (quickUse(item.kind) && !isQuickslotted(item.kind)) {
+      actions.push(button(t.toQuickslot, () => {
+        chooseQuickslot(item.kind);
+        showBackpack(options);
+      }));
     }
     actions.push(button(t.dropItem, () => act({ type: 'drop', item: index })));
   } else if (options.ring !== undefined) {
