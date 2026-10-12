@@ -72,6 +72,8 @@ export type Effect =
   | { type: 'mapped'; hero: string }
   | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby'; count: number }
   | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
+  | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
+  | { type: 'zapped'; depth: number; from: number; to: number }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };
 

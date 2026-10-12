@@ -1,9 +1,12 @@
-import { BACKPACK_SIZE, type Hero, maxExp } from './actors';
-import { randomRespawnCell } from './ai';
-import { earnExp } from './combat';
-import { charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, leaveCell } from './floor';
-import { type Heap, isStackable, type Item, itemDef, type ItemKind } from './items';
+import { BACKPACK_SIZE, type Hero, heroRangedSkill, maxExp } from './actors';
+import { ballistica, randomRespawnCell } from './ai';
+import { attack, earnExp, hurt } from './combat';
+import { charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, leaveCell } from './floor';
+import {
+  type Heap, isStackable, type Item, itemDef, type ItemKind, magicMissileDamage, missileStats,
+} from './items';
 import { discoverable } from './level/flags';
+import { adjacent, LENGTH } from './level/geometry';
 import { discover, F, hasFlag } from './level/terrain';
 import type { World } from './world';
 
@@ -17,9 +20,13 @@ export type InventoryAction =
   /** Drink a potion or read a scroll; a scroll of upgrade improves the weapon or the armour. */
   | { type: 'use'; item: number; target?: 'weapon' | 'armor' }
   | { type: 'equip'; item: number }
-  | { type: 'drop'; item: number };
+  | { type: 'drop'; item: number }
+  /** Throw a dart or the boomerang at a cell; it flies until it hits someone or something. */
+  | { type: 'throw'; item: number; target: number }
+  /** Zap a wand at a cell. */
+  | { type: 'zap'; item: number; target: number };
 
-const INVENTORY_ACTIONS: ReadonlySet<string> = new Set(['pickup', 'use', 'equip', 'drop']);
+const INVENTORY_ACTIONS: ReadonlySet<string> = new Set(['pickup', 'use', 'equip', 'drop', 'throw', 'zap']);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
   return INVENTORY_ACTIONS.has(action.type);
@@ -29,6 +36,8 @@ const TIME_TO_PICK_UP = 1;
 const TIME_TO_USE = 1;
 const TIME_TO_EQUIP = 1;
 const TIME_TO_DROP = 1;
+const TIME_TO_THROW = 1;
+const TIME_TO_ZAP = 1;
 
 const MIND_VISION_DURATION = 20;
 const INVISIBILITY_DURATION = 15;
@@ -53,6 +62,14 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       return category === 'weapon' || category === 'armor' ? null : 'that cannot be equipped';
     case 'drop':
       return null;
+    case 'throw':
+    case 'zap': {
+      if (category !== (action.type === 'throw' ? 'missile' : 'wand')) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
+      if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
+        return 'bad target';
+      }
+      return action.type === 'zap' && (item.charges ?? 0) <= 0 ? 'the wand is out of charges' : null;
+    }
   }
 }
 
@@ -79,6 +96,57 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       ctx.effects.push({ type: 'dropped', hero: hero.id, item });
       return TIME_TO_DROP;
     }
+    case 'throw':
+      throwItem(ctx, hero, action.item, action.target);
+      return TIME_TO_THROW;
+    case 'zap':
+      zap(ctx, hero, action.item, action.target);
+      return TIME_TO_ZAP;
+  }
+}
+
+/** MissileWeapon.onThrow: a hit uses the dart up, a miss leaves it on the floor; the boomerang returns. */
+function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
+  const item = hero.items[index]!;
+  const boomerang = item.kind === 'missile.boomerang';
+  let thrown = item;
+  if (!boomerang) {
+    if (item.qty > 1) {
+      item.qty--;
+      thrown = { kind: item.kind, qty: 1, level: item.level };
+    } else {
+      hero.items.splice(index, 1);
+    }
+  }
+  const trace = ballistica(ctx, hero.pos, target);
+  const end = trace.at(-1)!;
+  ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: item.kind });
+  const victim = charAt(ctx.world, ctx.depth, end);
+  let hit = false;
+  if (victim && !isHero(victim)) {
+    const stats = missileStats(thrown);
+    hit = attack(ctx, hero, victim, {
+      attack: heroRangedSkill(hero, thrown, adjacent(hero.pos, end)),
+      damage: [stats.min, stats.max],
+    });
+  }
+  if (!boomerang && !hit) dropItem(ctx.floor, end, thrown);
+}
+
+/** WandOfMagicMissile: a bolt that never misses the first creature in its way. */
+function zap(ctx: Ctx, hero: Hero, index: number, target: number): void {
+  const wand = hero.items[index]!;
+  wand.charges = (wand.charges ?? 1) - 1;
+  hero.invisible = 0;
+  const trace = ballistica(ctx, hero.pos, target);
+  const end = trace.at(-1)!;
+  ctx.effects.push({ type: 'zapped', depth: ctx.depth, from: hero.pos, to: end });
+  const victim = charAt(ctx.world, ctx.depth, end);
+  if (victim && !isHero(victim)) {
+    const [min, max] = magicMissileDamage(wand);
+    const damage = ctx.rng.intRange(min, max);
+    ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: hero.id, target: victim.id, hit: true, damage });
+    hurt(ctx, victim, damage, hero);
   }
 }
 

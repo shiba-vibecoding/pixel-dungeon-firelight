@@ -1,6 +1,7 @@
 import {
   adjacent, blockers, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, HEAP_SPRITES, type Hero,
-  heroById, type HeroClass, HEIGHT, isAlive, itemSprite, levelAt, mobById, T, visibleCells, WIDTH, type World,
+  heroById, type HeroClass, HEIGHT, isAlive, itemDef, itemSprite, levelAt, mobById, T, visibleCells, wandMaxCharges, WIDTH,
+  type World,
 } from '@pd/core';
 import * as core from '@pd/core';
 import { audio } from './audio';
@@ -244,6 +245,36 @@ const walk = {
 const heapAt = (world: World, depth: number, pos: number): boolean =>
   (world.floors[depth]?.heaps ?? []).some((heap) => heap.pos === pos);
 
+/** Aiming a thrown weapon or a wand: the next tap on the map picks the target. */
+let aim: { index: number; kind: 'throw' | 'zap' } | null = null;
+
+/** The backpack slot shown in the quickslot: the first thrown weapon or wand. */
+function quickIndex(hero: Hero): number {
+  return hero.items.findIndex((item) => {
+    const category = itemDef(item.kind).category;
+    return category === 'missile' || category === 'wand';
+  });
+}
+
+function toggleQuickslot(): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!me) return;
+  if (aim) {
+    aim = null;
+    return;
+  }
+  const index = quickIndex(me);
+  if (index < 0) return;
+  const item = me.items[index]!;
+  if (item.charges === 0) {
+    view.say(t.noCharges, '#cccccc');
+    return;
+  }
+  walk.reset();
+  aim = { index, kind: itemDef(item.kind).category === 'wand' ? 'zap' : 'throw' };
+}
+
 /** Awake monsters the party could see last frame; a new one interrupts walking. */
 let threats = new Set<string>();
 
@@ -349,6 +380,13 @@ function tapCell(cell: number): void {
   const explored = exploredCells(world, me.depth);
   walk.reset();
 
+  if (aim) {
+    const shot = aim;
+    aim = null;
+    if (cell !== me.pos && me.items[shot.index]) send({ type: shot.kind, item: shot.index, target: cell }, performance.now());
+    return;
+  }
+
   if (cell === me.pos) {
     if (heapAt(world, me.depth, me.pos)) send({ type: 'pickup' }, performance.now());
     else if (me.pos === level.exit) useStairs(world, 'descend', performance.now());
@@ -374,7 +412,16 @@ function openBackpack(): void {
   const me = world && heroById(world, session!.myId);
   if (!world || !me) return;
   walk.reset();
-  showBackpack({ world, hero: me, onAction: (action) => send(action, performance.now()), onClose: hideOverlay });
+  aim = null;
+  showBackpack({
+    world,
+    hero: me,
+    onAction: (action) => send(action, performance.now()),
+    onAim: (index, kind) => {
+      aim = { index, kind };
+    },
+    onClose: hideOverlay,
+  });
 }
 
 canvas.addEventListener('pointerdown', (event) => {
@@ -382,9 +429,12 @@ canvas.addEventListener('pointerdown', (event) => {
   const rect = canvas.getBoundingClientRect();
   const px = (event.clientX - rect.left) * (canvas.width / rect.width);
   const py = (event.clientY - rect.top) * (canvas.height / rect.height);
-  const button = hud.hit(px, py);
+  const me = heroById(session.world, session.myId);
+  const button = hud.hit(px, py, Boolean(me && quickIndex(me) >= 0));
   if (button) audio.play('click');
-  if (button === 'wait' || button === 'search') act(button);
+  if (button && button !== 'quick') aim = null;
+  if (button === 'quick') toggleQuickslot();
+  else if (button === 'wait' || button === 'search') act(button);
   else if (button === 'help') showHelp(hideOverlay);
   else if (button === 'backpack') openBackpack();
   else if (button === 'menu') openMenu();
@@ -424,7 +474,10 @@ addEventListener('keydown', (event) => {
   } else if (event.code === 'Enter') {
     tapCell(me.pos);
   } else if (event.code === 'Escape') {
-    openMenu();
+    if (aim) aim = null;
+    else openMenu();
+  } else if (event.code === 'KeyT') {
+    toggleQuickslot();
   } else {
     return;
   }
@@ -497,7 +550,9 @@ function tick(now: number): void {
   if (!world || !me) {
     drawBackdrop(now);
     hud.draw(
-      ctx, { me: placeholderHero, party: [], online: [], waitingFor: [], status: session.status, log: [], buffs: [] }, now,
+      ctx,
+      { me: placeholderHero, party: [], online: [], waitingFor: [], status: session.status, log: [], buffs: [], quick: null },
+      now,
     );
     return;
   }
@@ -570,7 +625,10 @@ function tick(now: number): void {
     busySince && now - busySince > 400
       ? blockers(world).filter((id) => id !== me.id).map((id) => heroById(world, id)?.name ?? '?')
       : [];
-  const status = session.status || (!isAlive(me) && !world.over ? `${t.youDied}. ${t.youDiedCoop}` : '');
+  const status =
+    session.status || (!isAlive(me) && !world.over ? `${t.youDied}. ${t.youDiedCoop}` : aim ? t.chooseTarget : '');
+  const quick = quickIndex(me);
+  const quickItem = me.items[quick];
   hud.draw(
     ctx,
     {
@@ -588,6 +646,16 @@ function tick(now: number): void {
         ...(me.burning > 0 ? [BUFF_ICONS.fire] : []),
         ...(me.paralysed > 0 ? [BUFF_ICONS.paralysis] : []),
       ],
+      quick: quickItem
+        ? {
+            sprite: itemSprite(quickItem, world.run.labels),
+            label:
+              quickItem.charges !== undefined
+                ? `${quickItem.charges}/${wandMaxCharges(quickItem)}`
+                : quickItem.qty > 1 ? String(quickItem.qty) : '',
+            aiming: aim !== null,
+          }
+        : null,
     },
     now,
   );

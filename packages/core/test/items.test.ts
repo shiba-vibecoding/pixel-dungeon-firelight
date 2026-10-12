@@ -5,9 +5,11 @@ import {
 } from '../src/index';
 import { pacify } from './helpers';
 
+/** A hero with an empty backpack, for tests about what goes in and out of it. */
 function soloAt(seed: number, heroClass: 'warrior' | 'mage' = 'warrior'): World {
   const world = pacify(createWorld(seed));
   addHero(world, { id: 'p', name: 'P', heroClass });
+  heroById(world, 'p')!.items = [];
   return world;
 }
 
@@ -98,8 +100,8 @@ describe('the backpack', () => {
     addHero(world, { id: 'q', name: 'Q', heroClass: 'warrior' });
     const mage = heroById(world, 'p')!;
     const warrior = heroById(world, 'q')!;
-    expect(mage.items.map((i) => i.kind)).toEqual(['potion.healing']);
-    expect(world.known).toContain('potion.healing');
+    mage.items = [createItem('potion.healing')];
+    warrior.items = [];
     expect(act(world, 'p', { type: 'drop', item: 0 }).ok).toBe(true);
     expect(mage.items).toEqual([]);
     // The warrior steps onto the mage's cell once the mage has moved away.
@@ -139,7 +141,7 @@ describe('the backpack', () => {
     mob.state = 'hunting';
     mob.pos = hero.pos + 2;
     hero.items.push(createItem('scroll.lullaby'));
-    const result = act(world, 'p', { type: 'use', item: 0 });
+    const result = act(world, 'p', { type: 'use', item: hero.items.length - 1 });
     expect(result.ok).toBe(true);
     expect(isAlive(mob) && mob.state).toBe('sleeping');
   });

@@ -170,6 +170,25 @@ export function render(
     if (puppet.hp < puppet.ht && !(puppet.isHero && puppet.id === myId)) drawHealth(ctx, puppet, x, y);
   }
 
+  // Thrown weapons and magic bolts in flight.
+  for (const p of view.projectiles) {
+    const k = Math.min(1, (now - p.start) / p.duration);
+    const x = ((p.from % WIDTH) + ((p.to % WIDTH) - (p.from % WIDTH)) * k) * TILE + TILE / 2;
+    const y = (Math.trunc(p.from / WIDTH) + (Math.trunc(p.to / WIDTH) - Math.trunc(p.from / WIDTH)) * k) * TILE + TILE / 2;
+    if (p.sprite === null) {
+      ctx.fillStyle = 'rgba(120, 180, 255, 0.5)';
+      ctx.fillRect(Math.round(x) - 3, Math.round(y) - 3, 6, 6);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2);
+    } else {
+      ctx.save();
+      ctx.translate(Math.round(x), Math.round(y));
+      ctx.rotate(k * Math.PI * 4);
+      ctx.drawImage(assets.items, (p.sprite % 8) * 16, Math.floor(p.sprite / 8) * 16, 16, 16, -8, -8, 16, 16);
+      ctx.restore();
+    }
+  }
+
   // Floating numbers and words, drawn at screen resolution so text stays crisp.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.textAlign = 'center';

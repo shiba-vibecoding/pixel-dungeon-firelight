@@ -157,7 +157,7 @@ function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
  * Ballistica.cast: the cells a straight line from `from` passes on its way to
  * `to`, ending at the first character or sight-blocking cell, or before a wall.
  */
-function ballistica(ctx: Ctx, from: number, to: number): number[] {
+export function ballistica(ctx: Ctx, from: number, to: number): number[] {
   const { world, depth, level } = ctx;
   let dx = cellX(to) - cellX(from);
   let dy = cellY(to) - cellY(from);

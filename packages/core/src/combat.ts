@@ -25,8 +25,9 @@ function armor(char: Char): number {
 }
 
 function damageRoll(ctx: Ctx, char: Char, range?: readonly [number, number]): number {
+  if (range) return ctx.rng.normalIntRange(range[0], range[1]);
   if (isHero(char)) return heroDamageRoll(char, ctx.rng);
-  const [min, max] = range ?? MOBS[char.kind].damage;
+  const [min, max] = MOBS[char.kind].damage;
   return ctx.rng.normalIntRange(min, max);
 }
 
@@ -36,14 +37,15 @@ export interface AttackOverride {
   damage?: readonly [number, number];
 }
 
-export function attack(ctx: Ctx, attacker: Char, defender: Char, override: AttackOverride = {}): void {
+/** One blow or shot; returns whether it hit. */
+export function attack(ctx: Ctx, attacker: Char, defender: Char, override: AttackOverride = {}): boolean {
   // Striking gives an invisible hero away.
   if (isHero(attacker)) attacker.invisible = 0;
   const skill = override.attack ?? attackSkill(attacker);
   const hit = ctx.rng.floatMax(skill) >= ctx.rng.floatMax(defenseSkill(defender));
   if (!hit) {
     ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage: 0 });
-    return;
+    return false;
   }
   const reduction = ctx.rng.intRange(0, armor(defender));
   const damage = Math.max(damageRoll(ctx, attacker, override.damage) - reduction, 0);
@@ -54,6 +56,7 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   }
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
   hurt(ctx, defender, damage, attacker);
+  return true;
 }
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | null): void {

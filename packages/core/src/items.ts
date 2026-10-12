@@ -12,7 +12,7 @@ import type { RunState } from './run';
  * upgrade levels. Wands, rings, seeds, food and thrown weapons come later.
  */
 
-export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor';
+export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -63,25 +63,57 @@ export const ITEMS = {
   'armor.mail': armor(3, 26),
   'armor.scale': armor(4, 27),
   'armor.plate': armor(5, 28),
+
+  // Thrown: darts are lost when they hit and fall to the floor when they
+  // miss; the boomerang always comes back.
+  'missile.dart': { category: 'missile', sprite: 31 },
+  'missile.boomerang': { category: 'missile', sprite: 106 },
+  'wand.magicMissile': { category: 'wand', sprite: 3 },
 } as const satisfies Record<string, ItemDef>;
 
 export type ItemKind = keyof typeof ITEMS;
 
 export interface Item {
   kind: ItemKind;
-  /** How many: gold coins, potions, scrolls; always 1 for equipment. */
+  /** How many: gold coins, potions, scrolls, darts; always 1 for equipment. */
   qty: number;
-  /** Upgrade level of weapons and armour, possibly negative. */
+  /** Upgrade level of weapons, armour and wands, possibly negative. */
   level: number;
+  /** Wands: charges left, and time spent towards the next one. */
+  charges?: number;
+  recharge?: number;
 }
 
 export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
-  return category === 'potion' || category === 'scroll' || category === 'gold';
+  return category === 'potion' || category === 'scroll' || category === 'gold' || kind === 'missile.dart';
 };
 
-export const createItem = (kind: ItemKind, qty = 1, level = 0): Item => ({ kind, qty, level });
+export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
+  const item: Item = { kind, qty, level };
+  if (itemDef(kind).category === 'wand') {
+    item.charges = wandMaxCharges(item);
+    item.recharge = 0;
+  }
+  return item;
+}
+
+/* Thrown weapons (MissileWeapon) and the wand of magic missile */
+
+export function missileStats(item: Item): { min: number; max: number; str: number } {
+  return item.kind === 'missile.boomerang'
+    ? { min: 1 + item.level, max: 4 + 2 * item.level, str: 10 }
+    : { min: 1, max: 4, str: 10 };
+}
+
+/** One more charge every this many turns (Wand.Charger). */
+export const WAND_RECHARGE = 40;
+
+export const wandMaxCharges = (item: Item): number => Math.min(3 + item.level, 9);
+
+/** WandOfMagicMissile: Random.Int(1, 6 + level * 2), so 1-5 for a plain wand. */
+export const magicMissileDamage = (item: Item): readonly [number, number] => [1, 5 + item.level * 2];
 
 /* Weapon and armour numbers (MeleeWeapon, Armor) */
 
@@ -153,11 +185,14 @@ export function itemSprite(item: Item, labels: Labels): number {
 
 /* Generator */
 
-const CATEGORY_CHANCES: ReadonlyArray<readonly [ItemCategory, number]> = [
+/** Categories the generator picks from; thrown weapons come with the weapons, wands are not found yet. */
+type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor';
+
+const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
   ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['gold', 50],
 ];
 
-const KIND_CHANCES: Readonly<Record<Exclude<ItemCategory, 'gold'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
+const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
   // The original also has toxic gas, paralytic gas, liquid flame, levitation,
   // purity and frost; strength and might only come as guaranteed finds.
   potion: [['potion.healing', 45], ['potion.experience', 4], ['potion.mindVision', 20], ['potion.invisibility', 10]],
@@ -167,6 +202,7 @@ const KIND_CHANCES: Readonly<Record<Exclude<ItemCategory, 'gold'>, ReadonlyArray
   weapon: [
     ['weapon.dagger', 1], ['weapon.knuckles', 1], ['weapon.quarterstaff', 1], ['weapon.spear', 1], ['weapon.mace', 1],
     ['weapon.sword', 1], ['weapon.longsword', 1], ['weapon.battleAxe', 1], ['weapon.warHammer', 1], ['weapon.glaive', 1],
+    ['missile.dart', 1],
   ],
   armor: [['armor.cloth', 1], ['armor.leather', 1], ['armor.mail', 1], ['armor.scale', 1], ['armor.plate', 1]],
 };
@@ -199,10 +235,12 @@ export class ItemGenerator {
     return this.of(category);
   }
 
-  of(category: ItemCategory): Item {
+  of(category: GeneratedCategory): Item {
     if (category === 'gold') return rollGold(this.rng, this.depth);
     const table = KIND_CHANCES[category];
     const kind = table[this.rng.chances(table.map(([, chance]) => chance))]![0];
+    // Dart.random: a handful of them.
+    if (kind === 'missile.dart') return createItem(kind, this.rng.intBetween(5, 15));
     const level = category === 'weapon' || category === 'armor' ? rollLevel(this.rng) : 0;
     return createItem(kind, 1, level);
   }

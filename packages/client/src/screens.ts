@@ -1,5 +1,5 @@
 import {
-  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, type World,
+  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, wandMaxCharges, type World,
 } from '@pd/core';
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
@@ -253,6 +253,9 @@ function slot(world: World, item: Item | undefined, onClick?: () => void, label?
   if (item) {
     node.append(itemIcon(world, item));
     if (item.qty > 1) node.append(el('span', { className: 'pd-qty', textContent: String(item.qty) }));
+    if (item.charges !== undefined) {
+      node.append(el('span', { className: 'pd-qty', textContent: `${item.charges}/${wandMaxCharges(item)}` }));
+    }
     if (item.level !== 0 && isKnown(world, item)) {
       node.append(
         el('span', { className: `pd-lvl ${item.level > 0 ? 'up' : 'down'}`, textContent: `${item.level > 0 ? '+' : ''}${item.level}` }),
@@ -271,6 +274,8 @@ export interface BackpackOptions {
   world: World;
   hero: Hero;
   onAction(action: InventoryAction): void;
+  /** Throw or zap the item at a cell the player picks next. */
+  onAim(index: number, kind: 'throw' | 'zap'): void;
   onClose(): void;
 }
 
@@ -331,6 +336,15 @@ function showItem(options: ItemOptions): void {
     }
     if (category === 'weapon' || category === 'armor') {
       actions.push(button(t.equip, () => act({ type: 'equip', item: index }), 'primary'));
+    }
+    if (category === 'missile' || category === 'wand') {
+      const kind = category === 'missile' ? 'throw' : 'zap';
+      actions.push(
+        button(kind === 'throw' ? t.throwItem : t.zap, () => {
+          options.onClose();
+          options.onAim(index, kind);
+        }, 'primary'),
+      );
     }
     actions.push(button(t.dropItem, () => act({ type: 'drop', item: index })));
   }

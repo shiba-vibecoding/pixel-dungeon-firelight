@@ -8,7 +8,7 @@ import {
   isWater, leaveCell, observe,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
-import { createItems, type ItemKind } from './items';
+import { createItems, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
 import { trapAt, triggerTrap } from './traps';
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
@@ -312,6 +312,17 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   hero.mindVision = Math.max(0, hero.mindVision - time);
   hero.invisible = Math.max(0, hero.invisible - time);
   hero.paralysed = Math.max(0, hero.paralysed - time);
+
+  // Wands recharge with time.
+  for (const item of hero.items) {
+    if (item.charges === undefined) continue;
+    const max = wandMaxCharges(item);
+    item.recharge = item.charges >= max ? 0 : (item.recharge ?? 0) + time;
+    while (item.recharge >= WAND_RECHARGE && item.charges < max) {
+      item.recharge -= WAND_RECHARGE;
+      item.charges++;
+    }
+  }
 
   // Poison and fire hurt once for every whole turn that passes.
   const ticks = (left: number): number => Math.floor(left) - Math.floor(Math.max(0, left - time));

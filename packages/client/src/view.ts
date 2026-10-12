@@ -1,4 +1,4 @@
-import { cellX, cellY, type Effect, heroById, isAlive, type MobKind, type World } from '@pd/core';
+import { cellX, cellY, type Effect, heroById, isAlive, itemDef, type MobKind, type World } from '@pd/core';
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
 import { itemName } from './itemtext';
@@ -72,6 +72,8 @@ export class View {
   depth = 0;
   /** When the "boss slain" banner appeared, or 0. */
   bannerStart = 0;
+  /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
+  projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null }> = [];
 
   constructor(private readonly assets: Assets) {}
 
@@ -82,6 +84,7 @@ export class View {
     this.floaters = [];
     this.flashes = [];
     this.bannerStart = 0;
+    this.projectiles = [];
   }
 
   say(text: string, color = COLORS.default, now = performance.now()): void {
@@ -165,6 +168,12 @@ export class View {
     }
     this.floaters = this.floaters.filter((floater) => now - floater.start < 1200);
     this.flashes = this.flashes.filter((flash) => now - flash.start < 600);
+    this.projectiles = this.projectiles.filter((p) => now - p.start < p.duration);
+  }
+
+  private shoot(from: number, to: number, sprite: number | null, now: number): void {
+    const cells = Math.max(Math.abs(cellX(to) - cellX(from)), Math.abs(cellY(to) - cellY(from)));
+    this.projectiles.push({ from, to, start: now, duration: Math.max(90, cells * 45), sprite });
   }
 
   /** Interpolated position in world pixels. */
@@ -357,6 +366,13 @@ export class View {
           break;
         case 'scroll':
           this.say(effect.kind === 'challenge' ? t.challenge : t.lullaby, COLORS.warning, now);
+          break;
+        case 'thrown':
+          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, itemDef(effect.item).sprite ?? 31, now);
+          break;
+        case 'zapped':
+          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now);
+          audio.play('zap');
           break;
         case 'trap':
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.pos, start: now });

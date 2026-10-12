@@ -98,6 +98,9 @@ const en = {
     'armor.mail': 'mail armor',
     'armor.scale': 'scale armor',
     'armor.plate': 'plate armor',
+    'missile.dart': 'dart',
+    'missile.boomerang': 'boomerang',
+    'wand.magicMissile': 'Wand of Magic Missile',
   } as Record<ItemKind, string>,
   itemInfo: {
     'potion.healing': 'Restores all health and washes off ooze.',
@@ -111,6 +114,9 @@ const en = {
     'scroll.challenge': 'A roar that brings every monster on the level to you.',
     'scroll.lullaby': 'Puts every monster in sight to sleep.',
     'scroll.upgrade': 'Improves your weapon or armour by one level.',
+    'missile.dart': 'A light throwing dart. Lost when it hits, left on the floor when it misses.',
+    'missile.boomerang': 'Thrown, it always flies back to your hand.',
+    'wand.magicMissile': 'Fires a bolt of magic that never misses. Recharges over time.',
   } as Partial<Record<ItemKind, string>>,
   colors: ['turquoise', 'crimson', 'azure', 'jade', 'golden', 'magenta', 'charcoal', 'ivory', 'amber', 'bistre', 'indigo', 'silver'],
   unknownPotion: (color: string) => `${color} potion`,
@@ -165,6 +171,13 @@ const en = {
     summoning: 'The trap summons monsters!',
   } as Record<TrapKind, string>,
   companionTrap: (name: string) => `${name} sets off a trap!`,
+  throwItem: 'Throw',
+  zap: 'Zap',
+  chooseTarget: 'Choose a target',
+  charges: (left: number, max: number) => `Charges: ${left}/${max}`,
+  missileInfo: (min: number, max: number) => `Damage ${min}–${max} when thrown.`,
+  wandDamage: (min: number, max: number) => `Damage ${min}–${max}.`,
+  noCharges: 'Your wand fizzles: it is out of charges for now.',
 };
 
 type Strings = typeof en;
@@ -267,6 +280,9 @@ const ru: Strings = {
     'armor.mail': 'кольчужный доспех',
     'armor.scale': 'чешуйчатый доспех',
     'armor.plate': 'латный доспех',
+    'missile.dart': 'дротик',
+    'missile.boomerang': 'бумеранг',
+    'wand.magicMissile': 'Палочка Волшебных Зарядов',
   },
   itemInfo: {
     'potion.healing': 'Полностью восстанавливает здоровье и смывает слизь.',
@@ -280,6 +296,9 @@ const ru: Strings = {
     'scroll.challenge': 'Рёв, который созывает к вам всех монстров уровня.',
     'scroll.lullaby': 'Усыпляет всех монстров в поле зрения.',
     'scroll.upgrade': 'Улучшает оружие или доспех на один уровень.',
+    'missile.dart': 'Лёгкий метательный дротик. Попав, теряется; промахнувшись, падает на пол.',
+    'missile.boomerang': 'Брошенный, всегда возвращается в руку.',
+    'wand.magicMissile': 'Выпускает волшебный заряд, который бьёт без промаха. Перезаряжается со временем.',
   },
   colors: ['голубое', 'алое', 'синее', 'зелёное', 'золотое', 'лиловое', 'чёрное', 'белесое', 'янтарное', 'коричневое', 'фиолетовое', 'серебряное'],
   unknownPotion: (color) => `${color} зелье`,
@@ -334,6 +353,13 @@ const ru: Strings = {
     summoning: 'Ловушка призывает монстров!',
   },
   companionTrap: (name) => `${name} попадает в ловушку!`,
+  throwItem: 'Метнуть',
+  zap: 'Взмахнуть',
+  chooseTarget: 'Выберите цель',
+  charges: (left, max) => `Заряды: ${left}/${max}`,
+  missileInfo: (min, max) => `Урон при броске ${min}–${max}.`,
+  wandDamage: (min, max) => `Урон ${min}–${max}.`,
+  noCharges: 'Палочка потрескивает: заряды кончились.',
 };
 
 function capitalize(text: string): string {

@@ -1,4 +1,4 @@
-import { armorStats, createItem, type Item, type ItemKind, weaponStats } from './items';
+import { armorStats, createItem, type Item, type ItemKind, missileStats, weaponStats } from './items';
 import type { Rng } from './rng';
 import type { Action } from './world';
 
@@ -16,19 +16,17 @@ interface ClassKit {
   ht: number;
   str: number;
   weapon: ItemKind;
-  /** Extra starting items, known to the party from the start. */
-  items: readonly ItemKind[];
+  /** Extra starting items and how many. */
+  items: ReadonlyArray<readonly [ItemKind, number]>;
   stealth: number;
 }
 
 export const HERO_CLASSES: Readonly<Record<HeroClass, ClassKit>> = {
-  warrior: { ht: 20, str: 11, weapon: 'weapon.shortSword', items: [], stealth: 0 },
-  // The mage's wand of magic missile and the huntress's boomerang are not
-  // ported yet; a potion of healing makes up for them for now.
-  mage: { ht: 20, str: 10, weapon: 'weapon.knuckles', items: ['potion.healing'], stealth: 0 },
+  warrior: { ht: 20, str: 11, weapon: 'weapon.shortSword', items: [['missile.dart', 8]], stealth: 0 },
+  mage: { ht: 20, str: 10, weapon: 'weapon.knuckles', items: [['wand.magicMissile', 1]], stealth: 0 },
   // The rogue's starting ring of shadows +1.
-  rogue: { ht: 20, str: 10, weapon: 'weapon.dagger', items: [], stealth: 1 },
-  huntress: { ht: 15, str: 10, weapon: 'weapon.dagger', items: ['potion.healing'], stealth: 0 },
+  rogue: { ht: 20, str: 10, weapon: 'weapon.dagger', items: [['missile.dart', 8]], stealth: 1 },
+  huntress: { ht: 15, str: 10, weapon: 'weapon.dagger', items: [['missile.boomerang', 1]], stealth: 0 },
 };
 
 /** Backpack slots, equipment aside. */
@@ -96,7 +94,7 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     ooze: -1,
     weapon: createItem(kit.weapon),
     armor: createItem('armor.cloth'),
-    items: kit.items.map((kind) => createItem(kind)),
+    items: kit.items.map(([kind, qty]) => createItem(kind, qty)),
     gold: 0,
     mindVision: 0,
     invisible: 0,
@@ -122,6 +120,20 @@ export function heroDefenseSkill(hero: Hero): number {
   }
   // Rogues turn spare strength into evasion.
   return hero.heroClass === 'rogue' ? hero.defenseSkill - encumbrance : hero.defenseSkill;
+}
+
+/**
+ * Accuracy with a thrown weapon (Hero.attackSkill with a ranged weapon):
+ * warriors are clumsy with them, huntresses deft, and nobody throws well
+ * point-blank.
+ */
+export function heroRangedSkill(hero: Hero, item: Item, pointBlank: boolean): number {
+  let encumbrance = missileStats(item).str - hero.str;
+  if (hero.heroClass === 'warrior') encumbrance += 3;
+  if (hero.heroClass === 'huntress') encumbrance -= 2;
+  let factor = encumbrance > 0 ? f32(1 / 1.5 ** encumbrance) : 1;
+  if (pointBlank) factor = f32(factor * 0.5);
+  return Math.trunc(f32(hero.attackSkill * factor));
 }
 
 /** Heavy armour slows its wearer down (Hero.speed). */

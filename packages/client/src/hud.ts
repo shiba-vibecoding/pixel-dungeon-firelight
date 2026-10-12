@@ -10,7 +10,7 @@ import { COLORS, type LogLine } from './view';
  * the toolbar at the bottom (Toolbar: wait, search, help).
  */
 
-export type HudButton = 'wait' | 'search' | 'help' | 'backpack' | 'menu';
+export type HudButton = 'wait' | 'search' | 'help' | 'backpack' | 'quick' | 'menu';
 
 interface Area {
   id: HudButton;
@@ -31,6 +31,8 @@ export interface HudState {
   log: readonly LogLine[];
   /** BuffIndicator icons to show under the health bar. */
   buffs: readonly number[];
+  /** The quickslot: a thrown weapon or a wand, ready to use. */
+  quick: { sprite: number; label: string; aiming: boolean } | null;
 }
 
 /** Buff icons in buffs.png (BuffIndicator). */
@@ -42,6 +44,7 @@ const TOOLS: ReadonlyArray<{ id: HudButton; sx: number; w: number }> = [
   { id: 'help', sx: 40, w: 21 },
 ];
 const BACKPACK = { id: 'backpack' as const, sx: 60, w: 23 };
+const QUICKSLOT = { id: 'quick' as const, sx: 83, w: 22 };
 
 export class Hud {
   /** Device pixels per HUD pixel. */
@@ -72,14 +75,17 @@ export class Hud {
       return area;
     });
     this.areas.push({ id: BACKPACK.id, x: this.width - BACKPACK.w, y, w: BACKPACK.w, h: 25 });
+    this.areas.push({ id: QUICKSLOT.id, x: this.width - BACKPACK.w - QUICKSLOT.w, y, w: QUICKSLOT.w, h: 25 });
     this.areas.push({ id: 'menu', x: this.width - 20, y: this.top, w: 20, h: 20 });
   }
 
   /** The button under a point in device pixels, if any. */
-  hit(px: number, py: number): HudButton | null {
+  hit(px: number, py: number, hasQuickslot = true): HudButton | null {
     const x = px / this.ui;
     const y = py / this.ui;
-    const area = this.areas.find((a) => x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h);
+    const area = this.areas.find(
+      (a) => (hasQuickslot || a.id !== 'quick') && x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h,
+    );
     if (area) this.pressed = { id: area.id, until: performance.now() + 150 };
     return area?.id ?? null;
   }
@@ -134,13 +140,29 @@ export class Hud {
 
     // Pressed toolbar buttons light up briefly.
     for (const area of this.areas) {
-      const tool = TOOLS.find((tl) => tl.id === area.id) ?? (area.id === BACKPACK.id ? BACKPACK : undefined);
+      const tool =
+        TOOLS.find((tl) => tl.id === area.id) ??
+        (area.id === BACKPACK.id ? BACKPACK : area.id === QUICKSLOT.id && state.quick ? QUICKSLOT : undefined);
       if (!tool) continue;
       ctx.drawImage(assets.toolbar, tool.sx, 7, tool.w, 25, area.x, area.y, tool.w, 25);
+      if (tool === QUICKSLOT && state.quick) {
+        const { sprite, aiming } = state.quick;
+        ctx.drawImage(assets.items, (sprite % 8) * 16, Math.floor(sprite / 8) * 16, 16, 16, area.x + 3, area.y + 5, 16, 16);
+        if (aiming) {
+          ctx.strokeStyle = `rgba(255, 235, 164, ${0.6 + 0.4 * Math.sin(now / 120)})`;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(area.x + 1.5, area.y + 1.5, area.w - 3, area.h - 3);
+        }
+      }
       if (this.pressed?.id === area.id && now < this.pressed.until) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.fillRect(area.x, area.y, area.w, area.h);
       }
+    }
+    if (state.quick?.label) {
+      const area = this.areas.find((a) => a.id === QUICKSLOT.id)!;
+      this.text(ctx, state.quick.label, area.x + area.w - 2, area.y + area.h - 2, 6, '#ffffff', 'right');
+      ctx.setTransform(ui, 0, 0, ui, 0, 0);
     }
 
     // Text at device resolution.

@@ -1,5 +1,6 @@
 import {
-  armorStats, type Hero, type Item, itemDef, itemSprite, SCROLL_RUNES, weaponStats, type World,
+  armorStats, type Hero, type Item, itemDef, itemSprite, magicMissileDamage, missileStats, SCROLL_RUNES, wandMaxCharges,
+  weaponStats, type World,
 } from '@pd/core';
 import { t } from './i18n';
 
@@ -33,6 +34,14 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
   if (category === 'armor') {
     const stats = armorStats(item);
     return [t.armorInfo(stats.dr, stats.str), ...(stats.str > hero.str ? [t.tooHeavy] : [])];
+  }
+  if (category === 'missile') {
+    const stats = missileStats(item);
+    return [t.itemInfo[item.kind] ?? '', t.missileInfo(stats.min, stats.max)];
+  }
+  if (category === 'wand') {
+    const [min, max] = magicMissileDamage(item);
+    return [t.itemInfo[item.kind] ?? '', t.wandDamage(min, max), t.charges(item.charges ?? 0, wandMaxCharges(item))];
   }
   if (category === 'gold') return [];
   return [isKnown(world, item) ? (t.itemInfo[item.kind] ?? '') : t.unknownInfo];
