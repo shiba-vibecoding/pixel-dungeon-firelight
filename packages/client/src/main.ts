@@ -608,6 +608,8 @@ function tapCell(cell: number): void {
   const visible = visibleCells(world, me.depth);
   const explored = exploredCells(world, me.depth);
   walk.reset();
+  // The tapped cell lights up for a blink: the tap was taken.
+  if (explored[cell]) view.flashes.push({ cell, start: fx.time(performance.now()), color: aim ? '255, 120, 80' : '255, 255, 255', duration: 260 });
 
   if (aim) {
     const shot = aim;
