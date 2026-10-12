@@ -1,10 +1,15 @@
 # Tests every push; on main also publishes the client to GitHub Pages and,
 # when a Cloudflare token is configured, the co-op server to Cloudflare.
 #
+# Publishing is off until the repository variable PD_PUBLISH is «true»: until
+# then GitHub Pages keeps serving whatever was published last (the Java build
+# the bot runs today), and pushes to main only test.
+#
 # Repository settings:
 #   Settings → Pages → Source: GitHub Actions
 #   Settings → Secrets and variables → Actions
-#     Variables: PD_SERVER_URL   wss://pd-coop.<your-subdomain>.workers.dev
+#     Variables: PD_PUBLISH      true, to publish from main
+#                PD_SERVER_URL   wss://pd-coop.<your-subdomain>.workers.dev
 #                PD_TG_APP_LINK  https://t.me/<bot>/<app>
 #     Secrets:   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (optional; without
 #                them the server is deployed by hand with `npm run deploy:server`)
@@ -37,7 +42,7 @@ jobs:
 
   client:
     needs: test
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.PD_PUBLISH == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -65,7 +70,7 @@ jobs:
 
   server:
     needs: test
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.PD_PUBLISH == 'true'
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
