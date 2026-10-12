@@ -595,11 +595,21 @@ function announceBadges(ids: readonly BadgeId[]): void {
   }
 }
 
+/** The region's tune for each region (the sewers keep the original's), and the bosses that have the boss's. */
+const REGION_MUSIC = ['game', 'prison', 'caves', 'city', 'halls'] as const;
+const MUSIC_BOSSES: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
+/** A boss fight on my depth: from the boss's cry until it falls, or the hero leaves, or the run starts over. */
+let bossFight: { session: Session; generation: number; depth: number } | null = null;
+
 function handleMyEffects(effects: readonly Effect[], myId: string): void {
   const world = session?.world;
   const me = world && heroById(world, myId);
   if (world && me) announceBadges([...countGame(world.run.seed), ...checkBadges(world, me, effects)]);
   for (const effect of effects) {
+    if (effect.type === 'yell' && effect.line === 'notice' && MUSIC_BOSSES.has(effect.kind) && session && me && effect.depth === me.depth) {
+      bossFight = { session, generation: session.generation, depth: effect.depth };
+    }
+    if (effect.type === 'bossSlain' && effect.depth === bossFight?.depth) bossFight = null;
     if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line, effect.errand);
     if (effect.type === 'ratKing' && effect.hero === myId) talkWithRatKing(effect.line);
     if (effect.type === 'wandmaker' && effect.hero === myId) talkWithWandmaker(effect.line);
@@ -1450,7 +1460,11 @@ function tick(now: number): void {
   // The world is heard from where the hero stands; each region has its air; a window over the
   // game, or the hero fallen, muffles the music.
   audio.listen(at.x + TILE / 2, at.y + TILE / 2);
-  audio.ambience(Math.min(4, Math.floor((me.depth - 1) / 5)));
+  const region = Math.min(4, Math.floor((me.depth - 1) / 5));
+  audio.ambience(region);
+  // Each region has its tune, and a boss fight its own while it lasts.
+  if (bossFight && (bossFight.session !== session || bossFight.generation !== session.generation || bossFight.depth !== me.depth)) bossFight = null;
+  audio.playMusic(bossFight ? 'boss' : REGION_MUSIC[region]!);
   audio.muffle(overlayOpen() || !isAlive(me));
   const kick = fx.shakeOffset(vnow);
   // The hero stands in the middle of the band the HUD and the toolbar leave free, not of the screen.
