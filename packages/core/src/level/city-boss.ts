@@ -1,6 +1,6 @@
 import type { LevelBuilder } from './builder';
 import { CITY_STYLE } from './city';
-import { LENGTH, WIDTH } from './geometry';
+import { LENGTH, SOLO_SPAN, WIDTH } from './geometry';
 import type { RegionStyle } from './regular';
 import { Room, RoomType } from './room';
 import { T } from './terrain';
@@ -17,7 +17,8 @@ const TOP = 2;
 const HALL_WIDTH = 7;
 const HALL_HEIGHT = 15;
 const CHAMBER_HEIGHT = 3;
-const LEFT = Math.trunc((WIDTH - HALL_WIDTH) / 2);
+// Centred on the level's own span (32), the grid's top-left part, whatever the grid's size.
+const LEFT = Math.trunc((SOLO_SPAN - HALL_WIDTH) / 2);
 const CENTER = LEFT + Math.trunc(HALL_WIDTH / 2);
 
 /** CityBossLevel.pedestal: where the King summons his undead from. */

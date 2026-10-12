@@ -83,7 +83,7 @@ describe("DM-300's caves", () => {
     const door = level.arenaDoor!;
     // Walk through the door and out into the cave.
     for (let i = 0; i < 40 && !floorAt(world, 15).arenaEntered; i++) {
-      const path = findPath(level, hero.pos, door + 32);
+      const path = findPath(level, hero.pos, door + WIDTH);
       if (!path || path.length === 0) break;
       act(world, 'p', { type: 'move', to: path[0]! });
     }
@@ -108,7 +108,7 @@ describe("DM-300's caves", () => {
         const key = dm ? null : skeletonKey(world, 'p');
         if (key) return key;
         if (hero.pos === level.exit) return { type: 'descend' };
-        const goal = dm ? dm.pos : floorAt(world, 15).arenaEntered ? level.exit : level.arenaDoor! + 32;
+        const goal = dm ? dm.pos : floorAt(world, 15).arenaEntered ? level.exit : level.arenaDoor! + WIDTH;
         const others = new Set(floorAt(world, 15).mobs.map((m) => m.pos));
         others.delete(goal);
         const path = findPath(level, hero.pos, goal, others);

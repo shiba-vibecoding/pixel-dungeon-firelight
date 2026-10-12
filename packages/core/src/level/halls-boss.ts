@@ -1,6 +1,6 @@
 import { HeapType, type LevelBuilder } from './builder';
 import { HALLS_STYLE } from './halls';
-import { HEIGHT, LENGTH, WIDTH } from './geometry';
+import { LENGTH, SOLO_SPAN, WIDTH } from './geometry';
 import { patch, type RegionStyle } from './regular';
 import { Room, RoomType } from './room';
 import { T } from './terrain';
@@ -15,10 +15,11 @@ import { T } from './terrain';
  * Amulet of Yendor on a pedestal between two statues.
  */
 
-const ROOM_LEFT = WIDTH / 2 - 1;
-const ROOM_RIGHT = WIDTH / 2 + 1;
-const ROOM_TOP = HEIGHT / 2 - 1;
-const ROOM_BOTTOM = HEIGHT / 2 + 1;
+// Laid out on the level's own span (32), the grid's top-left part, whatever the grid's size.
+const ROOM_LEFT = SOLO_SPAN / 2 - 1;
+const ROOM_RIGHT = SOLO_SPAN / 2 + 1;
+const ROOM_TOP = SOLO_SPAN / 2 - 1;
+const ROOM_BOTTOM = SOLO_SPAN / 2 + 1;
 
 export const HALLS_BOSS_STYLE: RegionStyle = { ...HALLS_STYLE, decorate: decorateBossLevel };
 

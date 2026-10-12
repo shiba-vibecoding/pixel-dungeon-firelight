@@ -1,5 +1,5 @@
 import type { LevelBuilder } from './builder';
-import { HEIGHT, LENGTH, WIDTH } from './geometry';
+import { LENGTH, SOLO_SPAN, WIDTH } from './geometry';
 import { CAVES_STYLE } from './caves';
 import { patch, type RegionStyle } from './regular';
 import { Room, RoomType } from './room';
@@ -12,10 +12,11 @@ import { T } from './terrain';
  * the room's door behind the party. The exit opens when DM-300 is destroyed.
  */
 
-const ROOM_LEFT = WIDTH / 2 - 2;
-const ROOM_RIGHT = WIDTH / 2 + 2;
-const ROOM_TOP = HEIGHT / 2 - 2;
-const ROOM_BOTTOM = HEIGHT / 2 + 2;
+// Laid out on the level's own span (32), the grid's top-left part, whatever the grid's size.
+const ROOM_LEFT = SOLO_SPAN / 2 - 2;
+const ROOM_RIGHT = SOLO_SPAN / 2 + 2;
+const ROOM_TOP = SOLO_SPAN / 2 - 2;
+const ROOM_BOTTOM = SOLO_SPAN / 2 + 2;
 
 export const CAVES_BOSS_STYLE: RegionStyle = { ...CAVES_STYLE, decorate: decorateBossLevel };
 
@@ -32,14 +33,14 @@ export function buildCavesBossLevel(level: LevelBuilder): boolean {
       right = ROOM_RIGHT + 3;
     } else {
       left = ROOM_LEFT - 3;
-      right = rng.intBetween(ROOM_RIGHT + 3, WIDTH - 1);
+      right = rng.intBetween(ROOM_RIGHT + 3, SOLO_SPAN - 1);
     }
     if (rng.int(2) === 0) {
       top = rng.intBetween(2, ROOM_TOP - 3);
       bottom = ROOM_BOTTOM + 3;
     } else {
       top = ROOM_TOP - 3;
-      bottom = rng.intBetween(ROOM_TOP + 3, HEIGHT - 1);
+      bottom = rng.intBetween(ROOM_TOP + 3, SOLO_SPAN - 1);
     }
     level.fill(left, top, right - left + 1, bottom - top + 1, T.EMPTY);
     if (top < topMost) {
