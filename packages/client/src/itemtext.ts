@@ -8,7 +8,7 @@ import { t } from './i18n';
 
 export function isKnown(world: World, item: Item): boolean {
   const category = itemDef(item.kind).category;
-  return (category !== 'potion' && category !== 'scroll') || world.known.includes(item.kind);
+  return (category !== 'potion' && category !== 'scroll' && category !== 'wand') || world.known.includes(item.kind);
 }
 
 export function itemName(world: World, item: Item): string {
@@ -16,10 +16,11 @@ export function itemName(world: World, item: Item): string {
   if (category === 'gold') return `${item.qty} ${t.goldShort}`;
   if (!isKnown(world, item)) {
     const label = world.run.labels[item.kind] ?? 0;
+    if (category === 'wand') return t.unknownWand(t.woods[label]!);
     return category === 'potion' ? t.unknownPotion(t.colors[label]!) : t.unknownScroll(SCROLL_RUNES[label]!);
   }
   const name = t.items[item.kind];
-  if (category === 'weapon' || category === 'armor') {
+  if (category === 'weapon' || category === 'armor' || category === 'wand') {
     return item.level === 0 ? name : `${name} ${item.level > 0 ? '+' : ''}${item.level}`;
   }
   return name;
@@ -40,8 +41,11 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
     return [t.itemInfo[item.kind] ?? '', t.missileInfo(stats.min, stats.max)];
   }
   if (category === 'wand') {
+    const charges = t.charges(item.charges ?? 0, wandMaxCharges(item));
+    if (!isKnown(world, item)) return [t.unknownWandInfo, charges];
+    if (item.kind !== 'wand.magicMissile') return [t.itemInfo[item.kind] ?? '', charges];
     const [min, max] = magicMissileDamage(item);
-    return [t.itemInfo[item.kind] ?? '', t.wandDamage(min, max), t.charges(item.charges ?? 0, wandMaxCharges(item))];
+    return [t.itemInfo[item.kind] ?? '', t.wandDamage(min, max), charges];
   }
   if (category === 'key') return [t.keyInfo(item.depth ?? 0)];
   if (category === 'gold') return [];

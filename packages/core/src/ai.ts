@@ -25,7 +25,8 @@ const TIME_TO_WAKE_UP = 1;
 export const TIME_TO_RESPAWN = 50;
 
 function spend(mob: Mob, time: number): void {
-  mob.time += time;
+  // Slowed, everything takes twice as long.
+  mob.time += (mob.slowed ?? 0) > 0 ? time * 2 : time;
 }
 
 function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
@@ -298,7 +299,7 @@ function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
  * Ballistica.cast: the cells a straight line from `from` passes on its way to
  * `to`, ending at the first character or sight-blocking cell, or before a wall.
  */
-export function ballistica(ctx: Ctx, from: number, to: number): number[] {
+export function ballistica(ctx: Ctx, from: number, to: number, hitChars = true): number[] {
   const { world, depth, level } = ctx;
   let dx = cellX(to) - cellX(from);
   let dy = cellY(to) - cellY(from);
@@ -324,7 +325,7 @@ export function ballistica(ctx: Ctx, from: number, to: number): number[] {
       trace.pop();
       return trace;
     }
-    if (hasFlag(terrain, F.LOS_BLOCKING) || charAt(world, depth, cell)) return trace;
+    if (hasFlag(terrain, F.LOS_BLOCKING) || (hitChars && charAt(world, depth, cell))) return trace;
   }
   return trace;
 }

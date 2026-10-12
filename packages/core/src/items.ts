@@ -79,6 +79,15 @@ export const ITEMS = {
   'missile.dart': { category: 'missile', sprite: 31 },
   'missile.boomerang': { category: 'missile', sprite: 106 },
   'wand.magicMissile': { category: 'wand', sprite: 3 },
+  // The other wands go by the wood they are made of until used.
+  'wand.firebolt': { category: 'wand' },
+  'wand.lightning': { category: 'wand' },
+  'wand.poison': { category: 'wand' },
+  'wand.slowness': { category: 'wand' },
+  'wand.teleportation': { category: 'wand' },
+  'wand.blink': { category: 'wand' },
+  'wand.disintegration': { category: 'wand' },
+  'wand.avalanche': { category: 'wand' },
   // Food (Food, Pasty, MysteryMeat): a ration staves off hunger for a while,
   // a pasty completely; mystery meat from crabs is a gamble.
   'food.ration': { category: 'food', sprite: 4, energy: 260 },
@@ -179,7 +188,8 @@ export function missileStats(item: Item): { min: number; max: number; str: numbe
 /** One more charge every this many turns (Wand.Charger). */
 export const WAND_RECHARGE = 40;
 
-export const wandMaxCharges = (item: Item): number => Math.min(3 + item.level, 9);
+/** Wand.initialCharges and updateLevel: two charges (three for magic missile), one more a level, nine at most. */
+export const wandMaxCharges = (item: Item): number => Math.min((item.kind === 'wand.magicMissile' ? 3 : 2) + item.level, 9);
 
 /** WandOfMagicMissile: Random.Int(1, 6 + level * 2), so 1-5 for a plain wand. */
 export const magicMissileDamage = (item: Item): readonly [number, number] => [1, 5 + item.level * 2];
@@ -225,6 +235,8 @@ export const SCROLL_RUNES = [
 ] as const;
 const POTION_SPRITE = 56;
 const SCROLL_SPRITES = [40, 41, 42, 43, 44, 45, 46, 47, 76, 77, 78, 79];
+/** Holly, yew, ebony, cherry, teak, rowan, willow, mahogany, bamboo, purpleheart, oak, birch. */
+const WAND_SPRITES = [48, 49, 50, 51, 52, 53, 54, 55, 68, 69, 70, 71];
 
 /** Kind → index into POTION_COLORS or SCROLL_RUNES, fixed for a run. */
 export type Labels = Partial<Record<ItemKind, number>>;
@@ -232,8 +244,10 @@ export type Labels = Partial<Record<ItemKind, number>>;
 export function rollLabels(seed: number): Labels {
   const rng = Rng.seeded(deriveSeed(seed, LABEL_STREAM));
   const labels: Labels = {};
-  for (const category of ['potion', 'scroll'] as const) {
-    const kinds = (Object.keys(ITEMS) as ItemKind[]).filter((kind) => itemDef(kind).category === category);
+  for (const category of ['potion', 'scroll', 'wand'] as const) {
+    const kinds = (Object.keys(ITEMS) as ItemKind[]).filter(
+      (kind) => itemDef(kind).category === category && itemDef(kind).sprite === undefined,
+    );
     const indices = [...Array(12).keys()];
     rng.shuffle(indices);
     kinds.forEach((kind, i) => {
@@ -249,16 +263,17 @@ export function itemSprite(item: Item, labels: Labels): number {
   const def = itemDef(item.kind);
   if (def.sprite !== undefined) return def.sprite;
   const label = labels[item.kind] ?? 0;
+  if (def.category === 'wand') return WAND_SPRITES[label]!;
   return def.category === 'potion' ? POTION_SPRITE + label : SCROLL_SPRITES[label]!;
 }
 
 /* Generator */
 
-/** Categories the generator picks from; thrown weapons come with the weapons, wands are not found yet. */
-type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food';
+/** Categories the generator picks from; thrown weapons come with the weapons. */
+type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand';
 
 const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
-  ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['gold', 50],
+  ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['wand', 4], ['gold', 50],
 ];
 
 const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
@@ -280,6 +295,11 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
     ['missile.dart', 1],
   ],
   armor: [['armor.cloth', 1], ['armor.leather', 1], ['armor.mail', 1], ['armor.scale', 1], ['armor.plate', 1]],
+  // The original also has amok, reach, flock and regrowth.
+  wand: [
+    ['wand.teleportation', 10], ['wand.slowness', 10], ['wand.firebolt', 15], ['wand.poison', 10], ['wand.blink', 11],
+    ['wand.lightning', 15], ['wand.disintegration', 5], ['wand.avalanche', 5],
+  ],
 };
 
 /** Gold.random: a pile's worth for a depth. */
@@ -322,6 +342,15 @@ export class ItemGenerator {
     const kind = table[this.rng.chances(table.map(([, chance]) => chance))]![0];
     // Dart.random: a handful of them.
     if (kind === 'missile.dart') return createItem(kind, this.rng.intBetween(5, 15));
+    if (category === 'wand') {
+      // Wand.random: half of them a level better, a few two.
+      let level = 0;
+      if (this.rng.float() < 0.5) {
+        level++;
+        if (this.rng.float() < 0.15) level++;
+      }
+      return createItem(kind, 1, level);
+    }
     const level = category === 'weapon' || category === 'armor' ? rollLevel(this.rng) : 0;
     return createItem(kind, 1, level);
   }

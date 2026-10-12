@@ -19,6 +19,12 @@ export const STEP_MS = 110;
 /** Potions whose shattering does something; the rest splash harmlessly. */
 const HARMFUL: ReadonlySet<ItemKind> = new Set(['potion.toxicGas', 'potion.paralyticGas', 'potion.liquidFlame']);
 
+/** Colours of magic bolts in flight. */
+const BOLT_COLORS: Record<string, string> = {
+  magic: '120, 180, 255', lightning: '255, 255, 200', fire: '255, 130, 40', poison: '120, 220, 60', slow: '230, 220, 120',
+  teleport: '170, 230, 255', blink: '255, 255, 255', beam: '200, 90, 255', rocks: '170, 160, 140',
+};
+
 /** Tints of the clouds: green poison, yellow paralysis, orange flames. */
 const BURST_COLORS = { toxic: '90, 200, 60', paralytic: '230, 220, 70', fire: '255, 120, 30' } as const;
 export const TILE = 16;
@@ -87,7 +93,7 @@ export class View {
   /** When the "boss slain" banner appeared, or 0. */
   bannerStart = 0;
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
-  projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null }> = [];
+  projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string }> = [];
 
   constructor(private readonly assets: Assets) {}
 
@@ -189,9 +195,9 @@ export class View {
     this.projectiles = this.projectiles.filter((p) => now - p.start < p.duration);
   }
 
-  private shoot(from: number, to: number, sprite: number | null, now: number): void {
+  private shoot(from: number, to: number, sprite: number | null, now: number, color?: string): void {
     const cells = Math.max(Math.abs(cellX(to) - cellX(from)), Math.abs(cellY(to) - cellY(from)));
-    this.projectiles.push({ from, to, start: now, duration: Math.max(90, cells * 45), sprite });
+    this.projectiles.push({ from, to, start: now, duration: Math.max(90, cells * 45), sprite, color });
   }
 
   /** Interpolated position in world pixels. */
@@ -428,8 +434,13 @@ export class View {
           }
           break;
         case 'zapped':
-          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now);
+          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now, BOLT_COLORS[effect.bolt ?? 'magic']);
           audio.play(effect.bolt === 'lightning' ? 'lightning' : 'zap');
+          break;
+        case 'avalanche':
+          if (effect.depth !== this.depth) break;
+          for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '150, 140, 120', duration: 900 });
+          audio.play('rocks');
           break;
         case 'missile':
           if (effect.depth === this.depth) this.shoot(effect.from, effect.to, effect.sprite, now);

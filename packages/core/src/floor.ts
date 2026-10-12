@@ -5,6 +5,7 @@ import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
 import type { GhostLine } from './quest';
 import type { Burst, TrapKind } from './traps';
+import type { Bolt } from './wands';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
@@ -80,7 +81,9 @@ export type Effect =
   | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
   | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
   /** A magic bolt: the mage's wand, or a shaman's lightning. */
-  | { type: 'zapped'; depth: number; from: number; to: number; bolt?: 'lightning' }
+  | { type: 'zapped'; depth: number; from: number; to: number; bolt?: Bolt }
+  /** Rocks falling on these cells (wand of avalanche). */
+  | { type: 'avalanche'; depth: number; cells: number[] }
   /** Something thrown by a monster (Tengu's shuriken), drawn with an item sprite. */
   | { type: 'missile'; depth: number; from: number; to: number; sprite: number }
   /** Tengu vanishes in a puff of smoke and lands elsewhere. */

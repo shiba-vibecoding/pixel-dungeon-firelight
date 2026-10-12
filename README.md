@@ -34,8 +34,9 @@ The first two acts of the original, depths 1–10:
 - Items: gold, which buys from the shop; potions (including toxic gas,
   paralytic gas and liquid flame, which can be thrown) and scrolls, unknown
   until used, and shared knowledge in a party; all melee weapons and armour
-  with upgrades and strength requirements; darts, the boomerang and the wand
-  of magic missile.
+  with upgrades and strength requirements; darts and the boomerang; wands of
+  magic missile, firebolt, lightning, poison, slowness, teleportation, blink,
+  disintegration and avalanche, known by their wood until used.
 - Four hero classes with their original starting kits and perks.
 - Solo runs saved on the device; a daily dungeon with a global leaderboard and
   shareable results.
@@ -47,8 +48,8 @@ The first two acts of the original, depths 1–10:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: depths 11+ (caves, city, halls), rings, wands other than magic
-missile, seeds and plants, the remaining special rooms (garden, pool, statue,
+Not ported yet: depths 11+ (caves, city, halls), rings, the wands of amok,
+reach, flock and regrowth, seeds and plants, the remaining special rooms (garden, pool, statue,
 laboratory, vault, weak floor), the wandmaker's quest, hero subclasses, and gas
 clouds (gas acts at once on everyone within reach instead).
 

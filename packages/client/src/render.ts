@@ -179,7 +179,7 @@ export function render(
     const x = ((p.from % WIDTH) + ((p.to % WIDTH) - (p.from % WIDTH)) * k) * TILE + TILE / 2;
     const y = (Math.trunc(p.from / WIDTH) + (Math.trunc(p.to / WIDTH) - Math.trunc(p.from / WIDTH)) * k) * TILE + TILE / 2;
     if (p.sprite === null) {
-      ctx.fillStyle = 'rgba(120, 180, 255, 0.5)';
+      ctx.fillStyle = `rgba(${p.color ?? '120, 180, 255'}, 0.5)`;
       ctx.fillRect(Math.round(x) - 3, Math.round(y) - 3, 6, 6);
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2);

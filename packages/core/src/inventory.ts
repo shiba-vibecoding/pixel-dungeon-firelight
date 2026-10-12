@@ -10,6 +10,7 @@ import { discoverable } from './level/flags';
 import { adjacent, LENGTH } from './level/geometry';
 import { discover, F, hasFlag } from './level/terrain';
 import { type Burst, burst } from './traps';
+import { zapWand } from './wands';
 import type { World } from './world';
 
 /*
@@ -208,21 +209,13 @@ const BURSTS: Partial<Record<ItemKind, { kind: Burst; radius: number }>> = {
   'potion.liquidFlame': { kind: 'fire', radius: 1 },
 };
 
-/** WandOfMagicMissile: a bolt that never misses the first creature in its way. */
+/** Wand.zapper: a charge is spent, and using a wand tells the party what it is. */
 function zap(ctx: Ctx, hero: Hero, index: number, target: number): void {
   const wand = hero.items[index]!;
   wand.charges = (wand.charges ?? 1) - 1;
   hero.invisible = 0;
-  const trace = ballistica(ctx, hero.pos, target);
-  const end = trace.at(-1)!;
-  ctx.effects.push({ type: 'zapped', depth: ctx.depth, from: hero.pos, to: end });
-  const victim = charAt(ctx.world, ctx.depth, end);
-  if (victim && !isHero(victim)) {
-    const [min, max] = magicMissileDamage(wand);
-    const damage = ctx.rng.intRange(min, max);
-    ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: hero.id, target: victim.id, hit: true, damage });
-    hurt(ctx, victim, damage, hero);
-  }
+  if (identify(ctx.world, wand.kind)) ctx.effects.push({ type: 'identified', hero: hero.id, kind: wand.kind });
+  zapWand(ctx, hero, wand, target);
 }
 
 /** Adds an item to the backpack, stacking where possible; false if there is no room. */

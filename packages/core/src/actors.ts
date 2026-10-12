@@ -265,6 +265,8 @@ export interface Mob {
   poison?: number;
   paralysed?: number;
   burning?: number;
+  /** Turns left of moving at half speed (wand of slowness). */
+  slowed?: number;
   /** A thief's stolen goods, dropped when it dies. */
   item?: Item;
   /** Swarms: how many splits away from the original swarm. */
