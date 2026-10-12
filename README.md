@@ -176,6 +176,17 @@ the server applies it and broadcasts it as an ordered event; every client
 applies the same event to its own copy. The core is deterministic, so all
 copies stay identical; a client that misses an event asks for a snapshot.
 
+Co-op rooms (and the arena alone, unless turned off in the settings) play
+**live turns**: the world is not held for anyone. The room's clock beats a turn
+every 180 ms, 360 ms while anyone in the party is in a fight (a slower beat
+leaves time to think), and broadcasts each beat as a `tick` event; every
+occupied depth plays one turn of its time (`liveTick` in the core). A player's
+action is a standing order (`plan`): walk to a cell (the way found afresh at
+every step), hunt a monster until it falls, rest until healed, stride while a
+key is held, or any action once. A hero with no orders strikes back at what
+attacks them, else waits. A step on screen lasts the beat, so walks never
+pause. Solo games keep the original's classic turns.
+
 ## Development
 
 ```bash

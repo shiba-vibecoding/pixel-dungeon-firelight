@@ -70,6 +70,8 @@ export type Action =
   | { type: 'faceCurse' }
   /** The Amulet of Yendor's «Let's call it a day»: the party wins here. */
   | { type: 'endGame' }
+  /** Live turns: what the hero is to do from now on, a turn at a time (an empty plan stops them). */
+  | { type: 'plan'; steps: PlanStep[] }
   /** Lloyd's beacon: set it where the hero stands, or return to where it was set. */
   | { type: 'beacon'; item: number; mode: 'set' | 'return' }
   /**
@@ -101,6 +103,11 @@ export interface World {
   over: boolean;
   /** The party has won: a hero with the Amulet of Yendor called it a day, or carried it out to the surface. */
   victory: boolean;
+  /**
+   * Live turns (co-op and the arena): the world goes on by a clock (liveTick, a turn a tick) instead of waiting
+   * for each player's move, and a player's action is a standing order (Hero.plan). Absent: classic turns.
+   */
+  live?: boolean;
   /** How the run was won: the Amulet's own end, or the way out to the surface (the original's «Happy end»). */
   ending?: 'amulet' | 'surface';
   /** The Amulet of Yendor has been taken up (Statistics.amuletObtained): its question is asked once. */
@@ -152,11 +159,12 @@ const JOIN_STREAM = 100;
  * A new run; `challenges` is a bitmask of CHALLENGES (Dungeon.challenges), 0 for none; `mode`
  * makes it the arena of waves rather than the dungeon.
  */
-export function createWorld(seed: number, challenges = 0, mode: GameMode = 'dungeon'): World {
+export function createWorld(seed: number, challenges = 0, mode: GameMode = 'dungeon', live = false): World {
   return {
     run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
     challenges, known: [], quest: null, wandQuest: null, impQuest: null, smithQuest: null,
     ...(mode === 'arena' ? { mode, arena: newArena() } : {}),
+    ...(live ? { live } : {}),
   };
 }
 
@@ -164,8 +172,9 @@ export function createWorld(seed: number, challenges = 0, mode: GameMode = 'dung
 export function restartWorld(world: World, seed: number): void {
   const party = world.heroes.map(({ id, name, heroClass }) => ({ id, name, heroClass }));
   const mode = world.mode ?? 'dungeon';
-  for (const key of ['mode', 'arena'] as const) delete world[key];
-  Object.assign(world, createWorld(seed, world.challenges ?? 0, mode));
+  const live = world.live ?? false;
+  for (const key of ['mode', 'arena', 'live'] as const) delete world[key];
+  Object.assign(world, createWorld(seed, world.challenges ?? 0, mode, live));
   for (const player of party) addHero(world, player);
 }
 
@@ -396,6 +405,8 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       return hero.depth <= 1 && !hasAmulet(hero) ? 'the way up is sealed' : null;
     case 'endGame':
       return hasAmulet(hero) ? null : 'no amulet';
+    case 'plan':
+      return world.live ? null : 'not a live world';
     default:
       return 'unknown action';
   }
@@ -411,6 +422,21 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
   if (problem) {
     return { ok: false, reason: problem };
   }
+  // Live turns: the order stands until done or replaced; the clock (liveTick) carries it out. Choices
+  // that take no time (the arena's «To battle!» and its rewards) are made at once.
+  if (world.live && (action.type === 'arenaReady' || action.type === 'arenaPick')) {
+    const floor = floorAt(world, hero.depth);
+    const effects: Effect[] = [];
+    perform({ world, depth: hero.depth, level: levelAt(world, hero.depth), floor, rng: new Rng(floor.rng), effects }, hero, action);
+    world.turn++;
+    return { ok: true, effects };
+  }
+  if (world.live) {
+    hero.plan = action.type === 'plan' ? action.steps.slice(0, MAX_PLAN) : [action];
+    hero.intent = null;
+    world.turn++;
+    return { ok: true, effects: [] };
+  }
   hero.intent = action;
   const effects: Effect[] = [];
   settle(world, effects);
@@ -419,6 +445,172 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
 }
 
 /* Scheduling */
+
+/*
+ * Live turns (world.live: co-op and the arena). The world is not held for anyone: a clock
+ * (the room's, or the solo session's) calls liveTick, and every occupied depth plays one turn
+ * of its time. A hero due to act does the next thing of their plan — a step towards where
+ * they are going, a blow at what they hunt, an item used — and with nothing to do, strikes
+ * back at whatever is after them, or waits (autoAction). The rules are the original's turns,
+ * only kept to a beat, so a party moves together without ever waiting on one another.
+ */
+
+/** A hero's standing order under live turns: an action once, or something that lasts. */
+export type PlanStep =
+  | Action
+  /** Walk to a cell, finding the way afresh at every step (around monsters in sight and companions held fast). */
+  | { type: 'go'; to: number }
+  /** Go for a monster and strike it until it falls, or is lost from sight. */
+  | { type: 'hunt'; target: string }
+  /** Rest until healed, while nothing in sight is after the hero. */
+  | { type: 'rest' }
+  /** Walk on in a direction (a key held down) until something stands in the way. */
+  | { type: 'stride'; dx: number; dy: number };
+
+/** The longest plan a hero keeps. */
+const MAX_PLAN = 64;
+/** How long a live turn takes (ms): exploring, and while anyone in the party is in a fight (time slows down). */
+export const LIVE_TURN_MS = 180;
+export const LIVE_COMBAT_MS = 360;
+
+/** The beat of the next live turn: slower while any living hero is in danger, so a fight leaves time to think. */
+export function liveTurnMs(world: World): number {
+  return world.heroes.some((hero) => isAlive(hero) && !isSafe(world, hero)) ? LIVE_COMBAT_MS : LIVE_TURN_MS;
+}
+
+/** One live turn for every occupied depth. */
+export function liveTick(world: World): ActionResult {
+  const effects: Effect[] = [];
+  if (world.over) return { ok: true, effects };
+  const depths = [...new Set(world.heroes.filter(isAlive).map((hero) => hero.depth))].sort((a, b) => a - b);
+  for (const depth of depths) {
+    const floor = floorAt(world, depth);
+    // A depth's clock: from where its time stands (a party arriving gets the depth's time, see place).
+    const until = Math.max(floor.liveAt ?? floor.now, floor.now) + 1;
+    advanceLive(world, depth, effects, until);
+    floor.liveAt = until;
+  }
+  world.turn++;
+  return { ok: true, effects };
+}
+
+/** When a turn falls due on a depth. */
+function turnTime(world: World, floor: Floor, turn: Turn): number {
+  switch (turn.kind) {
+    case 'hero': return turn.hero.time;
+    case 'mob': return turn.mob.time;
+    case 'respawn': return floor.respawn;
+    case 'arena': return world.arena!.tick;
+    case 'gas': return floor.gasAt!;
+  }
+}
+
+/** A depth's turns up to its clock's next beat; heroes do what their plans say. */
+function advanceLive(world: World, depth: number, effects: Effect[], until: number): void {
+  const floor = floorAt(world, depth);
+  const ctx: Ctx = { world, depth, level: levelAt(world, depth), floor, rng: new Rng(floor.rng), effects };
+  for (let guard = 0; guard < 10_000; guard++) {
+    const turn = world.over ? undefined : nextTurn(world, depth);
+    if (!turn || turnTime(world, floor, turn) >= until) return;
+    if (turn.kind !== 'hero') {
+      playTurn(ctx, turn);
+      continue;
+    }
+    const hero = turn.hero;
+    floor.now = Math.max(floor.now, hero.time);
+    if (hero.paralysed > 0) {
+      spend(ctx, hero, TIME_TO_REST);
+      overChasm(ctx, hero);
+      continue;
+    }
+    let action = planned(world, hero);
+    const problem = problemWith(world, hero, action);
+    if (problem) {
+      // The order cannot be carried out: it is dropped, and the hero defends themselves this turn.
+      if (hero.plan?.length) effects.push({ type: 'interrupted', hero: hero.id, reason: problem });
+      hero.plan = [];
+      action = autoAction(world, hero.id);
+      if (problemWith(world, hero, action)) action = { type: 'wait' };
+    }
+    perform(ctx, hero, action);
+    if (floor.falling) itemsFall(world, depth);
+    overChasm(ctx, hero);
+  }
+}
+
+/** What a hero's plan asks of them this turn; with nothing to do, autoAction. */
+function planned(world: World, hero: Hero): Action {
+  const plan = (hero.plan ??= []);
+  while (plan.length > 0) {
+    const step = plan[0]!;
+    switch (step.type) {
+      case 'go': {
+        const next = hero.pos === step.to ? null : stepTowards(world, hero, step.to);
+        if (next === null) {
+          plan.shift();
+          continue;
+        }
+        // The last step: the order is done.
+        if (next === step.to) plan.shift();
+        return { type: 'move', to: next };
+      }
+      case 'hunt': {
+        const mob = mobById(world, hero.depth, step.target);
+        if (!mob || !isAlive(mob) || !visibleCells(world, hero.depth)[mob.pos]) {
+          plan.shift();
+          continue;
+        }
+        if (adjacent(mob.pos, hero.pos)) return { type: 'attack', target: mob.id };
+        const next = stepTowards(world, hero, mob.pos);
+        if (next === null) {
+          plan.shift();
+          continue;
+        }
+        return { type: 'move', to: next };
+      }
+      case 'rest':
+        if (hero.hp >= hero.ht || !isSafe(world, hero)) {
+          plan.shift();
+          continue;
+        }
+        return { type: 'wait' };
+      case 'stride': {
+        const next = hero.pos + Math.sign(step.dx) + Math.sign(step.dy) * WIDTH;
+        const there = charAt(world, hero.depth, next);
+        // A key held down walks; it does not fight (and the ghost or the sheep step aside).
+        const blocked = (there !== undefined && !('heroClass' in there) && !swapsWithHero(there)) ||
+          (there !== undefined && 'heroClass' in there && !swapsWithCompanion(world, hero, there));
+        if (!adjacent(hero.pos, next) || blocked || !heroCanEnter(levelAt(world, hero.depth), hero, next)) {
+          plan.shift();
+          continue;
+        }
+        return { type: 'move', to: next };
+      }
+      default:
+        plan.shift();
+        return step;
+    }
+  }
+  return autoAction(world, hero.id);
+}
+
+/**
+ * The next step on the way to a cell, as the party knows the depth: round the monsters in sight
+ * and companions who cannot step aside, round known traps where there is a way. Null: no way.
+ */
+function stepTowards(world: World, hero: Hero, to: number): number | null {
+  const level = levelAt(world, hero.depth);
+  const seen = visibleCells(world, hero.depth);
+  const blocked = new Set<number>();
+  for (const mob of floorAt(world, hero.depth).mobs) if (seen[mob.pos] && !swapsWithHero(mob)) blocked.add(mob.pos);
+  for (const other of world.heroes) {
+    if (other !== hero && other.depth === hero.depth && isAlive(other) && !swapsWithCompanion(world, hero, other)) blocked.add(other.pos);
+  }
+  const floating = (hero.levitating ?? 0) > 0;
+  const known = exploredCells(world, hero.depth);
+  const path = findPath(level, hero.pos, to, blocked, known, floating) ?? findPath(level, hero.pos, to, blocked, known, floating, true);
+  return path && path.length > 0 ? path[0]! : null;
+}
 
 type Turn = { kind: 'hero'; hero: Hero } | { kind: 'mob'; mob: Mob } | { kind: 'respawn' } | { kind: 'gas' } | { kind: 'arena' };
 
@@ -497,25 +689,8 @@ function advance(world: World, depth: number, effects: Effect[]): void {
     const turn = world.over ? undefined : nextTurn(world, depth);
     if (!turn) return;
 
-    if (turn.kind === 'mob') {
-      floor.now = Math.max(floor.now, turn.mob.time);
-      mobAct(ctx, turn.mob);
-      continue;
-    }
-    if (turn.kind === 'respawn') {
-      floor.now = Math.max(floor.now, floor.respawn);
-      respawn(ctx);
-      continue;
-    }
-    if (turn.kind === 'arena') {
-      floor.now = Math.max(floor.now, world.arena!.tick);
-      arenaTurn(ctx);
-      continue;
-    }
-    if (turn.kind === 'gas') {
-      floor.now = Math.max(floor.now, floor.gasAt!);
-      floor.gasAt! += 1;
-      evolveGas(ctx);
+    if (turn.kind !== 'hero') {
+      playTurn(ctx, turn);
       continue;
     }
 
@@ -546,6 +721,29 @@ function advance(world: World, depth: number, effects: Effect[]): void {
       continue;
     }
     return;
+  }
+}
+
+/** A turn that is not a hero's: a monster's, the respawner's, the arena's, the gas spreading. */
+function playTurn(ctx: Ctx, turn: Exclude<Turn, { kind: 'hero' }>): void {
+  const { world, floor } = ctx;
+  switch (turn.kind) {
+    case 'mob':
+      floor.now = Math.max(floor.now, turn.mob.time);
+      mobAct(ctx, turn.mob);
+      return;
+    case 'respawn':
+      floor.now = Math.max(floor.now, floor.respawn);
+      respawn(ctx);
+      return;
+    case 'arena':
+      floor.now = Math.max(floor.now, world.arena!.tick);
+      arenaTurn(ctx);
+      return;
+    case 'gas':
+      floor.now = Math.max(floor.now, floor.gasAt!);
+      floor.gasAt! += 1;
+      evolveGas(ctx);
   }
 }
 

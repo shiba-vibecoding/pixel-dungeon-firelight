@@ -1,7 +1,7 @@
 import { effectiveLevel } from './wear';
 import { armorStats, createItem, type Item, type ItemKind, missileStats, type WeaponStats, weaponStats } from './items';
 import type { Rng } from './rng';
-import type { Action } from './world';
+import type { Action, PlanStep } from './world';
 
 /*
  * Heroes and monsters as plain data, with the numbers of the original:
@@ -62,6 +62,8 @@ export interface Hero {
   time: number;
   /** The player's chosen action, performed when the hero's turn comes. */
   intent: Action | null;
+  /** Live turns (world.live): what the player has told the hero to do, done a turn at a time (see liveTick). */
+  plan?: PlanStep[];
   /** Time spent since the last regenerated hit point. */
   regen: number;
   /** Caustic ooze from Goo: time since it last burned, or -1 when clean. Water washes it off. */

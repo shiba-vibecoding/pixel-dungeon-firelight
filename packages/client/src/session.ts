@@ -1,5 +1,6 @@
 import {
   act, type Action, addHero, applyEvent, type Bones, type ClientMessage, createWorld, type Effect, type GameMode, giveBones, heroById, type HeroClass,
+  LIVE_TURN_MS, liveTick, liveTurnMs,
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
 } from '@pd/core';
 import { guestSecret } from './guest';
@@ -32,6 +33,13 @@ export interface Session {
    * still on its way, goes to (where the next one starts from).
    */
   readonly stepAhead: number | null;
+  /**
+   * Live turns (world.live): how long the current beat lasts (ms), so a step on screen takes as long and
+   * walks never pause; null under classic turns.
+   */
+  readonly beatMs: number | null;
+  /** Alone under live turns: while this says so (a window open, the app put away), the clock stands still. */
+  hold?: () => boolean;
   send(action: Action): void;
   /** A new run after the party has fallen. */
   restart(): void;
@@ -110,10 +118,10 @@ export function forgetSolo(key: string): void {
  */
 export function soloSession(
   key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0, mode: GameMode = 'dungeon',
-  bones: () => Bones | null = () => null,
+  bones: () => Bones | null = () => null, live = false,
 ): Session {
   const fresh = (): World => {
-    const world = createWorld(newSeed(), challenges, mode);
+    const world = createWorld(newSeed(), challenges, mode, live);
     addHero(world, { id: 'me', name, heroClass });
     const left = bones();
     if (left) giveBones(world, left);
@@ -160,6 +168,9 @@ export function soloSession(
     generation: 0,
     busy: false,
     stepAhead: null,
+    get beatMs() {
+      return session.world?.live ? beat : null;
+    },
     send(action) {
       const result = act(session.world!, 'me', action);
       if (result.ok) {
@@ -184,6 +195,8 @@ export function soloSession(
     },
     close() {
       // Back to the title: what was played is kept, to the last move.
+      closed = true;
+      clearTimeout(clock);
       flush();
       document.removeEventListener('visibilitychange', away);
       removeEventListener('pagehide', flush);
@@ -195,6 +208,23 @@ export function soloSession(
     signal() {},
     drainSignals: () => [],
   };
+  // Live turns alone: the session's own clock, a beat a turn, standing still while a window is open
+  // or the app is put away (alone, nobody else is kept waiting).
+  let closed = false;
+  let clock = 0;
+  let beat = LIVE_TURN_MS;
+  const tick = (): void => {
+    if (closed) return;
+    const world = session.world!;
+    if (world.live && !world.over && !document.hidden && !session.hold?.()) {
+      beat = liveTurnMs(world);
+      const result = liveTick(world);
+      if (result.ok) pending.push(...result.effects);
+      save();
+    }
+    clock = window.setTimeout(tick, world.live ? beat : 1000);
+  };
+  if (session.world!.live) clock = window.setTimeout(tick, beat);
   save();
   return session;
 }
@@ -228,6 +258,8 @@ export function onlineSession(options: OnlineOptions): Session {
   let inFlight = 0;
   /** Where the last of them, if they are all steps, leads; null otherwise. */
   let ahead: number | null = null;
+  /** Live turns: how long the room's current beat lasts (ms), from its last tick. */
+  let beat = LIVE_TURN_MS;
   let closed = false;
   let pending: Effect[] = [];
   /** When the room was last heard from (performance.now()). */
@@ -249,13 +281,18 @@ export function onlineSession(options: OnlineOptions): Session {
     status: options.text.connecting,
     generation: 0,
     get busy() {
+      // Live turns: an order goes at once and replaces the last; nothing waits for the room.
+      if (session.world?.live) return false;
       const me = session.world && heroById(session.world, session.myId);
       return inFlight > 0 || Boolean(me?.intent);
     },
     get stepAhead() {
       const me = session.world && heroById(session.world, session.myId);
       const open = socket?.readyState === WebSocket.OPEN;
-      return open && inFlight > 0 && inFlight < STEPS_AHEAD && ahead !== null && !me?.intent ? ahead : null;
+      return open && inFlight > 0 && inFlight < STEPS_AHEAD && ahead !== null && !me?.intent && !session.world?.live ? ahead : null;
+    },
+    get beatMs() {
+      return session.world?.live ? beat : null;
     },
     send(action) {
       if (socket?.readyState !== WebSocket.OPEN) return;
@@ -341,6 +378,7 @@ export function onlineSession(options: OnlineOptions): Session {
           return;
         }
         if (message.event.type === 'restart') session.generation++;
+        if (message.event.type === 'tick') beat = message.event.ms;
         if (message.event.type === 'act' && message.event.heroId === session.myId) {
           inFlight = Math.max(0, inFlight - 1);
           const at = sentAt.shift();

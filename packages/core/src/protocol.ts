@@ -1,6 +1,6 @@
 import type { PlayerInfo } from './actors';
 import type { Look } from './shop';
-import { act, type Action, type ActionResult, joinHero, restartWorld, type World } from './world';
+import { act, type Action, type ActionResult, joinHero, liveTick, restartWorld, type World } from './world';
 
 /*
  * Co-op wire protocol. The server owns the authoritative world and broadcasts
@@ -16,7 +16,9 @@ export type WorldEvent =
   | { type: 'join'; player: PlayerInfo }
   | { type: 'act'; heroId: string; action: Action }
   /** A new run for the same party; the server picks the seed. */
-  | { type: 'restart'; seed: number };
+  | { type: 'restart'; seed: number }
+  /** Live turns: a beat of the room's clock, one turn for every occupied depth; `ms` is how long it lasts on screen. */
+  | { type: 'tick'; ms: number };
 
 /** The party's emotes, in the order the co-op sheet draws them. */
 export const EMOTES = ['help', 'here', 'wait', 'attention', 'thanks', 'hooray', 'heal', 'run'] as const;
@@ -59,5 +61,7 @@ export function applyEvent(world: World, event: WorldEvent): ActionResult {
     case 'restart':
       restartWorld(world, event.seed);
       return { ok: true, effects: [] };
+    case 'tick':
+      return liveTick(world);
   }
 }

@@ -3,7 +3,7 @@ import {
   HEAP_SPRITES,
   type Hero, type Item, type Level,
   type Bones, hasAmulet, heroById, type HeroClass, leaveBones, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
-  ORE_WANTED, PLANT_KINDS, type SmithLine, T,
+  ORE_WANTED, type PlanStep, PLANT_KINDS, type SmithLine, T,
   visibleCells, chargesKnown, WIDTH,
   type World, charAt, swapsWithHero,
 } from '@pd/core';
@@ -34,7 +34,7 @@ import {
   refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
 import { mart } from './mart';
-import { eraseDevice, showChallenges, showJournal, showSettings } from './meta';
+import { eraseDevice, liveArena, showChallenges, showJournal, showSettings } from './meta';
 import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
@@ -374,6 +374,8 @@ function setRoomInUrl(id: string | null): void {
 function enterGame(next: Session, roomId: string | null, welcome = t.welcome): void {
   session?.close();
   session = next;
+  session.hold = overlayOpen;
+  liveArrival = null;
   room = roomId;
   setRoomInUrl(roomId);
   seenGeneration = -1;
@@ -464,7 +466,8 @@ async function submitRun(world: World, me: Hero): Promise<DailyBoard | null> {
 /** The arena of waves alone: the arena run kept on this device goes on, or a new one begins. */
 function startArenaSolo(): void {
   dailyRun = false;
-  enterGame(soloSession(ARENA_SLOT, heroClass, randomSeed, playerName.trim() || telegramName() || t.heroDefault, 0, 'arena'), null, t.arena.welcome);
+  // A new arena takes the live turns or the classic ones as the settings say; one carried on keeps its own.
+  enterGame(soloSession(ARENA_SLOT, heroClass, randomSeed, playerName.trim() || telegramName() || t.heroDefault, 0, 'arena', undefined, liveArena.on), null, t.arena.welcome);
 }
 
 /** The arena of waves with friends: a new arena room, and the invitation to it. */
@@ -710,7 +713,51 @@ function companionOnTheMove(world: World, me: Hero, cell: number): boolean {
 /** How early (ms) the next step of a walk is sent before the last one ends on screen: about a frame. */
 const FRAME_AHEAD_MS = 17;
 
+/**
+ * Live turns: what a tap, a key or a button decided (the walk's queue, the monster to chase, the chest
+ * to open, the stairs, the rest) goes to the room at once as the hero's plan, which the room carries
+ * out a turn a beat; the steps are never sent one by one, so nothing waits on the network.
+ */
+function sendPlan(world: World, now: number): void {
+  const me = heroById(world, session!.myId);
+  if (!me || !isAlive(me) || overlayOpen()) return;
+  const steps: PlanStep[] = [];
+  if (walk.chase) {
+    steps.push({ type: 'hunt', target: walk.chase });
+  } else if (walk.resting) {
+    if (isStarving(me)) view.say(t.tooHungryToRest, '#ff4444');
+    else steps.push({ type: 'rest' });
+  } else if (walk.queue.length > 0 || walk.open !== null || walk.pickup || walk.stairs) {
+    const to = walk.queue[walk.queue.length - 1] ?? me.pos;
+    if (to !== me.pos) steps.push({ type: 'go', to });
+    if (walk.open !== null) steps.push({ type: 'open', cell: walk.open });
+    // A ware of a shop is bought through its window, once there (see the arrival below); anything else is picked up.
+    const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === to && h.kind !== 'hidden');
+    if (walk.pickup && heap?.kind === 'forSale') liveArrival = to;
+    else if (walk.pickup && heap) steps.push({ type: 'pickup' });
+    if (walk.stairs) steps.push({ type: walk.stairs });
+  } else {
+    return;
+  }
+  const goal = walk.goal;
+  walk.reset();
+  walk.goal = goal;
+  if (steps.length > 0) send({ type: 'plan', steps }, now);
+}
+
+/** Live turns: a shop's ware walked up to, whose window opens on arrival. */
+let liveArrival: number | null = null;
+
 function step(world: World, now: number, visible: readonly boolean[]): void {
+  if (session!.beatMs !== null) {
+    sendPlan(world, now);
+    const me = heroById(world, session!.myId);
+    if (liveArrival !== null && me?.pos === liveArrival && !me.plan?.length) {
+      liveArrival = null;
+      takeHere(world, me, now);
+    }
+    return;
+  }
   const me = heroById(world, session!.myId);
   // Resting turns are not paced like steps: there is nothing to animate.
   const pace = walk.resting ? 0 : STEP_MS;
@@ -1437,7 +1484,8 @@ function learnFromSight(world: World, me: Hero, level: Level, visible: readonly 
       if (NPCS.has(mob.kind)) hints.first('npc', () => portrait(mob.kind));
       if (mob.kind === 'shopkeeper') hints.first('shop', () => portrait(mob.kind));
     } else if (mob.state !== 'sleeping') {
-      hints.first('monster', () => portrait(mob.kind));
+      // (Its words are of classic turns; under live turns the world's own hint has said how fights go.)
+      if (!world.live) hints.first('monster', () => portrait(mob.kind));
     }
   }
   if (me.hp > 0 && me.hp < me.ht * 0.4) hints.first('lowHealth');
@@ -1459,6 +1507,7 @@ function learnFromSight(world: World, me: Hero, level: Level, visible: readonly 
   if (level.altar && visible[level.altar.pos]) hints.first('altar');
   // The arena: a word about the waves; it has no secrets, stairs or bosses' lairs to explain.
   if (world.arena && !overlayOpen()) hints.first('arena');
+  if (world.live && !overlayOpen()) hints.first('live');
   if (me.depth >= 2 && !world.arena) hints.first('secret');
   if (BOSS_DEPTHS.has(me.depth) && !world.arena) hints.first('boss');
   if (world.turn > 60) hints.first('examine');
@@ -1626,9 +1675,13 @@ function startResting(): void {
 }
 
 /** The direction key held down, if any: the hero walks on while it is. */
-const held = { code: '', dx: 0, dy: 0 };
+const held = { code: '', dx: 0, dy: 0, striding: false };
 addEventListener('keyup', (event) => {
-  if (event.code === held.code) held.code = '';
+  if (event.code !== held.code) return;
+  held.code = '';
+  // Live turns: the stride the key began stops with it.
+  if (held.striding && session?.beatMs != null) send({ type: 'plan', steps: [] }, performance.now());
+  held.striding = false;
 });
 addEventListener('blur', () => {
   held.code = '';
@@ -1656,7 +1709,22 @@ addEventListener('keydown', (event) => {
       held.code = event.code;
       held.dx = dir[0];
       held.dy = dir[1];
-      tapCell(me.pos + dir[0] + dir[1] * WIDTH);
+      const next = me.pos + dir[0] + dir[1] * WIDTH;
+      const there = visibleCells(world, me.depth)[next] ? charAt(world, me.depth, next) : undefined;
+      if (session!.beatMs !== null && !aim && !(there && 'kind' in there && !swapsWithHero(there)) && !heapAt(world, me.depth, next)) {
+        // Live turns: the hero strides on while the key is down (see keyup); never into a fight.
+        walk.reset();
+        held.striding = true;
+        send({ type: 'plan', steps: [{ type: 'stride', dx: dir[0], dy: dir[1] }] }, performance.now());
+      } else {
+        // A monster there is struck once a press; anything else, as a tap.
+        if (session!.beatMs !== null && there && 'kind' in there && !swapsWithHero(there) && !aim) {
+          walk.reset();
+          send({ type: 'attack', target: there.id }, performance.now());
+        } else {
+          tapCell(next);
+        }
+      }
     }
   } else if (event.code === 'Space' || event.code === 'Numpad5' || event.code === 'Period') {
     act('wait');
@@ -2075,6 +2143,7 @@ function tick(now: number): void {
         .filter((m) => m.state !== 'sleeping' && m.state !== 'passive' && visible[m.pos])
         .map((m) => m.id),
     );
+    // (Under live turns the player steers as things happen, and a fight slows the clock: a walk goes on.)
     if ([...inSight].some((id) => !threats.has(id))) {
       walk.queue = [];
       walk.stairs = null;
@@ -2097,6 +2166,8 @@ function tick(now: number): void {
   // An online session learns my class with its first snapshot: wear the look for it.
   if (!session.looks[session.myId] && session.mode === 'solo') putOnLook();
   view.looks = session.looks;
+  // Live turns: a step on screen lasts the room's beat, so walks run on without a pause.
+  view.stepMs = session.beatMs ?? STEP_MS;
   view.sync(world, vnow, session.myId);
   step(world, now, visible);
   fx.update(vnow, dt);
@@ -2236,7 +2307,10 @@ function tick(now: number): void {
   if (overlayOpen() && hover.cell >= 0) hideHover();
   mapControls.indicators(
     foe ? { key: `${foe.id}:${foe.kind}`, portrait: () => portrait(foe.kind) } : null,
-    isAlive(me) && walk.goal !== null && walk.queue.length === 0 && !walk.chase && !session.busy,
+    // «Go on»: a walk stopped short of where it was headed (under live turns, the plan ran out before the goal).
+    isAlive(me) && walk.goal !== null && (session.beatMs !== null
+      ? !me.plan?.length && me.pos !== walk.goal
+      : walk.queue.length === 0 && !walk.chase && !session.busy),
   );
   coachMove(me);
 
@@ -2588,5 +2662,5 @@ if (import.meta.env.DEV) {
       await new Promise((resolve) => setTimeout(resolve, 33));
     }
   };
-  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, startArenaSolo, audio, tick, held } });
+  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, startArenaSolo, audio, tick, held, tapCell } });
 }

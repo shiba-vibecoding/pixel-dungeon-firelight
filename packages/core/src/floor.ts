@@ -27,6 +27,8 @@ import type { World } from './world';
  */
 
 export interface Floor {
+  /** Live turns: where this depth's clock has got to (see liveTick). */
+  liveAt?: number;
   mobs: Mob[];
   /** Random stream for everything that happens on this depth during play. */
   rng: RngState;

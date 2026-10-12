@@ -8,6 +8,27 @@ import { el, info, show, sprites, windowOf } from './screens';
 import { canFullscreen, haptics, isFullscreen, openExternal, setFullscreen } from './telegram';
 import { hints } from './hints';
 
+/**
+ * Live turns in the arena alone (the co-op rooms always play them): on at first, as the arena is
+ * built for them; off, the solo arena keeps the classic turns.
+ */
+export const liveArena = {
+  get on(): boolean {
+    try {
+      return localStorage.getItem('pd-live-arena') !== 'off';
+    } catch {
+      return true;
+    }
+  },
+  set(on: boolean): void {
+    try {
+      localStorage.setItem('pd-live-arena', on ? 'on' : 'off');
+    } catch {
+      // For this session only.
+    }
+  },
+};
+
 /*
  * The windows around the game rather than in it (design system v9): the
  * settings, the about window, the challenges and the journal with its catalog.
@@ -172,6 +193,7 @@ export function showSettings(options: SettingsOptions): void {
   );
   const game = group(
     t.meta.game,
+    switchRow(t.meta.liveArena, t.meta.liveArenaNote, liveArena.on, (on) => liveArena.set(on)),
     el(
       'div',
       { className: 'pd-set-row stack' },

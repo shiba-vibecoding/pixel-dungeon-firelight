@@ -1,5 +1,5 @@
 import {
-  applyEvent, autoAction, blockers, type ClientMessage, createWorld, type GameMode, isAlive, type PlayerInfo, type ServerMessage,
+  applyEvent, autoAction, blockers, type ClientMessage, createWorld, type GameMode, isAlive, liveTurnMs, type PlayerInfo, type ServerMessage,
   type World, type WorldEvent,
 } from '@pd/core';
 
@@ -67,6 +67,9 @@ export const IDLE_TIMEOUT = 4000;
  */
 export const ARENA_READY_TIMEOUT = 30_000;
 
+/** Live turns: the room's clock stops once nobody here has done anything for this long. */
+export const LIVE_IDLE_MS = 10 * 60_000;
+
 /** Heroes per party; a shared invite link in a big chat must not flood one dungeon. */
 export const PARTY_SIZE = 4;
 
@@ -81,9 +84,44 @@ export class RoomLogic {
     private readonly newSeed: () => number = () => Math.floor(Math.random() * 2 ** 31),
   ) {}
 
-  /** A new room; `mode` makes it the arena of waves (the creator's choice: whoever joins plays what the room is). */
-  static create(seed: number, newSeed?: () => number, mode: GameMode = 'dungeon'): RoomLogic {
-    return new RoomLogic({ format: STATE_FORMAT, world: createWorld(seed, 0, mode), seq: 0, holdingSince: {} }, newSeed);
+  /**
+   * A new room; `mode` makes it the arena of waves (the creator's choice: whoever joins plays what the room is).
+   * New rooms play live turns (the core's liveTick, on the room's clock); rooms saved before them keep classic turns.
+   */
+  static create(seed: number, newSeed?: () => number, mode: GameMode = 'dungeon', live = true): RoomLogic {
+    return new RoomLogic({ format: STATE_FORMAT, world: createWorld(seed, 0, mode, live), seq: 0, holdingSince: {} }, newSeed);
+  }
+
+  /** Whether the room plays live turns: then it beats time itself (liveTick), and nobody is ever waited for. */
+  get live(): boolean {
+    return this.saved.world.live === true;
+  }
+
+  /** How long the next live turn lasts (ms): longer while anyone in the party is in a fight. */
+  turnMs(): number {
+    return liveTurnMs(this.saved.world);
+  }
+
+  /**
+   * Whether the room's clock should run: a live world, not over, someone here to play it, and someone
+   * who has done something in the last LIVE_IDLE_MS (a game left open overnight does not play on by
+   * itself; the next order starts the clock again).
+   */
+  ticking(now = Date.now()): boolean {
+    if (!this.live || this.saved.world.over || this.online.size === 0) return false;
+    const active = [...this.online].map((id) => this.saved.activeAt?.[id] ?? 0);
+    return active.some((at) => now - at < LIVE_IDLE_MS);
+  }
+
+  /**
+   * A beat of the room's clock (live turns): one turn for every occupied depth, sent to everyone as
+   * an event carrying how long it lasts, so every screen walks it in that time. At the arena's rest,
+   * whoever is away is ready.
+   */
+  liveTick(now: number): Delivery[] {
+    if (!this.ticking(now)) return [];
+    const deliveries = this.commit({ type: 'tick', ms: this.turnMs() }, this.onlinePlayers());
+    return [...deliveries, ...this.readyTheAbsent(now)];
   }
 
   /**
@@ -177,14 +215,14 @@ export class RoomLogic {
     }
     deliveries.push({ to: [player.id], message: this.snapshot(player.id) });
     deliveries.push(this.presence());
-    deliveries.push(...this.settle(now));
+    deliveries.push(...(this.live ? this.readyTheAbsent(now) : this.settle(now)));
     return deliveries;
   }
 
   disconnect(playerId: string, now: number): Delivery[] {
     this.online.delete(playerId);
     (this.saved.offlineSince ??= {})[playerId] = now;
-    return [this.presence(), ...this.settle(now)];
+    return [this.presence(), ...(this.live ? this.readyTheAbsent(now) : this.settle(now))];
   }
 
   receive(playerId: string, message: ClientMessage, now: number): Delivery[] {
@@ -198,7 +236,7 @@ export class RoomLogic {
         if (!result.ok) {
           return [{ to: [playerId], message: { type: 'rejected', reason: result.reason } }];
         }
-        return [this.broadcast(event), ...this.settle(now)];
+        return [this.broadcast(event), ...(this.live ? this.readyTheAbsent(now) : this.settle(now))];
       }
       case 'restart':
         if (!this.saved.world.over) {
@@ -259,6 +297,8 @@ export class RoomLogic {
 
   /** Makes heroes who ran out of time wait a turn. */
   tick(now: number): Delivery[] {
+    // Live turns hold nobody up: only the arena's readiness has a deadline.
+    if (this.live) return this.readyTheAbsent(now);
     const deliveries: Delivery[] = [];
     for (const [id, since] of Object.entries(this.saved.holdingSince)) {
       if (now >= since + TURN_TIMEOUT || now >= this.idleAt(id, since)) {

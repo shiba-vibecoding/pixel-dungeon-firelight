@@ -1,5 +1,5 @@
 import {
-  type Action, type EffectId, type FrameId, isItemRef, type ItemRef, LENGTH, type Look, OFFERS, type SkinVariant, SUBCLASSES,
+  type Action, type EffectId, type PlanStep, type FrameId, isItemRef, type ItemRef, LENGTH, type Look, OFFERS, type SkinVariant, SUBCLASSES,
   type SubClass,
 } from '@pd/core';
 
@@ -128,8 +128,44 @@ export function sanitizeAction(raw: unknown): Action | null {
       const weapon = slot(a.weapon);
       return weapon === null ? null : { type: 'balance', item, weapon, imbue };
     }
+    case 'plan': {
+      // Live turns: a standing order of a few steps, each a plain action or one that lasts.
+      if (!Array.isArray(a.steps) || a.steps.length > MAX_PLAN_STEPS) return null;
+      const steps: PlanStep[] = [];
+      for (const raw of a.steps as unknown[]) {
+        const step = sanitizePlanStep(raw);
+        if (!step) return null;
+        steps.push(step);
+      }
+      return { type: 'plan', steps };
+    }
     default:
       return null;
+  }
+}
+
+/** The longest plan a client may send (the core keeps 64). */
+const MAX_PLAN_STEPS = 64;
+
+/** One step of a live plan: going somewhere, hunting, resting, striding, or any action but another plan. */
+function sanitizePlanStep(raw: unknown): PlanStep | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const s = raw as Record<string, unknown>;
+  switch (s.type) {
+    case 'go': {
+      const to = cell(s.to);
+      return to === null ? null : { type: 'go', to };
+    }
+    case 'hunt':
+      return typeof s.target === 'string' && s.target.length > 0 && s.target.length <= 64 ? { type: 'hunt', target: s.target } : null;
+    case 'rest':
+      return { type: 'rest' };
+    case 'stride':
+      return isInt(s.dx, -1, 1) && isInt(s.dy, -1, 1) && (s.dx !== 0 || s.dy !== 0) ? { type: 'stride', dx: s.dx, dy: s.dy } : null;
+    case 'plan':
+      return null;
+    default:
+      return sanitizeAction(raw);
   }
 }
 

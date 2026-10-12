@@ -14,7 +14,7 @@ export type HintId =
   | 'monster' | 'attacked' | 'lowHealth' | 'floorItem' | 'container' | 'trap' | 'lockedDoor' | 'stairs' | 'secret'
   | 'hungry' | 'levelUp' | 'well' | 'altar' | 'alchemy' | 'shop' | 'npc' | 'boss' | 'companion' | 'waiting' | 'examine'
   | 'potion' | 'scroll' | 'weapon' | 'armor' | 'ring' | 'wand' | 'food' | 'seed' | 'missile' | 'bomb' | 'key' | 'gold'
-  | 'dew' | 'vial' | 'bag' | 'ankh' | 'honeypot' | 'torch' | 'tome' | 'kit' | 'beacon' | 'weightstone' | 'arena';
+  | 'dew' | 'vial' | 'bag' | 'ankh' | 'honeypot' | 'torch' | 'tome' | 'kit' | 'beacon' | 'weightstone' | 'arena' | 'live';
 
 type Text = readonly [title: string, text: string];
 
@@ -62,6 +62,7 @@ const RU: Record<HintId, Text> = {
   beacon: ['Маяк Ллойда', 'Поставьте маяк, и потом сможете вернуться в это место с любой глубины.'],
   weightstone: ['Утяжелитель', 'Балансирует оружие в руке: на скорость или на точность.'],
   arena: ['Арена волн', 'Монстры идут волнами через четверо ворот. После волны — передышка: павшие встают, каждый берёт награду. Отдохните и начните следующую.'],
+  live: ['Живые ходы', 'Здесь мир идёт по часам и никого не ждёт. Герой сам выполняет приказ до конца, а в бою время замедляется, чтобы успеть подумать.'],
 };
 
 const EN: Record<HintId, Text> = {
@@ -108,6 +109,7 @@ const EN: Record<HintId, Text> = {
   beacon: ['Lloyd\'s beacon', 'Set it, and you can come back to this spot later from any depth.'],
   weightstone: ['A weightstone', 'Balances the weapon in hand: for speed or for accuracy.'],
   arena: ['Wave arena', 'Monsters come in waves through four gates. After each wave a breather: the fallen rise, everyone takes a reward. Rest, then start the next.'],
+  live: ['Live turns', 'Here the world goes on by a clock and waits for no one. The hero carries an order out to the end, and in a fight time slows down so there is time to think.'],
 };
 
 /*
@@ -169,6 +171,7 @@ const THROW: How = {
 const EAT: How = tapOn('на рюкзак и съешьте еду', 'the backpack and eat', { key: 'I', target: 'bag' });
 
 const HOW: Partial<Record<HintId, How>> = {
+  live: tapOn('на клетку — герой пойдёт туда сам; на врага — будет бить, пока тот не падёт', 'a cell and the hero walks there; an enemy, and they strike until it falls'),
   monster: tapOn('на монстра или на кнопку с его портретом', 'the monster, or the button with its portrait', {
     wide: { gesture: 'click', ru: '<b>Щёлкните</b> по монстру или нажмите', en: '<b>Click</b> the monster or press' },
     key: 'Tab',

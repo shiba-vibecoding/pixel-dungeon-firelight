@@ -208,6 +208,8 @@ export class Room extends DurableObject<Env> {
   private readonly limiter = new MessageLimiter();
   /** True once 'idleSince' is known to be gone from storage while players are here. */
   private idleCleared = false;
+  /** The live clock's next beat, while it runs (see runClock). */
+  private clock: ReturnType<typeof setTimeout> | null = null;
   /** A save waiting for the moves to settle (see apply). */
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   /** The alarm as last set, null for none; undefined until known since the room woke. */
@@ -251,6 +253,34 @@ export class Room extends DurableObject<Env> {
     if (leaving || this.logic?.state().world.over) await this.flush();
     else this.saveSoon();
     await this.schedule(leaving);
+    this.runClock();
+  }
+
+  /**
+   * Live turns: the room's clock, a beat a turn (RoomLogic.liveTick) while anyone is here to play,
+   * each as long as the turn it starts (longer in a fight). It stops by itself when the last player
+   * leaves or the run ends, and starts again with the next message.
+   */
+  private runClock(): void {
+    const room = this.logic;
+    if (this.clock || !room?.ticking()) return;
+    this.clock = setTimeout(() => {
+      this.clock = null;
+      void this.beat();
+    }, room.turnMs());
+  }
+
+  private async beat(): Promise<void> {
+    try {
+      const room = await this.room();
+      if (!room.ticking()) return;
+      this.deliver(room.liveTick(Date.now()));
+      if (room.state().world.over) await this.flush();
+      else this.saveSoon();
+      this.runClock();
+    } catch (error) {
+      await this.failed(error, 'clock');
+    }
   }
 
   private saveSoon(): void {

@@ -932,6 +932,8 @@ const en = {
     hints: 'Hints for beginners',
     hintsNote: 'A word about each new thing, once',
     hintsAgain: 'Show all hints again',
+    liveArena: 'Live turns in the arena alone',
+    liveArenaNote: 'The world goes on by a clock, as with friends; off: classic turns',
     shakeNote: 'On heavy blows and explosions',
     fxModes: { auto: 'Auto', full: 'Full', light: 'Light' } as Record<'auto' | 'full' | 'light', string>,
     fxNotes: {
@@ -1937,6 +1939,8 @@ const ru: Strings = {
     hints: 'Подсказки новичку',
     hintsNote: 'Коротко о каждой новой вещи, один раз',
     hintsAgain: 'Показать все подсказки заново',
+    liveArena: 'Живые ходы на арене в одиночку',
+    liveArenaNote: 'Мир идёт по часам, как с друзьями; выкл. — классические ходы',
     shakeNote: 'От сильных ударов и взрывов',
     fxModes: { auto: 'Авто', full: 'Полные', light: 'Лёгкие' },
     fxNotes: {

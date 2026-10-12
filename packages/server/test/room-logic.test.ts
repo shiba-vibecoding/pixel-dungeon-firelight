@@ -46,7 +46,7 @@ function route(deliveries: Delivery[], replicas: Record<string, Replica>): void 
 
 /** A room whose levels have no monsters. */
 function peacefulRoom(seed: number): RoomLogic {
-  const room = RoomLogic.create(seed);
+  const room = RoomLogic.create(seed, undefined, 'dungeon', false);
   pacify(room.state().world);
   return room;
 }
@@ -82,7 +82,7 @@ describe('co-op room', () => {
 
   it('keeps replicas identical through fights, timeouts and deaths', () => {
     for (const seed of [1, 2, 3]) {
-      const room = RoomLogic.create(seed * 101);
+      const room = RoomLogic.create(seed * 101, undefined, 'dungeon', false);
       const replicas = { alice: new Replica(), bob: new Replica() };
       route(room.connect(alice, 0), replicas);
       route(room.connect(bob, 0), replicas);
@@ -104,7 +104,7 @@ describe('co-op room', () => {
   }, 20000);
 
   it('takes at most four heroes, though members can always come back', () => {
-    const room = RoomLogic.create(12);
+    const room = RoomLogic.create(12, undefined, 'dungeon', false);
     for (const id of ['a', 'b', 'c', 'd']) {
       expect(room.isFull(id)).toBe(false);
       room.connect({ id, name: id, heroClass: 'rogue' }, 0);
@@ -114,7 +114,7 @@ describe('co-op room', () => {
   });
 
   it('rejects invalid actions to the sender only, without advancing the sequence', () => {
-    const room = RoomLogic.create(1);
+    const room = RoomLogic.create(1, undefined, 'dungeon', false);
     const replicas = { alice: new Replica(), bob: new Replica() };
     route(room.connect(alice, 0), replicas);
     route(room.connect(bob, 0), replicas);
@@ -144,7 +144,7 @@ describe('co-op room', () => {
   });
 
   it('survives hibernation: a room rebuilt from its saved state continues', () => {
-    const room = RoomLogic.create(77);
+    const room = RoomLogic.create(77, undefined, 'dungeon', false);
     route(room.connect(alice, 0), { alice: new Replica() });
     const saved = JSON.parse(JSON.stringify(room.state()));
     const restored = RoomLogic.restore(saved, 1);
@@ -243,7 +243,7 @@ describe('co-op turns on the server', () => {
 
   it('starts a new run for the whole party once everyone has fallen', () => {
     let seed = 500;
-    const room = new RoomLogic(RoomLogic.create(1).state(), () => seed++);
+    const room = new RoomLogic(RoomLogic.create(1, undefined, 'dungeon', false).state(), () => seed++);
     const replicas = { alice: new Replica(), bob: new Replica() };
     route(room.connect(alice, 0), replicas);
     route(room.connect(bob, 0), replicas);
@@ -263,7 +263,7 @@ describe('co-op turns on the server', () => {
   });
 
   it('gives a full party’s seat to a newcomer only once its player has long been away', () => {
-    const room = RoomLogic.create(12);
+    const room = RoomLogic.create(12, undefined, 'dungeon', false);
     const join = (id: string, now: number) => {
       const seat = room.seatFor(id, now);
       if (seat !== null) room.connect({ id: seat, name: id, heroClass: 'rogue' }, now);
@@ -287,7 +287,7 @@ describe('co-op turns on the server', () => {
   });
 
   it('gives a player whose hero was taken over a new hero of their own when there is room', () => {
-    const room = RoomLogic.create(12);
+    const room = RoomLogic.create(12, undefined, 'dungeon', false);
     for (const id of ['a', 'b', 'c', 'd']) room.connect({ id, name: id, heroClass: 'mage' }, 0);
     room.disconnect('a', 0);
     const seat = room.seatFor('e', SEAT_TIMEOUT);
@@ -302,7 +302,7 @@ describe('co-op turns on the server', () => {
   });
 
   it('keeps seats when the room is saved and restored', () => {
-    const room = RoomLogic.create(12);
+    const room = RoomLogic.create(12, undefined, 'dungeon', false);
     for (const id of ['a', 'b', 'c', 'd']) room.connect({ id, name: id, heroClass: 'mage' }, 0);
     room.disconnect('a', 0);
     expect(room.seatFor('e', SEAT_TIMEOUT)).toBe('a');
@@ -325,7 +325,7 @@ describe('the arena of waves in a room', () => {
     // A saved arena room stays one whatever a later link asks.
     expect(RoomLogic.restore(room.state(), 1, 'dungeon').state().world.mode).toBe('arena');
     // A dungeon room is not turned into an arena by a later link.
-    expect(RoomLogic.restore(RoomLogic.create(5).state(), 1, 'arena').state().world.mode).toBeUndefined();
+    expect(RoomLogic.restore(RoomLogic.create(5, undefined, 'dungeon', false).state(), 1, 'arena').state().world.mode).toBeUndefined();
     // A new run in the room is an arena again.
     room.state().world.over = true;
     route(room.receive('alice', { type: 'restart' }, 10), replicas);
