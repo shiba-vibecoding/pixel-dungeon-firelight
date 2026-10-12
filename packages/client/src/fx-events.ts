@@ -1,4 +1,4 @@
-import { type Effect, HEIGHT, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
+import { type Effect, HEIGHT, type Level, type MobKind, T, visibleCells, WIDTH, type World } from '@pd/core';
 import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
@@ -391,6 +391,19 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     }
     case 'trap':
       if (!here(effect.depth)) return;
+      if (effect.mob) {
+        // Under a monster, where the party can see it: the same plate going off, without shaking the screen
+        // (LightningTrap: sparks and arcs; the rest a puff of dust off the plate).
+        if (!visibleCells(world, view.depth)[effect.pos]) return;
+        const at = cellCentre(effect.pos);
+        if (effect.kind === 'lightning') {
+          fx.burst(at.x, at.y, now, { count: 18, colors: BOLT_GLOW.lightning!, glow: true, speed: [40, 120], life: [200, 450], drag: 0.2, size: [1, 2] });
+          fx.flash('230, 240, 255', 0.25, 160, now);
+        } else {
+          fx.burst(at.x, at.y, now, { count: 10, colors: DUST, speed: [20, 60], life: [300, 600], gravity: 200 });
+        }
+        return;
+      }
       if (effect.kind === 'lightning') {
         fx.flash('230, 240, 255', 0.5, 220, now);
         fx.shake(4, 300, now);
@@ -482,6 +495,13 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     case 'fell':
       if (effect.hero === myId) fx.shake(4, 350, now);
       return;
+    case 'mobFell': {
+      // A little dust off the edge after it.
+      if (!here(effect.depth) || !visibleCells(world, view.depth)[effect.pos]) return;
+      const at = cellCentre(effect.pos);
+      fx.burst(at.x, at.y + 4, now, { count: 8, colors: DUST, speed: [10, 40], life: [300, 700], gravity: 260, size: [1, 2] });
+      return;
+    }
     case 'bee':
       if (!here(effect.depth)) return;
       fx.burst(cellCentre(effect.from).x, cellCentre(effect.from).y, now, { count: 12, colors: ['#ffd020', '#ffe080', '#fff8d0'], glow: true, speed: [20, 70], life: [250, 500], gravity: 200 });

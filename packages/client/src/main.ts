@@ -1530,7 +1530,9 @@ function examineCell(pos: number): void {
   const level = levelAt(world, me.depth);
   const { name, desc } = plant ? plantText(plant.kind) : tileText(level.map[pos]!);
   const well = level.map[pos] === T.WELL ? level.wells.find((w) => w.pos === pos) : undefined;
-  showInfo(name, [well ? wellText(well.water) : desc], hideOverlay);
+  // Level.tileDesc: and what covers it (Web.tileDesc).
+  const webbed = seen && world.floors[me.depth]?.gas?.web?.some(([cell]) => cell === pos);
+  showInfo(name, [well ? wellText(well.water) : desc, ...(webbed ? [t.webHere] : [])], hideOverlay);
 }
 
 function startResting(): void {
@@ -2106,9 +2108,10 @@ function tick(now: number): void {
     ...(clouds.toxic ?? []).map(([pos, volume]) => ({ pos, volume, color: '80, 200, 60' })),
     ...(clouds.paralytic ?? []).map(([pos, volume]) => ({ pos, volume, color: '230, 220, 70' })),
   ];
+  const webs = (clouds.web ?? []).map(([pos, volume]) => ({ pos, volume }));
   const explored = exploredCells(world, me.depth);
   const scene = {
-    level, baked: baked!, visible, explored, heaps, plants, gas, seeAll: me.mindVision > 0,
+    level, baked: baked!, visible, explored, heaps, plants, gas, webs, seeAll: me.mindVision > 0,
       ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
     focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
     lights: lightsFor(level, visible, view, vnow),

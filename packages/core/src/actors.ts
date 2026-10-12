@@ -484,6 +484,8 @@ export interface Mob {
   charmedBy?: string;
   /** Turns left of running amok (a wand of amok): it attacks whoever is nearest, friend or foe. */
   amok?: number;
+  /** Turns left of blind rage (Rage, from a scroll of challenge read in its sight): it charges over traps and chasms. */
+  rage?: number;
   /** A magic sheep: turns left before it fades away. */
   lifespan?: number;
   /** Turns left of being held fast where it stands (a mage's molten earth), and of seeing nothing (a smoke bomb). */

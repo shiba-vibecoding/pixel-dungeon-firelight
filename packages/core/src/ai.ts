@@ -14,9 +14,9 @@ import type { Level, RoomInfo } from './level/generate';
 import { adjacent, cellX, cellY, distance, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { RoomType } from './level/room';
 import { F, hasFlag, T } from './level/terrain';
-import { burst, mobConditions } from './traps';
-import { seedGas } from './gas';
-import { staggerTarget, stepOnPlant } from './plants';
+import { burst, mobConditions, mobPress } from './traps';
+import { seedGas, seedWeb } from './gas';
+import { staggerTarget } from './plants';
 import type { Rng } from './rng';
 import type { World } from './world';
 import { mobCount, partySize, respawnTime, scaleMob } from './party';
@@ -126,8 +126,9 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
   // Dizzy, it staggers about instead of doing anything useful.
   if ((mob.dizzy ?? 0) > 0) {
     mob.dizzy!--;
+    // Char.move: a stagger may take it onto a trap, or over a chasm.
     const to = staggerTarget(ctx, mob.pos);
-    if (canStand(ctx, mob, to) && !charAt(ctx.world, ctx.depth, to)) moveMob(ctx, mob, to);
+    if (canStand(ctx, mob, to, true) && !charAt(ctx.world, ctx.depth, to)) moveMob(ctx, mob, to);
     spend(mob, TICK);
     return;
   }
@@ -358,10 +359,11 @@ function runAmok(ctx: Ctx, mob: Mob): void {
 /**
  * PathFinder.getStepBack, simplified: the neighbouring cell furthest from
  * the threat, if it gains any distance; 'safe' when the threat cannot reach
- * the mob at all.
+ * the mob at all. Dungeon.flee: only a flier takes a way over traps and chasms.
  */
 function getFurther(ctx: Ctx, mob: Mob, threat: number): 'moved' | 'safe' | 'cornered' {
   const { world, depth, level } = ctx;
+  const flying = MOBS[mob.kind].flying === true;
   const dist = new Int32Array(LENGTH).fill(-1);
   dist[threat] = 0;
   const queue = [threat];
@@ -369,7 +371,8 @@ function getFurther(ctx: Ctx, mob: Mob, threat: number): 'moved' | 'safe' | 'cor
     const c = queue[head]!;
     for (const n of NEIGHBOURS8) {
       const next = c + n;
-      if (next < 0 || next >= LENGTH || dist[next]! >= 0 || !adjacent(c, next) || !isPassable(level, next)) continue;
+      if (next < 0 || next >= LENGTH || dist[next]! >= 0 || !adjacent(c, next)) continue;
+      if (!isPassable(level, next) && !(flying && hasFlag(level.map[next]!, F.AVOID))) continue;
       dist[next] = dist[c]! + 1;
       queue.push(next);
     }
@@ -379,7 +382,7 @@ function getFurther(ctx: Ctx, mob: Mob, threat: number): 'moved' | 'safe' | 'cor
   let bestDist = dist[mob.pos]!;
   for (const n of STEP_ORDER) {
     const step = mob.pos + n;
-    if (step < 0 || step >= LENGTH || !adjacent(mob.pos, step) || charAt(world, depth, step) || !canStand(ctx, mob, step)) continue;
+    if (step < 0 || step >= LENGTH || !adjacent(mob.pos, step) || charAt(world, depth, step) || !canStand(ctx, mob, step, flying)) continue;
     if (dist[step]! > bestDist) {
       best = step;
       bestDist = dist[step]!;
@@ -628,7 +631,7 @@ function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
         return;
       }
       moveMob(ctx, mob, trace.at(-2)!);
-      attack(ctx, mob, enemy, { attack: GOO_PUMPED.jumpAttack, damage: GOO_PUMPED.damage });
+      if (isAlive(mob)) attack(ctx, mob, enemy, { attack: GOO_PUMPED.jumpAttack, damage: GOO_PUMPED.damage });
     }
     mob.pumped = false;
     spend(mob, TICK);
@@ -699,12 +702,13 @@ function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean 
     const trace = ballistica(ctx, mob.pos, target);
     let cell = trace.at(-1)!;
     if (charAt(ctx.world, ctx.depth, cell) && trace.length > 2) cell = trace[trace.length - 2]!;
-    // She does not fly: rather than land over a chasm (and fall, as she would in the original),
-    // she stops at the last firm cell along the way.
+    // Succubus.blink is WandOfBlink.appear, which presses nothing: in the original she could be
+    // left standing on air over a chasm. Rather than that, she stops at the last firm cell along
+    // the way; a trap she lands on stays as it is.
     for (let i = trace.indexOf(cell); i > 0 && !canEnter(ctx.level, cell); i--) cell = trace[i - 1]!;
     if (cell !== mob.pos && canEnter(ctx.level, cell) && !charAt(ctx.world, ctx.depth, cell)) {
       const from = mob.pos;
-      moveMob(ctx, mob, cell);
+      moveMob(ctx, mob, cell, false);
       ctx.effects.push({ type: 'jumped', depth: ctx.depth, mob: mob.id, from, to: cell });
       mob.jumpIn = SUCCUBUS_BLINK_DELAY;
       mob.time -= 1 / MOBS[mob.kind].speed;
@@ -724,10 +728,16 @@ function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean 
   return true;
 }
 
-function moveMob(ctx: Ctx, mob: Mob, to: number): void {
+/**
+ * Mob.move: a step to the next cell. A fleeing spinner leaves a web behind it (Spinner.move); then,
+ * unless it flies, the monster presses the cell it comes to (Level.mobPress: traps, chasms, plants).
+ * `press` false: it appears there by magic instead (WandOfBlink.appear), touching nothing.
+ */
+function moveMob(ctx: Ctx, mob: Mob, to: number, press = true): void {
   // Crippled, every step takes twice as long.
   if ((mob.crippled ?? 0) > 0) mob.time += 1 / MOBS[mob.kind].speed;
   const from = mob.pos;
+  if (mob.kind === 'spinner' && mob.state === 'fleeing') seedWeb(ctx, from, ctx.rng.intBetween(5, 7));
   mob.pos = to;
   leaveCell(ctx.world, ctx.level, ctx.depth, from);
   enterCell(ctx.level, to);
@@ -735,22 +745,34 @@ function moveMob(ctx: Ctx, mob: Mob, to: number): void {
   if (mob.kind === 'goo' && ctx.level.map[ctx.level.entrance] === T.ENTRANCE) {
     ctx.level.map[ctx.level.entrance] = T.WATER_TILES;
   }
-  if (mob.kind === 'dm300') dm300Steps(ctx, mob, to);
-  stepOnPlant(ctx, mob, to);
-}
-
-/** Dungeon.findPath: the next step, treating characters the mover can see as obstacles. */
-function findStep(ctx: Ctx, from: number, to: number, fov: boolean[], mob?: Mob): number {
-  const { world, depth, level } = ctx;
-  if (adjacent(from, to)) {
-    return !charAt(world, depth, to) && canStand(ctx, mob, to) ? to : -1;
+  if (press && !MOBS[mob.kind].flying) {
+    mobPress(ctx, mob);
+    if (!isAlive(mob)) return;
   }
-  return getStep(from, to, (cell) => canStand(ctx, mob, cell) && !(fov[cell] && charAt(world, depth, cell)));
+  if (mob.kind === 'dm300') dm300Steps(ctx, mob, to);
 }
 
-/** Where a monster may go: open ground, and for a piranha only the water of its pool. */
-function canStand(ctx: Ctx, mob: Mob | undefined, cell: number): boolean {
-  return isPassable(ctx.level, cell) && (mob?.kind !== 'piranha' || isWater(ctx.level.map[cell]!));
+/**
+ * Dungeon.findPath: the next step, treating characters the mover can see as obstacles. Traps and
+ * chasms the party knows of are walked around, unless the mover flies or is beside itself (Amok,
+ * Rage); but a goal right next to it is stepped onto whatever it is.
+ */
+function findStep(ctx: Ctx, from: number, to: number, fov: boolean[], mob?: Mob): number {
+  const { world, depth } = ctx;
+  if (adjacent(from, to)) {
+    return !charAt(world, depth, to) && canStand(ctx, mob, to, true) ? to : -1;
+  }
+  const heedless = mob !== undefined && (MOBS[mob.kind].flying === true || (mob.amok ?? 0) > 0 || (mob.rage ?? 0) > 0);
+  return getStep(from, to, (cell) => canStand(ctx, mob, cell, heedless) && !(fov[cell] && charAt(world, depth, cell)));
+}
+
+/**
+ * Where a monster may go: open ground (Level.passable), and with `avoid` also known traps and
+ * chasms (Level.avoid); for a piranha only the water of its pool.
+ */
+function canStand(ctx: Ctx, mob: Mob | undefined, cell: number, avoid = false): boolean {
+  if (mob?.kind === 'piranha') return isPassable(ctx.level, cell) && isWater(ctx.level.map[cell]!);
+  return isPassable(ctx.level, cell) || (avoid && cell >= 0 && cell < LENGTH && hasFlag(ctx.level.map[cell]!, F.AVOID));
 }
 
 /** Neighbour order of PathFinder.getStep, which decides between equally short steps. */
