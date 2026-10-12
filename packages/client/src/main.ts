@@ -376,6 +376,11 @@ function startOnline(roomId: string): void {
 function toTitle(): void {
   session?.close();
   session = null;
+  // Nothing left half done: a walk, a shot being aimed, the look on the map.
+  walk.reset();
+  aim = null;
+  examining = false;
+  held.code = '';
   room = null;
   setRoomInUrl(null);
   audio.playMusic('theme');
@@ -1752,7 +1757,7 @@ function tick(now: number): void {
               onShare: () => {
                 void (async () => {
                   const text = t.shareText(score, depth);
-                  const killer = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? me.killedBy);
+                  const killer = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
                   const shared = await sharePicture({
                     name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, level: me.lvl, depth, score,
                     place: (await board)?.rank ?? null, won: victory, cause: killer ? capitalize(t.killedBy(killer)) : t.soloFell(me.depth),
@@ -1766,7 +1771,7 @@ function tick(now: number): void {
     window.setTimeout(() => {
       if (!session?.world?.over) return;
       if (!victory) haptic('error');
-      const cause = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? me.killedBy);
+      const cause = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
       // Rankings: the run takes its place among this device's best.
       const deepest = Object.keys(world.levels).length;
       const gold = me.stats?.gold ?? me.gold;

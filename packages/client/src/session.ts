@@ -77,19 +77,34 @@ export function soloSession(key: string | null, heroClass: HeroClass, newSeed: (
   };
   let pending: Effect[] = [];
   let saveTimer = 0;
+  /** A save is waiting for the moves to settle. */
+  let dirty = false;
+  /** Writes the run now. */
+  const flush = (): void => {
+    clearTimeout(saveTimer);
+    if (!key || !dirty) return;
+    dirty = false;
+    try {
+      const world = session.world!;
+      if (world.over) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify({ version: SAVE_VERSION, world } satisfies SoloSave));
+    } catch {
+      // Out of space or storage blocked: the run simply is not kept.
+    }
+  };
+  /** Saves once the moves settle (writing after every step of a walk would be wasted). */
   const save = (): void => {
     if (!key) return;
+    dirty = true;
     clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(() => {
-      try {
-        const world = session.world!;
-        if (world.over) localStorage.removeItem(key);
-        else localStorage.setItem(key, JSON.stringify({ version: SAVE_VERSION, world } satisfies SoloSave));
-      } catch {
-        // Out of space or storage blocked: the run simply is not kept.
-      }
-    }, 300);
+    saveTimer = window.setTimeout(flush, 300);
   };
+  // Leaving the app (Telegram closed or sent to the background) must not lose the last moves.
+  const away = (): void => {
+    if (document.hidden) flush();
+  };
+  document.addEventListener('visibilitychange', away);
+  addEventListener('pagehide', flush);
 
   const session: Session = {
     mode: 'solo',
@@ -120,7 +135,10 @@ export function soloSession(key: string | null, heroClass: HeroClass, newSeed: (
       return effects;
     },
     close() {
-      clearTimeout(saveTimer);
+      // Back to the title: what was played is kept, to the last move.
+      flush();
+      document.removeEventListener('visibilitychange', away);
+      removeEventListener('pagehide', flush);
     },
     looks: {},
     wear(look) {
