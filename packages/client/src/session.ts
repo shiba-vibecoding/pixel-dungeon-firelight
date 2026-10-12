@@ -1,5 +1,5 @@
 import {
-  act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, heroById, type HeroClass,
+  act, type Action, addHero, applyEvent, type Bones, type ClientMessage, giveBones, createWorld, type Effect, heroById, type HeroClass,
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
 } from '@pd/core';
 import { guestSecret } from './guest';
@@ -104,10 +104,13 @@ export function forgetSolo(key: string): void {
  * @param newSeed seed for a fresh run (also used by restart)
  */
 /** @param challenges the challenges of a fresh run (a bit mask; see Challenges in the core) */
-export function soloSession(key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0): Session {
+/** @param bones a fallen hero's bones for a fresh run to hold (bones.ts), read when the run starts */
+export function soloSession(key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0, bones: () => Bones | null = () => null): Session {
   const fresh = (): World => {
     const world = createWorld(newSeed(), challenges);
     addHero(world, { id: 'me', name, heroClass });
+    const left = bones();
+    if (left) giveBones(world, left);
     return world;
   };
   let pending: Effect[] = [];
@@ -163,6 +166,8 @@ export function soloSession(key: string | null, heroClass: HeroClass, newSeed: (
     },
     restart() {
       restartWorld(session.world!, newSeed());
+      const left = bones();
+      if (left) giveBones(session.world!, left);
       session.generation++;
       save();
     },

@@ -653,7 +653,7 @@ function randomCellIn(rng: Rng, room: RoomInfo): number {
 }
 
 /** RegularLevel.randomDropCell: somewhere in a standard room. */
-function randomDropCell(rng: Rng, level: Level): number {
+export function randomDropCell(rng: Rng, level: Level): number {
   for (let attempt = 0; attempt < 200; attempt++) {
     const room = rng.element(level.rooms);
     if (room?.type !== RoomType.STANDARD) continue;

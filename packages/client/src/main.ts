@@ -2,7 +2,7 @@ import {
   adjacent, blockers, distance, type Mob, trapAt, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
   HEAP_SPRITES,
   type Hero, type Item, type Level,
-  hasAmulet, heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
+  type Bones, hasAmulet, heroById, type HeroClass, leaveBones, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, PLANT_KINDS, type SmithLine, T,
   visibleCells, chargesKnown, WIDTH,
   type World, charAt, swapsWithHero,
@@ -295,6 +295,14 @@ function store(key: string, value: string): void {
   }
 }
 
+function forget(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Nothing kept anyway.
+  }
+}
+
 // ?hero= and ?name= override the saved choices (handy for testing several players).
 const query = new URLSearchParams(location.search);
 const savedClass = query.get('hero') ?? stored('pd-class') ?? '';
@@ -383,13 +391,32 @@ try {
   // Storage unavailable: nothing to clean.
 }
 
+/** Where the device keeps the last fallen hero's bones, until a run lays them on their depth (bones.ts). */
+const BONES_KEY = 'pd-bones';
+
+/** Bones handed to the run being played, until it lays them. */
+let bonesGiven = false;
+
+function readBones(): Bones | null {
+  try {
+    const bones = JSON.parse(stored(BONES_KEY) ?? 'null') as Bones | null;
+    bonesGiven = bones !== null;
+    return bones;
+  } catch {
+    return null;
+  }
+}
+
 function startSolo(mode: 'continue' | 'new' | 'daily'): void {
   if (mode === 'new') forgetSolo(SOLO_SLOT);
   const daily = mode === 'daily';
   const seed = daily ? dailySeed() : randomSeed();
   // The daily dungeon is the same for everyone: no challenges there.
   const chosen = !daily && challengesOpen() ? challenges : 0;
-  enterGame(soloSession(daily ? dailySlot() : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed()), playerName.trim() || telegramName() || t.heroDefault, chosen), null);
+  // A fallen hero's bones wait in ordinary runs (Bones.java: never in the daily dungeon, the same for everyone).
+  enterGame(soloSession(daily ? dailySlot() : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed()), playerName.trim() || telegramName() || t.heroDefault, chosen, daily ? undefined : readBones), null);
+  // A run carried on may still hold bones not yet laid.
+  if (!daily && session?.world?.bones && !session.world.bones.placed) bonesGiven = true;
   dailyRun = daily;
 }
 
@@ -2230,10 +2257,17 @@ function tick(now: number): void {
   );
   placeToasts();
 
+  // Bones laid on their depth are this run's now: the device forgets them.
+  if (bonesGiven && world.bones?.placed) {
+    bonesGiven = false;
+    forget(BONES_KEY);
+  }
   if (world.over && deathShown !== session.generation) {
     deathShown = session.generation;
     const solo = session.mode === 'solo';
     const victory = world.victory;
+    // Bones.leave: a hero fallen alone in an ordinary run leaves something for the next.
+    if (!victory && solo && !dailyRun) store(BONES_KEY, JSON.stringify(leaveBones(me, Math.floor(Math.random() * 4), Math.random())));
     if (victory) {
       audio.play('levelup');
       haptic('success');

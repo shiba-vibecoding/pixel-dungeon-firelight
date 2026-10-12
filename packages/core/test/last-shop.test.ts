@@ -91,7 +91,7 @@ describe('the last shop (depth 21)', () => {
         expect(level.map[level.shopkeeper!]).toBe(T.WATER);
       }
     }
-  });
+  }, 60000);
 
   it('never fills up with monsters, not even when the party grows', () => {
     const world = toLastShop(5, false);

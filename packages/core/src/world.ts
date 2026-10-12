@@ -12,6 +12,7 @@ import {
   swapsWithHero,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
+import { type Bones, layBones } from './bones';
 import { createItem, createItems, ItemGenerator, type ItemKind, shareOfDepth, WAND_RECHARGE, wandMaxCharges } from './items';
 import { staggerTarget, stepOnPlant, sungrassHeals } from './plants';
 import { discoverable } from './level/flags';
@@ -97,6 +98,8 @@ export interface World {
   ending?: 'amulet' | 'surface';
   /** The Amulet of Yendor has been taken up (Statistics.amuletObtained): its question is asked once. */
   amuletTaken?: boolean;
+  /** A fallen hero's bones from an earlier run on this device, for their depth to hold (bones.ts; solo only). */
+  bones?: Bones;
   /** The run's challenges (Challenges.java masks, see challenges.ts); worlds saved before them have none. */
   challenges: number;
   /** Potion and scroll kinds the party has identified; knowledge is shared. */
@@ -127,6 +130,7 @@ const GHOST_STREAM = 1;
 const WANDMAKER_STREAM = 2;
 const IMP_STREAM = 3;
 const BLACKSMITH_STREAM = 4;
+const BONES_STREAM = 5;
 /** Sub-streams of a depth's streams for a hero joining the party, by party size. */
 const JOIN_STREAM = 100;
 
@@ -143,6 +147,13 @@ export function restartWorld(world: World, seed: number): void {
   const party = world.heroes.map(({ id, name, heroClass }) => ({ id, name, heroClass }));
   Object.assign(world, createWorld(seed, world.challenges ?? 0));
   for (const player of party) addHero(world, player);
+}
+
+/** Hands a world a fallen hero's bones (bones.ts): laid at once if their depth is made already (the first is, as soon as a hero arrives). */
+export function giveBones(world: World, bones: Bones): void {
+  world.bones = bones;
+  const level = world.levels[bones.depth];
+  if (level) layBones(bones, level, world.floors[bones.depth]!, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, bones.depth, BONES_STREAM)));
 }
 
 export function levelAt(world: World, depth: number): Level {
@@ -173,6 +184,9 @@ export function levelAt(world: World, depth: number): Level {
           (item) => underChallenges(world, item),
         ),
       };
+      if (world.bones && !world.bones.placed && world.bones.depth === d) {
+        layBones(world.bones, level, world.floors[d]!, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d, BONES_STREAM)));
+      }
       const perHero: ItemKind[] = [
         ...(world.run.strengthFound > found.strength ? ['potion.strength' as const] : []),
         ...(world.run.upgradesFound > found.upgrades ? ['scroll.upgrade' as const] : []),
@@ -186,7 +200,7 @@ export function levelAt(world: World, depth: number): Level {
 /**
  * Depths that hold nothing but their layout and never fill up with monsters
  * again: the bosses' levels, the last shop's (LastShopLevel: no mobs, no
- * respawner, only bones, which this port does not have) and the Amulet's hall.
+ * respawner, only bones) and the Amulet's hall.
  * The original still rolled the last shop's potion of strength and scroll of
  * upgrade, counted them and never dropped them; here they are not rolled
  * there, so the depths below make up for them.
