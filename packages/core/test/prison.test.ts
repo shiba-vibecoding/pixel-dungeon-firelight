@@ -312,6 +312,44 @@ describe("Tengu's prison", () => {
     expect(won).toBe(3);
   });
 
+  it('in a party, the arena locks only once everyone is inside', () => {
+    const world = at(10, 4);
+    addHero(world, { id: 'q', name: 'Q', heroClass: 'mage' });
+    const [p, q] = [heroById(world, 'p')!, heroById(world, 'q')!];
+    const level = levelAt(world, 10);
+    const arena = level.rooms.find((r) => r.type === RoomType.BOSS_EXIT)!;
+    const door = level.arenaDoor!;
+    level.map[door] = T.DOOR;
+    const inside = NEIGHBOURS8.map((n) => door + n).find(
+      (c) => canEnter(level, c) && c % WIDTH > arena.left && c % WIDTH < arena.right &&
+        Math.trunc(c / WIDTH) > arena.top && Math.trunc(c / WIDTH) < arena.bottom,
+    )!;
+    const inArena = (c: number): boolean =>
+      c % WIDTH > arena.left && c % WIDTH < arena.right && Math.trunc(c / WIDTH) > arena.top && Math.trunc(c / WIDTH) < arena.bottom;
+    const outside = NEIGHBOURS8.map((n) => door + n).find((c) => canEnter(level, c) && !inArena(c))!;
+    q.depth = 10;
+    Object.assign(p, { pos: door, time: floorAt(world, 10).now, hp: 500, ht: 500 });
+    Object.assign(q, { pos: outside, time: floorAt(world, 10).now, hp: 500, ht: 500 });
+    act(world, 'p', { type: 'move', to: inside });
+    expect(floorAt(world, 10).arenaEntered).toBe(true);
+    expect(floorAt(world, 10).mobs.some((m) => m.kind === 'tengu')).toBe(true);
+    // Q is still outside: the way in stays open for them.
+    expect(level.map[door]).not.toBe(T.LOCKED_DOOR);
+    // In a fight, turns alternate: P waits while Q comes in.
+    for (let i = 0; i < 10 && q.pos !== door; i++) {
+      act(world, 'q', { type: 'move', to: door });
+      act(world, 'p', { type: 'wait' });
+    }
+    expect(q.pos).toBe(door);
+    for (let i = 0; i < 10 && q.pos === door; i++) {
+      const further = NEIGHBOURS8.map((n) => door + n).find((c) => canEnter(level, c) && !charAt(world, 10, c) && inArena(c))!;
+      act(world, 'q', { type: 'move', to: further });
+      act(world, 'p', { type: 'wait' });
+    }
+    expect(inArena(q.pos)).toBe(true);
+    expect(level.map[door]).toBe(T.LOCKED_DOOR);
+  });
+
   it('a simple bot can play through the prison without breaking anything', () => {
     for (const seed of [11, 12]) {
       const world = at(6, seed);
