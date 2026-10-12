@@ -1,6 +1,6 @@
 import {
   act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, heroById, type HeroClass,
-  type Look, restartWorld, RULES_VERSION, type ServerMessage, type World,
+  type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
 } from '@pd/core';
 import { report } from './report';
 
@@ -33,6 +33,10 @@ export interface Session {
   looks: Record<string, Look>;
   /** Puts my look on, for the party to see. */
   wear(look: Look): void;
+  /** A ping or an emote for the party (co-op only; alone there is no one to signal). */
+  signal(signal: Signal): void;
+  /** Signals the room relayed since the last call (mine among them), in order: who sent each, and when it came (performance.now()). */
+  drainSignals(): Array<{ from: string; signal: Signal; at: number }>;
 }
 
 const SAVE_VERSION = 30;
@@ -122,6 +126,8 @@ export function soloSession(key: string | null, heroClass: HeroClass, newSeed: (
     wear(look) {
       session.looks = { me: look };
     },
+    signal() {},
+    drainSignals: () => [],
   };
   save();
   return session;
@@ -182,7 +188,17 @@ export function onlineSession(options: OnlineOptions): Session {
       myLook = look;
       transmit({ type: 'look', look });
     },
+    signal(signal) {
+      transmit({ type: 'signal', signal });
+    },
+    drainSignals() {
+      const received = signals;
+      signals = [];
+      return received;
+    },
   };
+  /** Signals received and not yet shown (see drainSignals). */
+  let signals: Array<{ from: string; signal: Signal; at: number }> = [];
   /** My look, sent again whenever the connection is made anew. */
   let myLook: Look | null = null;
   /** Connections in a row that never opened. */
@@ -224,6 +240,11 @@ export function onlineSession(options: OnlineOptions): Session {
         break;
       case 'looks':
         session.looks = message.looks;
+        break;
+      case 'signal':
+        // Kept only briefly: a tab in the background must not pile them up.
+        signals.push({ from: message.from, signal: message.signal, at: performance.now() });
+        if (signals.length > 16) signals.shift();
         break;
       case 'rejected':
         inFlight = false;
