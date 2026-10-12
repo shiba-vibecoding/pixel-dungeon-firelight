@@ -58,7 +58,8 @@ Yendor on depth 26:
 - Items: gold, which buys from the shop; potions (including toxic gas,
   paralytic gas, liquid flame and frost, which can be thrown, levitation to
   float over traps and chasms, and purification) and scrolls (including
-  enchantment, terror, psionic blast and mirror image), unknown until used, and shared
+  enchantment, terror, psionic blast, mirror image and remove curse), unknown
+  until used, and shared
   knowledge in a party; all melee weapons and armour with upgrades and
   strength requirements, and the ten weapon enchantments (blazing, venomous,
   grim, stunning, vampiric, chilling, shocking, unstable, eldritch, lucky) and
@@ -84,8 +85,11 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: cursed items and the scroll of remove curse; the potion of
-might; and gas clouds (gas acts at once on everyone within reach instead).
+Worse-than-plain gear is cursed: once worn, it will not come off until a
+scroll of remove curse (or of upgrade) lifts the curse.
+
+Not ported yet: the potion of might; and gas clouds (gas acts at once on
+everyone within reach instead).
 
 ## How co-op works
 

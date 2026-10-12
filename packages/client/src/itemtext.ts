@@ -38,13 +38,14 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
     return [
       t.weaponInfo(stats.min, stats.max, stats.str), ...(item.enchant ? [t.enchantInfo[item.enchant]] : []),
       ...(item.kind === 'weapon.pickaxe' ? [t.pickaxeInfo(!!item.bloody)] : []),
+      ...(item.cursed ? [t.cursedInfo] : []),
       ...(stats.str > hero.str ? [t.tooHeavy] : []),
     ];
   }
   if (category === 'armor') {
     const stats = armorStats(item);
     return [
-      t.armorInfo(stats.dr, stats.str), ...(item.glyph ? [t.glyphInfo[item.glyph]] : []),
+      t.armorInfo(stats.dr, stats.str), ...(item.glyph ? [t.glyphInfo[item.glyph]] : []), ...(item.cursed ? [t.cursedInfo] : []),
       ...(stats.str > hero.str ? [t.tooHeavy] : []),
     ];
   }
@@ -61,7 +62,7 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
   }
   if (category === 'ring') {
     if (!isKnown(world, item)) return [t.unknownRingInfo];
-    return [t.itemInfo[item.kind] ?? '', ...(item.level < 0 ? [t.ringNegative] : [])];
+    return [t.itemInfo[item.kind] ?? '', ...(item.level < 0 ? [t.ringNegative] : []), ...(item.cursed ? [t.cursedInfo] : [])];
   }
   if (category === 'key') return [item.kind === 'key.golden' ? t.goldenKeyInfo(item.depth ?? 0) : t.keyInfo(item.depth ?? 0)];
   if (category === 'gold') return [];

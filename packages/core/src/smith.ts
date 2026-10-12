@@ -125,6 +125,7 @@ export function reforgeProblem(world: World, hero: Hero, first: ItemRef, second:
   const b = itemAt(hero, second);
   if (!a || !b || a === b) return 'choose two different items';
   if (a.kind !== b.kind) return 'choose two items of the same kind';
+  if (a.cursed || b.cursed) return 'I do not work with cursed items';
   if (a.level < 0 || b.level < 0) return 'it is junk, the quality is too poor';
   const category = itemDef(a.kind).category;
   const upgradable = category === 'weapon' || category === 'armor' || category === 'wand' || category === 'ring';

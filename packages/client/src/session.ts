@@ -30,7 +30,7 @@ export interface Session {
   close(): void;
 }
 
-const SAVE_VERSION = 28;
+const SAVE_VERSION = 29;
 
 interface SoloSave {
   version: number;
@@ -95,6 +95,9 @@ export function soloSession(key: string | null, heroClass: HeroClass, newSeed: (
       if (result.ok) {
         pending.push(...result.effects);
         save();
+      } else {
+        // Refused: let the player know why, where that is worth saying.
+        pending.push({ type: 'interrupted', hero: 'me', reason: result.reason });
       }
     },
     restart() {
@@ -195,6 +198,7 @@ export function onlineSession(options: OnlineOptions): Session {
         break;
       case 'rejected':
         inFlight = false;
+        pending.push({ type: 'interrupted', hero: session.myId, reason: message.reason });
         break;
     }
   };

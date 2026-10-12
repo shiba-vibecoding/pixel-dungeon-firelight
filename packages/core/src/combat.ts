@@ -88,7 +88,7 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
       // Albino.attackProc: half its bites leave the hero bleeding.
       if (attacker.kind === 'albino' && ctx.rng.int(2) === 0 && damage > 0) defender.bleeding = Math.max(defender.bleeding ?? 0, damage);
       // Monk.attackProc: one blow in six knocks the weapon out of the hero's hands (knuckledusters stay on).
-      if (baseKind(attacker.kind) === 'monk' && ctx.rng.int(6) === 0 && defender.weapon && defender.weapon.kind !== 'weapon.knuckles') {
+      if (baseKind(attacker.kind) === 'monk' && ctx.rng.int(6) === 0 && defender.weapon && defender.weapon.kind !== 'weapon.knuckles' && !defender.weapon.cursed) {
         const weapon = defender.weapon;
         defender.weapon = null;
         landItem(ctx, defender.pos, weapon);

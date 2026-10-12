@@ -129,6 +129,39 @@ describe('enchantments and glyphs', () => {
   });
 });
 
+describe('curses', () => {
+  it('worse-than-plain gear is cursed, and once worn will not come off until the curse is lifted', () => {
+    const generator = new ItemGenerator(Rng.seeded(11), 4);
+    const items = Array.from({ length: 300 }, () => generator.of('armor'));
+    expect(items.some((item) => item.level < 0)).toBe(true);
+    for (const item of items) expect(!!item.cursed).toBe(item.level < 0);
+
+    const world = solo();
+    const hero = heroById(world, 'p')!;
+    hero.items = [{ ...createItem('armor.mail', 1, -2), cursed: true }, createItem('armor.leather'), createItem('scroll.removeCurse')];
+    const put = act(world, 'p', { type: 'equip', item: 0 });
+    expect(put.ok && put.effects.some((e) => e.type === 'cursedEquip')).toBe(true);
+    const leather = hero.items.findIndex((i) => i.kind === 'armor.leather');
+    expect(act(world, 'p', { type: 'equip', item: leather })).toEqual({ ok: false, reason: 'it is cursed: you cannot take it off' });
+    act(world, 'p', { type: 'use', item: hero.items.findIndex((i) => i.kind === 'scroll.removeCurse') });
+    expect(hero.armor.cursed).toBeUndefined();
+    expect(act(world, 'p', { type: 'equip', item: hero.items.findIndex((i) => i.kind === 'armor.leather') }).ok).toBe(true);
+  });
+
+  it('a cursed ring stays on; an upgrade lifts the curse too', () => {
+    const world = solo();
+    const hero = heroById(world, 'p')!;
+    hero.items = [{ ...createItem('ring.haste', 1, -1), cursed: true }, createItem('scroll.upgrade')];
+    act(world, 'p', { type: 'equip', item: 0 });
+    const ring = hero.rings.findIndex((r) => r.kind === 'ring.haste');
+    expect(act(world, 'p', { type: 'remove', ring })).toEqual({ ok: false, reason: 'it is cursed: you cannot take it off' });
+    hero.weapon = { ...createItem('weapon.sword', 1, -1), cursed: true };
+    act(world, 'p', { type: 'use', item: hero.items.findIndex((i) => i.kind === 'scroll.upgrade'), target: 'weapon' });
+    expect(hero.weapon.cursed).toBeUndefined();
+    expect(hero.weapon.level).toBe(0);
+  });
+});
+
 describe('mirror images', () => {
   it('a scroll of mirror image conjures twins that go for the nearest monster and vanish once they strike', () => {
     const world = solo();

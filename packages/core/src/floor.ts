@@ -121,7 +121,9 @@ export type Effect =
   | { type: 'upgraded'; hero: string; item: Item }
   | { type: 'teleported'; hero: string }
   | { type: 'mapped'; hero: string }
-  | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby' | 'recharging' | 'terror' | 'psionic'; count: number }
+  | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby' | 'recharging' | 'terror' | 'psionic' | 'removeCurse'; count: number }
+  /** A hero put on something cursed: it will not come off. */
+  | { type: 'cursedEquip'; hero: string; item: Item }
   | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
   | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
   /** A magic bolt: the mage's wand, or a shaman's lightning. */

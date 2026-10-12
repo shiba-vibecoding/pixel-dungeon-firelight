@@ -64,6 +64,7 @@ export const ITEMS = {
   'scroll.terror': { category: 'scroll' },
   'scroll.psionicBlast': { category: 'scroll' },
   'scroll.mirrorImage': { category: 'scroll' },
+  'scroll.removeCurse': { category: 'scroll' },
 
   'weapon.knuckles': weapon(1, 16, 1, 0.5),
   'weapon.dagger': weapon(1, 19, 1.2),
@@ -176,6 +177,8 @@ export interface Item {
   glyph?: Glyph;
   /** The blacksmith's pickaxe: stained with a vampire bat's blood. */
   bloody?: boolean;
+  /** Worse than plain, and cursed: once worn, it will not come off until the curse is lifted. */
+  cursed?: boolean;
 }
 
 /* Enchantments and glyphs (Weapon.Enchantment, Armor.Glyph) */
@@ -240,7 +243,7 @@ const POTION_PRICES: Partial<Record<ItemKind, number>> = {
 };
 const SCROLL_PRICES: Partial<Record<ItemKind, number>> = {
   'scroll.identify': 30, 'scroll.teleportation': 40, 'scroll.mapping': 25, 'scroll.lullaby': 50,
-  'scroll.upgrade': 50, 'scroll.recharging': 40, 'scroll.enchantment': 60, 'scroll.terror': 50, 'scroll.psionicBlast': 80, 'scroll.mirrorImage': 40,
+  'scroll.upgrade': 50, 'scroll.recharging': 40, 'scroll.enchantment': 60, 'scroll.terror': 50, 'scroll.psionicBlast': 80, 'scroll.mirrorImage': 40, 'scroll.removeCurse': 30,
 };
 const FOOD_PRICES: Partial<Record<ItemKind, number>> = { 'food.ration': 10, 'food.pasty': 20, 'food.meat': 5 };
 
@@ -403,10 +406,9 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
     ['potion.liquidFlame', 15], ['potion.levitation', 10], ['potion.mindVision', 20], ['potion.purity', 12],
     ['potion.invisibility', 10], ['potion.frost', 10],
   ],
-  // The original also has remove curse (there are no curses here) and mirror
-  // image; upgrade only comes as guaranteed finds.
+  // Upgrade only comes as guaranteed finds.
   scroll: [
-    ['scroll.identify', 30], ['scroll.teleportation', 10], ['scroll.recharging', 10], ['scroll.mapping', 15],
+    ['scroll.identify', 30], ['scroll.teleportation', 10], ['scroll.removeCurse', 15], ['scroll.recharging', 10], ['scroll.mapping', 15],
     ['scroll.challenge', 12], ['scroll.terror', 8], ['scroll.lullaby', 8], ['scroll.psionicBlast', 4], ['scroll.mirrorImage', 6],
     ['scroll.enchantment', 1],
   ],
@@ -440,7 +442,9 @@ export function rollGold(rng: Rng, depth: number): Item {
 /** Ring.random: one or two levels, and three rings in ten the wrong way. */
 export function randomRing(rng: Rng, kind: ItemKind): Item {
   const level = rng.intBetween(1, 3);
-  return createItem(kind, 1, rng.float() < 0.3 ? -level : level);
+  const ring = createItem(kind, 1, rng.float() < 0.3 ? -level : level);
+  if (ring.level < 0) ring.cursed = true;
+  return ring;
 }
 
 /** Generator.Category.FOOD: four rations to every pasty. */
@@ -490,6 +494,8 @@ export class ItemGenerator {
     }
     const level = category === 'weapon' || category === 'armor' ? rollLevel(this.rng) : 0;
     const item = createItem(kind, 1, level);
+    // Weapon.random and Armor.random: what came out worse is cursed.
+    if (level < 0) item.cursed = true;
     // MeleeWeapon.random and Armor.random: now and then enchanted, the better the rarer.
     if (itemDef(kind).category === 'weapon' && this.rng.int(10 + level) === 0) item.enchant = randomEnchantment(this.rng);
     if (category === 'armor' && this.rng.int(10) === 0) item.glyph = randomGlyph(this.rng);

@@ -53,6 +53,9 @@ export function isInventoryAction(action: { type: string }): action is Inventory
   return INVENTORY_ACTIONS.has(action.type);
 }
 
+/** Why a cursed item will not come off. */
+const CURSED = 'it is cursed: you cannot take it off';
+
 const TIME_TO_PICK_UP = 1;
 const TIME_TO_USE = 1;
 const TIME_TO_EQUIP = 1;
@@ -89,6 +92,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   if (action.type === 'mine') return mineProblem(world, hero);
   if (action.type === 'remove') {
     if (!Number.isInteger(action.ring) || !hero.rings[action.ring]) return 'no such ring';
+    if (hero.rings[action.ring]!.cursed) return CURSED;
     return hero.items.length < BACKPACK_SIZE ? null : 'your pack is full';
   }
   if (action.type === 'buy') {
@@ -113,8 +117,12 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
         !hero.weapon && world.known.includes(item.kind)) return 'you hold no weapon';
       return null;
-    case 'equip':
-      return category === 'weapon' || category === 'armor' || category === 'ring' ? null : 'that cannot be equipped';
+    case 'equip': {
+      if (category !== 'weapon' && category !== 'armor' && category !== 'ring') return 'that cannot be equipped';
+      // A cursed item, once worn, will not come off (EquipableItem.doUnequip).
+      if (category === 'ring') return hero.rings.length >= 2 && hero.rings.every((ring) => ring.cursed) ? CURSED : null;
+      return hero[category]?.cursed ? CURSED : null;
+    }
     case 'drop':
       return null;
     case 'master':
@@ -175,11 +183,12 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
     case 'equip': {
       const item = hero.items[action.item]!;
       if (itemDef(item.kind).category === 'ring') {
-        // Two rings at most: a third takes the place of the first.
+        // Two rings at most: a third takes the place of the first that is not cursed.
         hero.items.splice(action.item, 1);
-        if (hero.rings.length >= 2) hero.items.push(hero.rings.shift()!);
+        if (hero.rings.length >= 2) hero.items.push(hero.rings.splice(hero.rings.findIndex((ring) => !ring.cursed), 1)[0]!);
         hero.rings.push(item);
         ctx.effects.push({ type: 'equipped', hero: hero.id, item });
+        if (item.cursed) ctx.effects.push({ type: 'cursedEquip', hero: hero.id, item });
         return TIME_TO_EQUIP;
       }
       const slot = itemDef(item.kind).category as 'weapon' | 'armor';
@@ -189,6 +198,7 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       else hero.items.splice(action.item, 1);
       hero[slot] = item;
       ctx.effects.push({ type: 'equipped', hero: hero.id, item });
+      if (item.cursed) ctx.effects.push({ type: 'cursedEquip', hero: hero.id, item });
       return TIME_TO_EQUIP;
     }
     case 'drop': {
@@ -615,6 +625,8 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
         ctx.effects.push({ type: 'disenchanted', hero: hero.id, item: upgraded });
       }
       upgraded.level++;
+      // Item.upgrade: an upgrade lifts any curse.
+      delete upgraded.cursed;
       ctx.effects.push({ type: 'upgraded', hero: hero.id, item: upgraded });
       break;
     }
@@ -622,9 +634,22 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
       // ScrollOfEnchantment: a new enchantment for the weapon, or a new glyph for the armour.
       const imbued = hero[target];
       if (!imbued) break;
+      delete imbued.cursed;
       if (target === 'weapon') imbued.enchant = randomEnchantment(ctx.rng, imbued.enchant);
       else imbued.glyph = randomGlyph(ctx.rng, imbued.glyph);
       ctx.effects.push({ type: 'imbued', hero: hero.id, item: imbued });
+      break;
+    }
+    case 'scroll.removeCurse': {
+      // ScrollOfRemoveCurse: every curse on what the reader wears or carries is lifted, and weakness with them.
+      let count = 0;
+      for (const item of [...hero.items, hero.weapon, hero.armor, ...hero.rings]) {
+        if (!item?.cursed) continue;
+        delete item.cursed;
+        count++;
+      }
+      hero.weakened = 0;
+      ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'removeCurse', count });
       break;
     }
     case 'scroll.mirrorImage':

@@ -431,7 +431,9 @@ export class View {
           if (effect.hero === myId) this.say(t.mapped, COLORS.highlight, now);
           break;
         case 'scroll':
-          if (effect.kind === 'recharging') {
+          if (effect.kind === 'removeCurse') {
+            if (effect.hero === myId) this.say(effect.count > 0 ? t.uncursed : t.nothingCursed, COLORS.default, now);
+          } else if (effect.kind === 'recharging') {
             if (effect.hero === myId) this.say(effect.count > 0 ? t.recharged : t.nothingToRecharge, COLORS.default, now);
           } else if (effect.kind === 'psionic') {
             audio.play('blast');
@@ -669,7 +671,15 @@ export class View {
         case 'burnt':
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.pos, start: now });
           break;
-        case 'interrupted':
+        case 'interrupted': {
+          // Only the reasons worth telling: a refused move into a wall says nothing.
+          const why = t.reasons[effect.reason];
+          if (effect.hero === myId && why) this.say(why, COLORS.warning, now);
+          break;
+        }
+        case 'cursedEquip':
+          if (effect.hero === myId) this.say(t.cursedEquip(itemName(world, effect.item)), COLORS.negative, now);
+          break;
         case 'victory':
           break;
       }
