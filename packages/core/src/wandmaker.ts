@@ -14,8 +14,8 @@ import type { World } from './world';
  * The old wandmaker of the prison (Wandmaker): once per run he waits by the
  * entrance of one of depths 7-9, lost on his way to some corpse dust. Fetch
  * it from a pile of bones on his level and he gives one of two wands: a
- * battle wand or a useful one. The original's other errand, a rotberry seed,
- * waits for plants to be ported.
+ * battle wand or a useful one. Or else he is after a rotberry seed, from a
+ * shrub that grows somewhere on his level.
  */
 
 export interface WandQuest {
@@ -24,6 +24,8 @@ export interface WandQuest {
   done: boolean;
   battle: Item;
   utility: Item;
+  /** What he is after: corpse dust (also when absent, in older saves) or a rotberry seed. */
+  wants?: 'dust' | 'berry';
 }
 
 export type WandmakerLine = 'intro' | 'remind' | 'reward' | 'farewell';
@@ -57,10 +59,24 @@ export function spawnWandmaker(world: World, level: Level, mobs: Mob[], rng: Rng
   world.wandQuest = {
     depth: level.depth, given: false, done: false,
     battle: rewardWand(rng, BATTLE_WANDS), utility: rewardWand(rng, UTILITY_WANDS),
+    wants: rng.int(2) === 0 ? 'dust' : 'berry',
   };
 }
 
-const dustOf = (hero: Hero): number => hero.items.findIndex((item) => item.kind === 'quest.dust');
+/** The backpack slot of what the wandmaker is after, or -1. */
+const wantedOf = (world: World, hero: Hero): number =>
+  hero.items.findIndex((item) => item.kind === (world.wandQuest?.wants === 'berry' ? 'seed.rotberry' : 'quest.dust'));
+
+/** Wandmaker.Quest: the rotberry grows somewhere on his level, out of the hero's sight if it can. */
+function plantRotberry(ctx: Ctx, hero: Hero): void {
+  const far = (cell: number): boolean =>
+    Math.max(Math.abs(cellX(cell) - cellX(hero.pos)), Math.abs(cellY(cell) - cellY(hero.pos))) > 8 &&
+    !(ctx.floor.plants ?? []).some((plant) => plant.pos === cell);
+  let pos = randomRespawnCell(ctx.rng, ctx.world, ctx.level, far);
+  if (pos === -1) pos = randomRespawnCell(ctx.rng, ctx.world, ctx.level, () => true);
+  if (pos === -1) return;
+  (ctx.floor.plants ??= []).push({ pos, kind: 'rotberry' });
+}
 
 /** Wandmaker.Quest.placeItem: the dust lies in a pile of bones, out of sight if there is one. */
 function placeDust(ctx: Ctx, hero: Hero): void {
@@ -83,17 +99,18 @@ export function talkToWandmaker(ctx: Ctx, hero: Hero): void {
   let line: WandmakerLine;
   if (!quest.given) {
     quest.given = true;
-    placeDust(ctx, hero);
+    if (quest.wants === 'berry') plantRotberry(ctx, hero);
+    else placeDust(ctx, hero);
     line = 'intro';
   } else {
-    line = dustOf(hero) >= 0 ? 'reward' : 'remind';
+    line = wantedOf(ctx.world, hero) >= 0 ? 'reward' : 'remind';
   }
   ctx.effects.push({ type: 'wandmaker', hero: hero.id, line });
 }
 
 export function wandRewardProblem(world: World, hero: Hero, choice: unknown): string | null {
   const quest = world.wandQuest;
-  if (!quest || quest.done || dustOf(hero) < 0) return 'nothing to give';
+  if (!quest || quest.done || wantedOf(world, hero) < 0) return 'nothing to give';
   if (choice !== 'battle' && choice !== 'utility') return 'bad choice';
   const wandmaker = world.floors[hero.depth]?.mobs.find((mob) => mob.kind === 'wandmaker');
   return wandmaker && adjacent(wandmaker.pos, hero.pos) ? null : 'the wandmaker is not here';
@@ -102,7 +119,8 @@ export function wandRewardProblem(world: World, hero: Hero, choice: unknown): st
 /** The dust for a wand; the wandmaker wishes the hero luck and is gone. */
 export function wandFromWandmaker(ctx: Ctx, hero: Hero, choice: 'battle' | 'utility'): void {
   const quest = ctx.world.wandQuest!;
-  hero.items.splice(dustOf(hero), 1);
+  const wanted = hero.items[wantedOf(ctx.world, hero)]!;
+  if (--wanted.qty <= 0) hero.items.splice(hero.items.indexOf(wanted), 1);
   const wand = quest[choice];
   if (!ctx.world.known.includes(wand.kind)) ctx.world.known.push(wand.kind);
   if (!collect(hero, wand)) dropItem(ctx.floor, hero.pos, wand);

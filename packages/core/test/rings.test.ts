@@ -46,9 +46,9 @@ describe('mimics', () => {
 describe('rings', () => {
   it('go by their gem until known; the rogue sets out wearing a ring of shadows', () => {
     const rings = (Object.keys(ITEMS) as ItemKind[]).filter((k) => itemDef(k).category === 'ring');
-    expect(rings).toHaveLength(11);
+    expect(rings).toHaveLength(12);
     const labels = createWorld(5).run.labels;
-    expect(new Set(rings.map((k) => itemSprite(createItem(k), labels))).size).toBe(11);
+    expect(new Set(rings.map((k) => itemSprite(createItem(k), labels))).size).toBe(12);
 
     const world = solo('rogue');
     const rogue = heroById(world, 'p')!;

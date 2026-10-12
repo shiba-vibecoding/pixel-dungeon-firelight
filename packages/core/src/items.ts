@@ -112,6 +112,7 @@ export const ITEMS = {
   'ring.elements': { category: 'ring' },
   'ring.thorns': { category: 'ring' },
   'ring.haggler': { category: 'ring' },
+  'ring.herbalism': { category: 'ring' },
   // Seeds, thrown where a plant should grow.
   'seed.firebloom': { category: 'seed', sprite: 88 },
   'seed.icecap': { category: 'seed', sprite: 89 },
@@ -120,6 +121,8 @@ export const ITEMS = {
   'seed.sungrass': { category: 'seed', sprite: 92 },
   'seed.earthroot': { category: 'seed', sprite: 93 },
   'seed.fadeleaf': { category: 'seed', sprite: 94 },
+  /** Only from the shrub the old wandmaker is after; it brews strength. */
+  'seed.rotberry': { category: 'seed', sprite: 95 },
   // Food (Food, Pasty, MysteryMeat): a ration staves off hunger for a while,
   // a pasty completely; mystery meat from crabs is a gamble.
   'food.ration': { category: 'food', sprite: 4, energy: 260 },
@@ -402,15 +405,14 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
     ['missile.dart', 1],
   ],
   armor: [['armor.cloth', 1], ['armor.leather', 1], ['armor.mail', 1], ['armor.scale', 1], ['armor.plate', 1]],
-  // The original's rotberry seed only comes from the wandmaker's errand.
   seed: [
     ['seed.firebloom', 1], ['seed.icecap', 1], ['seed.sorrowmoss', 1], ['seed.dreamweed', 1], ['seed.sungrass', 1],
     ['seed.earthroot', 1], ['seed.fadeleaf', 1],
   ],
-  // The original also has herbalism; thorns and haggler are only dropped by DM-300 and thieves.
+  // Thorns and haggler are only dropped by DM-300 and thieves.
   ring: [
     ['ring.mending', 1], ['ring.detection', 1], ['ring.shadows', 1], ['ring.power', 1], ['ring.accuracy', 1],
-    ['ring.evasion', 1], ['ring.satiety', 1], ['ring.haste', 1], ['ring.elements', 1],
+    ['ring.evasion', 1], ['ring.satiety', 1], ['ring.haste', 1], ['ring.elements', 1], ['ring.herbalism', 1],
   ],
   wand: [
     ['wand.teleportation', 10], ['wand.slowness', 10], ['wand.firebolt', 15], ['wand.regrowth', 6], ['wand.poison', 10],

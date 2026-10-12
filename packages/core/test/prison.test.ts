@@ -169,16 +169,25 @@ describe('the old wandmaker', () => {
       hero.time = floor.now;
       hero.pos = NEIGHBOURS8.map((n) => wandmaker.pos + n).find((c) => canEnter(level, c) && !charAt(world, quest.depth, c))!;
 
+      Object.assign(hero, { hp: 500, ht: 500 });
       const intro = act(world, 'p', { type: 'attack', target: wandmaker.id });
       expect(intro.ok && intro.effects).toEqual([{ type: 'wandmaker', hero: 'p', line: 'intro' }]);
-      const pile = floor.heaps.find((h) => h.items.some((i) => i.kind === 'quest.dust'));
-      expect(pile?.kind).toBe('skeleton');
       expect(act(world, 'p', { type: 'wandReward', choice: 'battle' })).toEqual({ ok: false, reason: 'nothing to give' });
-
-      // Fetch the dust (the walk itself is not the point here).
       const back = hero.pos;
-      hero.pos = pile!.pos;
-      expect(act(world, 'p', { type: 'pickup' }).ok).toBe(true);
+      if (quest.wants === 'berry') {
+        // The rotberry: step on the shrub, and take its seed (the walk itself is not the point here).
+        const shrub = floor.plants!.find((p) => p.kind === 'rotberry')!;
+        hero.pos = NEIGHBOURS8.map((n) => shrub.pos + n).find((c) => canEnter(level, c) && !charAt(world, quest.depth, c))!;
+        expect(act(world, 'p', { type: 'move', to: shrub.pos }).ok).toBe(true);
+        expect(act(world, 'p', { type: 'pickup' }).ok).toBe(true);
+        expect(hero.items.some((i) => i.kind === 'seed.rotberry')).toBe(true);
+      } else {
+        // Fetch the dust (the walk itself is not the point here).
+        const pile = floor.heaps.find((h) => h.items.some((i) => i.kind === 'quest.dust'));
+        expect(pile?.kind).toBe('skeleton');
+        hero.pos = pile!.pos;
+        expect(act(world, 'p', { type: 'pickup' }).ok).toBe(true);
+      }
       hero.pos = back;
       const reward = act(world, 'p', { type: 'attack', target: wandmaker.id });
       expect(reward.ok && reward.effects).toEqual([{ type: 'wandmaker', hero: 'p', line: 'reward' }]);

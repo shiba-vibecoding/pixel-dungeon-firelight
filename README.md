@@ -46,8 +46,9 @@ Yendor on depth 26:
   raising his undead court; Yog-Dzewa on depth 25 with its fists and larvae.
   Picking up the Amulet of Yendor below wins the run.
 - The sad ghost's quest (the dried rose) on depths 2–4, the old wandmaker's
-  (corpse dust, for a choice of two wands) on depths 7–9, and the ambitious
-  imp's on depths 17–19 (tokens from slain monks or golems, for a ring).
+  (corpse dust or a rotberry seed, for a choice of two wands) on depths 7–9,
+  and the ambitious imp's on depths 17–19 (tokens from slain monks or golems,
+  for a ring).
 - Hunger and food (rations, pasties, mystery meat), regeneration, experience
   and levels, melee and ranged combat.
 - Items: gold, which buys from the shop; potions (including toxic gas,
@@ -62,9 +63,9 @@ Yendor on depth 26:
   disintegration, avalanche, amok, reach, flock (magic sheep) and regrowth,
   known by their wood until used; rings of
   mending, detection, shadows, power, accuracy, evasion, satiety, haste,
-  elements, thorns and haggler, two worn at once, known by their gem until worn
+  elements, thorns, haggler and herbalism, two worn at once, known by their gem until worn
   a while; seeds of firebloom, icecap, sorrowmoss, dreamweed, sungrass,
-  earthroot and fadeleaf, which grow where they are thrown.
+  earthroot and fadeleaf (and the wandmaker's rotberry), which grow where they\n  are thrown.
 - Four hero classes with their original starting kits and perks, and their
   subclasses: Tengu leaves a Tome of Mastery for each hero, to become a
   gladiator or berserker, battlemage or warlock, freerunner or assassin, sniper
@@ -81,10 +82,9 @@ Yendor on depth 26:
 
 Not ported yet: cursed items and the scroll of remove curse; the scroll of
 mirror image and the glyph of multiplicity (there are no allies yet); the
-potion of might; the rotberry and the ring of herbalism; the blacksmith's quest and the wandmaker's
-rotberry errand; dwarf monks disarming; the rare monster variants
-(albino rats, bandits, fetid rats); and gas clouds (gas acts at once on
-everyone within reach instead).
+potion of might; the blacksmith's quest; dwarf monks disarming; the rare
+monster variants (albino rats, bandits, fetid rats); and gas clouds (gas acts
+at once on everyone within reach instead).
 
 ## How co-op works
 

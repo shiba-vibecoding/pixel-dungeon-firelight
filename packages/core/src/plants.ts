@@ -11,7 +11,7 @@ import { burst } from './traps';
  * whoever steps on the plant sets it off, using it up.
  */
 
-export type PlantKind = 'firebloom' | 'icecap' | 'sorrowmoss' | 'dreamweed' | 'sungrass' | 'earthroot' | 'fadeleaf';
+export type PlantKind = 'firebloom' | 'icecap' | 'sorrowmoss' | 'dreamweed' | 'sungrass' | 'earthroot' | 'fadeleaf' | 'rotberry';
 
 export interface PlantInfo {
   pos: number;
@@ -24,11 +24,14 @@ export const SEED_PLANTS: Readonly<Partial<Record<ItemKind, PlantKind>>> = {
   'seed.icecap': 'icecap',
   'seed.sorrowmoss': 'sorrowmoss',
   'seed.dreamweed': 'dreamweed',
+  'seed.rotberry': 'rotberry',
   'seed.sungrass': 'sungrass',
   'seed.earthroot': 'earthroot',
   'seed.fadeleaf': 'fadeleaf',
 };
-export const PLANT_KINDS: readonly PlantKind[] = ['firebloom', 'icecap', 'sorrowmoss', 'dreamweed', 'sungrass', 'earthroot', 'fadeleaf'];
+export const PLANT_KINDS: readonly PlantKind[] = [
+  'firebloom', 'icecap', 'sorrowmoss', 'dreamweed', 'sungrass', 'earthroot', 'fadeleaf', 'rotberry',
+];
 
 /** Frost.DURATION and Vertigo.DURATION. */
 const FROZEN_TURNS = 5;
@@ -103,6 +106,12 @@ export function stepOnPlant(ctx: Ctx, who: Char, pos: number): void {
       else ctx.effects.push({ type: 'jumped', depth, mob: who.id, from, to });
       break;
     }
+    case 'rotberry':
+      // Its berries taste like sweet, sweet death: a cloud of toxic gas, roots for whoever stepped on it, and its seed.
+      burst(ctx, pos, 'toxic', 2);
+      if (isHero(who)) who.rooted = Math.max(who.rooted, 3);
+      dropItem(ctx.floor, pos, createItem('seed.rotberry'));
+      break;
   }
 }
 

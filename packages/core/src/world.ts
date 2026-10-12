@@ -738,8 +738,11 @@ function trample(ctx: Ctx, pos: number, hero?: Hero): void {
   ctx.level.map[pos] = T.GRASS;
   // A warden draws bark from the grass.
   if (hero?.subclass === 'warden') hero.barkskin = Math.max(hero.barkskin, Math.trunc(hero.ht / 3));
-  if (ctx.rng.int(18) === 0) dropItem(ctx.floor, pos, new ItemGenerator(ctx.rng, ctx.depth).of('seed'));
-  if (ctx.rng.int(6) === 0) dropItem(ctx.floor, pos, createItem('dew'));
+  // A ring of herbalism makes both more likely (HighGrass.trample).
+  const herbalism = hero ? ringBonus(hero, 'ring.herbalism') : 0;
+  if (herbalism < 0) return;
+  if (ctx.rng.int(18) <= ctx.rng.int(herbalism + 1)) dropItem(ctx.floor, pos, new ItemGenerator(ctx.rng, ctx.depth).of('seed'));
+  if (ctx.rng.int(6) <= ctx.rng.int(herbalism + 1)) dropItem(ctx.floor, pos, createItem('dew'));
 }
 
 /** The backpack slot of an iron key for the hero's current depth, or -1. */

@@ -339,6 +339,7 @@ function pickUp(ctx: Ctx, hero: Hero): void {
       drinkDew(ctx, hero, item);
     } else if (collect(hero, item)) {
       ctx.effects.push({ type: 'pickedUp', hero: hero.id, item });
+      if (item.kind === 'seed.rotberry') rotberryRoar(ctx, hero);
       if (item.kind === 'quest.amulet') {
         // The Amulet of Yendor: the end of the journey, and the run is won.
         ctx.world.victory = true;
@@ -364,6 +365,7 @@ const ALCHEMY: Partial<Record<ItemKind, ItemKind>> = {
   'seed.sungrass': 'potion.healing',
   'seed.earthroot': 'potion.paralyticGas',
   'seed.fadeleaf': 'potion.mindVision',
+  'seed.rotberry': 'potion.strength',
 };
 const SEEDS_TO_POTION = 3;
 
@@ -455,6 +457,16 @@ function springMimic(ctx: Ctx, hero: Hero, heap: Heap): boolean {
   enterCell(level, pos);
   ctx.effects.push({ type: 'mimic', depth, mob: mimic.id, hero: hero.id });
   return true;
+}
+
+/** Rotberry.Seed.collect: picked, the seed lets out a roar that brings the whole level running. */
+function rotberryRoar(ctx: Ctx, hero: Hero): void {
+  const roused = ctx.floor.mobs.filter((mob) => mob.state !== 'passive');
+  for (const mob of roused) {
+    if (mob.state !== 'hunting') mob.state = 'wandering';
+    mob.target = hero.pos;
+  }
+  ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'challenge', count: roused.length });
 }
 
 /** Dewdrop.doPickUp: a little health, more for the huntress; wasted on the unhurt. */

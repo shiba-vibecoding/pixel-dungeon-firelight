@@ -494,7 +494,10 @@ function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): vo
     world,
     hero: me,
     who: 'wandmaker',
-    text: t.wandmaker[line],
+    // He may be after a rotberry seed rather than corpse dust.
+    text: quest?.wants === 'berry' && line === 'intro' ? t.wandmaker.introBerry
+      : quest?.wants === 'berry' && line === 'remind' ? t.wandmaker.remindBerry
+      : t.wandmaker[line],
     offers: line === 'reward' && quest ? [quest.battle, quest.utility] : [],
     onChoose: (index) => send({ type: 'wandReward', choice: index === 0 ? 'battle' : 'utility' }, performance.now()),
     onClose: hideOverlay,
