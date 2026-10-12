@@ -313,6 +313,12 @@ function send(action: Parameters<Session['send']>[0], now: number): void {
     view.say(t.rooted, '#ffff44');
     return;
   }
+  // Charmed, the hero cannot bring themselves to strike the charmer: say so rather than do nothing.
+  if (action.type === 'attack' && me && me.charmed > 0 && me.charmedBy === action.target) {
+    walk.reset();
+    view.say(t.charmedNoAttack, '#ffff44');
+    return;
+  }
   walk.lastSent = now;
   session!.send(action);
 }
@@ -334,8 +340,8 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
       return;
     } else {
       const path = findPath(
-      level, me.pos, mob.pos, occupiedCells(world, me.depth, mob.pos), exploredCells(world, me.depth), (me.levitating ?? 0) > 0,
-    );
+        level, me.pos, mob.pos, occupiedCells(world, me.depth, mob.pos), exploredCells(world, me.depth), (me.levitating ?? 0) > 0,
+      );
       if (!path || path.length < 2) {
         walk.chase = null;
         return;
