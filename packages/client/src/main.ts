@@ -323,6 +323,8 @@ function toTitle(): void {
   room = null;
   setRoomInUrl(null);
   audio.playMusic('theme');
+  audio.ambience(null);
+  audio.muffle(false);
   backButton(null);
   hud.show(false);
   const invited = invitedRoom();
@@ -455,6 +457,12 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
   const pace = walk.resting ? 0 : STEP_MS;
   if (!me || !isAlive(me) || session!.busy || overlayOpen() || now - walk.lastSent < pace) return;
   const level = levelAt(world, me.depth);
+
+  // An arrow held down walks on, a step as soon as the last is done: the keyboard's own repeat
+  // (a step, a pause, then a stream) is not waited for.
+  if (held.code && walk.queue.length === 0 && !walk.chase && !walk.resting && !walk.stairs && !walk.pickup) {
+    tapCell(me.pos + held.dx + held.dy * WIDTH, true);
+  }
 
   if (walk.chase) {
     const mob = mobById(world, me.depth, walk.chase);
@@ -727,7 +735,7 @@ function act(type: 'wait' | 'search'): void {
   send({ type }, performance.now());
 }
 
-function tapCell(cell: number): void {
+function tapCell(cell: number, quiet = false): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!world || !me || !isAlive(me)) return;
@@ -736,7 +744,7 @@ function tapCell(cell: number): void {
   const explored = exploredCells(world, me.depth);
   walk.reset();
   // The tapped cell lights up for a blink: the tap was taken.
-  if (explored[cell]) view.flashes.push({ cell, start: fx.time(performance.now()), color: aim ? '255, 120, 80' : '255, 255, 255', duration: 260 });
+  if (explored[cell] && !quiet) view.flashes.push({ cell, start: fx.time(performance.now()), color: aim ? '255, 120, 80' : '255, 255, 255', duration: 260 });
 
   if (aim) {
     const shot = aim;
@@ -855,7 +863,7 @@ function clampZoom(z: number, give = 0): number {
 /** Settles on a zoom level (by steps from the wheel and keys) and remembers it. */
 function zoomTo(level: number, anchor: { x: number; y: number } | null): void {
   const next = clampZoom(Math.round(level));
-  if (next !== Math.round(zoom.target)) audio.play('click', 1.5 + (next - zoom.base) * 0.05, 0.18);
+  if (next !== Math.round(zoom.target)) audio.play('tick', 1 + (next - zoom.base) * 0.06, 0.35);
   zoom.target = next;
   zoomAnchor = anchor;
   zoom.delta = next - zoom.base;
@@ -1058,6 +1066,15 @@ function startResting(): void {
   view.say(t.resting, '#cccccc');
 }
 
+/** The direction key held down, if any: the hero walks on while it is. */
+const held = { code: '', dx: 0, dy: 0 };
+addEventListener('keyup', (event) => {
+  if (event.code === held.code) held.code = '';
+});
+addEventListener('blur', () => {
+  held.code = '';
+});
+
 const KEYS: Record<string, [number, number]> = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
   KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0],
@@ -1075,7 +1092,13 @@ addEventListener('keydown', (event) => {
   }
   const dir = KEYS[event.code];
   if (dir) {
-    tapCell(me.pos + dir[0] + dir[1] * WIDTH);
+    // Held down, the walking goes on by itself (see step); the keyboard's repeats are not needed.
+    if (!event.repeat) {
+      held.code = event.code;
+      held.dx = dir[0];
+      held.dy = dir[1];
+      tapCell(me.pos + dir[0] + dir[1] * WIDTH);
+    }
   } else if (event.code === 'Space' || event.code === 'Numpad5' || event.code === 'Period') {
     act('wait');
   } else if (event.code === 'KeyR') {
@@ -1193,13 +1216,14 @@ function flyToBag(launch: Launch): void {
     const s = from + (to - from) * k * k + Math.sin(k * Math.PI) * 0.15;
     frames.push({ transform: `translate(${px}px, ${py}px) scale(${s}) rotate(${Math.sin(k * Math.PI) * -12}deg)`, opacity: k > 0.9 ? 1 - (k - 0.9) * 5 : 1 });
   }
+  audio.play('whoosh', 1.1, 0.25);
   icon.animate(frames, { duration: 560, easing: 'cubic-bezier(0.45, 0, 0.6, 1)' }).finished.then(() => {
     clearTimeout(lost);
     icon.remove();
     bag.classList.remove('got');
     void bag.offsetWidth;
     bag.classList.add('got');
-    audio.play('item', 1.6, 0.18);
+    audio.play('pop', 1, 0.3);
   }, () => icon.remove());
 }
 
@@ -1326,7 +1350,13 @@ function tick(now: number): void {
       const terrain = level.map[me.pos]!;
       // Footsteps: never quite the same twice, left foot and right a touch apart.
       stride = -stride;
-      audio.play(terrain >= T.WATER_TILES && terrain <= T.WATER ? 'water' : 'step', 1 + stride * 0.05 + (Math.random() - 0.5) * 0.08, 0.45 + Math.random() * 0.1);
+      // Each surface underfoot sounds its own: stone, water, grass, the wood of a doorway, hot embers.
+      const pitch = 1 + stride * 0.05;
+      if (terrain >= T.WATER_TILES && terrain <= T.WATER) audio.play('water', pitch, 0.5);
+      else if (terrain === T.OPEN_DOOR || terrain === T.DOOR) audio.play('stepWood', pitch, 0.55);
+      else audio.play('step', pitch, 0.45);
+      if (terrain === T.GRASS || terrain === T.HIGH_GRASS) audio.play('stepGrass', pitch, 0.4);
+      if (terrain === T.EMBERS) audio.play('sizzle', 1.3, 0.12);
       // And what the step stirs where it left: dust, a splash, a few blades of grass.
       stepFx(level.map[lastPlace.pos] ?? terrain, lastPlace.pos, vnow);
       // Stepping onto a sign reads it.
@@ -1377,6 +1407,11 @@ function tick(now: number): void {
 
   const mine = view.puppets.get(me.id);
   const at = mine ? view.position(mine, vnow) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
+  // The world is heard from where the hero stands; each region has its air; a window over the
+  // game, or the hero fallen, muffles the music.
+  audio.listen(at.x + TILE / 2, at.y + TILE / 2);
+  audio.ambience(Math.min(4, Math.floor((me.depth - 1) / 5)));
+  audio.muffle(overlayOpen() || !isAlive(me));
   const kick = fx.shakeOffset(vnow);
   // The hero stands in the middle of the band the HUD and the toolbar leave free, not of the screen.
   // When that band changes (a buff, a notice, companions), the view glides there rather than jumps.
@@ -1612,5 +1647,5 @@ if (import.meta.env.DEV) {
       await new Promise((resolve) => setTimeout(resolve, 33));
     }
   };
-  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo } });
+  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, audio } });
 }

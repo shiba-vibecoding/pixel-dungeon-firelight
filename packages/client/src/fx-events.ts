@@ -168,6 +168,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       // A boss that notices the heroes: the ground trembles.
       if (here(effect.depth) && effect.line === 'notice' && BOSSES.has(effect.kind)) {
         view.bossIntro = { kind: effect.kind, start: now };
+        audio.duck(0.3, 2600);
         fx.shake(4, 700, now);
         fx.flash('120, 0, 0', 0.35, 700, now, true);
       }

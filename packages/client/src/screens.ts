@@ -478,7 +478,38 @@ export interface MenuOptions {
   onExit(): void;
 }
 
+/** A level in five steps (the music's, the sounds'): a tap on a step sets it; on the lit first step, silence. */
+function volumeRow(label: string, value: () => number, set: (volume: number) => void, sample: () => void): HTMLElement {
+  const steps = el('span', { className: 'pd-volume-steps' });
+  const paint = (): void => {
+    const lit = Math.round(value() * 5);
+    [...steps.children].forEach((node, i) => node.classList.toggle('on', i < lit));
+    row.setAttribute('aria-valuenow', String(lit));
+  };
+  for (let i = 1; i <= 5; i++) {
+    const step = el('button', {
+      className: 'pd-volume-step',
+      onclick: () => {
+        const lit = Math.round(value() * 5);
+        set(lit === 1 && i === 1 ? 0 : i / 5);
+        paint();
+        sample();
+      },
+    });
+    step.setAttribute('aria-label', `${label} ${i * 20}%`);
+    steps.append(step);
+  }
+  const row = el('div', { className: 'pd-volume' }, el('span', { className: 'pd-info', textContent: label }), steps);
+  row.setAttribute('role', 'meter');
+  row.setAttribute('aria-valuemin', '0');
+  row.setAttribute('aria-valuemax', '5');
+  paint();
+  return row;
+}
+
 export function showMenu(options: MenuOptions): void {
+  const music = volumeRow(t.musicVolume, () => audio.musicVolume, (v) => audio.setMusicVolume(v), () => undefined);
+  const sounds = volumeRow(t.soundVolume, () => audio.soundVolume, (v) => audio.setSoundVolume(v), () => audio.play('coin', 1, 0.6));
   const sound = el(
     'button',
     {
@@ -522,6 +553,8 @@ export function showMenu(options: MenuOptions): void {
         button(t.badges, options.onBadges),
         button(t.mart, options.onMart),
         sound,
+        music,
+        sounds,
         effects,
         button(t.treat, options.onTreat, 'quiet'),
         button(t.toMenu, options.onExit, 'quiet'),

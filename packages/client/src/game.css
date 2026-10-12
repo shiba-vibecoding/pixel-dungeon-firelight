@@ -89,8 +89,18 @@ canvas#game {
 }
 @media (prefers-reduced-motion: reduce) { .pd-bar-lag { transition: none; } }
 
+/* Volume in five steps (menu): lit steps gold, the rest stone. */
+.pd-volume { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--tap-min, 44px); width: 100%; }
+.pd-volume-steps { display: flex; align-items: flex-end; gap: calc(2 * var(--u)); }
+.pd-volume-step { width: calc(6 * var(--u)); height: calc(10 * var(--u)); background: var(--stone-800); box-shadow: inset var(--u) var(--u) 0 var(--void); clip-path: var(--notch); }
+.pd-volume-step:nth-child(1) { height: calc(5 * var(--u)); }
+.pd-volume-step:nth-child(2) { height: calc(6 * var(--u)); }
+.pd-volume-step:nth-child(3) { height: calc(7 * var(--u)); }
+.pd-volume-step:nth-child(4) { height: calc(8 * var(--u)); }
+.pd-volume-step.on { background: var(--gold); box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--gold-deep); }
+
 /* A picked-up item on its way into the backpack, and the backpack's hop as it lands. */
 .pd-flying { position: fixed; z-index: 40; width: 32px; height: 32px; --u: 2px; pointer-events: none; }
-.pd-tool.bag.got { animation: pd-bag-hop 0.24s steps(3); }
-@keyframes pd-bag-hop { 40% { transform: translateY(-4px) scale(1.06); } }
+.pd-tool.bag.got { animation: pd-bag-hop 0.32s cubic-bezier(0.3, 0, 0.3, 1); }
+@keyframes pd-bag-hop { 30% { transform: translateY(-5px) scale(1.08, 0.94); } 60% { transform: translateY(0) scale(0.96, 1.05); } 80% { transform: translateY(-1px) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .pd-tool.bag.got { animation: none; } }

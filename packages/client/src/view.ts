@@ -46,6 +46,9 @@ const ENCHANT_COLORS: Record<Enchantment, string> = {
 };
 export const TILE = 16;
 
+/** The middle of a cell, world pixels. */
+const cellMiddle = (cell: number): { x: number; y: number } => ({ x: cellX(cell) * TILE + TILE / 2, y: cellY(cell) * TILE + TILE / 2 });
+
 export interface Puppet {
   id: string;
   /** Where the current step started, in world pixels: wherever the walker was, not the middle of a cell. */
@@ -305,6 +308,14 @@ export class View {
     return now - puppet.moveStart >= STEP_MS / 2 ? puppet.to : puppet.from;
   }
 
+  /** Where a character is, world pixels (its middle), for sounds that come from it. */
+  private placeOf(id: string, now: number): { x: number; y: number } | undefined {
+    const puppet = this.puppets.get(id);
+    if (!puppet) return undefined;
+    const { x, y } = this.position(puppet, now);
+    return { x: x + TILE / 2, y: y + TILE / 2 };
+  }
+
   private float(id: string, text: string, color: string, now: number, word = false): void {
     const puppet = this.puppets.get(id);
     if (!puppet) return;
@@ -344,12 +355,12 @@ export class View {
             if (target) target.flashUntil = now + 160;
             const toHero = !effect.target.startsWith('#');
             this.float(effect.target, String(effect.damage), toHero ? COLORS.negative : COLORS.warning, now);
-            audio.play('hit', 0.8 + Math.random() * 0.45);
+            audio.play('hit', 0.8 + Math.random() * 0.45, 1, this.placeOf(effect.target, now));
             if (effect.target === myId) haptic('hurt');
             else if (effect.attacker === myId) haptic('hit');
           } else {
             this.float(effect.target, t.miss, COLORS.neutral, now);
-            audio.play('miss');
+            audio.play('miss', 1, 1, this.placeOf(effect.target, now));
           }
           break;
         }
@@ -388,6 +399,7 @@ export class View {
           if (effect.hero === myId) {
             this.say(t.myLevelUp(effect.lvl), COLORS.highlight, now);
             audio.play('levelup');
+            audio.duck(0.3, 1600);
             haptic('success');
           } else {
             this.say(t.levelUp(this.name(world, effect.hero), effect.lvl), COLORS.highlight, now);
@@ -448,6 +460,7 @@ export class View {
           this.bannerStart = now;
           this.say(t.bossSlain[effect.kind] ?? '', COLORS.highlight, now);
           audio.play('boss');
+          audio.duck(0.25, 2500);
           haptic('success');
           break;
         case 'opened':
@@ -464,7 +477,8 @@ export class View {
           if (effect.hero !== myId) break;
           if (effect.item.kind === 'gold') {
             this.say(t.youFoundGold(effect.item.qty), COLORS.highlight, now);
-            audio.play('gold', 0.9 + Math.random() * 0.2);
+            audio.play('gold', 1, 0.8);
+            audio.coins(effect.item.qty);
           } else {
             this.say(t.youPicked(itemName(world, effect.item)), COLORS.default, now);
             audio.play('item');
@@ -599,7 +613,7 @@ export class View {
           break;
         case 'zapped':
           if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now, BOLT_COLORS[effect.bolt ?? 'magic']);
-          audio.play(effect.bolt === 'lightning' ? 'lightning' : 'zap');
+          audio.play(effect.bolt === 'lightning' ? 'lightning' : 'zap', 1, 1, effect.depth === this.depth ? cellMiddle(effect.from) : undefined);
           break;
         case 'avalanche':
           if (effect.depth !== this.depth) break;
@@ -630,7 +644,7 @@ export class View {
         case 'mined':
           if (effect.depth !== this.depth) break;
           this.flashes.push({ cell: effect.pos, start: now, color: '255, 210, 90', duration: 500 });
-          audio.play('rocks', 1.3, 0.5);
+          audio.play('rocks', 1.3, 0.5, cellMiddle(effect.pos));
           break;
         case 'smith':
           break;
@@ -679,7 +693,7 @@ export class View {
           break;
         case 'bones':
           if (effect.depth !== this.depth) break;
-          audio.play('bones');
+          audio.play('bones', 1, 1, cellMiddle(effect.pos));
           this.flashes.push({ cell: effect.pos, start: now, color: '230, 225, 200', duration: 700 });
           break;
         case 'bought':
@@ -791,7 +805,7 @@ export class View {
           break;
         case 'exploded':
           if (effect.depth === this.depth) {
-            audio.play('blast');
+            audio.play('blast', 1, 1, cellMiddle(effect.pos));
             this.flashes.push({ cell: effect.pos, start: now, duration: 400 });
           }
           break;

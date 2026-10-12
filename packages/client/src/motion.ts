@@ -91,6 +91,9 @@ function bounce(k: number): number {
 
 const isWater = (terrain: number): boolean => terrain >= T.WATER_TILES && terrain <= T.WATER;
 
+/** The middle of a cell, world pixels: where its sounds come from. */
+const centre = (cell: number): { x: number; y: number } => ({ x: (cell % WIDTH) * TILE + TILE / 2, y: Math.trunc(cell / WIDTH) * TILE + TILE / 2 });
+
 export class Motion {
   private map: Uint8Array | null = null;
   private heaps = new Map<number, number>();
@@ -176,14 +179,17 @@ export class Motion {
       if (!visible[cell]) continue;
       if (was === T.DOOR && is === T.OPEN_DOOR) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'open' });
-        audio.play('door_open', 0.95 + Math.random() * 0.1, 0.55);
+        audio.play('door_open', 0.95, 0.4, centre(cell));
+        audio.play('creak', 1, 0.3, centre(cell));
       } else if (was === T.OPEN_DOOR && is === T.DOOR) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'close' });
-        audio.play('door_open', 0.7 + Math.random() * 0.06, 0.32);
+        audio.play('creak', 0.85, 0.18, centre(cell));
+        audio.later(DOOR_CLOSE_MS * 0.8, 'thud', 1, 0.45, centre(cell));
       } else if (was === T.HIGH_GRASS && is === T.GRASS) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'trample' });
         const x = (cell % WIDTH) * TILE + TILE / 2;
         const y = Math.trunc(cell / WIDTH) * TILE + TILE - 3;
+        audio.play('rustle', 1, 0.45, centre(cell));
         fx.burst(x, y, now, {
           count: 9, colors: ['#6aa84f', '#93c47d', '#38761d', '#b6d7a8'], speed: [14, 34], life: [380, 700], gravity: 150, drag: 0.25,
           angle: -Math.PI / 2, cone: 2.6, size: [1, 1], spread: 5,
@@ -255,6 +261,8 @@ export class Motion {
       if (last === undefined || last === puppet.moveStart || !puppet.alive) continue;
       const pos = puppet.to;
       if (!visible[pos] && !puppet.isHero) continue;
+      // Companions are heard walking, softly, from where they are.
+      if (puppet.isHero && puppet.id !== myId) audio.play(isWater(level.map[pos]!) ? 'water' : 'step', 1.05, 0.22, centre(pos));
       if (isWater(level.map[pos]!)) {
         this.ripples.push({ x: (pos % WIDTH) * TILE + TILE / 2, y: Math.trunc(pos / WIDTH) * TILE + TILE - 4, start: now + 60, size: 1 });
       }
@@ -283,7 +291,7 @@ export class Motion {
       const x = (pos % WIDTH) * TILE + TILE / 2;
       const y = Math.trunc(pos / WIDTH) * TILE + TILE - 3;
       fx.burst(x, y, now, { count: 4, colors: ['rgba(200, 190, 170, 0.8)', 'rgba(150, 140, 120, 0.7)'], speed: [6, 16], life: [250, 420], rise: 4, drag: 0.3, size: [1, 1], spread: 4 });
-      if (visible[pos]) audio.play('item', 1.35 + Math.random() * 0.15, 0.22);
+      if (visible[pos]) audio.play('knock', 1.4, 0.35, centre(pos));
     }
 
     this.tiles = this.tiles.filter((a) => now - a.start < this.tileMs(a.kind));
@@ -311,7 +319,8 @@ export class Motion {
     const y = Math.trunc(pos / WIDTH) * TILE + TILE / 2;
     fx.burst(x, y - 2, at, { count: 14, colors: ['#ffe9a0', '#fff6c0', '#ffffff', '#e0a020'], glow: true, speed: [20, 60], life: [350, 800], rise: 26, drag: 0.35, size: [1, 1], spread: 4 });
     fx.burst(x, y + 4, at, { count: 8, colors: ['rgba(200, 190, 170, 0.8)', 'rgba(150, 140, 120, 0.7)'], speed: [10, 30], life: [300, 520], gravity: 60, drag: 0.3, size: [1, 2], spread: 6 });
-    audio.play('unlock', 1.2, 0.35);
+    audio.play('creak', 1.25, 0.3, centre(pos));
+    audio.later(CHEST_SHAKE_MS, 'sparkle', 1, 0.45, centre(pos));
   }
 
   /** How a heap lying at `pos` is drawn this frame. */
