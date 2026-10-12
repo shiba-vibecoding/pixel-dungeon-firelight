@@ -1,7 +1,7 @@
 import { type Hero, isAlive, MOBS } from './actors';
 import { randomRespawnCell } from './ai';
-import { charAt, type Char, type Ctx, enterCell, heroesOn, isHero, leaveCell } from './floor';
-import type { ItemKind } from './items';
+import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, leaveCell } from './floor';
+import { createItem, ItemGenerator, type ItemKind } from './items';
 import { distance, LENGTH } from './level/geometry';
 import { T } from './level/terrain';
 import { burst } from './traps';
@@ -58,6 +58,12 @@ export function stepOnPlant(ctx: Ctx, who: Char, pos: number): void {
   ctx.floor.plants = ctx.floor.plants!.filter((p) => p !== found);
   ctx.effects.push({ type: 'plantTriggered', depth: ctx.depth, pos, kind: found.kind, who: who.id });
   const { world, depth, level, rng } = ctx;
+  // Plant.activate and wither: a warden draws bark from it, and now and then a seed or a dewdrop.
+  if (isHero(who) && who.subclass === 'warden') {
+    who.barkskin = Math.max(who.barkskin, Math.trunc(who.ht / 3));
+    if (rng.int(5) === 0) dropItem(ctx.floor, pos, new ItemGenerator(rng, depth).of('seed'));
+    if (rng.int(5) === 0) dropItem(ctx.floor, pos, createItem('dew'));
+  }
   switch (found.kind) {
     case 'firebloom':
       burst(ctx, pos, 'fire', 0);

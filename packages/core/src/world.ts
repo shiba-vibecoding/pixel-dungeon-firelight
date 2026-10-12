@@ -363,6 +363,7 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   hero.light = Math.max(0, hero.light - time);
   hero.charmed = Math.max(0, hero.charmed - time);
   hero.dizzy = Math.max(0, hero.dizzy - time);
+  hero.barkskin = Math.max(0, (hero.barkskin ?? 0) - time);
   sungrassHeals(hero, time);
   if (hero.charmed <= 0) hero.charmedBy = null;
 
@@ -481,7 +482,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       if (trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
       if (level.map[hero.pos] === T.WELL) drinkFromWell(ctx, hero);
       stepOnPlant(ctx, hero, hero.pos);
-      if (level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos);
+      if (level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos, hero);
       if (level.arenaDoor !== undefined) {
         if (hero.depth === 15) enterLair(ctx, hero);
         else if (hero.depth === 20) enterThroneHall(ctx, hero);
@@ -503,7 +504,13 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         break;
       }
       attack(ctx, hero, mob);
-      spend(ctx, hero, heroAttackDelay(hero));
+      // A berserker strikes faster the more foes surround him.
+      let delay = heroAttackDelay(hero);
+      if (hero.subclass === 'berserker') {
+        const around = NEIGHBOURS8.filter((n) => charAt(world, hero.depth, hero.pos + n)).length;
+        if (around > 1) delay *= 1 - around / 16;
+      }
+      spend(ctx, hero, delay);
       break;
     }
 
@@ -674,8 +681,10 @@ function awakenYog(ctx: Ctx, hero: Hero): void {
 }
 
 /** HighGrass.trample: walked through, tall grass is flattened and sometimes sheds a seed or a dewdrop. */
-function trample(ctx: Ctx, pos: number): void {
+function trample(ctx: Ctx, pos: number, hero?: Hero): void {
   ctx.level.map[pos] = T.GRASS;
+  // A warden draws bark from the grass.
+  if (hero?.subclass === 'warden') hero.barkskin = Math.max(hero.barkskin, Math.trunc(hero.ht / 3));
   if (ctx.rng.int(18) === 0) dropItem(ctx.floor, pos, new ItemGenerator(ctx.rng, ctx.depth).of('seed'));
   if (ctx.rng.int(6) === 0) dropItem(ctx.floor, pos, createItem('dew'));
 }

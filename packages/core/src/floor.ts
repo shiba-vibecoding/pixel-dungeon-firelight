@@ -1,4 +1,4 @@
-import { type Hero, isAlive, type Mob, type MobKind } from './actors';
+import { type Hero, isAlive, type Mob, type MobKind, type SubClass } from './actors';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
@@ -71,6 +71,9 @@ export type Effect =
   /** A seed took root; a plant was set off by someone stepping on it. */
   | { type: 'planted'; depth: number; pos: number; kind: PlantKind }
   | { type: 'plantTriggered'; depth: number; pos: number; kind: PlantKind; who: string }
+  /** A gladiator's combo goes on; a hero masters a way. */
+  | { type: 'combo'; hero: string; count: number }
+  | { type: 'mastered'; hero: string; subclass: SubClass }
   /** Seeds in an alchemy pot brewed into a potion. */
   | { type: 'brewed'; depth: number; pos: number }
   /** A chest that was a mimic springs at the hero. */

@@ -16,7 +16,7 @@ import type { RunState } from './run';
 
 export type ItemCategory =
   | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
-  | 'quest';
+  | 'tome' | 'quest';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -122,6 +122,8 @@ export const ITEMS = {
   'quest.rose': { category: 'quest', sprite: 100 },
   /** What the old wandmaker is after. */
   'quest.dust': { category: 'quest', sprite: 121 },
+  /** Tengu's legacy: reading it, a hero masters one of two ways. */
+  'tome.mastery': { category: 'tome', sprite: 82 },
   /** Lit, it lets one see further in the dark halls for a while. */
   torch: { category: 'torch', sprite: 84 },
   /** The Amulet of Yendor, at the very bottom of the dungeon. */

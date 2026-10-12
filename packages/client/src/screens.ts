@@ -1,6 +1,6 @@
 import {
   BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, maxExp, type MobKind,
-  wandMaxCharges, type World,
+  SUBCLASSES, wandMaxCharges, type World,
 } from '@pd/core';
 import { audio } from './audio';
 import { BUFF_ICONS, type BuffName } from './hud';
@@ -180,7 +180,10 @@ export function showHero(options: HeroOptions): void {
     el(
       'div',
       { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: t.heroTitle(t.classes[hero.heroClass], hero.lvl) }),
+      el('p', {
+        className: 'pd-heading',
+        textContent: t.heroTitle(hero.subclass ? capitalize(t.subclasses[hero.subclass]) : t.classes[hero.heroClass], hero.lvl),
+      }),
       row(t.strength, String(hero.str)),
       row(t.health, `${Math.max(0, hero.hp)}/${hero.ht}`),
       row(t.experience, `${hero.exp}/${maxExp(hero)}`),
@@ -508,6 +511,25 @@ function showItem(options: ItemOptions): void {
     }
     if (category === 'food') actions.push(button(t.eat, () => act({ type: 'use', item: index }), 'primary'));
     if (category === 'torch') actions.push(button(t.light, () => act({ type: 'use', item: index }), 'primary'));
+    if (category === 'tome') {
+      actions.push(
+        button(t.readTome, () => {
+          // TomeOfMastery: the two ways of the hero's class, to choose from.
+          show(
+            el(
+              'div',
+              { className: 'pd-window' },
+              el('p', { className: 'pd-heading', textContent: t.chooseWay }),
+              ...SUBCLASSES[hero.heroClass].flatMap((way) => [
+                el('p', { className: 'pd-info', textContent: t.subclassInfo[way] }),
+                button(capitalize(t.subclasses[way]), () => act({ type: 'master', item: index, subclass: way }), 'primary'),
+              ]),
+              button(t.back, () => showBackpack(options)),
+            ),
+          );
+        }, 'primary'),
+      );
+    }
     if (category === 'seed') {
       actions.push(
         button(t.plantSeed, () => {

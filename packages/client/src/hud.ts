@@ -1,4 +1,4 @@
-import { type Hero, isAlive, isHungry, isStarving, itemDef, maxExp } from '@pd/core';
+import { FURY_LEVEL, type Hero, isAlive, isHungry, isStarving, itemDef, maxExp } from '@pd/core';
 import { t } from './i18n';
 import { FONT } from './render';
 import { type Assets, ICONS } from './sprites';
@@ -40,7 +40,7 @@ export interface HudState {
 /** Buff icons in buffs.png (BuffIndicator). */
 export const BUFF_ICONS = {
   mindVision: 0, fire: 2, poison: 3, paralysis: 4, hunger: 5, starvation: 6, slow: 7, ooze: 8, roots: 11, invisible: 12,
-  weakness: 14, healing: 19, bark: 20, charm: 21, light: 22, cripple: 23, dizzy: 29,
+  weakness: 14, combo: 17, fury: 18, healing: 19, bark: 20, charm: 21, light: 22, cripple: 23, barkskin: 24, dizzy: 29,
 } as const;
 export type BuffName = keyof typeof BUFF_ICONS;
 
@@ -63,6 +63,9 @@ export function heroBuffs(me: Hero): Array<{ name: BuffName; turns?: number }> {
     ...(me.dizzy > 0 ? [{ name: 'dizzy' as const, turns: turns(me.dizzy) }] : []),
     ...(me.sungrass !== undefined && me.sungrass === me.pos ? [{ name: 'healing' as const }] : []),
     ...(me.earthroot && me.earthroot.pos === me.pos ? [{ name: 'bark' as const }] : []),
+    ...(me.subclass === 'gladiator' && me.combo >= 3 && me.time <= me.comboUntil ? [{ name: 'combo' as const }] : []),
+    ...(me.subclass === 'berserker' && me.hp > 0 && me.hp <= me.ht * FURY_LEVEL ? [{ name: 'fury' as const }] : []),
+    ...(me.barkskin > 0 ? [{ name: 'barkskin' as const, turns: turns(me.barkskin) }] : []),
     ...(isStarving(me) ? [{ name: 'starvation' as const }] : isHungry(me) ? [{ name: 'hunger' as const }] : []),
   ];
 }

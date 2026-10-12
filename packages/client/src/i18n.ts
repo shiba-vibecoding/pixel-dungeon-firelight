@@ -1,4 +1,4 @@
-import type { HeroClass, ItemKind, MobKind, PlantKind, TrapKind } from '@pd/core';
+import type { HeroClass, ItemKind, MobKind, PlantKind, SubClass, TrapKind } from '@pd/core';
 import type { BuffName } from './hud';
 
 /* Interface text in Russian and English; the language follows Telegram or the browser. */
@@ -190,6 +190,7 @@ const en = {
     'ring.elements': 'Ring of Elements',
     'ring.thorns': 'Ring of Thorns',
     'ring.haggler': 'Ring of Haggler',
+    'tome.mastery': 'Tome of Mastery',
     'seed.firebloom': 'seed of Firebloom',
     'seed.icecap': 'seed of Icecap',
     'seed.sorrowmoss': 'seed of Sorrowmoss',
@@ -243,6 +244,7 @@ const en = {
     'ring.elements': 'Fire, poison, lightning and the like may do you much less harm.',
     'ring.thorns': 'Some of every blow you take is turned back on the attacker.',
     'ring.haggler': 'Shopkeepers ask you only half their price.',
+    'tome.mastery': 'This worn leather book is not that thick, but you feel somehow that you can gather a lot from it. Reading it takes a while: choose one of the two ways of your class.',
     'seed.firebloom': 'Throw it where you want a Firebloom to grow: whoever touches it bursts into flames.',
     'seed.icecap': 'Throw it where you want an Icecap to grow: touched, it freezes everyone around.',
     'seed.sorrowmoss': 'Throw it where you want a Sorrowmoss to grow: whoever touches it is poisoned.',
@@ -290,6 +292,24 @@ const en = {
   ringNegative: 'Its level is negative: it works the other way round.',
   putOn: 'Put on',
   plantSeed: 'Plant',
+  readTome: 'Read',
+  chooseWay: 'Choose your way',
+  mastered: (way: string) => `You have chosen the way of the ${way}!`,
+  combo: (count: number) => `${count} hit combo!`,
+  subclasses: {
+    gladiator: 'gladiator', berserker: 'berserker', battlemage: 'battlemage', warlock: 'warlock',
+    freerunner: 'freerunner', assassin: 'assassin', sniper: 'sniper', warden: 'warden',
+  } as Record<SubClass, string>,
+  subclassInfo: {
+    gladiator: 'Gladiator: a successful melee hit starts a combo, in which every next hit inflicts more damage.',
+    berserker: 'Berserker: the more enemies surround him, the faster he attacks; severely wounded, he enters a fury that greatly increases his damage.',
+    battlemage: 'Battlemage: his blows now and then restore a charge to one of his wands.',
+    warlock: 'Warlock: after killing an enemy he consumes its soul, healing his wounds and satisfying his hunger.',
+    freerunner: 'Freerunner: unencumbered and not starving, she moves much faster than most monsters and is much harder to hit.',
+    assassin: 'Assassin: a surprise attack inflicts additional damage.',
+    sniper: 'Sniper: her missiles find the weak points in an enemy\'s armour and ignore it.',
+    warden: 'Warden: trampling tall grass and touching plants gives her a bark armour, and plants yield her seeds and dewdrops.',
+  } as Record<SubClass, string>,
   alchemyPot: 'An alchemy pot: drop or throw three seeds into it to brew a potion.',
   brewed: 'The seeds in the pot brew into a potion!',
   plants: {
@@ -380,7 +400,8 @@ const en = {
   buffs: {
     mindVision: 'Mind vision', invisible: 'Invisible', ooze: 'Caustic ooze', poison: 'Poisoned', fire: 'Burning',
     paralysis: 'Paralysed', roots: 'Rooted', slow: 'Slowed', hunger: 'Hungry', starvation: 'Starving', weakness: 'Weakened',
-    charm: 'Charmed', light: 'Torchlight', cripple: 'Crippled', dizzy: 'Dizzy', healing: 'Healing', bark: 'Barkskin',
+    charm: 'Charmed', light: 'Torchlight', cripple: 'Crippled', dizzy: 'Dizzy', healing: 'Healing', bark: 'Earthroot',
+    combo: 'Combo', fury: 'Fury', barkskin: 'Barkskin',
   } as Record<BuffName, string>,
   causes: {
     poison: 'poison', burning: 'fire', ooze: 'caustic ooze', lightning: 'lightning', gripping: 'a gripping trap', hunger: 'starvation',
@@ -602,6 +623,7 @@ const ru: Strings = {
     'ring.elements': 'Кольцо Стихий',
     'ring.thorns': 'Кольцо Шипов',
     'ring.haggler': 'Кольцо Торговца',
+    'tome.mastery': 'Книга Мастерства',
     'seed.firebloom': 'семя огнецвета',
     'seed.icecap': 'семя ледянки',
     'seed.sorrowmoss': 'семя скорбного мха',
@@ -655,6 +677,7 @@ const ru: Strings = {
     'ring.elements': 'Огонь, яд, молнии и тому подобное могут ранить вас гораздо слабее.',
     'ring.thorns': 'Часть каждого полученного удара обращается против нападающего.',
     'ring.haggler': 'Торговцы просят с вас лишь половину цены.',
+    'tome.mastery': 'Эта потёртая кожаная книга не так уж толста, но вы чувствуете, что можете многое из неё почерпнуть. Чтение займёт время: выберите один из двух путей своего класса.',
     'seed.firebloom': 'Бросьте туда, где должен вырасти огнецвет: тот, кто его коснётся, вспыхнет.',
     'seed.icecap': 'Бросьте туда, где должна вырасти ледянка: от прикосновения она замораживает всех вокруг.',
     'seed.sorrowmoss': 'Бросьте туда, где должен вырасти скорбный мох: тот, кто его коснётся, отравится.',
@@ -702,6 +725,24 @@ const ru: Strings = {
   ringNegative: 'Его уровень отрицательный: оно действует наоборот.',
   putOn: 'Надеть',
   plantSeed: 'Посадить',
+  readTome: 'Прочитать',
+  chooseWay: 'Выберите свой путь',
+  mastered: (way) => `Вы избрали путь: ${way}!`,
+  combo: (count) => `Комбо: ${count}!`,
+  subclasses: {
+    gladiator: 'гладиатор', berserker: 'берсерк', battlemage: 'боевой маг', warlock: 'чернокнижник',
+    freerunner: 'бегунья', assassin: 'убийца', sniper: 'снайпер', warden: 'хранительница',
+  },
+  subclassInfo: {
+    gladiator: 'Гладиатор: удачный удар в ближнем бою начинает комбо, и каждый следующий удар в нём сильнее.',
+    berserker: 'Берсерк: чем больше врагов вокруг, тем быстрее он бьёт; тяжело раненный, впадает в ярость, сильно повышающую урон.',
+    battlemage: 'Боевой маг: его удары время от времени возвращают заряд одной из палочек.',
+    warlock: 'Чернокнижник: убив врага, поглощает его душу — она лечит раны и утоляет голод.',
+    freerunner: 'Бегунья: налегке и не голодая, двигается куда быстрее большинства монстров и уклоняется вдвое лучше.',
+    assassin: 'Убийца: внезапная атака наносит дополнительный урон.',
+    sniper: 'Снайпер: её метательное оружие находит слабые места в броне врага и не замечает её.',
+    warden: 'Хранительница: вытаптывая высокую траву и касаясь растений, обретает защиту коры, а растения дарят ей семена и росу.',
+  },
   alchemyPot: 'Алхимический котёл: бросьте в него три семени, чтобы сварить зелье.',
   brewed: 'Семена в котле превращаются в зелье!',
   plants: {
@@ -792,7 +833,8 @@ const ru: Strings = {
   buffs: {
     mindVision: 'Ясновидение', invisible: 'Невидимость', ooze: 'Едкая слизь', poison: 'Отравление', fire: 'Горение',
     paralysis: 'Паралич', roots: 'Опутан корнями', slow: 'Замедление', hunger: 'Голод', starvation: 'Истощение', weakness: 'Слабость',
-    charm: 'Очарование', light: 'Свет факела', cripple: 'Увечье', dizzy: 'Головокружение', healing: 'Исцеление', bark: 'Кора',
+    charm: 'Очарование', light: 'Свет факела', cripple: 'Увечье', dizzy: 'Головокружение', healing: 'Исцеление', bark: 'Земляной корень',
+    combo: 'Комбо', fury: 'Ярость', barkskin: 'Кора',
   },
   causes: {
     poison: 'яд', burning: 'огонь', ooze: 'едкая слизь', lightning: 'молния', gripping: 'капкан', hunger: 'голод',

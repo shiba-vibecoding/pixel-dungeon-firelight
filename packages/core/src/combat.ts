@@ -3,7 +3,7 @@ import {
   maxExp, type Mob, MOBS, mobStats, ringBonus,
 } from './actors';
 import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, isWater, leaveCell } from './floor';
-import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold } from './items';
+import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold, wandMaxCharges } from './items';
 import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
 import { earthrootAbsorbs } from './plants';
 import { questKill } from './quest';
@@ -51,8 +51,12 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage: 0 });
     return false;
   }
-  const reduction = ctx.rng.intRange(0, armor(defender));
-  const damage = Math.max(damageRoll(ctx, attacker, override.damage) - reduction, 0);
+  // A sniper's thrown weapons find the weak points in any armour.
+  const thrown = override.damage !== undefined;
+  const sniping = isHero(attacker) && attacker.subclass === 'sniper' && thrown;
+  const reduction = sniping ? 0 : ctx.rng.intRange(0, armor(defender));
+  let damage = Math.max(damageRoll(ctx, attacker, override.damage) - reduction, 0);
+  if (isHero(attacker) && !isHero(defender)) damage = masteredBlow(ctx, attacker, defender, damage, thrown);
   // Goo's touch may leave caustic ooze that burns until washed off in water.
   if (!isHero(attacker) && attacker.kind === 'goo' && ctx.rng.int(3) === 0 && isHero(defender)) {
     if (defender.ooze < 0) ctx.effects.push({ type: 'oozed', hero: defender.id });
@@ -127,6 +131,37 @@ function shopkeeperFlees(ctx: Ctx, keeper: Mob): void {
   ctx.floor.mobs.splice(ctx.floor.mobs.indexOf(keeper), 1);
   leaveCell(ctx.world, ctx.level, ctx.depth, keeper.pos);
   ctx.effects.push({ type: 'shopkeeperFled', depth: ctx.depth, mob: keeper.id, pos: keeper.pos });
+}
+
+/**
+ * Hero.attackProc and Mob.defenseProc for a mastered hero: the gladiator's
+ * combo, the battlemage's wand charging, the assassin's surprise attacks.
+ */
+function masteredBlow(ctx: Ctx, hero: Hero, mob: Mob, damage: number, thrown: boolean): number {
+  switch (hero.subclass) {
+    case 'gladiator': {
+      if (thrown) return damage;
+      // Combo: hit after hit without a break, the third and every later one harder.
+      hero.combo = hero.time <= hero.comboUntil ? hero.combo + 1 : 1;
+      // Combo.hit: the next blow must come within this long (a normal blow takes a turn).
+      hero.comboUntil = hero.time + (hero.combo >= 3 ? 1.41 - hero.combo / 10 : 1.1);
+      if (hero.combo < 3) return damage;
+      ctx.effects.push({ type: 'combo', hero: hero.id, count: hero.combo });
+      return damage + Math.trunc((damage * (hero.combo - 2)) / 5);
+    }
+    case 'battlemage':
+      // Each blow may give a wand in the pack a charge back.
+      if (!thrown && ctx.rng.int(3) === 0) {
+        const wand = hero.items.find((item) => item.charges !== undefined && item.charges < wandMaxCharges(item));
+        if (wand) wand.charges = wand.charges! + 1;
+      }
+      return damage;
+    case 'assassin':
+      // A blow out of nowhere hurts all the more.
+      return mob.enemySeen ? damage : damage + ctx.rng.intBetween(1, Math.max(2, damage));
+    default:
+      return damage;
+  }
 }
 
 /** Cripple.DURATION. */
@@ -277,6 +312,10 @@ function mobDied(ctx: Ctx, mob: Mob): void {
     if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
     ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'death' });
     ctx.effects.push({ type: 'bossSlain', depth: ctx.depth, kind: mob.kind });
+    // Tengu.die: a Tome of Mastery, here one for every hero who has not mastered yet.
+    if (mob.kind === 'tengu') {
+      for (const hero of ctx.world.heroes) if (!hero.subclass) dropItem(ctx.floor, mob.pos, createItem('tome.mastery'));
+    }
   }
 }
 
@@ -355,6 +394,15 @@ function heroDied(ctx: Ctx, hero: Hero): void {
 }
 
 export function earnExp(ctx: Ctx, hero: Hero, exp: number): void {
+  // A warlock feeds on the souls of the slain: some health, and a little less hunger.
+  if (hero.subclass === 'warlock' && isAlive(hero)) {
+    const value = Math.min(hero.ht - hero.hp, 1 + Math.trunc((ctx.depth - 1) / 5));
+    if (value > 0) {
+      hero.hp += value;
+      ctx.effects.push({ type: 'healed', hero: hero.id, amount: value });
+    }
+    hero.hunger = Math.max(0, hero.hunger - 10);
+  }
   hero.exp += exp;
   ctx.effects.push({ type: 'exp', hero: hero.id, amount: exp });
   let levelUp = false;

@@ -1,4 +1,6 @@
-import { BACKPACK_SIZE, createMob, type Hero, heroRangedSkill, maxExp, mobStats, STARVING } from './actors';
+import {
+  BACKPACK_SIZE, createMob, type Hero, heroRangedSkill, maxExp, mobStats, STARVING, type SubClass, SUBCLASSES,
+} from './actors';
 import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
 import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, leaveCell } from './floor';
@@ -34,9 +36,13 @@ export type InventoryAction =
   /** Sell an item from the pack to the shopkeeper next to the hero. */
   | { type: 'sell'; item: number }
   /** Take off a worn ring, back into the pack. */
-  | { type: 'remove'; ring: number };
+  | { type: 'remove'; ring: number }
+  /** Read the Tome of Mastery and master one of the two ways of the hero's class. */
+  | { type: 'master'; item: number; subclass: SubClass };
 
-const INVENTORY_ACTIONS: ReadonlySet<string> = new Set(['pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove']);
+const INVENTORY_ACTIONS: ReadonlySet<string> = new Set([
+  'pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master',
+]);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
   return INVENTORY_ACTIONS.has(action.type);
@@ -49,6 +55,8 @@ const TIME_TO_DROP = 1;
 const TIME_TO_THROW = 1;
 const TIME_TO_ZAP = 1;
 const TIME_TO_EAT = 3;
+/** TomeOfMastery.TIME_TO_READ. */
+const TIME_TO_READ_TOME = 10;
 /** Light.DURATION. */
 const LIGHT_TURNS = 250;
 
@@ -90,6 +98,10 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       return category === 'weapon' || category === 'armor' || category === 'ring' ? null : 'that cannot be equipped';
     case 'drop':
       return null;
+    case 'master':
+      if (item.kind !== 'tome.mastery') return 'that is no tome';
+      if (hero.subclass) return 'you have already mastered a way';
+      return SUBCLASSES[hero.heroClass].includes(action.subclass) ? null : 'not a way for you';
     case 'sell':
       if (!shopkeeperBeside(world, hero)) return 'nobody to sell to';
       return itemPrice(item, world.known.includes(item.kind)) > 0 ? null : 'nobody would buy that';
@@ -126,6 +138,12 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       }
       use(ctx, hero, action.item, action.target ?? 'weapon');
       return TIME_TO_USE;
+    case 'master':
+      // TomeOfMastery.choose: the tome is used up, and the hero takes a new way.
+      hero.items.splice(action.item, 1);
+      hero.subclass = action.subclass;
+      ctx.effects.push({ type: 'mastered', hero: hero.id, subclass: action.subclass });
+      return TIME_TO_READ_TOME;
     case 'remove': {
       const ring = hero.rings.splice(action.ring, 1)[0]!;
       hero.items.push(ring);

@@ -12,6 +12,15 @@ const f32 = Math.fround;
 
 export type HeroClass = 'warrior' | 'mage' | 'rogue' | 'huntress';
 
+/** HeroSubClass: the two ways each class can master with the Tome of Mastery. */
+export type SubClass = 'gladiator' | 'berserker' | 'battlemage' | 'warlock' | 'freerunner' | 'assassin' | 'sniper' | 'warden';
+export const SUBCLASSES: Readonly<Record<HeroClass, readonly [SubClass, SubClass]>> = {
+  warrior: ['gladiator', 'berserker'],
+  mage: ['battlemage', 'warlock'],
+  rogue: ['freerunner', 'assassin'],
+  huntress: ['sniper', 'warden'],
+};
+
 interface ClassKit {
   ht: number;
   str: number;
@@ -82,6 +91,13 @@ export interface Hero {
   charmedBy: string | null;
   /** Turns left of staggering about (dreamweed's confusion gas). */
   dizzy: number;
+  /** The way the hero has mastered, once they have read the Tome of Mastery. */
+  subclass: SubClass | null;
+  /** Gladiator: hits in a row, and until when the next one keeps the combo going. */
+  combo: number;
+  comboUntil: number;
+  /** Warden: bark from trampled grass and plants, adding to armour and wearing off a point a turn. */
+  barkskin: number;
   /** Sungrass: the spot it heals the hero on, while they stay there (-1 when not), and time towards the next healing. */
   sungrass?: number;
   sungrassTime?: number;
@@ -139,6 +155,10 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     charmed: 0,
     charmedBy: null,
     dizzy: 0,
+    subclass: null,
+    combo: 0,
+    comboUntil: 0,
+    barkskin: 0,
     hunger: 0,
     hungerTime: 0,
     kills: 0,
@@ -165,6 +185,8 @@ export const hungerStep = (hero: Hero): number => (hero.heroClass === 'rogue' ? 
 /** Hunger.act: how much hunger a step adds; a ring of satiety takes some away (or adds, if negative). */
 export const hungerGrowth = (hero: Hero): number => HUNGER_STEP - ringBonus(hero, 'ring.satiety');
 export const isStarving = (hero: Hero): boolean => hero.hunger >= STARVING;
+/** Fury.LEVEL: below this share of health, a berserker flies into a fury. */
+export const FURY_LEVEL = 0.4;
 export const isHungry = (hero: Hero): boolean => hero.hunger >= HUNGRY;
 
 export function heroAttackSkill(hero: Hero): number {
@@ -185,8 +207,9 @@ export function heroDefenseSkill(hero: Hero): number {
   if (encumbrance > 0) {
     return Math.trunc(defense / 1.5 ** encumbrance);
   }
-  // Rogues turn spare strength into evasion.
-  return hero.heroClass === 'rogue' ? defense - encumbrance : defense;
+  // Rogues turn spare strength into evasion; a freerunner on the move is twice as hard to hit.
+  if (hero.heroClass !== 'rogue') return defense;
+  return (defense - encumbrance) * (hero.subclass === 'freerunner' && !isStarving(hero) ? 2 : 1);
 }
 
 /**
@@ -206,14 +229,17 @@ export function heroRangedSkill(hero: Hero, item: Item, pointBlank: boolean): nu
 /** Heavy armour slows its wearer down (Hero.speed). */
 export function heroSpeed(hero: Hero): number {
   const encumbrance = armorStats(hero.armor).str - heroStr(hero);
-  // Char.speed: crippled, half as fast.
+  // Char.speed: crippled, half as fast; a freerunner who is not starving, much faster.
   const crippled = hero.crippled > 0 ? 0.5 : 1;
-  return (encumbrance > 0 ? 1.3 ** -encumbrance : 1) * crippled;
+  const running = hero.subclass === 'freerunner' && !isStarving(hero) ? 1.6 : 1;
+  return (encumbrance > 0 ? 1.3 ** -encumbrance : 1) * crippled * running;
 }
 
 export function heroDamageRoll(hero: Hero, rng: Rng): number {
   const weapon = weaponStats(hero.weapon);
   let damage = rng.normalIntRange(weapon.min, weapon.max);
+  // Fury: a berserker badly hurt hits half as hard again.
+  if (hero.subclass === 'berserker' && hero.hp > 0 && hero.hp <= hero.ht * FURY_LEVEL) damage = Math.trunc(damage * 1.5);
   if (hero.heroClass !== 'huntress') {
     const excess = heroStr(hero) - weapon.str;
     if (excess > 0) {
@@ -234,7 +260,8 @@ export function awareness(hero: Hero): number {
   return 1 - (hero.heroClass === 'rogue' ? 0.85 : 0.9) ** ((1 + Math.min(hero.lvl, 9)) * 0.5);
 }
 
-export const heroArmor = (hero: Hero): number => armorStats(hero.armor).dr;
+/** Hero.dr: the armour's, and a warden's bark. */
+export const heroArmor = (hero: Hero): number => armorStats(hero.armor).dr + Math.max(0, Math.ceil(hero.barkskin ?? 0));
 export const heroStealth = (hero: Hero): number => HERO_CLASSES[hero.heroClass].stealth + ringBonus(hero, 'ring.shadows');
 export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 

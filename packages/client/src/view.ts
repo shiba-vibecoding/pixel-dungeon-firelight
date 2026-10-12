@@ -509,6 +509,15 @@ export class View {
           break;
         case 'planted':
           break;
+        case 'combo':
+          if (effect.hero === myId) this.float(effect.hero, t.combo(effect.count), COLORS.highlight, now);
+          break;
+        case 'mastered':
+          if (effect.hero === myId) {
+            this.say(t.mastered(t.subclasses[effect.subclass]), COLORS.highlight, now);
+            audio.play('levelup');
+          }
+          break;
         case 'brewed':
           if (effect.depth !== this.depth) break;
           audio.play('puff');

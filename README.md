@@ -53,7 +53,10 @@ Yendor on depth 26:
   elements, thorns and haggler, two worn at once, known by their gem until worn
   a while; seeds of firebloom, icecap, sorrowmoss, dreamweed, sungrass,
   earthroot and fadeleaf, which grow where they are thrown.
-- Four hero classes with their original starting kits and perks.
+- Four hero classes with their original starting kits and perks, and their
+  subclasses: Tengu leaves a Tome of Mastery for each hero, to become a
+  gladiator or berserker, battlemage or warlock, freerunner or assassin, sniper
+  or warden.
 - Solo runs saved on the device; a daily dungeon with a global leaderboard and
   shareable results.
 - Co-op: invite friends by a Telegram link; everyone plays in the same dungeon.
@@ -64,7 +67,7 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: hero subclasses (the Tome of Mastery); weapon enchantments and
+Not ported yet: weapon enchantments and
 armour glyphs; the ankh; the wands of amok, reach, flock and regrowth; the
 rotberry and the ring of herbalism; the blacksmith's and the imp's quests and
 the wandmaker's rotberry errand; the remaining special rooms (pool, statue,
