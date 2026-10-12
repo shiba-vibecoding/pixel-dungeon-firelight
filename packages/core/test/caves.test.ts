@@ -3,6 +3,7 @@ import {
   act, type Action, addHero, adjacent, canEnter, castShadow, charAt, createMob, createRun, createWorld, type Effect,
   findPath, floorAt, generateLevel, heroById, heroView, isAlive, levelAt, NEIGHBOURS8, RoomType, T, terrainBlocksSight,
   type World,
+  WIDTH,
 } from '../src/index';
 import { botAction, checkInvariants, pacify, skeletonKey } from './helpers';
 
@@ -43,7 +44,7 @@ describe('the caves', () => {
     const hero = heroById(world, 'p')!;
     const level = levelAt(world, 12);
     const far = heroView(world, hero).some((seen, cell) => seen && Math.max(
-      Math.abs((cell % 32) - (hero.pos % 32)), Math.abs(Math.trunc(cell / 32) - Math.trunc(hero.pos / 32)),
+      Math.abs((cell % WIDTH) - (hero.pos % WIDTH)), Math.abs(Math.trunc(cell / WIDTH) - Math.trunc(hero.pos / WIDTH)),
     ) > 6);
     expect(far).toBe(false);
     expect(castShadow(hero.pos, terrainBlocksSight(level.map)).filter(Boolean).length)

@@ -21,7 +21,7 @@ export interface Delivery {
 }
 
 /** Bumped whenever the saved world format changes; older rooms start afresh. */
-export const STATE_FORMAT = 30;
+export const STATE_FORMAT = 31;
 
 export interface RoomState {
   format: number;

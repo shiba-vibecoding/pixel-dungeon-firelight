@@ -60,6 +60,22 @@ describe('a dungeon made for the party', () => {
     expect(count(solo, REGULAR, 'potion.strength')).toBeGreaterThan(0);
   });
 
+  it('spreads the depths wider for a party, with more rooms', () => {
+    let solo = 0;
+    let three = 0;
+    let wide = false;
+    for (const seed of [11, 12, 13]) {
+      const a = levelAt(party(seed, 1), 3);
+      const b = levelAt(party(seed, 3), 3);
+      solo += a.rooms.length;
+      three += b.rooms.length;
+      expect(a.rooms.every((room) => room.right < 32 && room.bottom < 32)).toBe(true);
+      wide ||= b.rooms.some((room) => room.right >= 32 || room.bottom >= 32);
+    }
+    expect(wide).toBe(true);
+    expect(three).toBeGreaterThan(solo);
+  });
+
   it('makes bosses much sturdier', () => {
     const goo = floorAt(party(5, 3), 5).mobs.find((m) => m.kind === 'goo')!;
     expect(goo.ht).toBe(Math.round(80 * 2.3));

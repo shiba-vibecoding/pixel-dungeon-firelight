@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   act, type Action, addHero, adjacent, canEnter, charAt, createItem, createMob, createRun, createWorld, type Effect,
   findPath, floorAt, generateLevel, heroById, heroStr, isAlive, levelAt, NEIGHBOURS8, RoomType, T, type World,
+  WIDTH,
 } from '../src/index';
 import { botAction, checkInvariants, pacify, skeletonKey } from './helpers';
 
@@ -98,7 +99,7 @@ describe("the King of Dwarves' hall", () => {
         const key = king ? null : skeletonKey(world, 'p');
         if (key) return key;
         if (hero.pos === level.exit) return { type: 'descend' };
-        const goal = king ? king.pos : floor.arenaEntered ? level.exit : level.arenaDoor! - 32;
+        const goal = king ? king.pos : floor.arenaEntered ? level.exit : level.arenaDoor! - WIDTH;
         const others = new Set(floor.mobs.map((m) => m.pos));
         others.delete(goal);
         const path = findPath(level, hero.pos, goal, others);

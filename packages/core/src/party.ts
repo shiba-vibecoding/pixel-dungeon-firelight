@@ -1,10 +1,11 @@
 import { type Mob, type MobKind, MOBS } from './actors';
+import { SOLO_SPAN } from './level/geometry';
 import type { World } from './world';
 
 /*
  * A dungeon made for the party that goes down it. The original is balanced for
  * one hero; a party of N finds it grown to match when each depth is first
- * reached: more monsters, sturdier ones, bosses much sturdier, monsters
+ * reached: wider (more rooms), more monsters, sturdier ones, bosses much sturdier, monsters
  * coming back sooner, more to find, and the items that make a hero stronger
  * (strength, upgrades) once for every hero rather than once for all. Alone,
  * nothing changes: not even a roll of the dice.
@@ -45,6 +46,14 @@ export function regrowBoss(world: World, mob: Mob): void {
   const ht = Math.round(MOBS[mob.kind].ht * (1 + BOSS_HEALTH * (partySize(world) - 1)));
   mob.hp = Math.max(1, Math.round((mob.hp * ht) / mob.ht));
   mob.ht = ht;
+}
+
+/**
+ * How many cells a side a depth spreads over: the original's 32 for one hero, four more for
+ * each hero beside, up to 44 (the grid is 48: geometry.ts).
+ */
+export function levelSpan(party: number): number {
+  return Math.min(44, SOLO_SPAN + 4 * Math.max(0, party - 1));
 }
 
 /** `base` monsters for one hero, as many as the party needs. */

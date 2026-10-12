@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   act, addHero, castShadow, cell, createWorld, exploredCells, findPath, heroById, LENGTH, levelAt, T, visibleCells,
+  WIDTH,
 } from '../src/index';
 
 describe('field of view', () => {
@@ -18,7 +19,7 @@ describe('field of view', () => {
   it('cannot see through a wall but sees the wall itself', () => {
     const viewer = cell(10, 10);
     const wallX = 12;
-    const fov = castShadow(viewer, (c) => c % 32 === wallX);
+    const fov = castShadow(viewer, (c) => c % WIDTH === wallX);
     expect(fov[cell(wallX, 10)]).toBe(true);
     expect(fov[cell(wallX + 1, 10)]).toBe(false);
     expect(fov[cell(wallX + 3, 10)]).toBe(false);

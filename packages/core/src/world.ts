@@ -17,7 +17,7 @@ import { discoverable } from './level/flags';
 import { faceCurse, faceCurseProblem, type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
 import { evolveGas } from './gas';
-import { regrowBoss, scaleMob } from './party';
+import { levelSpan, partySize, regrowBoss, scaleMob } from './party';
 import { scorchPack } from './cooking';
 import { altarMarksHero } from './altar';
 import { type ImpQuest, impRewardProblem, ringFromImp, spawnImp, talkToImp } from './imp';
@@ -135,7 +135,8 @@ export function restartWorld(world: World, seed: number): void {
 export function levelAt(world: World, depth: number): Level {
   for (let d = 1; d <= depth; d++) {
     if (!world.levels[d]) {
-      const level = generateLevel(world.run, d);
+      // A party's depths spread wider, with more rooms (party.ts); boss levels keep their layout.
+      const level = generateLevel(world.run, d, levelSpan(partySize(world)));
       world.levels[d] = level;
       const mobs = populate(world, level, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d)));
       // What the depth gives every hero, so that a hero who joins later gets theirs (party.ts).

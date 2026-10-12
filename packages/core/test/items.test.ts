@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   act, addHero, createItem, createWorld, F, floorAt, hasFlag, heroById, isAlive, type ItemKind, ITEMS, itemDef,
   levelAt, RoomType, weaponStats, type World,
+  WIDTH,
 } from '../src/index';
 import { pacify } from './helpers';
 
@@ -153,8 +154,8 @@ describe('the backpack', () => {
       for (let depth = 1; depth <= 4; depth++) {
         const level = levelAt(world, depth);
         for (const heap of floorAt(world, depth).heaps) {
-          const x = heap.pos % 32;
-          const y = Math.trunc(heap.pos / 32);
+          const x = heap.pos % WIDTH;
+          const y = Math.trunc(heap.pos / WIDTH);
           const room = level.rooms.find((r) => x > r.left && x < r.right && y > r.top && y < r.bottom);
           expect(room, `heap at ${heap.pos} on depth ${depth}`).toBeDefined();
           expect([RoomType.ENTRANCE, RoomType.TUNNEL, RoomType.PASSAGE]).not.toContain(room!.type);

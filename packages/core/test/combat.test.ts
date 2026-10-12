@@ -3,6 +3,7 @@ import {
   act, type Action, addHero, armorStats, baseKind, blockers, canEnter, charAt, createItem, createMob, createWorld, type Effect,
   F, floorAt, hasFlag, heroById, isAlive, type ItemKind, levelAt, MOBS, NEIGHBOURS8, Rng, rollMob, RoomType, T, weaponStats,
   type World,
+  WIDTH,
 } from '../src/index';
 import { botAction, checkInvariants, pacify, unblock } from './helpers';
 
@@ -52,8 +53,8 @@ describe('monsters', () => {
           expect(mob.state).toBe('sleeping');
           expect(hasFlag(level.map[mob.pos]!, F.PASSABLE)).toBe(true);
           const entrance = level.rooms.find((r) => r.type === RoomType.ENTRANCE)!;
-          const x = mob.pos % 32;
-          const y = Math.trunc(mob.pos / 32);
+          const x = mob.pos % WIDTH;
+          const y = Math.trunc(mob.pos / WIDTH);
           const inEntrance = x > entrance.left && x < entrance.right && y > entrance.top && y < entrance.bottom;
           expect(inEntrance).toBe(false);
         }

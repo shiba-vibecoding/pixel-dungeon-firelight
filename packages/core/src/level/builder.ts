@@ -1,6 +1,6 @@
 import type { ItemKind } from '../items';
 import type { Rng } from '../rng';
-import { cell, LENGTH, WIDTH, type Point, type Rect } from './geometry';
+import { cell, LENGTH, SOLO_SPAN, WIDTH, type Point, type Rect } from './geometry';
 import { type Room, RoomType } from './room';
 import { T } from './terrain';
 
@@ -102,9 +102,11 @@ export class LevelBuilder {
     readonly feeling: Feeling,
     /** Special room kinds still available, in this run's preference order. */
     readonly specials: RoomType[],
+    /** How many cells a side the level spreads over (the grid's top-left part): more for a bigger party. */
+    readonly span = SOLO_SPAN,
   ) {
     if (feeling === Feeling.CHASM) {
-      this.map.fill(T.CHASM);
+      for (let y = 0; y < span; y++) for (let x = 0; x < span; x++) this.map[x + y * WIDTH] = T.CHASM;
     }
   }
 

@@ -1,8 +1,13 @@
 /* Map dimensions, neighbourhoods and the integer rectangle used by rooms. */
 
-export const WIDTH = 32;
-export const HEIGHT = 32;
+export const WIDTH = 48;
+export const HEIGHT = 48;
 export const LENGTH = WIDTH * HEIGHT;
+/**
+ * How many cells a side a level spreads over for one hero: the original's 32. The grid is
+ * bigger so that a party's depths can spread wider (party.ts); the rest is solid rock.
+ */
+export const SOLO_SPAN = 32;
 
 export const NEIGHBOURS4: readonly number[] = [-WIDTH, +1, +WIDTH, -1];
 export const NEIGHBOURS8: readonly number[] = [

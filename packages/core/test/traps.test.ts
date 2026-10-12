@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   act, addHero, canEnter, charAt, createMob, createWorld, F, findPath, floorAt, hasFlag, heroById, levelAt,
   NEIGHBOURS8, T, type World,
+  WIDTH,
 } from '../src/index';
 import { pacify } from './helpers';
 
@@ -11,9 +12,12 @@ function besideTrap(trap: number, seed = 6): { world: World; cell: number } {
   addHero(world, { id: 'p', name: 'P', heroClass: 'warrior' });
   const hero = heroById(world, 'p')!;
   const level = levelAt(world, 1);
-  const cell = NEIGHBOURS8.map((n) => hero.pos + n).find(
-    (c) => level.map[c] === T.EMPTY && canEnter(level, c) && !charAt(world, 1, c),
-  )!;
+  // Any plain floor beside the hero (not a door or the stairs): the trap is laid there.
+  const plain = (c: number): boolean => ([T.EMPTY, T.EMPTY_SP, T.EMPTY_DECO, T.GRASS] as number[]).includes(level.map[c]!);
+  const free = (c: number): boolean => canEnter(level, c) && !charAt(world, 1, c) && level.map[c] !== T.DOOR && level.map[c] !== T.OPEN_DOOR;
+  const around = NEIGHBOURS8.map((n) => hero.pos + n);
+  // Plain floor if there is any; otherwise whatever can be walked on (a flooded room).
+  const cell = around.find((c) => plain(c) && free(c)) ?? around.find((c) => free(c) && hasFlag(level.map[c]!, F.PASSABLE))!;
   level.map[cell] = trap;
   return { world, cell };
 }
@@ -55,7 +59,7 @@ describe('traps', () => {
     act(world, 'p', { type: 'move', to: cell });
     const summoned = floorAt(world, 1).mobs;
     expect(summoned.length).toBeGreaterThanOrEqual(1);
-    for (const mob of summoned) expect(Math.max(Math.abs((mob.pos % 32) - (cell % 32)), Math.abs(Math.trunc(mob.pos / 32) - Math.trunc(cell / 32)))).toBeLessThanOrEqual(2);
+    for (const mob of summoned) expect(Math.max(Math.abs((mob.pos % WIDTH) - (cell % WIDTH)), Math.abs(Math.trunc(mob.pos / WIDTH) - Math.trunc(cell / WIDTH)))).toBeLessThanOrEqual(2);
   });
 
   it('lightning takes a third to two thirds of the health', () => {

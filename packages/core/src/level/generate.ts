@@ -3,6 +3,7 @@ import { deriveSeed, Rng, Stream } from '../rng';
 import { type RunState, useSpecial } from '../run';
 import { Feeling, isBossDepth, type ItemSpawn, type ItemSpec, LevelBuilder, type WellWater } from './builder';
 import { stitchTerrain } from './flags';
+import { SOLO_SPAN } from './geometry';
 import { PAINTERS } from './painters';
 import { RoomType } from './room';
 import { CAVES_STYLE } from './caves';
@@ -95,7 +96,7 @@ function rollFeeling(rng: Rng, depth: number): Feeling {
  * order of depth, because a weak floor on one level puts a pit room on the
  * next and special rooms rotate through the run.
  */
-export function generateLevel(run: RunState, depth: number): Level {
+export function generateLevel(run: RunState, depth: number, span = SOLO_SPAN): Level {
   if (depth < 1 || depth > DEEPEST_LEVEL) {
     throw new Error(`Depth ${depth} is not generated yet; the port covers the sewers and the prison (1-${DEEPEST_LEVEL})`);
   }
@@ -112,7 +113,7 @@ export function generateLevel(run: RunState, depth: number): Level {
     const specials = boss
       ? []
       : run.specials.filter((type) => PAINTERS.has(type) && !(type === RoomType.WEAK_FLOOR && isBossDepth(depth + 1)));
-    const level = new LevelBuilder(rng, depth, feeling, specials);
+    const level = new LevelBuilder(rng, depth, feeling, specials, boss ? SOLO_SPAN : span);
     level.pitRoomNeeded = pitNeeded && !boss;
     level.blacksmithWanted = !run.blacksmithSpawned;
     const { style, build } = layoutFor(depth);

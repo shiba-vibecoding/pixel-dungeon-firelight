@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   act, addHero, createItem, createWorld, floorAt, heroById, isWater, levelAt, NEIGHBOURS8, RoomType, T, type World,
+  WIDTH,
 } from '../src/index';
 
 /** The first run (and depth) whose layout has a room of `type` (and passes `also`). */
@@ -114,7 +115,7 @@ describe('statue, pool and vault rooms', () => {
     // Lure them out: the hero stands at the pool's edge.
     const pool = level.rooms.find((room) => room.type === RoomType.POOL)!;
     const door = level.map.findIndex((t, c) => (t === T.DOOR || t === T.OPEN_DOOR) &&
-      c % 32 >= pool.left && c % 32 <= pool.right && Math.trunc(c / 32) >= pool.top && Math.trunc(c / 32) <= pool.bottom);
+      c % WIDTH >= pool.left && c % WIDTH <= pool.right && Math.trunc(c / WIDTH) >= pool.top && Math.trunc(c / WIDTH) <= pool.bottom);
     heroAt(world, depth, door);
     for (const piranha of piranhas) Object.assign(piranha, { state: 'hunting', enemy: 'p', target: door });
     for (let i = 0; i < 20; i++) act(world, 'p', { type: 'wait' });

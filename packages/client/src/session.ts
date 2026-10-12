@@ -39,7 +39,7 @@ export interface Session {
   drainSignals(): Array<{ from: string; signal: Signal; at: number }>;
 }
 
-const SAVE_VERSION = 30;
+const SAVE_VERSION = 31;
 
 interface SoloSave {
   version: number;

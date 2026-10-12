@@ -1,7 +1,7 @@
 import {
   adjacent, blockers, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
   HEAP_SPRITES,
-  type Hero, type Item,
+  type Hero, type Item, type Level,
   heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, PLANT_KINDS, type SmithLine, T,
   visibleCells, wandMaxCharges, WIDTH,
@@ -162,6 +162,32 @@ const hud = new Hud({
     if (hero) toast(`${hero.name} · ${t.classes[hero.heroClass]} · ${t.newDepth(hero.depth)}`, { tone: 'ally' });
   },
 });
+/**
+ * The middle of where a level actually lies, world pixels: the grid is bigger than a level for
+ * one hero (core geometry.ts), and the rest of it is solid rock.
+ */
+const middles = new WeakMap<Level, { x: number; y: number }>();
+function levelMiddle(level: Level): { x: number; y: number } {
+  let middle = middles.get(level);
+  if (!middle) {
+    let left = WIDTH;
+    let right = 0;
+    let top = HEIGHT;
+    let bottom = 0;
+    for (let i = 0; i < level.map.length; i++) {
+      const terrain = level.map[i]!;
+      if (terrain === T.WALL || terrain === T.WALL_DECO) continue;
+      left = Math.min(left, i % WIDTH);
+      right = Math.max(right, i % WIDTH);
+      top = Math.min(top, Math.trunc(i / WIDTH));
+      bottom = Math.max(bottom, Math.trunc(i / WIDTH));
+    }
+    middle = { x: ((left + right + 1) / 2) * TILE, y: ((top + bottom + 1) / 2) * TILE };
+    middles.set(level, middle);
+  }
+  return middle;
+}
+
 /** The map's buttons over the log (zoom, the whole level, back to the hero) and the finds' stack (mapui.ts). */
 const mapControls = new MapControls(document.getElementById('ui')!, {
   zoomIn: () => zoomTo(Math.round(zoom.target) + 1, null),
@@ -172,8 +198,9 @@ const mapControls = new MapControls(document.getElementById('ui')!, {
     const me = world && heroById(world, session!.myId);
     zoomTo(zoom.min, null);
     if (me) {
-      pan.x = (WIDTH * TILE) / 2 - (cellX(me.pos) * TILE + TILE / 2);
-      pan.y = (HEIGHT * TILE) / 2 - (cellY(me.pos) * TILE + TILE / 2);
+      const middle = levelMiddle(levelAt(world, me.depth));
+      pan.x = middle.x - (cellX(me.pos) * TILE + TILE / 2);
+      pan.y = middle.y - (cellY(me.pos) * TILE + TILE / 2);
       pan.home = false;
     }
   },
@@ -1360,9 +1387,9 @@ function placeVignette(on: boolean, x = 0, y = 0): void {
 function drawBackdrop(now: number): void {
   placeVignette(false);
   const { level, all } = backdrop;
-  const span = WIDTH * TILE;
-  camera.x = Math.round(span / 2 - canvas.width / camera.zoom / 2 + Math.sin(now / 9000) * 60);
-  camera.y = Math.round(span / 2 - canvas.height / camera.zoom / 2 + Math.cos(now / 11000) * 40);
+  const middle = levelMiddle(level);
+  camera.x = Math.round(middle.x - canvas.width / camera.zoom / 2 + Math.sin(now / 9000) * 60);
+  camera.y = Math.round(middle.y - canvas.height / camera.zoom / 2 + Math.cos(now / 11000) * 40);
   render(
     ctx, { level, baked: backdrop.baked, visible: all, explored: all, heaps: [], seeAll: false },
     backdrop.view, '', assets, camera, now,

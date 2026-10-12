@@ -113,7 +113,7 @@ export function buildRegularLevel(level: LevelBuilder, style: RegionStyle): bool
 
 export function initRooms(level: LevelBuilder, style: RegionStyle): boolean {
   level.rooms = [];
-  split(level, style, new Rect(0, 0, WIDTH - 1, HEIGHT - 1));
+  split(level, style, new Rect(0, 0, level.span - 1, level.span - 1));
   if (level.rooms.length < 8) {
     return false;
   }
