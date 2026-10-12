@@ -239,7 +239,7 @@ export type Effect =
   | { type: 'arenaWave'; depth: number; wave: number; champions: boolean; tier: number; count: number; boss?: MobKind }
   | { type: 'arenaCleared'; depth: number; wave: number }
   | { type: 'arenaOffer'; hero: string; items: Item[] }
-  | { type: 'arenaReady'; hero: string }
+  | { type: 'arenaReady'; hero: string; ready: boolean }
   | { type: 'arenaSinks'; depth: number; tier: number }
   | { type: 'arenaGates'; depth: number; open: boolean; cells: number[] }
   /** A queued action that became impossible before the hero's turn came. */

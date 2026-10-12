@@ -70,8 +70,11 @@ export type Action =
   | { type: 'endGame' }
   /** Lloyd's beacon: set it where the hero stands, or return to where it was set. */
   | { type: 'beacon'; item: number; mode: 'set' | 'return' }
-  /** The arena of waves: «To battle!» once the party has rested, and one of the three rewards after a wave. */
-  | { type: 'arenaReady' }
+  /**
+   * The arena of waves: «To battle!» once the party has rested (or, `cancel`, not ready after all), and
+   * one of the three rewards after a wave.
+   */
+  | { type: 'arenaReady'; cancel?: boolean }
   | { type: 'arenaPick'; choice: number }
   | InventoryAction;
 
@@ -764,7 +767,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
 
     // Choosing takes no time: the party is resting.
     case 'arenaReady':
-      arenaReady(ctx, hero);
+      arenaReady(ctx, hero, action.cancel === true);
       break;
 
     case 'arenaPick':

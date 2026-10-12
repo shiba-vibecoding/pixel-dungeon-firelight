@@ -44,8 +44,10 @@ export function sanitizeAction(raw: unknown): Action | null {
     case 'pickup':
     case 'buy':
     case 'mine':
-    case 'arenaReady':
       return { type: a.type };
+    case 'arenaReady':
+      // «To battle!», or, pressed again, not after all.
+      return a.cancel === true ? { type: 'arenaReady', cancel: true } : { type: 'arenaReady' };
     case 'arenaPick':
       // One of the three rewards after a wave.
       return isInt(a.choice, 0, 2) ? { type: 'arenaPick', choice: a.choice } : null;

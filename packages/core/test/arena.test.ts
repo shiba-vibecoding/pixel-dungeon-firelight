@@ -217,10 +217,14 @@ describe('a wave', () => {
     expect(fallen.hp).toBe(Math.floor(fallen.ht / 2));
     expect(insideArena(fallen.pos)).toBe(true);
     expect(world.arena!.offers.q1).toHaveLength(3);
-    // Both must be ready for the next wave.
+    // Both must be ready for the next wave; pressed again, «To battle!» is taken back.
     act(world, 'p', { type: 'arenaReady' });
-    expect(world.arena!.phase).toBe('rest');
+    expect(world.arena!.ready).toEqual(['p']);
+    act(world, 'p', { type: 'arenaReady', cancel: true });
+    expect(world.arena!.ready).toEqual([]);
     act(world, 'q1', { type: 'arenaReady' });
+    expect(world.arena!.phase).toBe('rest');
+    act(world, 'p', { type: 'arenaReady' });
     expect(world.arena!).toMatchObject({ phase: 'fight', wave: 2 });
   });
 

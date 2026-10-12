@@ -8,9 +8,10 @@ import { T } from './terrain';
 
 /*
  * «The Pit of Yendor», the arena of waves: a hand-made, symmetric, octagonal
- * pit in the middle of the grid, ringed by decorated walls (the stands). Four
- * short corridors lead out of it, north, east, south and west, each to a gate
- * and a small pen behind it, where the monsters of a wave come in. In the
+ * pit in the middle of the grid, walled in, with the stands of the crowd three
+ * rings deep around the wall. Four gates in the wall, north, east, south and
+ * west, open onto short corridors through the stands, each to a small pen
+ * where the monsters of a wave come in. In the
  * middle a raised dais with a pedestal: rewards appear there, and heroes
  * gather at rest. Nothing leads up or down.
  *
@@ -26,10 +27,12 @@ export const ARENA_CENTRE = cell(23, 23);
 const RADIUS = 12;
 /** How far the corners are cut: |dx| + |dy| <= RADIUS + CUT. */
 const CUT = 5;
-/** How thick the stands are. */
-const STANDS = 2;
-/** Each pen is 3 by 3 cells, behind its gate at this distance from the middle. */
-const GATE_AT = RADIUS + STANDS + 1;
+/** The wall is the ring just outside the floor; the gates are in it. */
+const GATE_AT = RADIUS + 1;
+/** How deep the stands are, beyond the wall. */
+const STANDS = 3;
+/** Where the pens begin: 3 by 3 cells, past the corridors through the stands. */
+const PEN_AT = GATE_AT + STANDS + 1;
 
 /** The depth the arena stands on in each tier: the first depth of a region (sewers, prison, caves, city, halls). */
 export const ARENA_DEPTHS: readonly number[] = [1, 6, 11, 16, 21];
@@ -42,8 +45,10 @@ export interface ArenaRing {
   gates: number[];
   /** The cells of the pen behind each gate, in the same order. */
   pens: number[][];
-  /** The corridor cell just inside each gate, where what lies in a pen is brought at rest. */
+  /** The floor cell just inside each gate, where what lies beyond it is brought at rest. */
   mouths: number[];
+  /** The four braziers on the diagonals (fixtures that block the way, as statues do). */
+  braziers: number[];
 }
 
 /** Octagonal distance from the middle: inside the arena up to RADIUS, the stands beyond. */
@@ -51,14 +56,21 @@ const ring = (dx: number, dy: number): number => Math.max(Math.abs(dx), Math.abs
 
 const at = (dx: number, dy: number): number => ARENA_CENTRE + dx + dy * WIDTH;
 
-/** True for a cell of the arena proper: the floor inside the stands and the corridors to the gates. */
-export function insideArena(pos: number): boolean {
-  const dx = (pos % WIDTH) - (ARENA_CENTRE % WIDTH);
-  const dy = Math.trunc(pos / WIDTH) - Math.trunc(ARENA_CENTRE / WIDTH);
-  if (ring(dx, dy) <= RADIUS) return true;
-  // The corridors through the stands, up to (not including) the gates.
-  return (dx === 0 && Math.abs(dy) > RADIUS && Math.abs(dy) < GATE_AT) || (dy === 0 && Math.abs(dx) > RADIUS && Math.abs(dx) < GATE_AT);
+/**
+ * How far a cell is from the middle, as the octagon measures it: the floor is up to
+ * ARENA_RADIUS, the wall one more, then the stands (ARENA_STANDS deep).
+ */
+export function ringDistance(pos: number): number {
+  return ring((pos % WIDTH) - (ARENA_CENTRE % WIDTH), Math.trunc(pos / WIDTH) - Math.trunc(ARENA_CENTRE / WIDTH));
 }
+export const ARENA_RADIUS = RADIUS;
+export const ARENA_STANDS = STANDS;
+
+/** True for a cell of the arena proper: the floor inside the wall. */
+export const insideArena = (pos: number): boolean => ringDistance(pos) <= RADIUS;
+
+/** How far out along the diagonals the braziers stand. */
+const BRAZIER = 7;
 
 /** The four directions of the gates, as unit steps: north, east, south, west. */
 const SIDES: ReadonlyArray<readonly [number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
@@ -135,12 +147,12 @@ export function buildArenaLevel(seed: number, depth: number): Level & { ring: Ar
   const rng = Rng.seeded(deriveSeed(seed, Stream.LAYOUT, depth));
   const map = new Array<number>(LENGTH).fill(T.WALL);
 
-  // The floor and the stands around it.
-  for (let dy = -RADIUS - STANDS; dy <= RADIUS + STANDS; dy++) {
-    for (let dx = -RADIUS - STANDS; dx <= RADIUS + STANDS; dx++) {
+  // The floor; the wall around it is the region's rock, the stands beyond it decorated.
+  for (let dy = -GATE_AT - STANDS; dy <= GATE_AT + STANDS; dy++) {
+    for (let dx = -GATE_AT - STANDS; dx <= GATE_AT + STANDS; dx++) {
       const d = ring(dx, dy);
       if (d <= RADIUS) map[at(dx, dy)] = T.EMPTY;
-      else if (d <= RADIUS + STANDS) map[at(dx, dy)] = T.WALL_DECO;
+      else if (d > GATE_AT && d <= GATE_AT + STANDS) map[at(dx, dy)] = T.WALL_DECO;
     }
   }
 
@@ -183,6 +195,10 @@ export function buildArenaLevel(seed: number, depth: number): Level & { ring: Ar
   for (const [dx, dy] of mirrored(look.cover)) map[at(dx, dy)] = look.coverTerrain;
   for (const [dx, dy] of mirrored(look.statues ?? [])) map[at(dx, dy)] = T.STATUE;
 
+  // The braziers on the diagonals.
+  const braziers = [at(-BRAZIER, -BRAZIER), at(BRAZIER, -BRAZIER), at(BRAZIER, BRAZIER), at(-BRAZIER, BRAZIER)];
+  for (const pos of braziers) map[pos] = T.STATUE;
+
   // The raised dais, with the pedestal in the middle.
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) map[at(dx, dy)] = T.EMPTY_SP;
   map[ARENA_CENTRE] = T.PEDESTAL;
@@ -192,17 +208,17 @@ export function buildArenaLevel(seed: number, depth: number): Level & { ring: Ar
   const pens: number[][] = [];
   const mouths: number[] = [];
   for (const [sx, sy] of SIDES) {
-    for (let k = RADIUS + 1; k < GATE_AT; k++) map[at(sx * k, sy * k)] = T.EMPTY_SP;
     const gate = at(sx * GATE_AT, sy * GATE_AT);
     map[gate] = T.LOCKED_DOOR;
     gates.push(gate);
-    mouths.push(at(sx * (GATE_AT - 1), sy * (GATE_AT - 1)));
+    mouths.push(at(sx * RADIUS, sy * RADIUS));
+    for (let k = GATE_AT + 1; k < PEN_AT; k++) map[at(sx * k, sy * k)] = T.EMPTY_SP;
     const pen: number[] = [];
-    for (let depthIn = 1; depthIn <= 3; depthIn++) {
+    for (let depthIn = 0; depthIn < 3; depthIn++) {
       for (let across = -1; across <= 1; across++) {
-        // Along the corridor's axis `depthIn` cells past the gate, `across` to the side.
-        const dx = sx * (GATE_AT + depthIn) + (sx === 0 ? across : 0);
-        const dy = sy * (GATE_AT + depthIn) + (sy === 0 ? across : 0);
+        // Along the corridor's axis `depthIn` cells into the pen, `across` to the side.
+        const dx = sx * (PEN_AT + depthIn) + (sx === 0 ? across : 0);
+        const dy = sy * (PEN_AT + depthIn) + (sy === 0 ? across : 0);
         map[at(dx, dy)] = T.EMPTY;
         pen.push(at(dx, dy));
       }
@@ -230,6 +246,6 @@ export function buildArenaLevel(seed: number, depth: number): Level & { ring: Ar
     wells: [],
     secretDoors: 0,
     region: tier,
-    ring: { dais: ARENA_CENTRE, gates, pens, mouths },
+    ring: { dais: ARENA_CENTRE, gates, pens, mouths, braziers },
   };
 }

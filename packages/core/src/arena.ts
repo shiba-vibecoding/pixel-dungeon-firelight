@@ -2,7 +2,7 @@ import { createMob, type Hero, isAlive, type Mob, type MobKind, rollMob } from '
 import { canEnter, charAt, type Ctx, dropItem, enterCell, type Floor, freeCellNear, leaveCell, observe } from './floor';
 import { collect } from './inventory';
 import { createItem, type GeneratedCategory, type Item, itemDef, ItemGenerator, rollFood } from './items';
-import { ARENA_CENTRE, ARENA_DEPTHS, buildArenaLevel, insideArena } from './level/arena';
+import { ARENA_CENTRE, ARENA_DEPTHS, ARENA_RADIUS, ARENA_STANDS, buildArenaLevel, insideArena, ringDistance } from './level/arena';
 import { isBossDepth } from './level/builder';
 import { discoverable } from './level/flags';
 import type { Level } from './level/generate';
@@ -141,8 +141,8 @@ export function arenaLevelAt(world: World, depth: number): Level {
     world.floors[depth] = {
       mobs: [], rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, depth)), now: 0, plants: [], respawn: -1, heaps: [],
     };
-    // The party knows the whole pit from the start; what is in it they still have to see.
-    world.explored[depth] = discoverable(level.map);
+    // The party knows the whole pit from the start, the stands round it too; what is in it they still have to see.
+    world.explored[depth] = discoverable(level.map).map((open, pos) => open || ringDistance(pos) <= ARENA_RADIUS + 1 + ARENA_STANDS);
   }
   return world.levels[depth]!;
 }
@@ -172,12 +172,19 @@ export function arenaProblem(world: World, hero: Hero, action: { type: string; m
   }
 }
 
-/** «To battle!»: the hero is ready; once every living hero is, the next wave begins. */
-export function arenaReady(ctx: Ctx, hero: Hero): void {
+/** «To battle!»: the hero is ready (or, pressed again, not after all); once every living hero is, the next wave begins. */
+export function arenaReady(ctx: Ctx, hero: Hero, cancel = false): void {
   const arena = ctx.world.arena!;
+  if (cancel) {
+    if (arena.ready.includes(hero.id)) {
+      arena.ready.splice(arena.ready.indexOf(hero.id), 1);
+      ctx.effects.push({ type: 'arenaReady', hero: hero.id, ready: false });
+    }
+    return;
+  }
   if (!arena.ready.includes(hero.id)) {
     arena.ready.push(hero.id);
-    ctx.effects.push({ type: 'arenaReady', hero: hero.id });
+    ctx.effects.push({ type: 'arenaReady', hero: hero.id, ready: true });
   }
   if (ctx.world.heroes.filter(isAlive).every((h) => arena.ready.includes(h.id))) startWave(ctx);
 }
@@ -372,8 +379,8 @@ function clearWave(ctx: Ctx): void {
   }
   for (const heap of [...floor.heaps]) {
     if (!outside(heap.pos)) continue;
-    const gate = ring.pens.findIndex((pen) => pen.includes(heap.pos));
-    const mouth = ring.mouths[gate >= 0 ? gate : Math.max(0, ring.gates.indexOf(heap.pos))]!;
+    // To the gate it lies behind: the nearest one.
+    const mouth = ring.mouths.reduce((best, m) => (distance(m, heap.pos) < distance(best, heap.pos) ? m : best));
     floor.heaps.splice(floor.heaps.indexOf(heap), 1);
     for (const item of heap.items) dropItem(floor, mouth, item);
   }

@@ -181,6 +181,8 @@
       slain: { hold: 2, dur: 2200, frames: [[0, { a: 1, flash: 1, rule: 0 }], [66, { a: 1, flash: 0, rule: .5 }], [133, { a: 1, flash: 0, rule: 1 }], [2000, { a: .66, flash: 0, rule: .66 }], [2066, { a: .33, flash: 0, rule: .33 }], [2133, { a: 0, flash: 0, rule: 0 }]] },
       /* вступление к региону: шапка как у depth, затем строки текста по одной (кадр на половину яркости, кадр на полную); держится 5,6 с */
       intro: { hold: 15, dur: 5800, frames: [[0, { band: .33, rule: 0, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }], [66, { band: .66, rule: .25, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }], [133, { band: 1, rule: .5, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }], [200, { band: 1, rule: 1, emb: .5, dy: 2, title: 0, sub: 0, lines: 0 }], [266, { band: 1, rule: 1, emb: 1, dy: -1, title: .5, sub: 0, lines: 0 }], [333, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 0, lines: 0 }], [400, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: .5, lines: 0 }], [466, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 0 }], [600, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: .5 }], [666, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 1 }], [800, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 1.5 }], [866, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 2 }], [1000, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 2.5 }], [1066, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 3 }], [1200, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 3.5 }], [1266, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 4 }], [5600, { band: .66, rule: .66, emb: .66, dy: 0, title: .66, sub: .66, lines: 2.64 }], [5666, { band: .33, rule: .33, emb: .33, dy: 0, title: .33, sub: .33, lines: 1.32 }], [5733, { band: 0, rule: 0, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }]] },
+      /* баннер волны: как имя босса, но короче — 2,2 с */
+      wave: { hold: 6, dur: 2200, frames: [[0, { band: .33, rule: 0, name: 0, sub: 0 }], [66, { band: .66, rule: .25, name: 0, sub: 0 }], [133, { band: 1, rule: .5, name: 0, sub: 0 }], [200, { band: 1, rule: 1, name: .5, sub: 0 }], [266, { band: 1, rule: 1, name: 1, sub: 0 }], [400, { band: 1, rule: 1, name: 1, sub: .5 }], [466, { band: 1, rule: 1, name: 1, sub: 1 }], [1933, { band: .66, rule: .66, name: .66, sub: .66 }], [2000, { band: .33, rule: .33, name: .33, sub: .33 }], [2066, { band: 0, rule: 0, name: 0, sub: 0 }]] },
       depth: { hold: 7, dur: 2400, frames: [[0, { band: .33, rule: 0, emb: 0, dy: 0, title: 0, sub: 0 }], [66, { band: .66, rule: .25, emb: 0, dy: 0, title: 0, sub: 0 }], [133, { band: 1, rule: .5, emb: 0, dy: 0, title: 0, sub: 0 }], [200, { band: 1, rule: 1, emb: .5, dy: 2, title: 0, sub: 0 }], [266, { band: 1, rule: 1, emb: 1, dy: -1, title: .5, sub: 0 }], [333, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 0 }], [400, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: .5 }], [466, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1 }], [2200, { band: .66, rule: .66, emb: .66, dy: 0, title: .66, sub: .66 }], [2266, { band: .33, rule: .33, emb: .33, dy: 0, title: .33, sub: .33 }], [2333, { band: 0, rule: 0, emb: 0, dy: 0, title: 0, sub: 0 }]] },
       number: { hold: 0, dur: 700, frames: [[0, { a: 1, dy: 0 }], [100, { a: 1, dy: -2 }], [200, { a: 1, dy: -4 }], [300, { a: 1, dy: -6 }], [400, { a: .66, dy: -8 }], [500, { a: .33, dy: -8 }], [600, { a: 0, dy: -8 }]] }
     },
@@ -236,6 +238,17 @@
       var fade = k.band < 1 ? k.band : 1;
       lines.forEach(function (ln, i) { var a = Math.max(0, Math.min(1, k.lines - i)); if (k.band < 1) a = fade; if (a > 0) PD.fx.text(ctx, ln, width / 2, top + 96 + 12 + i * lh, { font: 'small', scale: 1.5, color: FX_COLORS.ink, alpha: a, shadow: 0 }); });
       return t < PD.fx.timelines.intro.dur;
+    },
+    /* баннер начала волны: «Волна 5» Galmuri11 ×4 gold на полосе, подпись ×1.5 — kind 'champions' красит подпись в fx-boss, 'boss' — и номер */
+    wave: function (ctx, title, sub, kind, cy, width, t) {
+      var k = PD.fx.step(PD.fx.timelines.wave, t), h = 104;
+      if (k.band > 0) { ctx.save(); ctx.globalAlpha = k.band; ctx.fillStyle = FX_COLORS.band; ctx.fillRect(0, snap(cy - h / 2, 2), width, h); ctx.restore(); }
+      var rw = Math.round(width * .4 * k.rule), lc = kind === 'champions' || kind === 'boss' ? FX_COLORS.boss : FX_COLORS.line;
+      if (rw > 0) { PD.fx.rule(ctx, width / 2 - rw, cy - h / 2 + 6, rw * 2, 2, lc, k.band); PD.fx.rule(ctx, width / 2 - rw, cy + h / 2 - 8, rw * 2, 2, lc, k.band); }
+      ctx.save(); ctx.font = '48px "Galmuri11"'; var sc = ctx.measureText(title).width > width * .9 ? 3 : 4; ctx.restore();
+      if (k.name > 0) PD.fx.text(ctx, title, width / 2, cy + 6, { scale: sc, color: kind === 'boss' ? FX_COLORS.boss : FX_COLORS.gold, alpha: k.name });
+      if (k.sub > 0 && sub) PD.fx.text(ctx, sub, width / 2, cy + 34, { scale: 1.5, color: kind === 'champions' || kind === 'boss' ? FX_COLORS.boss : FX_COLORS.ink, alpha: k.sub, shadow: 0 });
+      return t < PD.fx.timelines.wave.dur;
     },
     /* «Уровень 3!» — над героем, на 3 клетки выше; Galmuri11 ×3, gold, тень 1 */
     level: function (ctx, text, x, y, t) {
@@ -388,6 +401,7 @@
     /* canvas во весь экран; scale — --px; focus — клетка, которая окажется в центре по горизонтали и на высоте fy (0..1) */
     map: function (canvas, opt) {
       opt = opt || {};
+      if (opt.custom) return opt.custom(canvas);
       var s = opt.scale || 2, ts = 16 * s, dpr = window.devicePixelRatio || 1;
       var W = canvas.clientWidth, H = canvas.clientHeight;
       canvas.width = W * dpr; canvas.height = H * dpr;
@@ -485,7 +499,7 @@
         tool('backpack', 14, 15, 'Рюкзак') +
       '</nav>';
     PD.sprite(el);
-    PD.demo.map(el.querySelector('canvas'), { fy: o.fy || 0.46, after: o.after, names: o.names });
+    PD.demo.map(el.querySelector('canvas'), { fy: o.fy || 0.46, after: o.after, names: o.names, custom: o.custom });
   };
 
   /* Титульный экран для макетов: фон-карта, логотип, окно с классами, шестерёнка настроек в углу. o: { en, challenges: n } */
@@ -502,7 +516,7 @@
       '<div class="pd-field"><label>' + L.field + '</label><input class="pd-input" value="QA" maxlength="16"></div>' +
       '<div class="pd-actions"><button class="pd-button primary big stacked">' + L.cont + '<span class="pd-btn-sub">' + L.meta + '</span></button>' +
       '<div class="pd-row"><button class="pd-button">' + L.neu + '</button><button class="pd-button pd-ch-btn" aria-label="' + L.ch + '"><i class="pd-icon" style="width:24px;height:24px;background-image:var(--spr-challenge-' + (o.challenges ? 'on' : 'off') + ')"></i>' + L.ch + (o.challenges ? '<b class="pd-ch-n">' + o.challenges + '</b>' : '') + '</button></div>' +
-      '<button class="pd-button ally">' + L.coop + '</button></div>' +
+      '<button class="pd-button ally">' + L.coop + '</button>' + (o.arena ? '<button class="pd-button pd-mode-btn"><i class="pd-mode-ico"></i><span class="pd-mode-text">' + (en ? 'Wave arena' : 'Арена волн') + '<small>' + (en ? 'The Pit of Yendor · best: <b>wave 12</b>' : 'Яма Йендора · рекорд: <b>волна 12</b>') + '</small></span></button>' : '') + '</div>' +
       '<div class="pd-daily"><div class="pd-daily-head"><i class="pd-icon" style="background-image:var(--spr-stairs)"></i><h3>' + L.daily + '</h3></div><p class="pd-note">' + L.dnote + '</p><div class="pd-row"><button class="pd-button">' + L.down + '</button><button class="pd-button">' + L.ranks + '</button></div></div>' +
       '</section></main>';
     PD.demo.map(el.querySelector('canvas'), { fy: 0.3, names: false });
@@ -692,7 +706,8 @@
   };
   var D_UNSEEN = function (x, y) { return (x >= 31 && y >= 14) || (x <= 19 && y >= 17) || (y >= 19); };
   var D_HERO = [17, 11], D_MATE = [21, 12], D_RAT = [13, 10], D_ITEMS = [[11, 13, 57], [22, 9, 14], [6, 2, 45]];
-  function deskMap(canvas, W, H, m, cb, solo) {
+  function deskMap(canvas, W, H, m, cb, solo, custom) {
+    if (custom) return custom(canvas, W, H, m);
     var dpr = window.devicePixelRatio || 1; canvas.width = W * dpr; canvas.height = H * dpr;
     var g = canvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.imageSmoothingEnabled = false;
     var ts = 16 * m, ox = Math.round(W / 2 - (D_HERO[0] + .5) * ts), oy = Math.round(H * .5 - (D_HERO[1] + .5) * ts);
@@ -719,7 +734,7 @@
     o = o || {}; var L = DTX[o.lang || 'ru'], ui = o.ui || 1, W = el.clientWidth, H = el.clientHeight, m = o.m || 3;
     var tool = function (t) { return '<button class="pd-tool" aria-label="' + t[3] + '" aria-keyshortcuts="' + t[4] + '"><span class="pd-key">' + t[4] + '</span><i class="pd-icon" style="--w:' + t[1] + ';--h:' + t[2] + ';background-image:var(--spr-tool-' + t[0] + ')"></i></button>'; };
     var mates = o.mates === false ? '' : '<section class="pd-party" aria-label="' + L.party + '">' + L.mates.map(function (p) { return '<button class="pd-pcard ' + p[5] + '"><i class="pd-mate-face" style="--av:' + p[1] + '"></i><span class="pd-mate-name">' + p[0] + '</span><span class="pd-mate-depth">' + p[3] + '</span><div class="pd-bar" style="--v:' + p[2] + '"></div><span class="pd-pstate">' + p[4] + '</span></button>'; }).join('') + '</section>' + (o.waiting === false ? '' : '<p class="pd-status waiting"><span class="pd-status-text">' + L.wait.replace(/: (.*)$/, ': <span class="pd-ally">$1</span>') + '</span></p>');
-    var log = o.mates === false ? L.log.filter(function (l) { return l[0].indexOf('pd-ally') < 0; }) : L.log;
+    var log = o.log || (o.mates === false ? L.log.filter(function (l) { return l[0].indexOf('pd-ally') < 0; }) : L.log);
     var lines = log.map(function (l, i) { return '<div class="pd-log-line ' + l[1] + '" data-age="' + (log.length - 1 - i) + '">' + l[0] + '</div>'; }).join('');
     el.innerHTML = '<canvas class="pd-map" style="position:absolute;inset:0;width:100%;height:100%"></canvas>' +
       '<div class="pd-ui pd-wide' + (o.bare ? ' bare' + (o.tip === 'tool' ? '' : ' notool') : '') + '" style="--ui:' + ui + '">' +
@@ -750,7 +765,116 @@
       hv.style.cssText = 'left:' + at.x + 'px;top:' + at.y + 'px;width:' + size + 'px;height:' + size + 'px'; el.insertBefore(hv, layer);
       var cx = (at.x + size * .55) / ui, cy = (at.y + size * .5) / ui;
       var c3 = document.createElement('i'); c3.className = 'pd-cursor'; c3.style.left = cx + 'px'; c3.style.top = cy + 'px'; layer.appendChild(c3);
-    }, solo);
+    }, solo, o.custom);
+  };
+
+  /* ---------- Арена волн (макеты) ---------- */
+  var AR = { gate: 0, brazier: 16, banner: 32, sand: 48, crowd: 64 };
+  /* круглая арена: песок внутри круга, кольцо стены со знамёнами и четырьмя воротами, жаровни, трибуны со зрителями.
+     o: { imgs: { tiles, atlas, mobA, mobB }, scale, fy, region, crowdFrame, gateFrame, brazierFrame, mates, mobs: [[x,y,'a'|'b']] } */
+  PD.demo.arenaMap = function (canvas, o) {
+    var W = canvas.clientWidth, H = canvas.clientHeight, dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    var g = canvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.imageSmoothingEnabled = false;
+    var s = o.scale || 2, ts = 16 * s, C = 12, hero = [12, 13], ox = Math.round(W / 2 - (hero[0] + .5) * ts), oy = Math.round(H * (o.fy || .5) - (hero[1] + .5) * ts);
+    var T = o.imgs.tiles, A = o.imgs.atlas;
+    g.fillStyle = '#0b0b09'; g.fillRect(0, 0, W, H);
+    function at(sx, sy, x, y) { g.drawImage(A, sx, sy, 16, 16, ox + x * ts, oy + y * ts, ts, ts); }
+    function tile(n, x, y) { g.drawImage(T, (n % 16) * 16, Math.floor(n / 16) * 16, 16, 16, ox + x * ts, oy + y * ts, ts, ts); }
+    var gates = { '12,6': 1, '18,12': 1, '12,18': 1, '6,12': 1 };
+    for (var y = 0; y < 25; y++) for (var x = 0; x < 25; x++) {
+      var d = Math.hypot(x - C, y - C), X = ox + x * ts, Y = oy + y * ts; if (X > W || Y > H || X < -ts || Y < -ts) continue;
+      var hsh = (x * 73 + y * 151) % 97;
+      if (d <= 5.4) at(AR.sand ? (hsh % 23 === 0 ? 48 : hsh % 31 === 0 ? 64 : (hsh % 3) * 16) : 0, AR.sand, x, y);
+      else if (d <= 6.5) { if (gates[x + ',' + y]) at((o.gateFrame || 0) * 16, AR.gate, x, y); else if (hsh % 5 === 0 && y < C) at(((x + (o.t || 0)) % 2) * 16, AR.banner, x, y); else tile(4, x, y); }
+      else if (d <= 9.6) at(((o.crowdFrame || 0) === 0 ? 0 : ((x + y) % 2 ? o.crowdFrame : 3 - o.crowdFrame)) * 16, AR.crowd, x, y);
+    }
+    [[9, 9], [15, 9], [9, 15], [15, 15]].forEach(function (b, i) { at(((o.brazierFrame || 0) + i) % 4 * 16, AR.brazier, b[0], b[1]); });
+    function spr(im, sx, sy, sw, sh, c) { g.drawImage(im, sx, sy, sw, sh, ox + c[0] * ts + (16 - sw) / 2 * s, oy + c[1] * ts + (16 - sh) * s, sw * s, sh * s); }
+    (o.mobs || []).forEach(function (m) { var im = m[2] === 'b' ? o.imgs.mobB : o.imgs.mobA; spr(im, 0, 0, 12, 15, m); });
+    if (o.mates !== false) { spr(img('mage'), 0, 15, 12, 15, [14, 12]); spr(img('mage'), 0, 15, 12, 15, [10, 14]); }
+    spr(img('warrior'), 0, 15, 12, 15, hero);
+    return { ts: ts, ox: ox, oy: oy };
+  };
+  var ART = {
+    ru: { wave: function (n) { return 'Волна ' + n; }, left: function (n) { return 'осталось <b>' + n + '</b>'; }, rest: 'Передышка', fight: 'К бою!', ready: function (a, b) { return 'Готовы ' + a + '/' + b; }, waitFor: 'ждём: <b>Ёжик</b>', readyMark: 'готов', notReady: 'выбирает награду',
+      pickT: 'Арена волн', pickSub: 'Яма Йендора', rules: ['Отряд из 1–4 героев держит волны монстров.', 'После волны — передышка и награда на выбор.', 'Каждые 5 волн арена уходит глубже: тюрьма, пещеры, город, залы.'], solo: 'Одному', soloSub: 'один герой', friends: 'С друзьями', friendsSub: '2–4 героя · ссылка в Telegram', record: 'Рекорд: волна 12',
+      rewardT: 'Награда', rewardSub: 'за волну 5', take: 'Взять', rewardNote: 'Каждый в отряде выбирает себе сам.', rar: { common: 'обычное', rare: 'редкое', legend: 'легендарное' },
+      loot: [[61, 'Зелье Опыта', 'common'], [33, 'Кольцо Мощи +1', 'rare'], [21, 'Длинный меч +2', 'legend']],
+      endT: 'Отряд пал', endCause: 'на волне 12 · Пещеры', stats: [['Волн', '12'], ['Убито', '87'], ['Очки', '4 320', 'gold']], newRec: 'Новый рекорд!', again: 'Ещё раз', share: 'Поделиться', menu: 'Главное меню',
+      party: [[0, 'QA', 34, 1820], [1, 'Лиса', 29, 1480], [3, 'Ёжик', 24, 1020]] },
+    en: { wave: function (n) { return 'Wave ' + n; }, left: function (n) { return '<b>' + n + '</b> left'; }, rest: 'Breather', fight: 'To battle!', ready: function (a, b) { return 'Ready ' + a + '/' + b; }, waitFor: 'waiting: <b>Hedgehog</b>', readyMark: 'ready', notReady: 'picking a reward',
+      pickT: 'Wave arena', pickSub: 'The Pit of Yendor', rules: ['A party of 1–4 heroes holds off waves of monsters.', 'After each wave: a breather and a reward to choose.', 'Every 5 waves the arena sinks deeper: prison, caves, city, halls.'], solo: 'Alone', soloSub: 'one hero', friends: 'With friends', friendsSub: '2–4 heroes · a link in Telegram', record: 'Best: wave 12',
+      rewardT: 'Reward', rewardSub: 'for wave 5', take: 'Take', rewardNote: 'Everyone in the party picks their own.', rar: { common: 'common', rare: 'rare', legend: 'legendary' },
+      loot: [[61, 'Potion of Experience', 'common'], [33, 'Ring of Power +1', 'rare'], [21, 'Longsword +2', 'legend']],
+      endT: 'The party fell', endCause: 'on wave 12 · Caves', stats: [['Waves', '12'], ['Kills', '87'], ['Score', '4 320', 'gold']], newRec: 'New record!', again: 'Again', share: 'Share', menu: 'Main menu',
+      party: [[0, 'QA', 34, 1820], [1, 'Fox', 29, 1480], [3, 'Hedgehog', 24, 1020]] }
+  };
+  PD.demo.win.arenaPick = function (lang) {
+    var L = ART[lang || 'ru'], art = [[0, 0], [16, 16], [32, 32], [48, 0], [16, 16], [0, 0]].map(function (p) { return '<i style="background-position:' + (-p[0] * 2) + 'px ' + (-(p[1] === 0 && p[0] === 0 ? 0 : p[1]) * 2) + 'px"></i>'; });
+    return '<section class="pd-window narrow" role="dialog" aria-label="' + L.pickT + '"><div class="pd-window-head"><span class="pd-mode-ico" style="width:32px;height:32px"></span><div class="pd-titles"><h2 class="pd-heading">' + L.pickT + '</h2><span class="pd-sub">' + L.pickSub + '</span></div><button class="pd-close" aria-label="×"></button></div>' +
+      '<div class="pd-arena-pick"><div class="pd-arena-art"><i style="background-position:0 0"></i><i style="background-position:-32px -32px"></i><i style="background-position:0 -64px"></i><i style="background-position:-32px -32px"></i><i style="background-position:-96px 0"></i></div>' +
+      '<ul class="pd-arena-rules">' + L.rules.map(function (r) { return '<li>' + r + '</li>'; }).join('') + '</ul><span class="pd-record">' + L.record + '</span>' +
+      '<div class="pd-actions"><button class="pd-button stacked">' + L.solo + '<span class="pd-btn-sub">' + L.soloSub + '</span></button><button class="pd-button ally stacked">' + L.friends + '<span class="pd-btn-sub">' + L.friendsSub + '</span></button></div></div></section>';
+  };
+  PD.demo.win.reward = function (lang, sel) {
+    var L = ART[lang || 'ru'];
+    return '<section class="pd-window" role="dialog" aria-label="' + L.rewardT + '"><div class="pd-window-head"><div class="pd-titles"><h2 class="pd-heading">' + L.rewardT + '</h2><span class="pd-sub">' + L.rewardSub + '</span></div></div>' +
+      '<div class="pd-loot3" role="radiogroup">' + L.loot.map(function (it, i) { return '<button class="pd-loot ' + it[2] + '" role="radio" aria-checked="' + (i === sel) + '"><span class="pd-slot"><i class="pd-item" data-i="' + it[0] + '"></i></span><span class="pd-loot-name">' + it[1] + '</span><span class="pd-rarity">' + L.rar[it[2]] + '</span></button>'; }).join('') + '</div>' +
+      '<p class="pd-loot-note">' + L.rewardNote + '</p><div class="pd-actions"><button class="pd-button primary"' + (sel == null ? ' disabled' : '') + '>' + L.take + '</button></div></section>';
+  };
+  PD.demo.win.arenaEnd = function (lang, coop) {
+    var L = ART[lang || 'ru'];
+    return '<section class="pd-window pd-runend arena" role="dialog" aria-label="' + L.endT + '"><h2 class="pd-display">' + L.endT + '</h2><p class="pd-cause">' + L.endCause + '</p><span class="pd-record new">' + L.newRec + '</span>' +
+      '<dl class="pd-stats">' + L.stats.map(function (x) { return '<div><dt>' + x[0] + '</dt><dd' + (x[2] ? ' class="' + x[2] + '"' : '') + '>' + x[1] + '</dd></div>'; }).join('') + '</dl>' +
+      (coop ? '<div class="pd-arena-party"><div class="head"><span></span><span></span><span>' + L.stats[1][0] + '</span><span>' + L.stats[2][0] + '</span></div>' + L.party.map(function (p, i) { return '<div class="' + (i ? '' : 'me') + '"><i style="--av:' + p[0] + '"></i><span>' + p[1] + '</span><span>' + p[2] + '</span><span>' + p[3] + '</span></div>'; }).join('') + '</div>' : '') +
+      '<div class="pd-actions"><button class="pd-button primary">' + L.again + '</button><button class="pd-button">' + L.share + '</button><button class="pd-button quiet">' + L.menu + '</button></div></section>';
+  };
+  /* табло и «К бою!»: phase 'fight' | 'rest'; ready [a, b] в кооперативе */
+  PD.demo.waveboard = function (lang, o) {
+    var L = ART[lang || 'ru'];
+    if (o.phase === 'rest') return '<div class="pd-waveboard rest' + (o.top ? ' top' : '') + '" role="status"><span class="pd-wave-n">' + L.rest + '</span><span class="pd-wave-left">' + L.wave(o.wave + 1) + '</span>' + (o.ready ? '<span class="pd-wave-ready">' + L.ready(o.ready[0], o.ready[1]) + '</span>' : '') + '</div>';
+    return '<div class="pd-waveboard' + (o.champions ? ' champions' : '') + (o.top ? ' top' : '') + '" role="status"><span class="pd-wave-n">' + L.wave(o.wave) + '</span><span class="pd-wave-left">' + L.left(o.left) + '</span><div class="pd-bar" style="--v:' + (o.v == null ? .6 : o.v) + '"></div></div>';
+  };
+  PD.demo.fight = function (lang, o) {
+    var L = ART[lang || 'ru'];
+    return '<div class="pd-fight"><button class="pd-button primary' + (o.mine ? ' waiting' : '') + '">' + L.fight + '</button>' + (o.ready ? '<span class="pd-fight-note">' + L.ready(o.ready[0], o.ready[1]) + ' · ' + L.waitFor + '</span>' : '') + '</div>';
+  };
+  PD.demo.arenaT = ART;
+
+  /* экран арены целиком. o: { urls: { tiles: [5], atlas: [5], mobA, mobB }, region, wide, lang, phase: 'fight'|'rest', coop, wave, left, ready, overlay: html, fx: fn(ctx, W, H), crowdFrame, gateFrame } */
+  PD.demo.arenaScreen = function (el, o) {
+    o = o || {}; var lang = o.lang || 'ru', r = o.region || 0, U = o.urls;
+    var srcs = [U.tiles[r], U.atlas[r], U.mobA, U.mobB], ims = srcs.map(function (u) { var i = new Image(); i.src = u; return i; });
+    var wait = ims.map(function (i) { return i.complete && i.naturalWidth ? Promise.resolve() : new Promise(function (ok) { i.onload = ok; i.onerror = ok; }); });
+    ready(['warrior', 'mage'], function () { Promise.all(wait).then(function () {
+      var imgs = { tiles: ims[0], atlas: ims[1], mobA: ims[2], mobB: ims[3] };
+      var mobs = o.mobs || (o.phase === 'rest' ? [] : [[12, 9, 'a'], [9, 12, 'b'], [15, 14, 'a'], [12, 17, 'b']]);
+      var mapo = { imgs: imgs, fy: o.wide ? .5 : .46, mates: !!o.coop, mobs: mobs, crowdFrame: o.crowdFrame || 0, gateFrame: o.gateFrame == null ? (o.phase === 'rest' ? 0 : 3) : o.gateFrame, brazierFrame: 1 };
+      if (o.wide) {
+        PD.demo.desk(el, { ui: 1, m: 3, mates: !!o.coop, waiting: false, lang: lang, log: o.log || (lang === 'en' ? [['Wave 7: the gates rise!', 'warn']] : [['Волна 7: ворота поднимаются!', 'warn']]), custom: function (c, W, H, m) { mapo.scale = m; PD.demo.arenaMap(c, mapo); } });
+        var layer = el.querySelector('.pd-ui');
+        layer.querySelectorAll('.pd-dhud .pd-hud-side .pd-stat')[0].remove();
+        layer.insertAdjacentHTML('beforeend', PD.demo.waveboard(lang, { phase: o.phase, wave: o.wave || 7, left: o.left == null ? 5 : o.left, v: o.v, ready: o.coop ? o.ready : null, top: true, champions: o.champions }));
+        if (o.phase === 'rest') layer.insertAdjacentHTML('beforeend', PD.demo.fight(lang, { ready: o.coop ? o.ready : null, mine: o.mineReady }));
+        if (o.coop && o.phase === 'rest') { var pc = layer.querySelectorAll('.pd-pcard'), L = ART[lang]; pc.forEach(function (c, i) { if (i < (o.ready ? o.ready[0] - 1 : 0)) { c.classList.add('ready'); c.querySelector('.pd-pstate').textContent = L.readyMark; } else { c.classList.remove('turn'); c.querySelector('.pd-pstate').textContent = L.notReady; } }); }
+        layer.querySelectorAll('.pd-pcard').forEach(function (c, i) { if (i > 1) { c.remove(); return; } c.querySelector('.pd-mate-depth').remove(); if (o.phase !== 'rest') { c.classList.remove('turn', 'away'); c.querySelector('.pd-pstate').textContent = lang === 'en' ? 'in battle' : 'в бою'; } });
+        if (o.overlay) { var ov = document.createElement('div'); ov.className = 'pd-overlay static'; ov.innerHTML = o.overlay; el.appendChild(ov); PD.sprite(ov); }
+      } else {
+        PD.demo.game(el, { mates: !!o.coop, log: o.log || (lang === 'en' ? [['Wave 7: the gates rise!', 'warn']] : [['Волна 7: ворота поднимаются!', 'warn']]), custom: function (c) { mapo.scale = 2; PD.demo.arenaMap(c, mapo); } });
+        el.querySelector('.pd-hud-side .pd-stat').remove();
+        el.querySelector('.pd-hud-main').insertAdjacentHTML('afterend', PD.demo.waveboard(lang, { phase: o.phase, wave: o.wave || 7, left: o.left == null ? 5 : o.left, v: o.v, ready: o.coop ? o.ready : null, champions: o.champions }));
+        if (o.coop) { var names = lang === 'en' ? ['Fox', 'Hedgehog'] : ['Лиса', 'Ёжик']; el.querySelectorAll('.pd-mate').forEach(function (m, i) { m.classList.remove('away'); m.querySelector('.pd-mate-name').textContent = names[i] || ''; m.querySelector('.pd-mate-depth').remove(); if (o.phase === 'rest' && i < (o.ready ? o.ready[0] - 1 : 0)) m.classList.add('ready'); }); }
+        if (o.phase === 'rest') el.insertAdjacentHTML('beforeend', PD.demo.fight(lang, { ready: o.coop ? o.ready : null, mine: o.mineReady }));
+        if (o.overlay) PD.demo.overlay(el, o.overlay);
+      }
+      PD.sprite(el);
+      if (o.fx) document.fonts.load('36px Galmuri11').then(function () { return document.fonts.load('20px Galmuri9'); }).then(function () {
+        var c = document.createElement('canvas'); c.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none'; el.appendChild(c);
+        var W = el.clientWidth, H = el.clientHeight, d = window.devicePixelRatio || 1; c.width = W * d; c.height = H * d; var g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.imageSmoothingEnabled = false;
+        o.fx(g, W, H);
+      });
+    }); });
   };
 
   /* окно поверх экрана макета: box — .phone; html — строка окна */

@@ -1,0 +1,31 @@
+<!-- @dsCard group="Арена волн" height=844 width=820 page subtitle="Баннер начала волны «Волна 5 — Чемпионы!» (полоса как у босса, черты красные) и карточка «Тюрьма — Арена погружается глубже» с эмблемой региона" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Арена: баннеры</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .row { display: flex; gap: 40px; width: 820px; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; --safe-t: 0px; --safe-b: 34px; flex: none; }
+  .screen { position: relative; width: 1280px; height: 800px; overflow: hidden; --safe-t: 0px; --safe-b: 0px; }
+</style></head>
+<body>
+<div class="pd-root row" id="row"></div>
+<script>
+  var URLS = {"tiles": ["/_blob/bafc6229d9fe99234dade3d1b3732133", "/_blob/c07536e8eb5847f3df261cf38bf40bb7", "/_blob/3c99483e0d1f2f33a1c369309799d0f0", "/_blob/19806e2d3cd59aacc9098d35b5a7b180", "/_blob/b03608106d7b74b6218803fb53134efc"], "atlas": ["/_blob/39187c520dfb62a50ae0eceff6ebcb54", "/_blob/33cceae13a77e0c215213eca8055b549", "/_blob/b1c93fc7045b8b8bca207fd2e00cf8fb", "/_blob/6b58587cc0a09ffce7cb3fab72b1ba4c", "/_blob/ccbbe6e62960188b3bfcd5b8417fadf8"], "mobA": "/_blob/f7e2262ad6166dce257c275e7ce2b0bf", "mobB": "/_blob/555788d1c964401e157ce3e1d8ea645e"};
+  function em(cb) { PD.demo.images(['emblems'], function (i) { cb(i.emblems); }); }
+  var S = {
+    title: function (el, L) { PD.demo.title(el, { arena: true, en: L === 'en' }); },
+    pick: function (el, L) { PD.demo.title(el, { arena: true, en: L === 'en' }); PD.demo.overlay(el, PD.demo.win.arenaPick(L)); },
+    fight: function (el, L, wide) { PD.demo.arenaScreen(el, { urls: URLS, region: 1, wide: wide, lang: L, phase: 'fight', coop: true, wave: 7, left: 5 }); },
+    rest: function (el, L, wide) { PD.demo.arenaScreen(el, { urls: URLS, region: 1, wide: wide, lang: L, phase: 'rest', coop: true, wave: 7, ready: [2, 3], crowdFrame: 1, log: L === 'en' ? [['Wave 7 is beaten!', 'good'], ['The crowd roars.', 'hl']] : [['Волна 7 отбита!', 'good'], ['Трибуны ревут.', 'hl']] }); },
+    banner: function (el, L, wide) { PD.demo.arenaScreen(el, { urls: URLS, region: 0, wide: wide, lang: L, phase: 'fight', coop: true, wave: 5, left: 9, champions: true, log: L === 'en' ? [['Wave 5: champions enter the arena!', 'warn']] : [['Волна 5: на арену выходят чемпионы!', 'warn']], fx: function (g, W, H) { PD.fx.wave(g, L === 'en' ? 'Wave 5' : 'Волна 5', L === 'en' ? 'Champions!' : 'Чемпионы!', 'champions', Math.round(H * (wide ? .3 : .38)), W, 900); } }); },
+    descent: function (el, L, wide) { em(function (E) { PD.demo.arenaScreen(el, { urls: URLS, region: 1, wide: wide, lang: L, phase: 'fight', coop: false, wave: 6, left: 8, v: 0, mobs: [], gateFrame: 0, log: L === 'en' ? [['The floor shudders and sinks...', 'hl']] : [['Пол содрогается и уходит вниз…', 'hl']], fx: function (g, W, H) { PD.fx.depth(g, L === 'en' ? 'Prison' : 'Тюрьма', L === 'en' ? 'The arena sinks deeper' : 'Арена погружается глубже', E, 1, Math.round(H * (wide ? .3 : .38)), W, 900); } }); }); },
+    reward: function (el, L, wide) { PD.demo.arenaScreen(el, { urls: URLS, region: 0, wide: wide, lang: L, phase: 'rest', coop: true, wave: 5, ready: [1, 3], log: L === 'en' ? [['Wave 5 is beaten!', 'good']] : [['Волна 5 отбита!', 'good']], overlay: PD.demo.win.reward(L, 2) }); },
+    end: function (el, L, wide) { PD.demo.arenaScreen(el, { urls: URLS, region: 2, wide: wide, lang: L, phase: 'fight', coop: true, wave: 12, left: 3, log: L === 'en' ? [['The last hero falls.', 'bad']] : [['Пал последний герой.', 'bad']], overlay: PD.demo.win.arenaEnd(L, true) }); }
+  };
+
+  var q = new URLSearchParams(location.search), L = q.get('lang') || 'ru';
+  ["banner", "descent"].forEach(function (k) { var p = document.createElement('div'); p.className = 'phone'; document.getElementById('row').appendChild(p); S[k](p, L, false); });
+</script>
+</body>
+</html>
