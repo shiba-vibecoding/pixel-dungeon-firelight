@@ -28,4 +28,5 @@ export {
 export * from './protocol';
 export * from './version';
 export { durabilityOf, effectiveLevel, isBroken, maxDurability } from './wear';
+export { chargesKnown, cursedKnown, isIdentified, kindKnown, levelKnown, visiblyCursed } from './ident';
 export * from './shop';

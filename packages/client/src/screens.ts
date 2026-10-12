@@ -1,13 +1,13 @@
 import {
-  type Action, armorStats, BACKPACK_SIZE, scrollTargets, isBroken, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
-  itemSprite, maxExp, type MobKind, SUBCLASSES, wandMaxCharges, weaponStats, type World, CLASS_ARMOR_OF,
+  type Action, BACKPACK_SIZE, scrollTargets, isBroken, isIdentified, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
+  itemSprite, levelKnown, maxExp, type MobKind, SUBCLASSES, visiblyCursed, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
 import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
-import { isKnown, itemInfo, itemName, plainName, wearOf } from './itemtext';
+import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import type { DailyBoard } from './leaderboard';
 import { mart } from './mart';
 import { countChallenges } from './meta';
@@ -256,19 +256,20 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
     }
     return el('div', { className: 'pd-slot empty' });
   }
-  const known = isKnown(world, item);
-  const cursed = Boolean(item.cursed) && (known || options.equipped);
+  // ItemSlot: the curse and the level only once they are known (Item.visiblyCursed, visiblyUpgraded).
+  const cursed = visiblyCursed(item);
   const node = el('button', {
     className: `pd-slot${options.equipped ? ' equipped' : ''}${cursed ? ' cursed' : ''}`,
     ariaLabel: capitalize(itemName(world, item)),
   });
   node.append(itemIcon(world, item));
-  if (item.charges !== undefined) {
-    node.append(el('span', { className: 'pd-qty', textContent: `${item.charges}/${wandMaxCharges(item)}` }));
+  const charges = chargesOf(item);
+  if (charges !== null) {
+    node.append(el('span', { className: 'pd-qty', textContent: charges }));
   } else if (item.qty > 1) {
     node.append(el('span', { className: 'pd-qty', textContent: String(item.qty) }));
   }
-  if (item.level !== 0 && known) {
+  if (item.level !== 0 && levelKnown(item)) {
     node.append(el('span', { className: `pd-lvl ${item.level > 0 ? 'up' : 'down'}`, textContent: `${item.level > 0 ? '+' : '−'}${Math.abs(item.level)}` }));
   }
   // WndBag's durability bars: how worn an upgraded item is; a broken one's level is struck through (it works as +0).
@@ -277,10 +278,10 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
     node.append(durabilityBar(wear.left, wear.max));
     markWear(node);
   }
-  // ItemSlot's top right: the strength it wants, with a «?» while its level is unknown.
-  const category = itemDef(item.kind).category;
-  const str = category === 'weapon' ? weaponStats(item).str : category === 'armor' ? armorStats(item).str : null;
-  if (str !== null && !options.equipped) {
+  // ItemSlot's top right: the strength it wants, or the typical one with a «?» while its level is unknown.
+  const strength = strengthOf(item);
+  if (strength && !options.equipped) {
+    const { str, known } = strength;
     node.append(el('span', { className: `pd-tag${options.hero && options.hero.str < str ? ' bad' : ''}`, textContent: known ? String(str) : `${str}?` }));
   }
   if (cursed) node.append(el('span', { className: 'pd-mark curse' }));
@@ -330,7 +331,7 @@ function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
 
 /** A window title for an item: a broken item's level struck through rather than its name saying «broken». */
 function titleFor(world: World, item: Item, box: HTMLElement): void {
-  if (!isBroken(item) || item.level <= 0 || !isKnown(world, item)) return;
+  if (!isBroken(item) || item.level <= 0 || !levelKnown(item)) return;
   const heading = box.querySelector('.pd-heading');
   if (!heading) return;
   heading.textContent = `${capitalize(plainName(world, item))} `;
@@ -824,8 +825,9 @@ export function showReforge(options: ReforgeOptions): void {
     ...hero.items.map((item, index) => ({ ref: index as ItemRef, item })),
   ].filter(({ item }) => {
     const category = itemDef(item.kind).category;
+    // Blacksmith.verify: he works only with what is identified.
     return (category === 'weapon' || category === 'armor' || category === 'wand' || category === 'ring') &&
-      item.level >= 0 && item.kind !== 'weapon.pickaxe';
+      isIdentified(world, item) && item.level >= 0 && item.kind !== 'weapon.pickaxe';
   });
   const pairs: Array<{ first: ItemRef; second: ItemRef; better: Item; worse: Item }> = [];
   owned.forEach((a, i) => {
@@ -1489,7 +1491,7 @@ function itemDetail(options: ItemOptions): HTMLElement {
   const { world, hero, item, index } = options;
   const { main, more, danger } = itemActions(options);
   // A cursed thing one knows about: nothing urges putting it on (the callout says why).
-  const knownCurse = Boolean(item.cursed) && isKnown(world, item) && index !== null;
+  const knownCurse = visiblyCursed(item) && index !== null;
   if (knownCurse) main[0]?.classList.remove('primary');
   if (main[0]?.classList.contains('primary')) main[0].append(el('span', { className: 'pd-btn-sub', textContent: t.orHold }));
   const all = [...main, ...more];

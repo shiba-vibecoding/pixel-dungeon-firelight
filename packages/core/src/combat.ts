@@ -1,4 +1,5 @@
 import { wear } from './wear';
+import { ARMOR_HITS_TO_KNOW, familiarise, identifyBelongings, WEAPON_HITS_TO_KNOW } from './ident';
 import {
   baseKind, BRUTE_ENRAGED_DAMAGE, isShopkeeper, statsOf, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
   maxExp, type Mob, MOBS, mobStats, ringBonus,
@@ -136,14 +137,18 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   // Hero.attackProc and defenseProc: an enchanted weapon's blow, an inscribed armour's answer.
   if (isHero(attacker) && !isHero(defender)) {
     weaponProc(ctx, attacker, defender, damage, thrown ? override.weapon ?? null : attacker.weapon);
-    // Weapon.proc: every blow that lands wears the weapon a little (a thrown boomerang wears as it comes back).
-    if (!thrown && attacker.weapon) wear(ctx, attacker, attacker.weapon);
+    // Weapon.proc: every blow that lands makes the weapon better known, and wears it a little (a thrown boomerang wears as it comes back).
+    if (!thrown && attacker.weapon) {
+      familiarise(ctx, attacker, attacker.weapon, WEAPON_HITS_TO_KNOW);
+      wear(ctx, attacker, attacker.weapon);
+    }
   }
 
   if (isHero(defender) && !isHero(attacker)) {
     const mark = ctx.effects.length;
     damage = armorProc(ctx, attacker, defender, damage);
-    // Armor.proc: and every blow taken wears the armour.
+    // Armor.proc: and every blow taken makes the armour better known, and wears it.
+    familiarise(ctx, defender, defender.armor, ARMOR_HITS_TO_KNOW);
     wear(ctx, defender, defender.armor);
     // The glyph's backlash may have felled its wearer, or an ankh raised them anew: the blow is spent.
     if (!isAlive(defender) || ctx.effects.slice(mark).some((e) => e.type === 'resurrected')) return true;
@@ -498,6 +503,8 @@ function heroDied(ctx: Ctx, hero: Hero): void {
   ctx.effects.push({ type: 'died', depth: ctx.depth, who: hero.id, pos: hero.pos });
   if (!ctx.world.heroes.some(isAlive)) {
     ctx.world.over = true;
+    // Hero.die: once it is all over, everything the heroes carried is known for what it was.
+    for (const other of ctx.world.heroes) identifyBelongings(ctx.world, other);
   }
 }
 

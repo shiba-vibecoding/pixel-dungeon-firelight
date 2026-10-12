@@ -119,7 +119,13 @@ Yendor on depth 26:
 Fire burns scrolls, lying about or in a burning hero's pack.
 
 Worse-than-plain gear is cursed: once worn, it will not come off until a
-scroll of remove curse (or of upgrade) lifts the curse.
+scroll of remove curse (or of upgrade) lifts the curse. Weapons, armour, rings
+and wands are found unidentified, as in the original: their level and curse
+are unknown (the slot shows the typical strength with a «?») until the item is
+put on (the curse), used long enough (20 blows with a weapon, 10 taken in
+armour, 40 zaps of a wand, 200 turns with a ring on), read on with a scroll of
+identify, or the hero drinks from a well of awareness (what is worn, and the
+curses of the rest).
 
 Clouds of toxic and paralytic gas (from traps, potions, DM-300, rotberries and
 armour of stench) spread through open cells, never through walls or closed

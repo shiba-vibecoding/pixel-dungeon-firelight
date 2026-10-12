@@ -1,4 +1,5 @@
-import { effectiveLevel } from './wear';
+import { effectiveLevel, isBroken } from './wear';
+import { unidentified } from './ident';
 import { HeapType, type ItemSpec } from './level/builder';
 import type { Level, RoomInfo } from './level/generate';
 import { LENGTH, WIDTH } from './level/geometry';
@@ -233,6 +234,16 @@ export interface Item {
   imbue?: 'speed' | 'accuracy';
   /** Uses left before an upgraded item breaks (Item.durability); absent while whole. See wear.ts. */
   durability?: number;
+  /**
+   * What is not known yet of a weapon, armour, ring or wand as found (Item.levelKnown and cursedKnown,
+   * Wand.curChargeKnown, all false): its level, whether it is cursed, a wand's charges left. Absent
+   * once known, and on whatever was known from the start. See ident.ts.
+   */
+  levelUnknown?: boolean;
+  curseUnknown?: boolean;
+  chargesUnknown?: boolean;
+  /** Weapons, armour and wands: blows struck, blows taken or zaps so far towards knowing them (Weapon.hitsToKnow, Armor.hitsToKnow, Wand.usagesToKnow). */
+  familiarity?: number;
 }
 
 /* Enchantments and glyphs (Weapon.Enchantment, Armor.Glyph) */
@@ -311,9 +322,15 @@ export function itemPrice(item: Item, known: boolean): number {
   const def = itemDef(item.kind);
   // RatSkull.price: a hunting trophy, of a sort.
   if (item.kind === 'quest.skull') return 100;
-  // Item.considerState: better items are worth more, worse ones less.
-  const levelled = (price: number): number =>
-    Math.max(1, item.level > 0 ? price * (item.level + 1) : item.level < 0 ? Math.trunc(price / (1 - item.level)) : price);
+  // Item.considerState: a known curse halves the price; a known level makes it worth more (half that, broken), or less.
+  const levelled = (price: number): number => {
+    if (item.cursed && !item.curseUnknown) price = Math.trunc(price / 2);
+    if (!item.levelUnknown) {
+      if (item.level > 0) price = isBroken(item) ? Math.trunc((price * (item.level + 1)) / 2) : price * (item.level + 1);
+      else if (item.level < 0) price = Math.trunc(price / (1 - item.level));
+    }
+    return Math.max(1, price);
+  };
   switch (def.category) {
     // Enchanted, half as much again.
     case 'weapon':
@@ -580,7 +597,8 @@ export class ItemGenerator {
     // MissileWeapon.random: a handful of them.
     const handful = MISSILE_HANDFULS[kind];
     if (handful) return createItem(kind, this.rng.intBetween(handful[0], handful[1]));
-    if (category === 'ring') return randomRing(this.rng, kind);
+    // As found, a ring, a wand, a melee weapon or armour tells neither its level nor its curse (ident.ts).
+    if (category === 'ring') return unidentified(randomRing(this.rng, kind));
     if (category === 'wand') {
       // Wand.random: half of them a level better, a few two.
       let level = 0;
@@ -588,7 +606,7 @@ export class ItemGenerator {
         level++;
         if (this.rng.float() < 0.15) level++;
       }
-      return createItem(kind, 1, level);
+      return unidentified(createItem(kind, 1, level));
     }
     const level = category === 'weapon' || category === 'armor' ? rollLevel(this.rng) : 0;
     const item = createItem(kind, 1, level);
@@ -597,7 +615,7 @@ export class ItemGenerator {
     // MeleeWeapon.random and Armor.random: now and then enchanted, the better the rarer.
     if (itemDef(kind).category === 'weapon' && this.rng.int(10 + level) === 0) item.enchant = randomEnchantment(this.rng);
     if (category === 'armor' && this.rng.int(10) === 0) item.glyph = randomGlyph(this.rng);
-    return item;
+    return unidentified(item);
   }
 }
 

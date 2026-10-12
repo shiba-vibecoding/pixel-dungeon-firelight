@@ -60,7 +60,8 @@ const WARNING_LEVEL = 1 / 6;
 
 /**
  * Item.use: one use (or `amount`, for a ring's turns) wears an upgraded item.
- * Its bearer hears when it is about to break, and when it breaks.
+ * Its bearer hears when it is about to break, and when it breaks, if they know
+ * its level (Item.levelKnown); otherwise it breaks unnoticed.
  */
 export function wear(ctx: Ctx, hero: Hero, item: Item, amount = 1): void {
   if (item.level <= 0 || isBroken(item)) return;
@@ -70,8 +71,9 @@ export function wear(ctx: Ctx, hero: Hero, item: Item, amount = 1): void {
   const before = durabilityOf(item);
   const after = before - amount;
   item.durability = after;
+  if (after <= 0) item.durability = 0;
+  if (item.levelUnknown) return;
   if (after <= 0) {
-    item.durability = 0;
     ctx.effects.push({ type: 'worn', hero: hero.id, item, state: 'broken' });
   } else if (before >= threshold && threshold > after) {
     ctx.effects.push({ type: 'worn', hero: hero.id, item, state: 'warning' });

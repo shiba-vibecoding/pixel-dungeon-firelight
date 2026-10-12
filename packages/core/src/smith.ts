@@ -1,4 +1,5 @@
 import { mend } from './wear';
+import { isIdentified } from './ident';
 import { createMob, type Hero, type Mob, STARVING, isStarving } from './actors';
 import { type Ctx, dropItem } from './floor';
 import { collect } from './inventory';
@@ -110,7 +111,7 @@ export function mine(ctx: Ctx, hero: Hero): void {
   ctx.effects.push({ type: 'mined', depth: ctx.depth, pos, hero: hero.id });
 }
 
-/** Blacksmith.verify: two different items of one kind, neither of poor quality, that can be upgraded. */
+/** Blacksmith.verify: two different items of one kind, both identified, neither of poor quality, that can be upgraded. */
 export function reforgeProblem(world: World, hero: Hero, first: ItemRef, second: ItemRef): string | null {
   const quest = world.smithQuest;
   if (!quest?.done || quest.reforged) return 'the blacksmith will not work for you';
@@ -122,6 +123,7 @@ export function reforgeProblem(world: World, hero: Hero, first: ItemRef, second:
   const b = itemAt(hero, second);
   if (!a || !b || a === b) return 'choose two different items';
   if (a.kind !== b.kind) return 'choose two items of the same kind';
+  if (!isIdentified(world, a) || !isIdentified(world, b)) return 'I need to know what I am working with, identify them first';
   if (a.cursed || b.cursed) return 'I do not work with cursed items';
   if (a.level < 0 || b.level < 0) return 'it is junk, the quality is too poor';
   // Blacksmith.verify: only what a scroll of upgrade could improve.

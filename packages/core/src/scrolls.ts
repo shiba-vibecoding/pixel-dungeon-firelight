@@ -3,6 +3,7 @@ import { CLASS_ARMOR } from './classArmor';
 import type { Ctx } from './floor';
 import { type Item, itemDef, type ItemKind, randomEnchantment, randomGlyph, wandMaxCharges } from './items';
 import { isBroken, mend } from './wear';
+import { isIdentified } from './ident';
 import type { World } from './world';
 
 /*
@@ -72,15 +73,13 @@ export function isEnchantable(item: Item): boolean {
 }
 
 /**
- * WndBag.Mode.UNIDENTIFED: what the party does not know yet. In this port only
- * potions, scrolls, wands and rings hide what they are; the levels of weapons
- * and armour are always seen. The scroll read is known once read, so it is no
- * choice of its own.
+ * WndBag.Mode.UNIDENTIFED: what is not identified yet (Item.isIdentified): a
+ * potion, scroll, wand or ring of a kind the party does not know, or a weapon,
+ * armour, ring or wand whose level or curse is not known (see ident.ts). The
+ * scroll read is known once read, so it is no choice of its own.
  */
 export function isUnidentified(world: World, item: Item, reading?: ItemKind): boolean {
-  const category = itemDef(item.kind).category;
-  const hides = category === 'potion' || category === 'scroll' || category === 'wand' || category === 'ring';
-  return hides && item.kind !== reading && !world.known.includes(item.kind);
+  return item.kind !== reading && !isIdentified(world, item);
 }
 
 /** The scrolls that are read on a chosen item. */
@@ -118,14 +117,13 @@ export const TARGET_PROBLEMS: Readonly<Record<TargetedScroll, string>> = {
  * When no item was chosen (an unknown scroll, whose kind the client could not
  * know to ask about, or an old client): the weapon in hand, else the armour,
  * if the scroll can act on them; for identify, the first unknown potion or
- * scroll in the pack. Undefined if there is none: the scroll is wasted.
+ * scroll in the pack, else the first thing held that is not identified.
+ * Undefined if there is none: the scroll is wasted.
  */
 export function defaultTarget(world: World, hero: Hero, kind: TargetedScroll): Item | undefined {
   if (kind === 'scroll.identify') {
-    return hero.items.find((item) => {
-      const category = itemDef(item.kind).category;
-      return (category === 'potion' || category === 'scroll') && isUnidentified(world, item, kind);
-    });
+    const unknown = heldRefs(hero).map((ref) => itemAt(hero, ref)!).filter((item) => isUnidentified(world, item, kind));
+    return unknown.find((item) => ['potion', 'scroll'].includes(itemDef(item.kind).category)) ?? unknown[0];
   }
   return [hero.weapon, hero.armor].find((item): item is Item => !!item && canTarget(world, kind, item));
 }
@@ -155,6 +153,8 @@ export function upgradeItem(ctx: Ctx, hero: Hero, item: Item): void {
     ctx.effects.push({ type: 'disenchanted', hero: hero.id, item });
   }
   item.level++;
+  // Item.upgrade: no curse, and that is known (cursedKnown), though the level stays as known as it was.
+  delete item.curseUnknown;
   mend(item);
   // Wand.upgrade: one more charge, up to the new maximum.
   if (item.charges !== undefined) item.charges = Math.min(item.charges + 1, wandMaxCharges(item));
