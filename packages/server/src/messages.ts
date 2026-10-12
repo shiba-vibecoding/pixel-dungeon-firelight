@@ -44,7 +44,11 @@ export function sanitizeAction(raw: unknown): Action | null {
     case 'pickup':
     case 'buy':
     case 'mine':
+    case 'arenaReady':
       return { type: a.type };
+    case 'arenaPick':
+      // One of the three rewards after a wave.
+      return isInt(a.choice, 0, 2) ? { type: 'arenaPick', choice: a.choice } : null;
     case 'open': {
       const at = cell(a.cell);
       return at === null ? null : { type: 'open', cell: at };
