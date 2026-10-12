@@ -65,6 +65,12 @@ export interface Hero {
   poison: number;
   burning: number;
   paralysed: number;
+  /** Turns left of being rooted to the spot and of moving at half speed (mystery meat). */
+  rooted: number;
+  slowed: number;
+  /** Hunger.level: 0 when fed, hungry from HUNGRY, starving at STARVING; and time towards its next step. */
+  hunger: number;
+  hungerTime: number;
   /** For the end of the run: monsters slain, and what dealt the killing blow. */
   kills: number;
   killedBy: string | null;
@@ -97,19 +103,34 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     ooze: -1,
     weapon: createItem(kit.weapon),
     armor: createItem('armor.cloth'),
-    items: kit.items.map(([kind, qty]) => createItem(kind, qty)),
+    // Everyone sets out with a ration of food (HeroClass.initCommon).
+    items: [...kit.items.map(([kind, qty]) => createItem(kind, qty)), createItem('food.ration')],
     gold: 0,
     mindVision: 0,
     invisible: 0,
     poison: 0,
     burning: 0,
     paralysed: 0,
+    rooted: 0,
+    slowed: 0,
+    hunger: 0,
+    hungerTime: 0,
     kills: 0,
     killedBy: null,
   };
 }
 
 export const isAlive = (char: { hp: number }): boolean => char.hp > 0;
+
+/* Hunger */
+
+export const HUNGRY = 260;
+export const STARVING = 360;
+/** Hunger grows by this much every this many turns; rogues go longer without food. */
+export const HUNGER_STEP = 10;
+export const hungerStep = (hero: Hero): number => (hero.heroClass === 'rogue' ? HUNGER_STEP * 1.2 : HUNGER_STEP);
+export const isStarving = (hero: Hero): boolean => hero.hunger >= STARVING;
+export const isHungry = (hero: Hero): boolean => hero.hunger >= HUNGRY;
 
 export function heroAttackSkill(hero: Hero): number {
   const weapon = weaponStats(hero.weapon);

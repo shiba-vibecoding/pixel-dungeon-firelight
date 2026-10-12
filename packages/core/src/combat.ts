@@ -2,7 +2,7 @@ import {
   type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive, maxExp, type Mob, MOBS,
 } from './actors';
 import { type Char, type Ctx, dropItem, heroesOn, isHero, leaveCell } from './floor';
-import { rollGold } from './items';
+import { createItem, rollGold } from './items';
 import { questKill } from './quest';
 import { T } from './level/terrain';
 
@@ -61,7 +61,7 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
 }
 
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
@@ -86,6 +86,9 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
   }
 }
 
+/** Crab.lootChance. */
+const CRAB_MEAT_CHANCE = 0.167;
+
 function mobDied(ctx: Ctx, mob: Mob): void {
   mob.hp = 0;
   ctx.floor.mobs.splice(ctx.floor.mobs.indexOf(mob), 1);
@@ -101,9 +104,11 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 
   questKill(ctx, mob);
 
-  // Mob.dropLoot: gnolls carry some gold, unless the party has outgrown them.
-  if (mob.kind === 'gnoll' && heroes.some((h) => h.lvl <= stats.maxLvl + 2) && ctx.rng.float() < 0.5) {
-    dropItem(ctx.floor, mob.pos, rollGold(ctx.rng, ctx.depth));
+  // Mob.dropLoot: gnolls carry some gold and crabs are edible, unless the
+  // party has outgrown them.
+  if (heroes.some((h) => h.lvl <= stats.maxLvl + 2)) {
+    if (mob.kind === 'gnoll' && ctx.rng.float() < 0.5) dropItem(ctx.floor, mob.pos, rollGold(ctx.rng, ctx.depth));
+    if (mob.kind === 'crab' && ctx.rng.float() < CRAB_MEAT_CHANCE) dropItem(ctx.floor, mob.pos, createItem('food.meat'));
   }
 
   if (mob.kind === 'goo') {

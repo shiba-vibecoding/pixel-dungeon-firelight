@@ -28,7 +28,10 @@ describe('thrown weapons and wands', () => {
   it('starting kits: darts for the warrior and rogue, a boomerang for the huntress, a wand for the mage', () => {
     const world = createWorld(1);
     for (const heroClass of ['warrior', 'mage', 'rogue', 'huntress'] as const) addHero(world, { id: heroClass, name: heroClass, heroClass });
-    expect(heroById(world, 'warrior')!.items).toEqual([{ kind: 'missile.dart', qty: 8, level: 0 }]);
+    expect(heroById(world, 'warrior')!.items).toEqual([
+      { kind: 'missile.dart', qty: 8, level: 0 },
+      { kind: 'food.ration', qty: 1, level: 0 },
+    ]);
     expect(heroById(world, 'rogue')!.items[0]).toMatchObject({ kind: 'missile.dart', qty: 8 });
     expect(heroById(world, 'huntress')!.items[0]).toMatchObject({ kind: 'missile.boomerang' });
     expect(heroById(world, 'mage')!.items[0]).toMatchObject({ kind: 'wand.magicMissile', charges: 3 });

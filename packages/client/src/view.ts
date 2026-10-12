@@ -404,6 +404,19 @@ export class View {
             this.say(t.companionTrap(this.name(world, effect.hero)), COLORS.warning, now);
           }
           break;
+        case 'ate':
+          audio.play('eat');
+          if (effect.hero === myId) {
+            this.say(effect.kind === 'food.meat' ? t.ateMeat : t.ateFood, COLORS.default, now);
+            if (effect.outcome) this.say(t.meat[effect.outcome], COLORS.warning, now);
+          }
+          break;
+        case 'hunger':
+          if (effect.hero === myId) {
+            this.say(effect.state === 'hungry' ? t.hungry : t.starving, effect.state === 'hungry' ? COLORS.warning : COLORS.negative, now);
+            if (effect.state === 'starving') haptic('error');
+          }
+          break;
         case 'interrupted':
         case 'victory':
           break;

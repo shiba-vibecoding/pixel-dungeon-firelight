@@ -10,10 +10,11 @@ import type { RunState } from './run';
  * Items, as data. A port of the original's item families that matter in the
  * sewers: gold, potions and scrolls (unknown until used or identified, with
  * colours and runes shuffled for every run), melee weapons and armour with
- * upgrade levels. Wands, rings, seeds, food and thrown weapons come later.
+ * upgrade levels, thrown weapons, the wand of magic missile and food. Rings,
+ * seeds and the other wands come later.
  */
 
-export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'key' | 'quest';
+export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'food' | 'key' | 'quest';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -24,6 +25,8 @@ export interface ItemDef {
   accuracy?: number;
   delay?: number;
   str?: number;
+  /** Food: how much hunger it takes away. */
+  energy?: number;
 }
 
 const weapon = (tier: number, sprite: number, accuracy = 1, delay = 1, str?: number): ItemDef => ({
@@ -70,6 +73,11 @@ export const ITEMS = {
   'missile.dart': { category: 'missile', sprite: 31 },
   'missile.boomerang': { category: 'missile', sprite: 106 },
   'wand.magicMissile': { category: 'wand', sprite: 3 },
+  // Food (Food, Pasty, MysteryMeat): a ration staves off hunger for a while,
+  // a pasty completely; mystery meat from crabs is a gamble.
+  'food.ration': { category: 'food', sprite: 4, energy: 260 },
+  'food.pasty': { category: 'food', sprite: 112, energy: 360 },
+  'food.meat': { category: 'food', sprite: 113, energy: 100 },
   /** Opens the locked room of the level it was found on. */
   'key.iron': { category: 'key', sprite: 9 },
   /** The sad ghost's dried rose. */
@@ -94,7 +102,7 @@ export interface Item {
 export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
-  return category === 'potion' || category === 'scroll' || category === 'gold' || kind === 'missile.dart';
+  return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || kind === 'missile.dart';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
@@ -219,6 +227,11 @@ export function rollGold(rng: Rng, depth: number): Item {
   return createItem('gold', rng.intBetween(20 + depth * 10, 40 + depth * 20));
 }
 
+/** Generator.Category.FOOD: four rations to every pasty. */
+export function rollFood(rng: Rng): Item {
+  return createItem(rng.chances([4, 1]) === 0 ? 'food.ration' : 'food.pasty');
+}
+
 /** Weapon.random / Armor.random: sometimes better, sometimes worse than usual. */
 function rollLevel(rng: Rng): number {
   if (rng.float() >= 0.4) return 0;
@@ -321,8 +334,12 @@ function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: num
   }
 }
 
-/** RegularLevel.createItems, plus the drops the layout asked for (special rooms, graves). */
-export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean): Heap[] {
+/**
+ * RegularLevel.createItems, plus the drops the layout asked for (special
+ * rooms, graves). Every level has some food, one helping for each hero in
+ * the party.
+ */
+export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean, party = 1): Heap[] {
   const heaps: Heap[] = [];
   const drop = (pos: number, kind: HeapKind, item: Item): void => {
     if (pos < 0) return;
@@ -341,6 +358,7 @@ export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean
     drop(randomDropCell(rng, level), kind, generator.random());
   }
 
+  for (let i = 0; i < Math.max(1, party); i++) drop(randomDropCell(rng, level), 'heap', rollFood(rng));
   if (quotaReached(rng, level.depth, [4, 2, 9, 4, 14, 6, 19, 8, 24, 9], run.strengthFound)) {
     run.strengthFound++;
     drop(randomDropCell(rng, level), 'heap', createItem('potion.strength'));

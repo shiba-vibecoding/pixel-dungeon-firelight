@@ -1,9 +1,9 @@
-import { BACKPACK_SIZE, type Hero, heroRangedSkill, maxExp } from './actors';
+import { BACKPACK_SIZE, type Hero, heroRangedSkill, maxExp, STARVING } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
 import { charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, leaveCell } from './floor';
 import {
-  type Heap, isStackable, type Item, itemDef, type ItemKind, magicMissileDamage, missileStats,
+  type Heap, isStackable, type Item, itemDef, type ItemKind, magicMissileDamage, missileStats, wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
 import { adjacent, LENGTH } from './level/geometry';
@@ -17,7 +17,7 @@ import type { World } from './world';
 
 export type InventoryAction =
   | { type: 'pickup' }
-  /** Drink a potion or read a scroll; a scroll of upgrade improves the weapon or the armour. */
+  /** Drink a potion, read a scroll or eat; a scroll of upgrade improves the weapon or the armour. */
   | { type: 'use'; item: number; target?: 'weapon' | 'armor' }
   | { type: 'equip'; item: number }
   | { type: 'drop'; item: number }
@@ -38,6 +38,7 @@ const TIME_TO_EQUIP = 1;
 const TIME_TO_DROP = 1;
 const TIME_TO_THROW = 1;
 const TIME_TO_ZAP = 1;
+const TIME_TO_EAT = 3;
 
 const MIND_VISION_DURATION = 20;
 const INVISIBILITY_DURATION = 15;
@@ -55,7 +56,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (category !== 'potion' && category !== 'scroll') return 'that cannot be used';
+      if (category !== 'potion' && category !== 'scroll' && category !== 'food') return 'that cannot be used';
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
       return null;
     case 'equip':
@@ -80,6 +81,10 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       pickUp(ctx, hero);
       return TIME_TO_PICK_UP;
     case 'use':
+      if (itemDef(hero.items[action.item]!.kind).category === 'food') {
+        eat(ctx, hero, action.item);
+        return TIME_TO_EAT;
+      }
       use(ctx, hero, action.item, action.target ?? 'weapon');
       return TIME_TO_USE;
     case 'equip': {
@@ -187,6 +192,46 @@ function pickUp(ctx: Ctx, hero: Hero): void {
   heap.items = left;
   if (left.length === 0) ctx.floor.heaps.splice(ctx.floor.heaps.indexOf(heap), 1);
 }
+
+/** What mystery meat can do to whoever eats it. */
+export type MeatOutcome = 'hot' | 'legs' | 'unwell' | 'stuffed';
+
+/**
+ * Food.execute: hunger goes away; warriors also get some health back and
+ * mages a charge in every wand. Mystery meat (MysteryMeat) has a four in
+ * five chance of disagreeing with the eater.
+ */
+function eat(ctx: Ctx, hero: Hero, index: number): void {
+  const item = hero.items[index]!;
+  const kind = item.kind;
+  if (--item.qty <= 0) hero.items.splice(index, 1);
+  hero.hunger = Math.min(Math.max(0, hero.hunger - itemDef(kind).energy!), STARVING);
+  if (hero.heroClass === 'warrior' && hero.hp < hero.ht) {
+    const amount = Math.min(5, hero.ht - hero.hp);
+    hero.hp += amount;
+    ctx.effects.push({ type: 'healed', hero: hero.id, amount });
+  }
+  if (hero.heroClass === 'mage') {
+    // Belongings.charge: a charge more in every wand that is not full.
+    for (const wand of hero.items) {
+      if (wand.charges !== undefined && wand.charges < wandMaxCharges(wand)) wand.charges++;
+    }
+  }
+  let outcome: MeatOutcome | null = null;
+  if (kind === 'food.meat') {
+    outcome = (['hot', 'legs', 'unwell', 'stuffed', null] as const)[ctx.rng.int(5)]!;
+    if (outcome === 'hot') hero.burning = Math.max(hero.burning, MEAT_BURNING_TURNS);
+    if (outcome === 'legs') hero.rooted = Math.max(hero.rooted, ROOTED_TURNS);
+    if (outcome === 'unwell') hero.poison = Math.max(hero.poison, Math.trunc(hero.ht / 5));
+    if (outcome === 'stuffed') hero.slowed = Math.max(hero.slowed, SLOWED_TURNS);
+  }
+  ctx.effects.push({ type: 'ate', hero: hero.id, kind, outcome });
+}
+
+/** Burning.DURATION, Paralysis.DURATION (roots last as long) and Slow.DURATION. */
+const MEAT_BURNING_TURNS = 8;
+const ROOTED_TURNS = 10;
+const SLOWED_TURNS = 10;
 
 function identify(world: World, kind: ItemKind): boolean {
   if (world.known.includes(kind)) return false;

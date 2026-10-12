@@ -1,6 +1,7 @@
 import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
 import {
-  awareness, createHero, type Hero, heroAttackDelay, heroSpeed, isAlive, type Mob, type PlayerInfo,
+  awareness, createHero, type Hero, heroAttackDelay, heroSpeed, HUNGER_STEP, hungerStep, HUNGRY, isAlive, isStarving,
+  type Mob, type PlayerInfo, STARVING,
 } from './actors';
 import { attack, hurt } from './combat';
 import {
@@ -104,7 +105,7 @@ export function levelAt(world: World, depth: number): Level {
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
         now: 0,
         respawn: isBossDepth(d) ? -1 : TIME_TO_RESPAWN,
-        heaps: createItems(world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), isBossDepth(d)),
+        heaps: createItems(world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), isBossDepth(d), world.heroes.length),
       };
     }
   }
@@ -171,6 +172,7 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
     case 'search':
       return null;
     case 'move':
+      if (hero.rooted > 0) return 'you are rooted';
       if (Number.isInteger(action.to) && adjacent(hero.pos, action.to) && level.map[action.to] === T.LOCKED_DOOR) {
         return keyFor(hero) >= 0 ? null : 'the door is locked';
       }
@@ -308,12 +310,16 @@ function advance(world: World, depth: number, effects: Effect[]): void {
 }
 
 function spend(ctx: Ctx, hero: Hero, time: number): void {
+  // Slowed, everything takes twice as long (Char.spend).
+  if (hero.slowed > 0) time *= 2;
   hero.time += time;
   hero.regen += time;
   while (hero.regen >= REGENERATION_DELAY) {
     hero.regen -= REGENERATION_DELAY;
-    if (isAlive(hero) && hero.hp < hero.ht) hero.hp++;
+    // A starving body does not heal (Regeneration).
+    if (isAlive(hero) && hero.hp < hero.ht && !isStarving(hero)) hero.hp++;
   }
+  starve(ctx, hero, time);
   // Caustic ooze burns every turn until washed off in water.
   if (hero.ooze >= 0) {
     hero.ooze += time;
@@ -327,6 +333,8 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   hero.mindVision = Math.max(0, hero.mindVision - time);
   hero.invisible = Math.max(0, hero.invisible - time);
   hero.paralysed = Math.max(0, hero.paralysed - time);
+  hero.rooted = Math.max(0, hero.rooted - time);
+  hero.slowed = Math.max(0, hero.slowed - time);
 
   // Wands recharge with time.
   for (const item of hero.items) {
@@ -360,6 +368,29 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
       }
       hero.burning = Math.max(0, hero.burning - time);
     }
+  }
+}
+
+/**
+ * Hunger: it grows a step at a time until the hero is starving, which stops
+ * healing and now and then costs a hit point.
+ */
+function starve(ctx: Ctx, hero: Hero, time: number): void {
+  const step = hungerStep(hero);
+  hero.hungerTime += time;
+  while (hero.hungerTime >= step && isAlive(hero)) {
+    hero.hungerTime -= step;
+    if (isStarving(hero)) {
+      if (ctx.rng.float() < 0.3 && (hero.hp > 1 || hero.paralysed <= 0)) {
+        ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage: 1 });
+        hurt(ctx, hero, 1, 'hunger');
+      }
+      continue;
+    }
+    const before = hero.hunger;
+    hero.hunger = Math.min(before + HUNGER_STEP, STARVING);
+    if (hero.hunger >= STARVING) ctx.effects.push({ type: 'hunger', hero: hero.id, state: 'starving' });
+    else if (hero.hunger >= HUNGRY && before < HUNGRY) ctx.effects.push({ type: 'hunger', hero: hero.id, state: 'hungry' });
   }
 }
 
@@ -454,10 +485,12 @@ function drinkFromWell(ctx: Ctx, hero: Hero): void {
   if (index < 0) return;
   const { water } = level.wells.splice(index, 1)[0]!;
   if (water === 'health') {
+    // WaterOfHealth: healed, cured and fed.
     hero.hp = hero.ht;
     hero.poison = 0;
     hero.burning = 0;
     hero.ooze = -1;
+    hero.hunger = 0;
   } else {
     for (const item of hero.items) {
       const category = itemDef(item.kind).category;
@@ -520,10 +553,11 @@ function reviveFallen(world: World, depth: number, effects: Effect[]): void {
   const level = levelAt(world, depth);
   for (const fallen of world.heroes) {
     if (isAlive(fallen)) continue;
-    fallen.hp = Math.max(1, Math.floor(fallen.ht / 2));
-    fallen.depth = depth;
-    fallen.intent = null;
-    fallen.regen = 0;
+    // Back on their feet, rid of whatever ailed them.
+    Object.assign(fallen, {
+      hp: Math.max(1, Math.floor(fallen.ht / 2)), depth, intent: null, regen: 0, ooze: -1,
+      poison: 0, burning: 0, paralysed: 0, rooted: 0, slowed: 0, hunger: 0,
+    });
     place(world, fallen, level, level.entrance);
     effects.push({ type: 'revived', hero: fallen.id });
   }

@@ -2,6 +2,7 @@ import { type Hero, isAlive, type Mob } from './actors';
 import { castShadow, terrainBlocksSight } from './fov';
 import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
+import type { MeatOutcome } from './inventory';
 import type { GhostLine } from './quest';
 import type { TrapKind } from './traps';
 import type { Level } from './level/generate';
@@ -79,6 +80,9 @@ export type Effect =
   | { type: 'unlocked'; depth: number; pos: number; hero: string }
   | { type: 'ghost'; hero: string; line: GhostLine }
   | { type: 'well'; hero: string; water: WellWater }
+  /** Something eaten; mystery meat may disagree with the eater. */
+  | { type: 'ate'; hero: string; kind: ItemKind; outcome: MeatOutcome | null }
+  | { type: 'hunger'; hero: string; state: 'hungry' | 'starving' }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };
 

@@ -1,7 +1,7 @@
 import {
   adjacent, blockers, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, HEAP_SPRITES, type Hero,
-  heroById, type HeroClass, HEIGHT, isAlive, itemDef, itemSprite, levelAt, mobById, type MobKind, T, visibleCells,
-  wandMaxCharges, WIDTH,
+  heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind, T,
+  visibleCells, wandMaxCharges, WIDTH,
   type World,
 } from '@pd/core';
 import * as core from '@pd/core';
@@ -296,6 +296,12 @@ function toggleQuickslot(): void {
 let threats = new Set<string>();
 
 function send(action: Parameters<Session['send']>[0], now: number): void {
+  const me = session?.world && heroById(session.world, session.myId);
+  if (action.type === 'move' && me && me.rooted > 0) {
+    walk.reset();
+    view.say(t.rooted, '#ffff44');
+    return;
+  }
   walk.lastSent = now;
   session!.send(action);
 }
@@ -345,7 +351,10 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
   }
 
   if (walk.resting) {
-    if (me.hp >= me.ht || threats.size > 0) {
+    if (isStarving(me)) {
+      walk.resting = false;
+      view.say(t.tooHungryToRest, '#ff4444');
+    } else if (me.hp >= me.ht || threats.size > 0) {
       walk.resting = false;
     } else {
       send({ type: 'wait' }, now);
@@ -384,7 +393,10 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
 function handleMyEffects(effects: readonly Effect[], myId: string): void {
   for (const effect of effects) {
     if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line);
-    const hurt = (effect.type === 'attack' && effect.target === myId) || (effect.type === 'hurt' && effect.who === myId);
+    const hurt =
+      (effect.type === 'attack' && effect.target === myId) ||
+      (effect.type === 'hurt' && effect.who === myId) ||
+      (effect.type === 'hunger' && effect.hero === myId && effect.state === 'starving');
     if ((effect.type === 'interrupted' && effect.hero === myId) || hurt) {
       walk.queue = [];
       walk.stairs = null;
@@ -504,6 +516,18 @@ canvas.addEventListener('pointerdown', (event) => {
   if (x >= 0 && y >= 0 && x < WIDTH && y < HEIGHT) tapCell(x + y * WIDTH);
 });
 
+function startResting(): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  walk.reset();
+  if (me && isStarving(me)) {
+    view.say(t.tooHungryToRest, '#ff4444');
+    return;
+  }
+  walk.resting = true;
+  view.say(t.resting, '#cccccc');
+}
+
 /* The hourglass: a tap waits a turn, holding it rests until healed (as in the original). */
 let waitPress: { timer: number; long: boolean } | null = null;
 
@@ -512,9 +536,7 @@ function pressWait(): void {
     long: false,
     timer: window.setTimeout(() => {
       press.long = true;
-      walk.reset();
-      walk.resting = true;
-      view.say(t.resting, '#cccccc');
+      startResting();
     }, 400),
   };
   waitPress = press;
@@ -551,9 +573,7 @@ addEventListener('keydown', (event) => {
   } else if (event.code === 'Space' || event.code === 'Numpad5' || event.code === 'Period') {
     act('wait');
   } else if (event.code === 'KeyR') {
-    walk.reset();
-    walk.resting = true;
-    view.say(t.resting, '#cccccc');
+    startResting();
   } else if (event.code === 'KeyF') {
     act('search');
   } else if (event.code === 'KeyI') {
@@ -745,6 +765,9 @@ function tick(now: number): void {
         ...(me.poison > 0 ? [BUFF_ICONS.poison] : []),
         ...(me.burning > 0 ? [BUFF_ICONS.fire] : []),
         ...(me.paralysed > 0 ? [BUFF_ICONS.paralysis] : []),
+        ...(me.rooted > 0 ? [BUFF_ICONS.roots] : []),
+        ...(me.slowed > 0 ? [BUFF_ICONS.slow] : []),
+        ...(isStarving(me) ? [BUFF_ICONS.starvation] : isHungry(me) ? [BUFF_ICONS.hunger] : []),
       ],
       keys: me.items.filter((i) => i.kind === 'key.iron' && i.depth === me.depth).length,
       quick: quickItem
