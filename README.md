@@ -115,7 +115,14 @@ unhurt hero shakes from the grass; drunk, it heals the more the fuller it
 is, and a full one saves its bearer from death once (a well of health fills
 it, too).
 
-Not ported yet: bags (seed pouch, scroll holder, wand holster, keyring).
+Bags from the shops (a seed pouch, a scroll holder, a wand holster) hold
+their kind without taking room in the backpack, out of reach of fire and
+thieves; keys never take room, as every hero carries a key ring.
+
+Every item, monster, quest and room of the original is now in. Where this
+port differs on purpose: co-op throughout; golden bees and mirror images
+are ignored by monsters rather than fought; Lloyd's beacon is not blocked by
+companions standing next to its bearer.
 
 ## How co-op works
 

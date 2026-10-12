@@ -450,8 +450,7 @@ function paintStorage(level: LevelBuilder, room: Room): void {
  * ShopPainter: the wares laid out along the walls, starting opposite the
  * door, and the shopkeeper among them. Depth 6 sells a quarterstaff or a
  * spear and leather armour, depth 11 a sword or a mace and mail armour;
- * both potions, scrolls and food, and a weightstone. The seed pouch,
- * scroll holder and wand holster of the original are not ported yet.
+ * both potions, scrolls and food, a weightstone and a bag.
  */
 function paintShop(level: LevelBuilder, room: Room): void {
   const { rng } = level;
@@ -482,6 +481,9 @@ function paintShop(level: LevelBuilder, room: Room): void {
     : level.depth < 21 ? [pick('weapon.longsword', 'weapon.battleAxe'), 'armor.scale']
     : [rng.oneOf(['weapon.glaive', 'weapon.warHammer', 'armor.plate'] as ItemKind[]), 'torch', 'torch'];
   if (level.depth < 21) gear.push('weightstone');
+  // A bag for each of the first three shops: seeds, then scrolls, then wands.
+  const bag: ItemKind | undefined = level.depth < 11 ? 'bag.seeds' : level.depth < 16 ? 'bag.scrolls' : level.depth < 21 ? 'bag.wands' : undefined;
+  if (bag) gear.push(bag);
   const wares: ItemSpec[] = [
     ...gear.map((kind): ItemSpec => ({ roll: 'kind', kind })),
     { roll: 'kind', kind: 'potion.healing' },

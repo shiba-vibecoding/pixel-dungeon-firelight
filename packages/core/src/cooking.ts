@@ -1,4 +1,5 @@
-import { BACKPACK_SIZE, type Hero } from './actors';
+import type { Hero } from './actors';
+import { hasRoom, looseItems } from './bags';
 import { type Ctx, landItem } from './floor';
 import { createItem, type Item, itemDef } from './items';
 import { distance } from './level/geometry';
@@ -41,7 +42,8 @@ export function freezeHeaps(ctx: Ctx, pos: number, radius: number): void {
 
 /** Burning.act on a hero: something from the pack catches; a scroll burns up, a piece of meat is cooked. */
 export function scorchPack(ctx: Ctx, hero: Hero): void {
-  const item = ctx.rng.element(hero.items);
+  // A scroll holder keeps its scrolls from the fire.
+  const item = ctx.rng.element(looseItems(hero));
   if (!item) return;
   const scroll = itemDef(item.kind).category === 'scroll';
   if (!scroll && item.kind !== 'food.meat') return;
@@ -52,7 +54,7 @@ export function scorchPack(ctx: Ctx, hero: Hero): void {
 
 /** Frost.attachTo on a hero: a piece of meat in the pack freezes. */
 export function chillPack(ctx: Ctx, hero: Hero): void {
-  const item = ctx.rng.element(hero.items);
+  const item = ctx.rng.element(looseItems(hero));
   if (item?.kind !== 'food.meat') return;
   takeOne(hero, item);
   give(ctx, hero, createItem('food.carpaccio'));
@@ -66,6 +68,6 @@ function takeOne(hero: Hero, item: Item): void {
 function give(ctx: Ctx, hero: Hero, item: Item): void {
   const stack = hero.items.find((i) => i.kind === item.kind);
   if (stack) stack.qty += item.qty;
-  else if (hero.items.length < BACKPACK_SIZE) hero.items.push(item);
+  else if (hasRoom(hero, item)) hero.items.push(item);
   else landItem(ctx, hero.pos, item);
 }

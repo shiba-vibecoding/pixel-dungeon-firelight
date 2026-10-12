@@ -16,7 +16,7 @@ import type { RunState } from './run';
 
 export type ItemCategory =
   | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
-  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone' | 'beacon' | 'honeypot' | 'vial';
+  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone' | 'beacon' | 'honeypot' | 'vial' | 'bag';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -159,6 +159,10 @@ export const ITEMS = {
   beacon: { category: 'beacon', sprite: 85 },
   /** Balances a melee weapon for speed or for accuracy (Weightstone). */
   weightstone: { category: 'weightstone', sprite: 123 },
+  /** Bags (SeedPouch, ScrollHolder, WandHolster), sold in the shops: what they hold takes no room in the backpack. */
+  'bag.seeds': { category: 'bag', sprite: 83 },
+  'bag.scrolls': { category: 'bag', sprite: 104 },
+  'bag.wands': { category: 'bag', sprite: 111 },
   /** Keeps spare dew for later; full, it saves its bearer from death once (DewVial). */
   vial: { category: 'vial', sprite: 120 },
   /** Shaken from tall grass; heals whoever picks it up. */
@@ -330,6 +334,8 @@ export function itemPrice(item: Item, known: boolean): number {
       return 10 * item.qty;
     case 'honeypot':
       return 50 * item.qty;
+    case 'bag':
+      return 50;
     case 'weightstone':
       return 40 * item.qty;
     default:

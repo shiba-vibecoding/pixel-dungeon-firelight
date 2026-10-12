@@ -22,6 +22,7 @@ import { zapWand } from './wands';
 import { mine, mineProblem, TIME_TO_MINE } from './smith';
 import { transmute } from './transmute';
 import { DEW_VIAL_VOLUME, drinkFromVial } from './vial';
+import { hasRoom } from './bags';
 import { applyArmorKit, CLASS_ARMOR, CLASS_ARMOR_OF, classSpecial, specialProblem, TIME_TO_APPLY_KIT } from './classArmor';
 import type { World } from './world';
 
@@ -106,16 +107,14 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   if (action.type === 'remove') {
     if (!Number.isInteger(action.ring) || !hero.rings[action.ring]) return 'no such ring';
     if (hero.rings[action.ring]!.cursed) return CURSED;
-    return hero.items.length < BACKPACK_SIZE ? null : 'your pack is full';
+    return hasRoom(hero, hero.rings[action.ring]!) ? null : 'your pack is full';
   }
   if (action.type === 'buy') {
     const heap = heapAt(world, hero);
     const ware = heap?.kind === 'forSale' ? heap.items[0] : undefined;
     if (!ware) return 'nothing for sale here';
     if (hero.gold < buyPrice(ware, hero.depth, world.known.includes(ware.kind), haggles(hero))) return 'not enough gold';
-    return isStackable(ware.kind) && hero.items.some((i) => i.kind === ware.kind) || hero.items.length < BACKPACK_SIZE
-      ? null
-      : 'your pack is full';
+    return hasRoom(hero, ware) ? null : 'your pack is full';
   }
   const item = Number.isInteger(action.item) ? hero.items[action.item] : undefined;
   if (!item) return 'no such item';
@@ -499,7 +498,7 @@ export function collect(hero: Hero, item: Item): boolean {
       return true;
     }
   }
-  if (hero.items.length >= BACKPACK_SIZE) return false;
+  if (!hasRoom(hero, item)) return false;
   hero.items.push(item);
   return true;
 }

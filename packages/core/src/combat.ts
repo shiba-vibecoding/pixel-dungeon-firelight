@@ -14,6 +14,7 @@ import { impQuestKill } from './imp';
 import { curseBroken, questKill } from './quest';
 import { seedGas } from './gas';
 import { DEW_VIAL_VOLUME, drinkFromVial } from './vial';
+import { looseItems } from './bags';
 import { T } from './level/terrain';
 import { isBossDepth } from './level/builder';
 
@@ -237,7 +238,7 @@ const isFist = (mob: Mob): boolean => mob.kind === 'rottingFist' || mob.kind ===
 
 /** Thief.steal: a whole stack from the pack (never a key or a quest item), then off it runs. */
 function steal(ctx: Ctx, thief: Mob, hero: Hero): void {
-  const loot = hero.items.filter((item) => itemDef(item.kind).category !== 'key' && itemDef(item.kind).category !== 'quest');
+  const loot = looseItems(hero).filter((item) => itemDef(item.kind).category !== 'key' && itemDef(item.kind).category !== 'quest');
   if (loot.length === 0) return;
   const item = ctx.rng.element(loot)!;
   hero.items.splice(hero.items.indexOf(item), 1);

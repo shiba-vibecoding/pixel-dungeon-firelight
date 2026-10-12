@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { act, addHero, createItem, createMob, createWorld, floorAt, heroById, levelAt, NEIGHBOURS8, canEnter, charAt } from '../src/index';
+import {
+  act, addHero, canEnter, charAt, createItem, createMob, createWorld, floorAt, hasRoom, heroById, inBag, levelAt, NEIGHBOURS8, slotsUsed,
+} from '../src/index';
 import { pacify } from './helpers';
 
 describe('the dew vial', () => {
@@ -42,5 +44,26 @@ describe('the dew vial', () => {
     for (let i = 0; i < 20 && hero.items[0]!.volume; i++) act(world, 'p', { type: 'wait' });
     expect(hero.items[0]!.volume).toBe(0);
     expect(hero.hp).toBeGreaterThan(0);
+  });
+});
+
+describe('bags', () => {
+  it('hold their own kind without taking room in the backpack, up to their size; keys never take room', () => {
+    const world = pacify(createWorld(4));
+    addHero(world, { id: 'p', name: 'P', heroClass: 'mage' });
+    const hero = heroById(world, 'p')!;
+    hero.items = Array.from({ length: 19 }, () => createItem('weapon.dagger'));
+    hero.items.push(createItem('bag.scrolls'));
+    expect(slotsUsed(hero)).toBe(20);
+    expect(hasRoom(hero, createItem('weapon.sword'))).toBe(false);
+    expect(hasRoom(hero, { ...createItem('key.iron'), depth: 1 })).toBe(true);
+    const scrolls = (['scroll.identify', 'scroll.teleportation', 'scroll.mapping'] as const).map((kind) => createItem(kind));
+    for (const scroll of scrolls) {
+      expect(hasRoom(hero, scroll)).toBe(true);
+      hero.items.push(scroll);
+    }
+    expect(slotsUsed(hero)).toBe(20);
+    expect(scrolls.every((scroll) => inBag(hero, scroll))).toBe(true);
+    expect(hasRoom(hero, createItem('seed.firebloom'))).toBe(false);
   });
 });

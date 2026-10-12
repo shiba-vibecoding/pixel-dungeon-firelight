@@ -1,5 +1,5 @@
 import {
-  type Action, BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, type ItemRef, maxExp, type MobKind,
+  type Action, BACKPACK_SIZE, type Hero, inBag, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, type ItemRef, maxExp, type MobKind,
   SUBCLASSES, wandMaxCharges, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
@@ -529,11 +529,16 @@ export interface BackpackOptions {
 export function showBackpack(options: BackpackOptions): void {
   const { world, hero } = options;
   const open = (item: Item, index: number | null, ring?: number): void => showItem({ ...options, item, index, ring });
+  // The backpack's own slots, then whatever lies in bags or on the key ring.
+  const entries = hero.items.map((item, index) => ({ item, index, bagged: inBag(hero, item) }));
+  const loose = entries.filter((entry) => !entry.bagged);
+  const bagged = entries.filter((entry) => entry.bagged);
   const grid = el('div', { className: 'pd-grid' });
-  for (let i = 0; i < BACKPACK_SIZE; i++) {
-    const item = hero.items[i];
-    grid.append(slot(world, item, item && (() => open(item, i))));
+  for (let i = 0; i < Math.max(BACKPACK_SIZE, loose.length); i++) {
+    const entry = loose[i];
+    grid.append(slot(world, entry?.item, entry && (() => open(entry.item, entry.index))));
   }
+  const bags = el('div', { className: 'pd-grid' }, ...bagged.map(({ item, index }) => slot(world, item, () => open(item, index))));
   show(
     el(
       'div',
@@ -557,6 +562,7 @@ export function showBackpack(options: BackpackOptions): void {
         el('span', { className: 'pd-stats', textContent: `${t.strShort} ${hero.str}` }),
       ),
       grid,
+      ...(bagged.length > 0 ? [el('p', { className: 'pd-note', textContent: t.inBags }), bags] : []),
       button(t.close, options.onClose),
     ),
   );
