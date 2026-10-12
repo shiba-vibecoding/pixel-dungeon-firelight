@@ -823,13 +823,160 @@ function openBackpack(): void {
   });
 }
 
+/* Zoom and looking around: pinch or wheel to zoom, drag to look about (as GameScene's camera). */
+
+/** Zoom levels in device pixels per art pixel: whole numbers keep the art crisp; the view glides between them. */
+const zoom = { base: 2, min: 1, max: 4, target: 2, delta: 0 };
+try {
+  zoom.delta = Number(localStorage.getItem('pd-zoom')) || 0;
+} catch {
+  // The default zoom, then.
+}
+/** How far the view has been dragged away from the hero, world pixels; it glides back when the hero moves. */
+const pan = { x: 0, y: 0, home: false };
+/** Where a zoom is centred, device pixels: the fingers, the cursor, or the hero. */
+let zoomAnchor: { x: number; y: number } | null = null;
+
+function clampZoom(z: number, give = 0): number {
+  return Math.min(zoom.max + give, Math.max(zoom.min - give, z));
+}
+
+/** Settles on a zoom level (by steps from the wheel and keys) and remembers it. */
+function zoomTo(level: number, anchor: { x: number; y: number } | null): void {
+  const next = clampZoom(Math.round(level));
+  if (next !== Math.round(zoom.target)) audio.play('click', 1.5 + (next - zoom.base) * 0.05, 0.18);
+  zoom.target = next;
+  zoomAnchor = anchor;
+  zoom.delta = next - zoom.base;
+  try {
+    localStorage.setItem('pd-zoom', String(zoom.delta));
+  } catch {
+    // Not remembered.
+  }
+}
+
+/** Changes the zoom keeping the world point under `anchor` where it is on screen. */
+function applyZoom(z: number, anchor: { x: number; y: number }): void {
+  const old = camera.zoom;
+  if (!Number.isFinite(z) || z <= 0) return;
+  if (z === old || !follow.ready || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
+    camera.zoom = z;
+    return;
+  }
+  const nx = follow.x + anchor.x / old - anchor.x / z;
+  const ny = follow.y + anchor.y / old - anchor.y / z;
+  // Following the hero, the view's target moves with the zoom; the drag offset makes up the difference.
+  const shiftX = (canvas.width / 2) * (1 / z - 1 / old);
+  const shiftY = freeMiddle >= 0 ? freeMiddle * (1 / z - 1 / old) : (canvas.height / 2) * (1 / z - 1 / old);
+  pan.x += nx - follow.x + shiftX;
+  pan.y += ny - follow.y + shiftY;
+  follow.x = nx;
+  follow.y = ny;
+  camera.zoom = z;
+}
+
+const toDevice = (clientX: number, clientY: number): { x: number; y: number } => {
+  const rect = canvas.getBoundingClientRect();
+  // A canvas not laid out (a hidden pane) has no size to scale by.
+  const sx = rect.width > 0 ? canvas.width / rect.width : 1;
+  const sy = rect.height > 0 ? canvas.height / rect.height : 1;
+  return { x: (clientX - rect.left) * sx, y: (clientY - rect.top) * sy };
+};
+
+/** Fingers on the map, in device pixels, and what they are doing. */
+const fingers = new Map<number, { x: number; y: number }>();
+let gesture:
+  | { kind: 'tap' | 'pan'; x: number; y: number; panX: number; panY: number }
+  | { kind: 'pinch'; dist: number; zoom: number; mid: { x: number; y: number } }
+  | { kind: 'done' }
+  | null = null;
+
+const spread = (): { dist: number; mid: { x: number; y: number } } => {
+  const [a, b] = [...fingers.values()];
+  return { dist: Math.hypot(a!.x - b!.x, a!.y - b!.y) || 1, mid: { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 } };
+};
+
 canvas.addEventListener('pointerdown', (event) => {
   if (!session?.world || overlayOpen()) return;
-  // The HUD, log and toolbar are HTML over the canvas: what reaches here is a tap on the map.
-  const rect = canvas.getBoundingClientRect();
-  const px = (event.clientX - rect.left) * (canvas.width / rect.width);
-  const py = (event.clientY - rect.top) * (canvas.height / rect.height);
+  // The HUD, log and toolbar are HTML over the canvas: what reaches here is a touch on the map.
+  try {
+    canvas.setPointerCapture(event.pointerId);
+  } catch {
+    // Not a live pointer (a synthetic event): its moves still reach the canvas.
+  }
+  fingers.set(event.pointerId, toDevice(event.clientX, event.clientY));
+  if (fingers.size === 1) {
+    const at = fingers.get(event.pointerId)!;
+    gesture = { kind: 'tap', x: at.x, y: at.y, panX: pan.x, panY: pan.y };
+  } else if (fingers.size === 2) {
+    const { dist, mid } = spread();
+    gesture = { kind: 'pinch', dist, zoom: camera.zoom, mid };
+  }
+});
 
+canvas.addEventListener('pointermove', (event) => {
+  if (!fingers.has(event.pointerId) || !gesture) return;
+  fingers.set(event.pointerId, toDevice(event.clientX, event.clientY));
+  if (gesture.kind === 'tap' || gesture.kind === 'pan') {
+    const at = fingers.get(event.pointerId)!;
+    const dx = at.x - gesture.x;
+    const dy = at.y - gesture.y;
+    // A finger that travels is looking around, not tapping.
+    const slop = 10 * (canvas.width / (canvas.clientWidth || canvas.width));
+    if (gesture.kind === 'tap' && Math.hypot(dx, dy) > slop) gesture = { ...gesture, kind: 'pan' };
+    if (gesture.kind === 'pan') {
+      pan.x = gesture.panX - dx / camera.zoom;
+      pan.y = gesture.panY - dy / camera.zoom;
+      pan.home = false;
+    }
+  } else if (gesture.kind === 'pinch' && fingers.size >= 2) {
+    const { dist, mid } = spread();
+    // The zoom follows the fingers, a little past the ends, and the point between them stays put.
+    const z = clampZoom(gesture.zoom * (dist / gesture.dist), 0.6);
+    zoom.target = z;
+    applyZoom(z, mid);
+    pan.x -= (mid.x - gesture.mid.x) / camera.zoom;
+    pan.y -= (mid.y - gesture.mid.y) / camera.zoom;
+    follow.x -= (mid.x - gesture.mid.x) / camera.zoom;
+    follow.y -= (mid.y - gesture.mid.y) / camera.zoom;
+    gesture.mid = mid;
+    pan.home = false;
+  }
+});
+
+const lift = (event: PointerEvent): void => {
+  if (!fingers.has(event.pointerId)) return;
+  const at = fingers.get(event.pointerId)!;
+  fingers.delete(event.pointerId);
+  if (gesture?.kind === 'pinch') {
+    // Let go: the view settles on the nearest whole zoom, round the point between the fingers.
+    zoomTo(camera.zoom, gesture.mid);
+    gesture = fingers.size > 0 ? { kind: 'done' } : null;
+    return;
+  }
+  if (fingers.size > 0) return;
+  const tapped = gesture?.kind === 'tap' && event.type === 'pointerup';
+  gesture = null;
+  if (tapped) tapAt(at.x, at.y);
+};
+canvas.addEventListener('pointerup', lift);
+canvas.addEventListener('pointercancel', lift);
+
+/** The mouse wheel (and a touchpad's pinch) zooms by steps, round the cursor. */
+let wheelSum = 0;
+canvas.addEventListener('wheel', (event) => {
+  if (!session?.world || overlayOpen()) return;
+  event.preventDefault();
+  wheelSum += event.deltaMode === 1 ? event.deltaY * 40 : event.deltaY;
+  // A touchpad's pinch comes as many small steps with ctrl held.
+  const notch = event.ctrlKey ? 25 : 60;
+  if (Math.abs(wheelSum) < notch) return;
+  zoomTo(Math.round(zoom.target) - Math.sign(wheelSum), toDevice(event.clientX, event.clientY));
+  wheelSum = 0;
+}, { passive: false });
+
+function tapAt(px: number, py: number): void {
+  if (!session?.world || overlayOpen()) return;
   const x = Math.floor((camera.x + px / camera.zoom) / TILE);
   const y = Math.floor((camera.y + py / camera.zoom) / TILE);
   if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
@@ -839,7 +986,7 @@ canvas.addEventListener('pointerdown', (event) => {
     return;
   }
   tapCell(x + y * WIDTH);
-});
+}
 
 /** The examine tool is on: the next tap on the map tells what is there. */
 let examining = false;
@@ -935,6 +1082,10 @@ addEventListener('keydown', (event) => {
     else openMenu();
   } else if (event.code === 'KeyT') {
     toggleQuickslot();
+  } else if (event.code === 'Equal' || event.code === 'NumpadAdd') {
+    zoomTo(Math.round(zoom.target) + 1, null);
+  } else if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
+    zoomTo(Math.round(zoom.target) - 1, null);
   } else {
     return;
   }
@@ -948,8 +1099,14 @@ function resize(): void {
   const dpr = Math.min(devicePixelRatio || 1, quality.light ? 1.5 : 3);
   canvas.width = Math.round(canvas.clientWidth * dpr);
   canvas.height = Math.round(canvas.clientHeight * dpr);
-  // About 12 tiles across the narrow side, at an integer zoom for crisp pixels.
-  camera.zoom = Math.max(1, Math.round(Math.min(canvas.width, canvas.height) / (TILE * 12)));
+  // About 12 tiles across the narrow side, at an integer zoom for crisp pixels; out to the whole
+  // level across it, in to twice as close.
+  const narrow = Math.min(canvas.width, canvas.height);
+  zoom.base = Math.max(1, Math.round(narrow / (TILE * 12)));
+  zoom.min = Math.max(1, Math.min(zoom.base, Math.floor(narrow / (TILE * WIDTH))));
+  zoom.max = Math.max(zoom.base + 2, zoom.base * 2);
+  zoom.target = clampZoom(zoom.base + zoom.delta);
+  camera.zoom = zoom.target;
 }
 
 /** Toasts appear just under the HUD, however tall it has grown (buffs, companions, a notice). */
@@ -1126,6 +1283,9 @@ function tick(now: number): void {
     view.reset(me.depth);
     fx.reset();
     follow.ready = false;
+    pan.x = 0;
+    pan.y = 0;
+    pan.home = false;
     walk.reset();
     bakedKey = '';
     threats = new Set();
@@ -1150,6 +1310,8 @@ function tick(now: number): void {
       const feeling = t.feelings[level.feeling];
       if (feeling && me.depth > lastPlace.depth) view.say(feeling, '#ffff44');
     } else if (me.pos !== lastPlace.pos) {
+      // The view comes home to the walking hero.
+      if (pan.x !== 0 || pan.y !== 0) pan.home = true;
       const terrain = level.map[me.pos]!;
       // Footsteps: never quite the same twice, left foot and right a touch apart.
       stride = -stride;
@@ -1215,10 +1377,38 @@ function tick(now: number): void {
   // The view follows the hero softly: it eases after them (a short exponential lag), so a walk
   // starts and stops with a little weight instead of the map jerking under them. A jump of
   // more than a few cells (a new depth, a teleport, a fall) is not followed but cut to.
-  const targetX = at.x + TILE / 2 - canvas.width / camera.zoom / 2;
-  const targetY = at.y + TILE / 2 - middle / camera.zoom;
-  const far = Math.hypot(targetX - follow.x, targetY - follow.y) > TILE * 4;
-  if (!follow.ready || far || follow.depth !== me.depth) {
+  // The zoom glides to its level, round its anchor (the fingers, the cursor, or the hero).
+  if (gesture?.kind !== 'pinch' && camera.zoom !== zoom.target) {
+    const z = Math.abs(zoom.target - camera.zoom) < 0.004
+      ? zoom.target
+      : camera.zoom + (zoom.target - camera.zoom) * (1 - Math.exp(-Math.max(0, dt) / 70));
+    applyZoom(z, zoomAnchor ?? { x: canvas.width / 2, y: middle });
+    if (z === zoom.target) zoomAnchor = null;
+  }
+  // A step brings the view home from wherever it was dragged.
+  if (pan.home) {
+    const back = Math.exp(-Math.max(0, dt) / 110);
+    pan.x *= back;
+    pan.y *= back;
+    if (Math.hypot(pan.x, pan.y) < 0.05) {
+      pan.x = 0;
+      pan.y = 0;
+      pan.home = false;
+    }
+  }
+  // Not so far that the level leaves the screen.
+  const reach = (WIDTH * TILE) / 2;
+  pan.x = Math.max(-reach, Math.min(reach, pan.x));
+  pan.y = Math.max(-reach, Math.min(reach, pan.y));
+  const targetX = at.x + TILE / 2 - canvas.width / camera.zoom / 2 + pan.x;
+  const targetY = at.y + TILE / 2 - middle / camera.zoom + pan.y;
+  const dragging = gesture?.kind === 'pan' || gesture?.kind === 'pinch';
+  const far = !dragging && Math.hypot(targetX - follow.x, targetY - follow.y) > TILE * 4 && !pan.home;
+  if (dragging && follow.ready && follow.depth === me.depth) {
+    // Under the finger the map moves with it, not after it.
+    follow.x = targetX;
+    follow.y = targetY;
+  } else if (!follow.ready || far || follow.depth !== me.depth) {
     follow.x = targetX;
     follow.y = targetY;
   } else {

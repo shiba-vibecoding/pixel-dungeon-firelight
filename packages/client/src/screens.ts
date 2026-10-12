@@ -884,7 +884,7 @@ const CONTROLS: ReadonlyArray<{ sprite?: string; item?: number; w: number; h: nu
   { sprite: 'menu', w: 6, h: 5 },
 ];
 /** The rest of the help text: tips rather than controls. */
-const TIPS = [2, 7, 8, 9, 10];
+const TIPS = [11, 2, 7, 8, 9, 10];
 
 /** The help: «Controls», each line beside the button it is about, and «Tips»; only the list scrolls. */
 export function showHelp(onClose: () => void): void {
