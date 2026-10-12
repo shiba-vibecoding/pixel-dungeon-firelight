@@ -34,6 +34,7 @@ import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
 import { type Launch, Motion } from './motion';
 import { Scenery } from './scenery';
+import { Feedback } from './feedback';
 import { preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
@@ -121,6 +122,8 @@ setAssets(assets);
 const view = new View(assets);
 /** The world answering touch: doors, grass, water, what falls and what is taken (motion.ts). */
 const motion = new Motion(assets);
+/** The map answering a tap: the cell aimed at, the way there, a cross where there is none (feedback.ts). */
+const feedback = new Feedback();
 /** Each region's life: torches, drips, veins, lanterns, lava, wells, trap plates (scenery.ts). */
 const scenery = new Scenery();
 const hud = new Hud({
@@ -747,8 +750,10 @@ function tapCell(cell: number, quiet = false): void {
   const visible = visibleCells(world, me.depth);
   const explored = exploredCells(world, me.depth);
   walk.reset();
-  // The tapped cell lights up for a blink: the tap was taken.
-  if (explored[cell] && !quiet) view.flashes.push({ cell, start: fx.time(performance.now()), color: aim ? '255, 120, 80' : '255, 255, 255', duration: 260 });
+  const vnow = fx.time(performance.now());
+  feedback.clear();
+  // Aiming a shot, the tapped cell flashes for a blink: the tap was taken.
+  if (explored[cell] && !quiet && aim) view.flashes.push({ cell, start: vnow, color: '255, 120, 80', duration: 260 });
 
   if (aim) {
     const shot = aim;
@@ -768,6 +773,7 @@ function tapCell(cell: number, quiet = false): void {
   const mob = world.floors[me.depth]?.mobs.find((m) => m.pos === cell);
   if (mob && visible[cell]) {
     walk.chase = mob.id;
+    if (!quiet) feedback.aim(cell, true, vnow, mob.id);
     return;
   }
   if (!explored[cell]) return;
@@ -787,15 +793,18 @@ function tapCell(cell: number, quiet = false): void {
   }
   if (level.map[cell] === T.LOCKED_DOOR && !me.items.some((i) => i.kind === 'key.iron' && i.depth === me.depth)) {
     view.say(t.locked, '#ff8800');
+    feedback.refuse(cell, vnow);
     return;
   }
   // Hero.handle: the way down from a boss's depth wants its skeleton key.
   if (level.map[cell] === T.LOCKED_EXIT && !me.items.some((i) => i.kind === 'key.skeleton' && i.depth === me.depth)) {
     view.say(t.exitLocked, '#ff8800');
+    feedback.refuse(cell, vnow);
     return;
   }
   if (level.map[cell] === T.BARRICADE) {
     view.say(t.barricade, '#ff8800');
+    feedback.refuse(cell, vnow);
     return;
   }
   // The alchemy pot: what it is for, then walk up to it as usual.
@@ -808,9 +817,14 @@ function tapCell(cell: number, quiet = false): void {
     if (risky && trap >= 0) {
       walk.queue = risky.slice(0, trap);
       view.say(t.trapInTheWay, '#ff8800');
+      if (!quiet && walk.queue.length > 0) feedback.aim(walk.queue[walk.queue.length - 1]!, false, vnow);
+    } else if (!quiet) {
+      // No way there: say so where the finger was.
+      feedback.refuse(cell, vnow);
     }
     return;
   }
+  if (!quiet && walk.queue.length > 1) feedback.aim(cell, false, vnow);
   walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && me.depth > 1) walk.stairs = 'ascend';
@@ -1381,6 +1395,7 @@ function tick(now: number): void {
       const feeling = t.feelings[level.feeling];
       if (feeling && me.depth > lastPlace.depth) view.say(feeling, '#ffff44');
     } else if (me.pos !== lastPlace.pos) {
+      feedback.stepped(me.pos, vnow);
       // The view comes home to the walking hero.
       if (pan.x !== 0 || pan.y !== 0) pan.home = true;
       const terrain = level.map[me.pos]!;
@@ -1545,7 +1560,13 @@ function tick(now: number): void {
       scenery.draw(c, level, visible, explored, vnow);
       motion.draw(c, level, visible, explored, vnow);
     },
-    over: (c: CanvasRenderingContext2D) => motion.drawOver(c, vnow),
+    over: (c: CanvasRenderingContext2D) => {
+      motion.drawOver(c, vnow);
+      feedback.draw(
+        c, walk.queue, (id) => mobById(world, me.depth, id)?.pos,
+        walk.queue.length === 0 && !walk.chase && !session!.busy, vnow,
+      );
+    },
     mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
     middle,
   };
