@@ -42,6 +42,44 @@ function drawIcon(ctx: CanvasRenderingContext2D, assets: Assets, icon: readonly 
   ctx.drawImage(assets.icons, sx, sy, w, h, Math.round(x - w / 2), Math.round(y - h), w, h);
 }
 
+/** One texel per cell: the fog's darkness, eased from frame to frame (see drawFog). */
+const fogCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+let fogDark: Float32Array | null = null;
+let fogLevel: Level | null = null;
+let fogTime = 0;
+/** How quickly a cell comes out of the dark, and how slowly it sinks back (ms to close most of the gap). */
+const FOG_REVEAL_MS = 70;
+const FOG_FORGET_MS = 260;
+
+function drawFog(ctx: CanvasRenderingContext2D, level: Level, visible: readonly boolean[], explored: readonly boolean[], now: number): void {
+  if (!fogCanvas) return;
+  const fresh = fogLevel !== level || !fogDark;
+  if (fresh) {
+    fogCanvas.width = WIDTH;
+    fogCanvas.height = HEIGHT;
+    fogDark = new Float32Array(LENGTH).fill(1);
+    fogLevel = level;
+  }
+  const dt = fresh ? 0 : Math.min(100, Math.max(0, now - fogTime));
+  fogTime = now;
+  const fog = fogCanvas.getContext('2d')!;
+  const data = fog.createImageData(WIDTH, HEIGHT);
+  const reveal = 1 - Math.exp(-dt / FOG_REVEAL_MS);
+  const forget = 1 - Math.exp(-dt / FOG_FORGET_MS);
+  for (let i = 0; i < LENGTH; i++) {
+    const target = visible[i] ? 0 : explored[i] ? 0.55 : 1;
+    const dark = fogDark![i]!;
+    fogDark![i] = fresh ? target : dark + (target - dark) * (target < dark ? reveal : forget);
+    data.data[i * 4 + 3] = Math.round(fogDark![i]! * 255);
+  }
+  fog.putImageData(data, 0, 0);
+  // Drawn up with smoothing: the darkness fades from cell to cell instead of stopping at tile edges.
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(fogCanvas, 0, 0, WIDTH, HEIGHT, 0, 0, WIDTH * TILE, HEIGHT * TILE);
+  ctx.restore();
+}
+
 /**
  * The finest step on screen, in world pixels: one device pixel. Walkers and
  * the camera move by it rather than by the art's own (much coarser) pixel, so
@@ -217,12 +255,10 @@ export function render(
   }
   ctx.globalCompositeOperation = 'source-over';
 
-  // Fog of war: unexplored cells are black, remembered ones are dimmed.
-  for (let i = 0; i < LENGTH; i++) {
-    if (visible[i]) continue;
-    ctx.fillStyle = explored[i] ? 'rgba(0, 0, 0, 0.55)' : '#000';
-    ctx.fillRect((i % WIDTH) * TILE, Math.trunc(i / WIDTH) * TILE, TILE, TILE);
-  }
+  // Fog of war: unexplored cells are black, remembered ones are dimmed, and the
+  // edges between are soft. Each cell's darkness eases toward what it should be,
+  // so what comes into sight surfaces quickly and what leaves it sinks slowly.
+  drawFog(ctx, level, visible, explored, now);
 
   // Splats on the floor, where it can be seen.
   const seen = (x: number, y: number): boolean => visible[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true;
