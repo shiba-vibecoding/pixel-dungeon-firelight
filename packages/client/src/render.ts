@@ -3,6 +3,7 @@ import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
 import { bossCard, floatNumber, levelCard, nameplate, slainCard } from './cards';
 import { fx } from './fx';
+import type { HeapLook } from './motion';
 import { quality } from './quality';
 import { t } from './i18n';
 
@@ -167,6 +168,10 @@ export interface Scene {
   mourning?: number;
   /** The middle of the band the HUD and toolbar leave free, in device pixels: cards are centred there. */
   middle?: number;
+  /** How each heap moves this frame: dropping in, bouncing (motion.ts). */
+  heapLook?: (pos: number, now: number) => HeapLook;
+  /** Drawn over the floor, under what lies on it: doors swinging, grass swaying, rings on water (motion.ts). */
+  under?: (ctx: CanvasRenderingContext2D) => void;
 }
 
 export function render(
@@ -206,13 +211,25 @@ export function render(
     if (!explored[plant.pos]) continue;
     ctx.drawImage(assets.plants, plant.index * 16, 0, 16, 16, (plant.pos % WIDTH) * TILE, Math.trunc(plant.pos / WIDTH) * TILE, 16, 16);
   }
+  scene.under?.(ctx);
   for (const heap of scene.heaps) {
     if (!explored[heap.pos]) continue;
-    const bob = visible[heap.pos] ? Math.round(Math.sin(now / 300 + heap.pos) * 0.6) : 0;
-    ctx.drawImage(
-      assets.items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16,
-      (heap.pos % WIDTH) * TILE, Math.trunc(heap.pos / WIDTH) * TILE - 1 + bob, 16, 16,
-    );
+    const look = visible[heap.pos] ? scene.heapLook?.(heap.pos, now) : undefined;
+    if (look?.hidden) continue;
+    const x = (heap.pos % WIDTH) * TILE;
+    const y = Math.trunc(heap.pos / WIDTH) * TILE;
+    // Things on the floor breathe a little (by device pixels, so smoothly), and cast a soft shadow.
+    const breath = visible[heap.pos] && !quality.reducedMotion ? Math.sin(now / 520 + heap.pos) * 0.5 : 0;
+    const lift = -(look?.dy ?? 0) - breath;
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.3 - Math.min(0.2, lift * 0.02)})`;
+    ctx.beginPath();
+    ctx.ellipse(x + TILE / 2, y + TILE - 2.5, 4.5 - Math.min(2, lift * 0.2), 1.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(snap(x + TILE / 2 + (look?.dx ?? 0)), snap(y + TILE - 1 - lift));
+    if (look) ctx.scale(look.scaleX, look.scaleY);
+    ctx.drawImage(assets.items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, -8, -16, 16, 16);
+    ctx.restore();
   }
 
   // The sacrificial fire: a flickering blue flame on its pedestal (SacrificialParticle).
@@ -330,7 +347,7 @@ export function render(
     const sx = (floater.x - camera.x) * camera.zoom;
     const sy = (floater.y - camera.y) * camera.zoom;
     const numeric = /^\d+$/.test(floater.text);
-    const kind = numeric ? ((floater.scale ?? 1) > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
+    const kind = floater.word ? 'word' : numeric ? ((floater.scale ?? 1) > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
     floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px);
   }
   ctx.globalAlpha = 1;

@@ -97,6 +97,8 @@ export interface Floater {
   start: number;
   /** Bigger for a heavy blow. */
   scale?: number;
+  /** Drawn in its own colour even if it looks like a number (gold found). */
+  word?: boolean;
 }
 
 export interface LogLine {
@@ -303,13 +305,13 @@ export class View {
     return now - puppet.moveStart >= STEP_MS / 2 ? puppet.to : puppet.from;
   }
 
-  private float(id: string, text: string, color: string, now: number): void {
+  private float(id: string, text: string, color: string, now: number, word = false): void {
     const puppet = this.puppets.get(id);
     if (!puppet) return;
     const { x, y } = this.position(puppet, now);
     // Stack texts that appear together so they stay readable.
-    const stacked = this.floaters.filter((f) => now - f.start < 250 && Math.abs(f.x - x) < 4).length;
-    this.floaters.push({ text, color, x: x + TILE / 2, y: y - stacked * 7, start: now });
+    const stacked = this.floaters.filter((f) => now - f.start < 250 && Math.abs(f.x - x - TILE / 2) < 4).length;
+    this.floaters.push({ text, color, x: x + TILE / 2, y: y - stacked * 7, start: now, ...(word ? { word } : {}) });
   }
 
   private name(world: World, id: string): string {
@@ -451,7 +453,14 @@ export class View {
         case 'opened':
           audio.play('item', 0.8);
           break;
-        case 'pickedUp':
+        case 'pickedUp': {
+          // Whoever takes something stoops for it.
+          const taker = this.puppets.get(effect.hero);
+          if (taker?.alive && taker.anim !== 'attack') {
+            taker.anim = 'operate';
+            taker.animStart = now;
+          }
+          if (effect.item.kind === 'gold') this.float(effect.hero, `+${effect.item.qty}`, COLORS.highlight, now, true);
           if (effect.hero !== myId) break;
           if (effect.item.kind === 'gold') {
             this.say(t.youFoundGold(effect.item.qty), COLORS.highlight, now);
@@ -461,6 +470,7 @@ export class View {
             audio.play('item');
           }
           break;
+        }
         case 'packFull':
           if (effect.hero === myId) this.say(t.packFull, COLORS.warning, now);
           break;

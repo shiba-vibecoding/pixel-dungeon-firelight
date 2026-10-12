@@ -32,6 +32,7 @@ import {
 import { mart } from './mart';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
+import { type Launch, Motion } from './motion';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
@@ -105,6 +106,8 @@ loading.remove();
 setAssets(assets);
 
 const view = new View(assets);
+/** The world answering touch: doors, grass, water, what falls and what is taken (motion.ts). */
+const motion = new Motion(assets);
 const hud = new Hud({
   hero: () => openHero(),
   menu: () => openMenu(),
@@ -587,10 +590,8 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'fell' && effect.hero === myId) justFell = true;
     // Hero.interrupt: an item breaking stops whatever the hero was doing.
     if (effect.type === 'worn' && effect.hero === myId && effect.state === 'broken') walk.reset();
-    if (effect.type === 'pickedUp' && effect.hero === myId && effect.item.kind !== 'gold') {
-      newLoot = true;
-      flyToBag(itemSprite(effect.item, world!.run.labels));
-    }
+    // What flies into the backpack is motion.ts's: from wherever it lay.
+    if (effect.type === 'pickedUp' && effect.hero === myId && effect.item.kind !== 'gold') newLoot = true;
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     const hurt =
       (effect.type === 'attack' && effect.target === myId) ||
@@ -982,24 +983,27 @@ const backdrop = (() => {
   return { level, baked: bakeLevel(level, assets), all, view: new View(assets) };
 })();
 
+/** What I picked up, waiting for its moment to set off (motion.ts). */
+let launches: Launch[] = [];
+
 /**
- * What is picked up flies from the hero's hands into the backpack on the toolbar,
- * by steps, and the backpack gives a little hop as it lands.
+ * What is picked up flies from where it lay into the backpack on the toolbar:
+ * it leaves the floor at the size it had there, swings up in a smooth arc and
+ * shrinks into the pack, which gives a little hop as it lands.
  */
-function flyToBag(sprite: number): void {
-  const world = session?.world;
-  const puppet = world && view.puppets.get(session!.myId);
+function flyToBag(launch: Launch): void {
   const bag = document.querySelector<HTMLElement>('.pd-tool.bag');
-  if (!puppet || !bag || quality.reducedMotion) return;
-  const at = view.position(puppet, fx.time(performance.now()));
+  if (!bag || quality.reducedMotion) return;
+  // World pixels to CSS pixels.
   const scale = camera.zoom / (canvas.width / (canvas.clientWidth || canvas.width));
-  const x = (at.x + TILE / 2 - camera.x) * scale;
-  const y = (at.y - camera.y) * scale;
+  const rect = canvas.getBoundingClientRect();
+  const x = rect.left + (launch.x - camera.x) * scale;
+  const y = rect.top + (launch.y - camera.y) * scale;
   const target = bag.getBoundingClientRect();
   const icon = document.createElement('i');
   icon.className = 'pd-item pd-flying';
-  icon.style.setProperty('--ix', String(sprite % 8));
-  icon.style.setProperty('--iy', String(Math.floor(sprite / 8)));
+  icon.style.setProperty('--ix', String(launch.sprite % 8));
+  icon.style.setProperty('--iy', String(Math.floor(launch.sprite / 8)));
   icon.style.left = `${x - 16}px`;
   icon.style.top = `${y - 16}px`;
   document.body.append(icon);
@@ -1007,20 +1011,27 @@ function flyToBag(sprite: number): void {
   const lost = window.setTimeout(() => icon.remove(), 1500);
   const dx = target.left + target.width / 2 - x;
   const dy = target.top + target.height / 2 - y;
-  // An arc: up a little first, then down into the pack.
-  icon.animate(
-    [
-      { transform: 'translate(0, 0) scale(1)' },
-      { transform: `translate(${dx * 0.35}px, ${dy * 0.15 - 36}px) scale(1.1)`, offset: 0.35 },
-      { transform: `translate(${dx}px, ${dy}px) scale(0.55)`, opacity: 0.85 },
-    ],
-    { duration: 520, easing: 'steps(10, end)' },
-  ).finished.then(() => {
+  // The icon is 32 CSS pixels; on the floor the item was 16 world pixels.
+  const from = (16 * scale) / 32;
+  const to = 0.6;
+  // A quadratic arc through a point above the start, sampled so the path stays a curve.
+  const cx = dx * 0.25;
+  const cy = Math.min(0, dy) - 70;
+  const frames: Keyframe[] = [];
+  for (let i = 0; i <= 16; i++) {
+    const k = i / 16;
+    const px = 2 * (1 - k) * k * cx + k * k * dx;
+    const py = 2 * (1 - k) * k * cy + k * k * dy;
+    const s = from + (to - from) * k * k + Math.sin(k * Math.PI) * 0.15;
+    frames.push({ transform: `translate(${px}px, ${py}px) scale(${s}) rotate(${Math.sin(k * Math.PI) * -12}deg)`, opacity: k > 0.9 ? 1 - (k - 0.9) * 5 : 1 });
+  }
+  icon.animate(frames, { duration: 560, easing: 'cubic-bezier(0.45, 0, 0.6, 1)' }).finished.then(() => {
     clearTimeout(lost);
     icon.remove();
     bag.classList.remove('got');
     void bag.offsetWidth;
     bag.classList.add('got');
+    audio.play('item', 1.6, 0.18);
   }, () => icon.remove());
 }
 
@@ -1145,7 +1156,6 @@ function tick(now: number): void {
       audio.play(terrain >= T.WATER_TILES && terrain <= T.WATER ? 'water' : 'step', 1 + stride * 0.05 + (Math.random() - 0.5) * 0.08, 0.45 + Math.random() * 0.1);
       // And what the step stirs where it left: dust, a splash, a few blades of grass.
       stepFx(level.map[lastPlace.pos] ?? terrain, lastPlace.pos, vnow);
-      if (terrain === T.OPEN_DOOR) audio.play('door_open', 1, 0.6);
       // Stepping onto a sign reads it.
       // Below the last shop the signs burst into flames as one reads them (Sign.read).
       const tip = t.signs[me.depth - 1] ?? t.signBurns;
@@ -1180,6 +1190,7 @@ function tick(now: number): void {
   if (effects.length > 0) {
     view.apply(effects, world, session.myId, vnow);
     for (const effect of effects) effectFx(effect, view, world, session.myId, vnow);
+    motion.effects(effects, world, me.depth, (e) => itemSprite(e.item, world.run.labels));
     handleMyEffects(effects, session.myId);
   }
   // An online session learns my class with its first snapshot: wear the look for it.
@@ -1224,6 +1235,13 @@ function tick(now: number): void {
     pos: heap.pos,
     sprite: heap.kind === 'heap' || heap.kind === 'forSale' ? itemSprite(heap.items[0]!, world.run.labels) : HEAP_SPRITES[heap.kind],
   }));
+  motion.update(level, heaps, visible, view, session.myId, `${session.generation}:${me.depth}`, vnow);
+  for (const launch of motion.takeLaunches()) if (!launch.gold) launches.push(launch);
+  launches = launches.filter((launch) => {
+    if (launch.at > vnow) return true;
+    flyToBag(launch);
+    return false;
+  });
   const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
   // Clouds of gas: green toxic, yellow paralytic.
   const clouds = world.floors[me.depth]?.gas ?? {};
@@ -1236,6 +1254,8 @@ function tick(now: number): void {
       ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
     focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
     lights: lightsFor(level, visible, view, vnow),
+    heapLook: (pos: number, at: number) => motion.heapLook(pos, at),
+    under: (c: CanvasRenderingContext2D) => motion.draw(c, level, visible, vnow),
     mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
     middle,
   };
@@ -1391,5 +1411,5 @@ if (import.meta.env.DEV) {
       await new Promise((resolve) => setTimeout(resolve, 33));
     }
   };
-  Object.assign(window, { __pd: { get session() { return session; }, camera, view, walk, advance, play, resize, core, fx } });
+  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo } });
 }
