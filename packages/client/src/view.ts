@@ -319,6 +319,15 @@ export class View {
     return now - puppet.moveStart >= STEP_MS / 2 ? puppet.to : puppet.from;
   }
 
+  /** A hero busy with their hands (drinking, reading, eating): the operate animation, as in the original. */
+  private busy(id: string, now: number): void {
+    const puppet = this.puppets.get(id);
+    if (puppet?.alive && puppet.anim !== 'attack') {
+      puppet.anim = 'operate';
+      puppet.animStart = now;
+    }
+  }
+
   /** Where a character is, world pixels (its middle), for sounds that come from it. */
   private placeOf(id: string, now: number): { x: number; y: number } | undefined {
     const puppet = this.puppets.get(id);
@@ -507,7 +516,8 @@ export class View {
           break;
         case 'used': {
           const potion = effect.kind.startsWith('potion.');
-          audio.play(potion ? 'drink' : 'read');
+          audio.play(potion ? 'drink' : 'read', 1, 1, this.placeOf(effect.hero, now));
+          this.busy(effect.hero, now);
           if (effect.identified) this.say(t.itWas(t.items[effect.kind]), COLORS.highlight, now);
           if (effect.hero === myId && effect.kind === 'potion.levitation') this.say(t.floating, COLORS.default, now);
           if (effect.hero === myId && effect.kind === 'potion.purity') this.say(t.noSmell, COLORS.default, now);
@@ -790,7 +800,8 @@ export class View {
           }
           break;
         case 'ate':
-          audio.play('eat');
+          audio.play('eat', 1, 1, this.placeOf(effect.hero, now));
+          this.busy(effect.hero, now);
           if (effect.hero === myId) {
             this.say(effect.kind === 'food.meat' ? t.ateMeat : effect.kind === 'food.overpriced' ? t.ateOk : t.ateFood, COLORS.default, now);
             // Mystery meat's surprises are bad ones; frozen carpaccio's are good.
