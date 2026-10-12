@@ -19,7 +19,7 @@ export function pacify(world: World): World {
  * When no path exists it cheats a little: it knows where the hidden doors are
  * and searches next to the nearest one.
  */
-export function botAction(world: World, id: string): Action {
+export function botAction(world: World, id: string, deepest = 4): Action {
   const hero = heroById(world, id)!;
   const level = levelAt(world, hero.depth);
   const floor = floorAt(world, hero.depth);
@@ -30,7 +30,7 @@ export function botAction(world: World, id: string): Action {
   const food = hero.items.findIndex((item) => item.kind.startsWith('food.'));
   if (hero.hunger >= HUNGRY && food >= 0) return { type: 'use', item: food };
   if (floor.heaps.some((heap) => heap.pos === hero.pos) && hero.items.length < 20) return { type: 'pickup' };
-  if (hero.pos === level.exit && hero.depth < 4) return { type: 'descend' };
+  if (hero.pos === level.exit && hero.depth < deepest) return { type: 'descend' };
   if (hero.hp < hero.ht / 2) return { type: 'wait' };
 
   const companions = new Set(

@@ -1,12 +1,12 @@
 import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
 import {
-  awareness, createHero, type Hero, heroAttackDelay, heroSpeed, HUNGER_STEP, hungerStep, HUNGRY, isAlive, isStarving,
-  type Mob, type PlayerInfo, STARVING,
+  awareness, createHero, createMob, type Hero, heroAttackDelay, heroSpeed, HUNGER_STEP, hungerStep, HUNGRY, isAlive,
+  isStarving, type Mob, type PlayerInfo, STARVING,
 } from './actors';
 import { attack, hurt } from './combat';
 import {
   canEnter, charAt, type Ctx, dropItem, type Effect, enterCell, exploredCells, type Floor, freeCellNear, heroesOn,
-  heroView, isWater, leaveCell, observe,
+  heroView, isPassable, isWater, leaveCell, observe,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
 import { createItem, createItems, itemDef, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
@@ -16,6 +16,7 @@ import { trapAt, triggerTrap } from './traps';
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
 import { adjacent, cellX, cellY, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
+import { RoomType } from './level/room';
 import { discover, F, hasFlag, T } from './level/terrain';
 import { deriveSeed, Rng, seedRng, Stream } from './rng';
 import { createRun, type RunState } from './run';
@@ -70,7 +71,7 @@ export interface World {
 }
 
 /** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
-export const DEEPEST_AVAILABLE = 5;
+export const DEEPEST_AVAILABLE = 10;
 const TIME_TO_REST = 1;
 const TIME_TO_SEARCH = 2;
 /** How far a deliberate search reaches; the original only checked adjacent cells. */
@@ -430,6 +431,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       if (trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
       if (level.map[hero.pos] === T.WELL) drinkFromWell(ctx, hero);
       if (level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos);
+      if (level.arenaDoor !== undefined) enterArena(ctx, hero);
       search(ctx, hero, false);
       break;
     }
@@ -468,6 +470,40 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       break;
   }
   if (isAlive(hero)) observe(world, hero);
+}
+
+/**
+ * PrisonBossLevel.press: Tengu appears when the first hero sets foot in the
+ * arena, and the door locks once the whole party on the depth is inside.
+ */
+function enterArena(ctx: Ctx, hero: Hero): void {
+  const { level, floor, world, depth, rng } = ctx;
+  const arena = level.rooms.find((room) => room.type === RoomType.BOSS_EXIT);
+  if (!arena) return;
+  const inside = (pos: number): boolean =>
+    cellX(pos) > arena.left && cellX(pos) < arena.right && cellY(pos) > arena.top && cellY(pos) < arena.bottom;
+  if (!floor.arenaEntered) {
+    if (!inside(hero.pos)) return;
+    floor.arenaEntered = true;
+    let pos = -1;
+    for (let attempt = 0; attempt < 200 && pos === -1; attempt++) {
+      const cell = rng.intBetween(arena.left + 1, arena.right) + rng.intBetween(arena.top + 1, arena.bottom) * WIDTH;
+      if (cell !== hero.pos && isPassable(level, cell) && !charAt(world, depth, cell)) pos = cell;
+    }
+    if (pos === -1) return;
+    const tengu = createMob(`#${++world.nextId}`, 'tengu', pos, 'hunting', floor.now);
+    Object.assign(tengu, { enemy: hero.id, target: hero.pos, enemySeen: true });
+    floor.mobs.push(tengu);
+    enterCell(level, pos);
+    ctx.effects.push({ type: 'noticed', depth, mob: tengu.id });
+    ctx.effects.push({ type: 'yell', depth, mob: tengu.id, kind: 'tengu', line: 'notice', hero: hero.id });
+  }
+  const fighting = floor.mobs.some((mob) => mob.kind === 'tengu');
+  const door = level.arenaDoor!;
+  if (fighting && level.map[door] !== T.LOCKED_DOOR && heroesOn(world, depth).every((h) => inside(h.pos))) {
+    level.map[door] = T.LOCKED_DOOR;
+    ctx.effects.push({ type: 'arena', depth, sealed: true });
+  }
 }
 
 /** HighGrass.trample: walked through, tall grass is flattened and sometimes sheds a dewdrop. */

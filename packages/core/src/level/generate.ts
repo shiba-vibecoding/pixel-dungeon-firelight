@@ -3,8 +3,10 @@ import { type RunState, useSpecial } from '../run';
 import { Feeling, isBossDepth, type ItemSpawn, type ItemSpec, LevelBuilder, type WellWater } from './builder';
 import { stitchTerrain } from './flags';
 import { PAINTERS } from './painters';
-import { buildRegularLevel } from './regular';
 import { RoomType } from './room';
+import { PRISON_STYLE } from './prison';
+import { buildPrisonBossLevel, PRISON_BOSS_STYLE } from './prison-boss';
+import { buildRegularLevel as buildRegular, type RegionStyle } from './regular';
 import { SEWER_STYLE } from './sewer';
 import { buildSewerBossLevel, SEWER_BOSS_STYLE } from './sewer-boss';
 
@@ -31,7 +33,20 @@ export interface Level {
   /** Magic wells that still hold water. */
   wells: Array<{ pos: number; water: WellWater }>;
   secretDoors: number;
+  /** Tengu's level: the door into the arena. */
+  arenaDoor?: number;
 }
+
+/** How each depth is laid out: the sewers, Goo's lair, the prison, Tengu's prison. */
+function layoutFor(depth: number): { style: RegionStyle; build: (level: LevelBuilder) => boolean } {
+  if (depth === 5) return { style: SEWER_BOSS_STYLE, build: buildSewerBossLevel };
+  if (depth === 10) return { style: PRISON_BOSS_STYLE, build: buildPrisonBossLevel };
+  const style = depth < 5 ? SEWER_STYLE : PRISON_STYLE;
+  return { style, build: (level) => buildRegular(level, style) };
+}
+
+/** The deepest depth the port can generate. */
+export const DEEPEST_LEVEL = 10;
 
 const MAX_ATTEMPTS = 128;
 
@@ -57,8 +72,8 @@ function rollFeeling(rng: Rng, depth: number): Feeling {
  * next and special rooms rotate through the run.
  */
 export function generateLevel(run: RunState, depth: number): Level {
-  if (depth < 1 || depth > 5) {
-    throw new Error(`Depth ${depth} is not generated yet; the port currently covers the sewers (1-5)`);
+  if (depth < 1 || depth > DEEPEST_LEVEL) {
+    throw new Error(`Depth ${depth} is not generated yet; the port covers the sewers and the prison (1-${DEEPEST_LEVEL})`);
   }
 
   const rng = Rng.seeded(deriveSeed(run.seed, Stream.LAYOUT, depth));
@@ -74,8 +89,8 @@ export function generateLevel(run: RunState, depth: number): Level {
       : run.specials.filter((type) => PAINTERS.has(type) && !(type === RoomType.WEAK_FLOOR && isBossDepth(depth + 1)));
     const level = new LevelBuilder(rng, depth, feeling, specials);
     level.pitRoomNeeded = pitNeeded && !boss;
-    const style = boss ? SEWER_BOSS_STYLE : SEWER_STYLE;
-    if (!(boss ? buildSewerBossLevel(level) : buildRegularLevel(level, style))) {
+    const { style, build } = layoutFor(depth);
+    if (!build(level)) {
       continue;
     }
 
@@ -98,6 +113,7 @@ export function generateLevel(run: RunState, depth: number): Level {
       toSpawn: level.toSpawn,
       wells: level.wells,
       secretDoors: level.secretDoors,
+      ...(level.arenaDoor >= 0 ? { arenaDoor: level.arenaDoor } : {}),
     };
   }
   throw new Error(`Unable to generate depth ${depth} after ${MAX_ATTEMPTS} attempts`);

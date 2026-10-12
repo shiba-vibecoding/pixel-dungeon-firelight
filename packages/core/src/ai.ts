@@ -1,5 +1,7 @@
-import { createMob, GOO_PUMPED, type Hero, heroStealth, type Mob, type MobState, MOBS, rollMob } from './actors';
-import { attack } from './combat';
+import {
+  createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, type Mob, type MobState, MOBS, rollMob,
+} from './actors';
+import { attack, hurt } from './combat';
 import { castShadow, terrainBlocksSight } from './fov';
 import { charAt, type Ctx, enterCell, heroesOn, isPassable, isWater, leaveCell } from './floor';
 import { isBossDepth } from './level/builder';
@@ -102,7 +104,7 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
 
     case 'hunting':
       mob.enemySeen = enemyInFov;
-      if (enemyInFov && canAttack(mob, enemy)) {
+      if (enemyInFov && canAttack(ctx, mob, enemy)) {
         doAttack(ctx, mob, enemy);
         return;
       }
@@ -116,7 +118,60 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
         mob.target = randomDestination(ctx.rng, ctx.level);
       }
       return;
+
+    case 'fleeing': {
+      // Mob.Fleeing: away from the enemy, or from where it was last seen.
+      mob.enemySeen = enemyInFov;
+      if (enemyInFov) mob.target = enemy.pos;
+      const fled = mob.target === -1 ? 'cornered' : getFurther(ctx, mob, mob.target);
+      if (fled === 'moved') {
+        spend(mob, 1 / MOBS[mob.kind].speed);
+      } else {
+        spend(mob, TICK);
+        if (fled === 'cornered') {
+          // Thief.Fleeing.nowhereToRun: cornered, it turns on its pursuer.
+          mob.state = 'hunting';
+          ctx.effects.push({ type: 'cornered', depth: ctx.depth, mob: mob.id });
+        }
+      }
+      return;
+    }
   }
+}
+
+/**
+ * PathFinder.getStepBack, simplified: the neighbouring cell furthest from
+ * the threat, if it gains any distance; 'safe' when the threat cannot reach
+ * the mob at all.
+ */
+function getFurther(ctx: Ctx, mob: Mob, threat: number): 'moved' | 'safe' | 'cornered' {
+  const { world, depth, level } = ctx;
+  const dist = new Int32Array(LENGTH).fill(-1);
+  dist[threat] = 0;
+  const queue = [threat];
+  for (let head = 0; head < queue.length; head++) {
+    const c = queue[head]!;
+    for (const n of NEIGHBOURS8) {
+      const next = c + n;
+      if (next < 0 || next >= LENGTH || dist[next]! >= 0 || !adjacent(c, next) || !isPassable(level, next)) continue;
+      dist[next] = dist[c]! + 1;
+      queue.push(next);
+    }
+  }
+  if (dist[mob.pos]! < 0) return 'safe';
+  let best = -1;
+  let bestDist = dist[mob.pos]!;
+  for (const n of STEP_ORDER) {
+    const step = mob.pos + n;
+    if (step < 0 || step >= LENGTH || !adjacent(mob.pos, step) || charAt(world, depth, step)) continue;
+    if (dist[step]! > bestDist) {
+      best = step;
+      bestDist = dist[step]!;
+    }
+  }
+  if (best === -1) return 'cornered';
+  moveMob(ctx, mob, best);
+  return 'moved';
 }
 
 function notice(ctx: Ctx, mob: Mob, enemy: Hero, state: MobState): void {
@@ -124,17 +179,87 @@ function notice(ctx: Ctx, mob: Mob, enemy: Hero, state: MobState): void {
   mob.state = state;
   mob.target = enemy.pos;
   ctx.effects.push({ type: 'noticed', depth: ctx.depth, mob: mob.id });
-  if (mob.kind === 'goo') ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, line: 'notice' });
+  if (mob.kind === 'goo' || mob.kind === 'tengu') {
+    ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'notice', hero: enemy.id });
+  }
 }
 
-function canAttack(mob: Mob, enemy: Hero): boolean {
+function canAttack(ctx: Ctx, mob: Mob, enemy: Hero): boolean {
+  // Shamans cast lightning and Tengu throws shuriken at anyone in a clear line.
+  if (mob.kind === 'shaman' || mob.kind === 'tengu') return ballistica(ctx, mob.pos, enemy.pos).at(-1) === enemy.pos;
   return mob.pumped ? distance(mob.pos, enemy.pos) <= 2 : adjacent(mob.pos, enemy.pos);
 }
 
+/** Shaman.doAttack from afar: a bolt of lightning, worse for someone standing in water. */
+function zapLightning(ctx: Ctx, mob: Mob, enemy: Hero): void {
+  spend(mob, TIME_TO_ZAP);
+  ctx.effects.push({ type: 'zapped', depth: ctx.depth, from: mob.pos, to: enemy.pos, bolt: 'lightning' });
+  // A magic attack: accuracy counts double.
+  const hit = ctx.rng.floatMax(MOBS.shaman.attack) * 2 >= ctx.rng.floatMax(heroDefenseSkill(enemy));
+  let damage = 0;
+  if (hit) {
+    damage = ctx.rng.intBetween(2, 12);
+    if (isWater(ctx.level.map[enemy.pos]!)) damage = Math.trunc(damage * 1.5);
+  }
+  ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: mob.id, target: enemy.id, hit, damage });
+  if (hit) hurt(ctx, enemy, damage, mob);
+}
+
+const TIME_TO_ZAP = 2;
+/** Tengu jumps away after this many blows at close quarters. */
+const TENGU_JUMP_DELAY = 5;
+/** ItemSpriteSheet.SHURIKEN. */
+const SHURIKEN_SPRITE = 15;
+
+/**
+ * Tengu.jump: spent traps around flare up as poison traps, and Tengu lands
+ * somewhere in sight, never right next to its enemy.
+ */
+function tenguJump(ctx: Ctx, mob: Mob): void {
+  const { world, depth, level, rng } = ctx;
+  mob.jumpIn = TENGU_JUMP_DELAY;
+  const fov = castShadow(mob.pos, terrainBlocksSight(level.map));
+  const enemy = heroesOn(world, depth).find((hero) => hero.id === mob.enemy);
+  const pick = (landing: boolean): number =>
+    randomCell(rng, (c) =>
+      fov[c]! && isPassable(level, c) &&
+      (!landing || (!(enemy && adjacent(c, enemy.pos)) && !charAt(world, depth, c))));
+  for (let i = 0; i < 4; i++) {
+    const trap = pick(false);
+    if (trap === -1) break;
+    if (level.map[trap] === T.INACTIVE_TRAP) {
+      level.map[trap] = T.POISON_TRAP;
+      ctx.effects.push({ type: 'discovered', depth, cell: trap });
+    }
+  }
+  const to = pick(true);
+  if (to === -1) return;
+  const from = mob.pos;
+  moveMob(ctx, mob, to);
+  ctx.effects.push({ type: 'jumped', depth, mob: mob.id, from, to });
+}
+
 function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
+  if (mob.kind === 'shaman' && !adjacent(mob.pos, enemy.pos)) {
+    zapLightning(ctx, mob, enemy);
+    return;
+  }
+  if (mob.kind === 'tengu') {
+    mob.jumpIn = (mob.jumpIn ?? TENGU_JUMP_DELAY) - 1;
+    if (mob.jumpIn <= 0 && adjacent(mob.pos, enemy.pos)) {
+      tenguJump(ctx, mob);
+    } else {
+      if (!adjacent(mob.pos, enemy.pos)) {
+        ctx.effects.push({ type: 'missile', depth: ctx.depth, from: mob.pos, to: enemy.pos, sprite: SHURIKEN_SPRITE });
+      }
+      attack(ctx, mob, enemy);
+    }
+    spend(mob, TICK);
+    return;
+  }
   if (mob.kind !== 'goo') {
     attack(ctx, mob, enemy);
-    spend(mob, TICK);
+    spend(mob, MOBS[mob.kind].attackDelay ?? TICK);
     return;
   }
   // Goo (Goo.doAttack): sometimes pumps itself up, then strikes hard, leaping
@@ -201,6 +326,11 @@ export function ballistica(ctx: Ctx, from: number, to: number): number[] {
 
 function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean {
   if (mob.kind === 'goo') mob.pumped = false;
+  // Tengu does not walk up to anyone it can see: it jumps.
+  if (mob.kind === 'tengu' && fov[target]) {
+    tenguJump(ctx, mob);
+    return true;
+  }
   const step = findStep(ctx, mob.pos, target, fov);
   if (step === -1) return false;
   moveMob(ctx, mob, step);
@@ -318,6 +448,8 @@ const nextMobId = (world: World): string => `#${++world.nextId}`;
 /** The monsters a new level starts with, asleep in its rooms. */
 export function populate(world: World, level: Level, rng: Rng): Mob[] {
   if (isBossDepth(level.depth)) {
+    // Goo sleeps in its lair; Tengu only appears when someone enters the arena.
+    if (level.depth === 10) return [];
     const arena = level.rooms.find((room) => room.type === RoomType.BOSS_EXIT)!;
     return [createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0)];
   }

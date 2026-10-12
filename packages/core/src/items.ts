@@ -364,9 +364,15 @@ export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean
     if (heap) heap.items.push(item);
     else heaps.push({ pos, kind, items: [item] });
   };
-  if (boss) return heaps;
-
   const generator = new ItemGenerator(rng, level.depth);
+  if (boss) {
+    // Boss levels hold nothing but what their layout asks for (Tengu's key).
+    for (const spawn of level.items) {
+      drop(spawn.pos, HEAP_KINDS[spawn.heap] ?? 'heap', rollSpec(spawn.item, generator, rng, level.depth));
+    }
+    return heaps;
+  }
+
   let count = 3;
   while (rng.float() < 0.4) count++;
   for (let i = 0; i < count; i++) {

@@ -63,7 +63,7 @@ describe("Goo's lair", () => {
     }
   });
 
-  it('seals the way back while Goo lives; slaying it opens the exit and wins the run', () => {
+  it('seals the way back while Goo lives; slaying it opens the way down to the prison', () => {
     let won = 0;
     for (const seed of [3, 4, 5, 6]) {
       const world = atTheLair(seed);
@@ -88,6 +88,7 @@ describe("Goo's lair", () => {
           }
         } else if (hero.pos === level.exit) {
           play({ type: 'descend' });
+          break;
         } else {
           const path = findPath(level, hero.pos, level.exit);
           expect(path).not.toBeNull();
@@ -100,8 +101,8 @@ describe("Goo's lair", () => {
       if (isAlive(hero)) {
         expect(types.has('bossSlain')).toBe(true);
         expect(level.map[level.entrance]).toBe(T.ENTRANCE);
-        expect(world).toMatchObject({ over: true, victory: true });
-        expect(effects.at(-1)).toEqual({ type: 'victory', hero: 'p' });
+        expect(hero.depth).toBe(6);
+        expect(world.over).toBe(false);
         won++;
       } else {
         // Goo won: the lair stays sealed and the run is lost.

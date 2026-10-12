@@ -59,6 +59,8 @@ export class LevelBuilder {
   entrance = -1;
   exit = -1;
   secretDoors = 0;
+  /** Tengu's level: the locked door into the arena. */
+  arenaDoor = -1;
   pitRoomNeeded = false;
   weakFloorCreated = false;
   /** Special rooms placed on this level, in placement order. */

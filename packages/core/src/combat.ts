@@ -1,8 +1,10 @@
 import {
-  type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive, maxExp, type Mob, MOBS,
+  BRUTE_ENRAGED_DAMAGE, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
+  maxExp, type Mob, MOBS,
 } from './actors';
-import { type Char, type Ctx, dropItem, heroesOn, isHero, leaveCell } from './floor';
-import { createItem, rollGold } from './items';
+import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, leaveCell } from './floor';
+import { createItem, type Item, itemDef, ItemGenerator, rollGold } from './items';
+import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
 import { questKill } from './quest';
 import { T } from './level/terrain';
 
@@ -28,7 +30,7 @@ function armor(char: Char): number {
 function damageRoll(ctx: Ctx, char: Char, range?: readonly [number, number]): number {
   if (range) return ctx.rng.normalIntRange(range[0], range[1]);
   if (isHero(char)) return heroDamageRoll(char, ctx.rng);
-  const [min, max] = MOBS[char.kind].damage;
+  const [min, max] = char.kind === 'brute' && char.enraged ? BRUTE_ENRAGED_DAMAGE : MOBS[char.kind].damage;
   return ctx.rng.normalIntRange(min, max);
 }
 
@@ -55,13 +57,48 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     if (defender.ooze < 0) ctx.effects.push({ type: 'oozed', hero: defender.id });
     defender.ooze = 0;
   }
+  // Char.attackProc and defenseProc: what a blow does besides the damage.
+  if (!isHero(attacker)) {
+    // The vampire bat drinks what it draws.
+    if (attacker.kind === 'bat') attacker.hp += Math.min(damage, attacker.ht - attacker.hp);
+    if (attacker.kind === 'thief' && !attacker.item && isHero(defender)) steal(ctx, attacker, defender);
+  }
+  if (!isHero(defender) && defender.kind === 'swarm') split(ctx, defender, damage);
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
   hurt(ctx, defender, damage, attacker);
   return true;
 }
 
+/** Thief.steal: a whole stack from the pack (never a key or a quest item), then off it runs. */
+function steal(ctx: Ctx, thief: Mob, hero: Hero): void {
+  const loot = hero.items.filter((item) => item.kind !== 'key.iron' && itemDef(item.kind).category !== 'quest');
+  if (loot.length === 0) return;
+  const item = ctx.rng.element(loot)!;
+  hero.items.splice(hero.items.indexOf(item), 1);
+  thief.item = item;
+  thief.state = 'fleeing';
+  ctx.effects.push({ type: 'stole', depth: ctx.depth, mob: thief.id, hero: hero.id, item });
+}
+
+/** Swarm.defenseProc: struck, the swarm splits, half of what is left flying off next to it. */
+function split(ctx: Ctx, swarm: Mob, damage: number): void {
+  if (swarm.hp < damage + 2) return;
+  const { world, depth, level, rng, floor } = ctx;
+  const cells = NEIGHBOURS4.map((n) => swarm.pos + n).filter((c) => isPassable(level, c) && !charAt(world, depth, c));
+  if (cells.length === 0) return;
+  const clone = createMob(`#${++world.nextId}`, 'swarm', rng.element(cells)!, 'hunting', floor.now + 1);
+  clone.generation = (swarm.generation ?? 0) + 1;
+  clone.hp = Math.trunc((swarm.hp - damage) / 2);
+  clone.enemy = swarm.enemy;
+  if ((swarm.burning ?? 0) > 0) clone.burning = swarm.burning;
+  if ((swarm.poison ?? 0) > 0) clone.poison = 2;
+  swarm.hp -= clone.hp;
+  floor.mobs.push(clone);
+  enterCell(level, clone.pos);
+}
+
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
@@ -75,6 +112,12 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
     if (by && isHero(by)) victim.enemy = by.id;
   }
   victim.hp -= damage;
+  // Brute.damage: below a quarter of its health, the brute flies into a rage.
+  if (!isHero(victim) && victim.kind === 'brute' && isAlive(victim) && !victim.enraged && victim.hp < victim.ht / 4) {
+    victim.enraged = true;
+    victim.time += 1;
+    ctx.effects.push({ type: 'enraged', depth: ctx.depth, mob: victim.id });
+  }
   if (!isAlive(victim)) {
     if (isHero(victim)) {
       victim.killedBy = typeof source === 'string' ? source : isHero(source) ? source.heroClass : source.kind;
@@ -104,20 +147,73 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 
   questKill(ctx, mob);
 
-  // Mob.dropLoot: gnolls carry some gold and crabs are edible, unless the
-  // party has outgrown them.
+  // A thief's stolen goods fall where it dies.
+  if (mob.item) dropItem(ctx.floor, mob.pos, mob.item);
+
+  // Mob.dropLoot, unless the party has outgrown the monster.
   if (heroes.some((h) => h.lvl <= stats.maxLvl + 2)) {
-    if (mob.kind === 'gnoll' && ctx.rng.float() < 0.5) dropItem(ctx.floor, mob.pos, rollGold(ctx.rng, ctx.depth));
-    if (mob.kind === 'crab' && ctx.rng.float() < CRAB_MEAT_CHANCE) dropItem(ctx.floor, mob.pos, createItem('food.meat'));
+    const loot = dropLoot(ctx, mob);
+    if (loot) dropItem(ctx.floor, mob.pos, loot);
   }
 
-  if (mob.kind === 'goo') {
-    // The lair opens: the way back up dries out and the exit unlocks.
+  if (mob.kind === 'skeleton') explode(ctx, mob);
+
+  if (mob.kind === 'goo' || mob.kind === 'tengu') {
     const { level } = ctx;
+    // Goo's lair dries out behind the heroes; Tengu's arena opens.
     if (level.map[level.entrance] === T.WATER_TILES) level.map[level.entrance] = T.ENTRANCE;
+    if (level.arenaDoor !== undefined && level.map[level.arenaDoor] === T.LOCKED_DOOR) {
+      level.map[level.arenaDoor] = T.DOOR;
+      ctx.effects.push({ type: 'arena', depth: ctx.depth, sealed: false });
+    }
     if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
-    ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, line: 'death' });
-    ctx.effects.push({ type: 'bossSlain', depth: ctx.depth });
+    ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'death' });
+    ctx.effects.push({ type: 'bossSlain', depth: ctx.depth, kind: mob.kind });
+  }
+}
+
+/** What a monster leaves behind (Mob.loot and lootChance, or its own dropLoot). */
+function dropLoot(ctx: Ctx, mob: Mob): Item | null {
+  const { rng } = ctx;
+  const generator = (): ItemGenerator => new ItemGenerator(rng, ctx.depth);
+  switch (mob.kind) {
+    case 'gnoll':
+      return rng.float() < 0.5 ? rollGold(rng, ctx.depth) : null;
+    case 'crab':
+      return rng.float() < CRAB_MEAT_CHANCE ? createItem('food.meat') : null;
+    case 'skeleton': {
+      // The worst of three weapons, one time in five.
+      if (rng.int(5) !== 0) return null;
+      let loot = generator().of('weapon');
+      for (let i = 0; i < 2; i++) {
+        const other = generator().of('weapon');
+        if (other.level < loot.level) loot = other;
+      }
+      return loot;
+    }
+    case 'swarm':
+      return rng.int(5 * ((mob.generation ?? 0) + 1)) === 0 ? createItem('potion.healing') : null;
+    case 'shaman':
+      return rng.float() < 0.33 ? generator().of('scroll') : null;
+    case 'bat':
+      return rng.float() < 0.125 ? createItem('potion.healing') : null;
+    case 'brute':
+      return rng.float() < 0.5 ? rollGold(rng, ctx.depth) : null;
+    default:
+      return null;
+  }
+}
+
+/** Skeleton.die: its bones fly apart, hurting everyone around. */
+function explode(ctx: Ctx, skeleton: Mob): void {
+  ctx.effects.push({ type: 'bones', depth: ctx.depth, pos: skeleton.pos });
+  for (const n of NEIGHBOURS8) {
+    const victim = charAt(ctx.world, ctx.depth, skeleton.pos + n);
+    if (!victim || !isAlive(victim)) continue;
+    const [min, max] = MOBS.skeleton.damage;
+    const damage = Math.max(0, ctx.rng.normalIntRange(min, max) - ctx.rng.intRange(0, Math.trunc(armor(victim) / 2)));
+    ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: victim.id, damage });
+    hurt(ctx, victim, damage, isHero(victim) ? 'bones' : skeleton);
   }
 }
 

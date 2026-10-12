@@ -197,9 +197,11 @@ export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 
 /* Monsters */
 
-export type MobKind = 'rat' | 'gnoll' | 'crab' | 'goo' | 'ghost';
-/** `passive`: the sad ghost, who neither fights nor can be hurt. */
-export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'passive';
+export type MobKind =
+  | 'rat' | 'gnoll' | 'crab' | 'goo' | 'ghost'
+  | 'skeleton' | 'thief' | 'swarm' | 'shaman' | 'bat' | 'brute' | 'tengu';
+/** `passive`: the sad ghost, who neither fights nor can be hurt; `fleeing`: a thief making off with its loot. */
+export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
 export interface MobStats {
   name: string;
@@ -212,6 +214,10 @@ export interface MobStats {
   /** Heroes above this level no longer learn anything from it. */
   maxLvl: number;
   speed: number;
+  /** Time a blow takes, if not one turn (the thief strikes twice as fast). */
+  attackDelay?: number;
+  /** Flies over traps and grass without disturbing them. */
+  flying?: boolean;
 }
 
 export const MOBS: Readonly<Record<MobKind, MobStats>> = {
@@ -219,8 +225,19 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   gnoll: { name: 'gnoll scout', ht: 12, attack: 11, defense: 4, damage: [2, 5], dr: 2, exp: 2, maxLvl: 8, speed: 1 },
   crab: { name: 'sewer crab', ht: 15, attack: 12, defense: 5, damage: [3, 6], dr: 4, exp: 3, maxLvl: 9, speed: 2 },
   goo: { name: 'Goo', ht: 80, attack: 15, defense: 12, damage: [2, 12], dr: 2, exp: 10, maxLvl: 30, speed: 1 },
-  ghost: { name: 'sad ghost', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 0.5 },
+  ghost: { name: 'sad ghost', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 0.5, flying: true },
+  // The prison (depths 6-10).
+  skeleton: { name: 'skeleton', ht: 25, attack: 12, defense: 9, damage: [3, 8], dr: 5, exp: 5, maxLvl: 10, speed: 1 },
+  thief: { name: 'crazy thief', ht: 20, attack: 12, defense: 12, damage: [1, 7], dr: 3, exp: 5, maxLvl: 10, speed: 1, attackDelay: 0.5 },
+  swarm: { name: 'swarm of flies', ht: 80, attack: 12, defense: 5, damage: [1, 4], dr: 0, exp: 1, maxLvl: 10, speed: 1, flying: true },
+  shaman: { name: 'gnoll shaman', ht: 18, attack: 11, defense: 8, damage: [2, 6], dr: 4, exp: 6, maxLvl: 14, speed: 1 },
+  bat: { name: 'vampire bat', ht: 30, attack: 16, defense: 15, damage: [6, 12], dr: 4, exp: 7, maxLvl: 15, speed: 2, flying: true },
+  brute: { name: 'gnoll brute', ht: 40, attack: 20, defense: 15, damage: [8, 18], dr: 8, exp: 8, maxLvl: 15, speed: 1 },
+  tengu: { name: 'Tengu', ht: 120, attack: 20, defense: 20, damage: [8, 15], dr: 5, exp: 20, maxLvl: 30, speed: 1 },
 };
+
+/** The brute, enraged when badly hurt: much harder hits. */
+export const BRUTE_ENRAGED_DAMAGE = [10, 40] as const;
 
 /** Goo, pumped up: harder hits from up to two cells away. */
 export const GOO_PUMPED = { attack: 30, jumpAttack: 15, damage: [5, 30] as const, delay: 2 };
@@ -247,6 +264,14 @@ export interface Mob {
   poison?: number;
   paralysed?: number;
   burning?: number;
+  /** A thief's stolen goods, dropped when it dies. */
+  item?: Item;
+  /** Swarms: how many splits away from the original swarm. */
+  generation?: number;
+  /** Brutes: enraged below a quarter of their health. */
+  enraged?: boolean;
+  /** Tengu: attacks left before it jumps away. */
+  jumpIn?: number;
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {
@@ -255,8 +280,8 @@ export function createMob(id: string, kind: MobKind, pos: number, state: MobStat
 }
 
 /*
- * Who lives where. The rare swarm of flies, skeleton and thief of depths 3-4
- * join once their abilities are ported.
+ * Who lives where (Bestiary). The original's rare swarm of flies, skeleton
+ * and thief of depths 3-4 are left out of the sewers.
  */
 const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]>>> = {
   1: [['rat', 1]],
@@ -264,6 +289,11 @@ const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]
   3: [['rat', 1], ['gnoll', 2], ['crab', 1]],
   4: [['rat', 1], ['gnoll', 2], ['crab', 3]],
   5: [['goo', 1]],
+  6: [['skeleton', 4], ['thief', 2], ['swarm', 1], ['shaman', 0.2]],
+  7: [['skeleton', 3], ['shaman', 1], ['thief', 1], ['swarm', 1]],
+  8: [['skeleton', 3], ['shaman', 2], ['gnoll', 1], ['thief', 1], ['swarm', 1], ['bat', 0.02]],
+  9: [['skeleton', 3], ['shaman', 3], ['thief', 1], ['swarm', 1], ['bat', 0.02], ['brute', 0.01]],
+  10: [['tengu', 1]],
 };
 
 export function rollMob(rng: Rng, depth: number): MobKind {

@@ -698,6 +698,11 @@ function tick(now: number): void {
   if (lastPlace.generation === session.generation && isAlive(me)) {
     if (me.depth !== lastPlace.depth) {
       audio.play('descend');
+      // GameScene's greetings: the depth, a new region, and the level's feeling.
+      view.say(me.depth > lastPlace.depth ? t.descended(me.depth) : t.ascended(me.depth));
+      if (me.depth === 6 && lastPlace.depth === 5) view.say(t.enterPrison, '#ffff44');
+      const feeling = t.feelings[level.feeling];
+      if (feeling && me.depth > lastPlace.depth) view.say(feeling, '#ffff44');
     } else if (me.pos !== lastPlace.pos) {
       const terrain = level.map[me.pos]!;
       audio.play(terrain >= T.WATER_TILES && terrain <= T.WATER ? 'water' : 'step', 1, 0.5);

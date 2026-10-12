@@ -1,4 +1,4 @@
-import { type Hero, isAlive, type Mob } from './actors';
+import { type Hero, isAlive, type Mob, type MobKind } from './actors';
 import { castShadow, terrainBlocksSight } from './fov';
 import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
@@ -27,6 +27,8 @@ export interface Floor {
   respawn: number;
   /** Items lying around, at most one heap per cell. */
   heaps: Heap[];
+  /** Tengu's level: someone has set foot in the arena, and Tengu has appeared. */
+  arenaEntered?: boolean;
 }
 
 /** Puts an item on a cell, adding to whatever lies there already. */
@@ -57,8 +59,9 @@ export type Effect =
   | { type: 'hurt'; depth: number; who: string; damage: number }
   | { type: 'oozed'; hero: string }
   | { type: 'pumped'; depth: number; mob: string }
-  | { type: 'yell'; depth: number; mob: string; line: 'notice' | 'death' }
-  | { type: 'bossSlain'; depth: number }
+  /** A boss speaks up; `hero` is whom it noticed. */
+  | { type: 'yell'; depth: number; mob: string; kind: MobKind; line: 'notice' | 'death'; hero?: string }
+  | { type: 'bossSlain'; depth: number; kind: MobKind }
   | { type: 'victory'; hero: string }
   | { type: 'opened'; depth: number; pos: number; heap: HeapKind }
   | { type: 'pickedUp'; hero: string; item: Item }
@@ -76,7 +79,22 @@ export type Effect =
   | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby' | 'recharging'; count: number }
   | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
   | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
-  | { type: 'zapped'; depth: number; from: number; to: number }
+  /** A magic bolt: the mage's wand, or a shaman's lightning. */
+  | { type: 'zapped'; depth: number; from: number; to: number; bolt?: 'lightning' }
+  /** Something thrown by a monster (Tengu's shuriken), drawn with an item sprite. */
+  | { type: 'missile'; depth: number; from: number; to: number; sprite: number }
+  /** Tengu vanishes in a puff of smoke and lands elsewhere. */
+  | { type: 'jumped'; depth: number; mob: string; from: number; to: number }
+  /** A thief made off with something from a hero's pack. */
+  | { type: 'stole'; depth: number; mob: string; hero: string; item: Item }
+  /** A fleeing thief with nowhere left to run turns to fight. */
+  | { type: 'cornered'; depth: number; mob: string }
+  /** A badly hurt brute flies into a rage. */
+  | { type: 'enraged'; depth: number; mob: string }
+  /** A skeleton falls apart in an explosion of bones. */
+  | { type: 'bones'; depth: number; pos: number }
+  /** Tengu's arena: sealed when the fight starts, opened when it ends. */
+  | { type: 'arena'; depth: number; sealed: boolean }
   | { type: 'unlocked'; depth: number; pos: number; hero: string }
   | { type: 'ghost'; hero: string; line: GhostLine }
   | { type: 'well'; hero: string; water: WellWater }

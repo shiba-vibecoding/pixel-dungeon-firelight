@@ -15,6 +15,8 @@ export interface RegionStyle {
   water(feeling: Feeling): [density: number, generations: number];
   grass(feeling: Feeling): [density: number, generations: number];
   trapChances: readonly number[];
+  /** A last say over the room types, once they are assigned. */
+  roomTypes?(level: LevelBuilder): void;
   decorate(level: LevelBuilder): void;
 }
 
@@ -90,7 +92,7 @@ export function buildRegularLevel(level: LevelBuilder, style: RegionStyle): bool
     return false;
   }
 
-  if (isShopDepth(level.depth)) {
+  if (isShopDepth(level.depth) && PAINTERS.has(RoomType.SHOP)) {
     const shop = [...roomEntrance.connected.keys()].find(
       (r) => r.connected.size === 1 && r.width() >= 5 && r.height() >= 5,
     );
@@ -101,6 +103,7 @@ export function buildRegularLevel(level: LevelBuilder, style: RegionStyle): bool
   }
 
   assignRoomTypes(level);
+  style.roomTypes?.(level);
   paint(level, style);
   paintWater(level, style);
   paintGrass(level, style);

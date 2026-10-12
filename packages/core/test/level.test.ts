@@ -108,6 +108,33 @@ describe('sewer level generation', () => {
     expect(generateRun(1)[0]!.map).not.toEqual(generateRun(2)[0]!.map);
   });
 
+  it('generates the prison and Tengu\'s level after the sewers', () => {
+    for (const seed of SEEDS.slice(0, 80)) {
+      const run = createRun(seed);
+      const levels = Array.from({ length: 10 }, (_, i) => generateLevel(run, i + 1));
+      for (const level of levels.slice(5, 9)) {
+        const where = `seed ${seed} depth ${level.depth}`;
+        expect(level.map[level.entrance], where).toBe(T.ENTRANCE);
+        expect(level.map[level.exit], where).toBe(T.EXIT);
+        const seen = reachable(level.map, level.entrance);
+        const lost = walkable(level.map).flatMap((w, i) => (w && !seen[i] ? [i] : []));
+        if (!seen[level.exit] || lost.length > 0) {
+          throw new Error(`${where}: exit reached=${seen[level.exit]}, ${lost.length} lost\n${ascii(level.map)}`);
+        }
+      }
+      const boss = levels[9]!;
+      const where = `seed ${seed} depth 10`;
+      expect(boss.map[boss.arenaDoor!], where).toBe(T.LOCKED_DOOR);
+      expect(boss.map[boss.exit], where).toBe(T.LOCKED_EXIT);
+      expect(boss.items.filter((spawn) => spawn.item.roll === 'key'), where).toHaveLength(1);
+      // Through the locked door, the whole level can be reached.
+      const seen = reachable(boss.map, boss.entrance);
+      expect(seen[boss.items[0]!.pos], where).toBe(true);
+      expect(seen[boss.arenaDoor!], where).toBe(true);
+      expect(boss.map.some((t) => t === T.INACTIVE_TRAP), where).toBe(true);
+    }
+  });
+
   it('first depth has no traps, no secret doors and no feeling', () => {
     for (const { levels } of runs) {
       const first = levels[0]!;

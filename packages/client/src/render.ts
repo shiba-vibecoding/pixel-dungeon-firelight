@@ -1,5 +1,5 @@
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
-import { type Assets, frameAt, ICONS } from './sprites';
+import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
 
 /* Canvas renderer for the world, using the original 16px tiles and sprites. */
@@ -21,12 +21,13 @@ export function bakeLevel(level: Level, assets: Assets): HTMLCanvasElement {
   canvas.width = WIDTH * TILE;
   canvas.height = HEIGHT * TILE;
   const ctx = canvas.getContext('2d')!;
-  const columns = assets.tiles.width / TILE;
+  const tiles = assets.tiles[regionOf(level.depth)]!;
+  const columns = tiles.width / TILE;
   for (let i = 0; i < LENGTH; i++) {
     const terrain = level.map[i]!;
     const sx = (terrain % columns) * TILE;
     const sy = Math.trunc(terrain / columns) * TILE;
-    ctx.drawImage(assets.tiles, sx, sy, TILE, TILE, (i % WIDTH) * TILE, Math.trunc(i / WIDTH) * TILE, TILE, TILE);
+    ctx.drawImage(tiles, sx, sy, TILE, TILE, (i % WIDTH) * TILE, Math.trunc(i / WIDTH) * TILE, TILE, TILE);
   }
   return canvas;
 }
@@ -118,8 +119,9 @@ export function render(
   ctx.setTransform(camera.zoom, 0, 0, camera.zoom, -camera.x * camera.zoom, -camera.y * camera.zoom);
 
   // Slowly drifting water under the transparent parts of water tiles.
-  const pattern = ctx.createPattern(assets.water, 'repeat')!;
-  const drift = (now / 120) % assets.water.width;
+  const water = assets.water[regionOf(level.depth)]!;
+  const pattern = ctx.createPattern(water, 'repeat')!;
+  const drift = (now / 120) % water.width;
   pattern.setTransform(new DOMMatrix().translate(drift, drift * 0.5));
   ctx.fillStyle = pattern;
   for (let i = 0; i < LENGTH; i++) {

@@ -323,14 +323,19 @@ export class View {
           this.float(effect.mob, '!!!', COLORS.negative, now);
           this.say(t.gooPumps, COLORS.negative, now);
           break;
-        case 'yell':
-          if (effect.depth === this.depth) {
-            this.say(`${t.mobs.goo}: «${effect.line === 'notice' ? t.gooNotice : t.gooDeath}»`, COLORS.negative, now);
-          }
+        case 'yell': {
+          if (effect.depth !== this.depth) break;
+          const hero = effect.hero ? heroById(world, effect.hero) : undefined;
+          const line =
+            effect.kind === 'goo'
+              ? effect.line === 'notice' ? t.gooNotice : t.gooDeath
+              : effect.line === 'notice' ? t.tenguNotice(hero ? t.classes[hero.heroClass] : '') : t.tenguDeath;
+          this.say(`${t.mobs[effect.kind]}: «${line}»`, COLORS.negative, now);
           break;
+        }
         case 'bossSlain':
           this.bannerStart = now;
-          this.say(t.bossSlain, COLORS.highlight, now);
+          this.say(t.bossSlain[effect.kind] ?? '', COLORS.highlight, now);
           audio.play('boss');
           haptic('success');
           break;
@@ -424,7 +429,42 @@ export class View {
           break;
         case 'zapped':
           if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now);
-          audio.play('zap');
+          audio.play(effect.bolt === 'lightning' ? 'lightning' : 'zap');
+          break;
+        case 'missile':
+          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, effect.sprite, now);
+          audio.play('miss', 1.4, 0.6);
+          break;
+        case 'jumped':
+          // Gone in a puff of smoke, and there at once in the new place.
+          if (effect.depth !== this.depth) break;
+          this.puppets.delete(effect.mob);
+          this.flashes.push({ cell: effect.from, start: now, color: '220, 220, 220', duration: 500 });
+          this.flashes.push({ cell: effect.to, start: now, color: '220, 220, 220', duration: 500 });
+          audio.play('puff');
+          break;
+        case 'stole':
+          if (effect.hero === myId) this.say(t.stole(t.mobs.thief, itemName(world, effect.item)), COLORS.warning, now);
+          else if (effect.depth === this.depth) this.say(t.robbed(this.name(world, effect.hero)), COLORS.warning, now);
+          break;
+        case 'cornered':
+          if (effect.depth === this.depth) this.say(t.cornered(t.mobs.thief), COLORS.warning, now);
+          break;
+        case 'enraged':
+          if (effect.depth !== this.depth) break;
+          this.float(effect.mob, '!!!', COLORS.negative, now);
+          this.say(t.enraged(t.mobs.brute), COLORS.warning, now);
+          break;
+        case 'bones':
+          if (effect.depth !== this.depth) break;
+          audio.play('bones');
+          this.flashes.push({ cell: effect.pos, start: now, color: '230, 225, 200', duration: 700 });
+          break;
+        case 'arena':
+          if (effect.depth === this.depth && effect.sealed) {
+            this.say(t.arenaSealed, COLORS.warning, now);
+            audio.play('door_open', 0.7);
+          }
           break;
         case 'trap':
           trapped = true;
