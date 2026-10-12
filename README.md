@@ -96,6 +96,14 @@ Yendor on depth 26:
   dropping them. Every level holds food for the whole party.
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
+- Game feel beyond the original: blows spray blood, ichor, bone dust or sparks
+  and leave splats on the floor; attackers lunge; heavy blows, kills, explosions
+  and bosses shake the camera and stop time for an instant; damage numbers pop;
+  the screen flushes red when the hero is hurt; fire, frost, gas, spells,
+  healing and level-ups have particles; each region has its ambience (dripping
+  pipes, torches with warm light, glinting veins, smoke, rising embers); the
+  view is lit around the hero; bosses arrive with a title card; a fallen hero's
+  world drains of colour.
 
 Fire burns scrolls, lying about or in a burning hero's pack.
 
