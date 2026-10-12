@@ -75,7 +75,8 @@ Workers») и `CLOUDFLARE_ACCOUNT_ID`, сервер тоже будет обно
 Старая версия на Java остаётся как есть, а новая живёт рядом.
 
 1. @BotFather → `/newapp` → выберите `@pixel_dungeon_gamebot`.
-2. Название, описание, картинка 640×360.
+2. Название, описание, картинка 640×360: готовая лежит в `docs/design/bot-cover-640x360.png`
+   (перерисовать: `python packages/client/scripts/bot-cover.py "Другая подпись"`).
 3. Web App URL — адрес из GitHub Pages.
 4. Короткое имя, например `coop`. Ссылка на игру будет
    `https://t.me/pixel_dungeon_gamebot/coop` — её же укажите в `PD_TG_APP_LINK`.
