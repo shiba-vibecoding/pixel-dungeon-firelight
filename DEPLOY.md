@@ -2,101 +2,112 @@
 
 Игра состоит из двух частей:
 
-- **клиент** — статический сайт (HTML + JS + картинки), его отдаёт GitHub Pages;
-- **сервер кооператива** — Cloudflare Worker с Durable Objects: одна «комната» на отряд.
-  Одиночная игра и «Подземелье дня» работают и без сервера.
+- **клиент** — статический сайт, его отдаёт GitHub Pages этого репозитория
+  (`https://shiba-vibecoding.github.io/pixel-dungeon-telegram/`, тот же адрес,
+  что был у Java-версии: бот открывает новую игру без перенастройки);
+- **сервер** — Cloudflare Worker `pd-coop` с Durable Objects: комнаты
+  кооператива, рекорды «Подземелья дня», кошельки Пиксель-Марта и вебхук бота
+  (оплата звёздами, `/start`, `/paysupport`, `/terms`).
 
-Обе части бесплатны. GitHub Pages бесплатен для публичных репозиториев.
-На бесплатном тарифе Cloudflare Durable Objects дают 100 000 запросов в сутки:
-подключение к комнате — один запрос, а ходы внутри подключения считаются как
-один запрос на 20 сообщений, то есть это порядка двух миллионов ходов в сутки.
-Простаивающие комнаты «засыпают» и ничего не стоят.
+Обе части бесплатны (у Cloudflare 100 000 запросов к Durable Objects в сутки).
+Одиночная игра работает и без сервера.
 
-## 1. Сервер кооператива (Cloudflare)
+Команды ниже — для PowerShell, из папки `C:\pixel_dungeon\pd-ts`. Токен бота
+и секреты вводятся только в консоли и никуда не пишутся.
 
-1. Зарегистрируйтесь на <https://dash.cloudflare.com> (бесплатный аккаунт).
-2. В папке `pd-ts` войдите в аккаунт — откроется браузер:
+## 1. Сервер (Cloudflare)
 
-   ```bash
+1. Войдите в Cloudflare (откроется браузер):
+
+   ```powershell
    npx wrangler login
    ```
 
-3. Выложите сервер:
+2. Выложите сервер:
 
-   ```bash
+   ```powershell
    npm run deploy:server
    ```
 
-   В конце wrangler напечатает адрес вида `https://pd-coop.<ваш-поддомен>.workers.dev`.
-   Откройте его в браузере — должно быть написано `Pixel Dungeon co-op server`.
-   Адрес для клиента тот же, но со схемой `wss://`:
-   `wss://pd-coop.<ваш-поддомен>.workers.dev`.
+   Wrangler напечатает адрес вида `https://pd-coop.<поддомен>.workers.dev`.
+   В браузере по нему должно быть написано `Pixel Dungeon co-op server`.
 
-4. Передайте серверу токен бота, чтобы игроки из Telegram входили под своими
-   именами и никто не мог выдать себя за другого (токен берётся у @BotFather):
+3. Секреты сервера. Токен — тот же, что у бота (@BotFather → `/mybots` → бот →
+   API Token). Секрет вебхука — любая строка до 256 символов из `A-Z a-z 0-9 _ -`,
+   придумайте и запомните на минуту, он нужен ещё в шаге 2:
 
-   ```bash
+   ```powershell
    npx wrangler secret put BOT_TOKEN --config packages/server/wrangler.jsonc
+   npx wrangler secret put WEBHOOK_SECRET --config packages/server/wrangler.jsonc
    ```
 
-   Игроков из обычного браузера сервер пускает как гостей, пока в
-   `packages/server/wrangler.jsonc` стоит `"ALLOW_GUESTS": "true"`.
+## 2. Вебхук бота
 
-5. Тот же сервер ведёт таблицу рекордов «Подземелья дня»: отдельного
-   развёртывания не нужно, wrangler сам создаёт хранилище при первом
-   `deploy`. Проверить можно в браузере:
-   `https://pd-coop.<ваш-поддомен>.workers.dev/daily/2026-10-12` (подставьте
-   сегодняшнюю дату по UTC) — должен вернуться JSON с полем `top`.
+У бота один вебхук. Сейчас его принимает Worker Java-версии
+(`telegram-pixel-dungeon-gamebot`). Переводим на новый сервер: он умеет то же
+(отвечает кнопкой «Играть») плюс оплату и команды.
 
-## 2. Клиент (GitHub Pages)
+```powershell
+$env:BOT_TOKEN = Read-Host "Bot token"
+$env:WEBHOOK_SECRET = Read-Host "Webhook secret"
+$env:SERVER_URL = "https://pd-coop.<поддомен>.workers.dev"
+node packages/server/scripts/set-webhook.mjs
+Remove-Item Env:BOT_TOKEN, Env:WEBHOOK_SECRET
+```
 
-1. Создайте на GitHub пустой репозиторий, например `pixel-dungeon-coop`.
-2. Отправьте туда код:
+Скрипт напишет `Webhook: https://pd-coop…/telegram/webhook`. Проверка: напишите
+боту что угодно — он ответит фразой и кнопкой «Играть». Старый Worker после
+этого можно удалить в панели Cloudflare.
 
-   ```bash
-   git remote add origin https://github.com/<вы>/pixel-dungeon-coop.git
-   git push -u origin main
-   ```
+## 3. Клиент (GitHub Pages)
 
-3. В репозитории: **Settings → Pages → Source: GitHub Actions**.
-4. **Settings → Secrets and variables → Actions → Variables** — добавьте:
-   - `PD_SERVER_URL` = `wss://pd-coop.<ваш-поддомен>.workers.dev`
-   - `PD_TG_APP_LINK` = ссылка на мини-приложение, например
-     `https://t.me/pixel_dungeon_gamebot/coop` (см. ниже)
-5. **Actions → CI and deploy → Run workflow** (или любой push в `main`).
-   Через минуту игра откроется по адресу `https://<вы>.github.io/pixel-dungeon-coop/`.
+1. На GitHub: **Settings → Secrets and variables → Actions → Variables** —
+   добавьте три переменные:
+   - `PD_SERVER_URL` = `wss://pd-coop.<поддомен>.workers.dev`
+   - `PD_TG_APP_LINK` = `https://t.me/pixel_dungeon_gamebot/pixel_dungeon`
+   - `PD_PUBLISH` = `true` — без неё сборка только тестирует и ничего не выкладывает.
+2. **Settings → Pages → Source** должен стоять на **GitHub Actions** (так было и
+   для Java-версии).
+3. **Actions → CI and deploy → Run workflow** (ветка `main`). Через пару минут
+   по адресу GitHub Pages откроется новая игра — и в боте тоже.
 
-Если ещё добавить секреты `CLOUDFLARE_API_TOKEN` (токен с правом «Edit Cloudflare
-Workers») и `CLOUDFLARE_ACCOUNT_ID`, сервер тоже будет обновляться сам при каждом push.
+Сохранения Java-версии в новую не переносятся: формат другой. Сама Java-версия
+лежит в ветке `java-gwt`; вернуть её — запустить там старую сборку.
 
-## 3. Telegram
+Если добавить секреты `CLOUDFLARE_API_TOKEN` (право «Edit Cloudflare Workers») и
+`CLOUDFLARE_ACCOUNT_ID`, сервер будет обновляться сам при каждом push в `main`.
 
-**Вариант А (рекомендую): отдельное мини-приложение у того же бота.**
-Старая версия на Java остаётся как есть, а новая живёт рядом.
+## 4. Telegram
 
-1. @BotFather → `/newapp` → выберите `@pixel_dungeon_gamebot`.
-2. Название, описание, картинка 640×360: готовая лежит в `docs/design/bot-cover-640x360.png`
-   (перерисовать: `python packages/client/scripts/bot-cover.py "Другая подпись"`).
-3. Web App URL — адрес из GitHub Pages.
-4. Короткое имя, например `coop`. Ссылка на игру будет
-   `https://t.me/pixel_dungeon_gamebot/coop` — её же укажите в `PD_TG_APP_LINK`.
+- Картинка мини-приложения 640×360: `docs/design/bot-cover-640x360.png`
+  (@BotFather → `/myapps` → приложение → Edit Photo). Перерисовать:
+  `python packages/client/scripts/bot-cover.py "Другая подпись"`.
+- Политика конфиденциальности: `https://shiba-vibecoding.github.io/pixel-dungeon-telegram/privacy.html`
+  (@BotFather → бот → Bot Settings → Privacy Policy).
+- Оплата звёздами в Telegram отдельно не включается: звёзды работают у любого бота.
+  Вывод заработанных звёзд — @BotFather → бот → Balance (через Fragment, в TON).
 
-**Вариант Б: заменить старую версию.** @BotFather → `/myapps` → бот →
-Edit Web App URL → адрес из GitHub Pages; `PD_TG_APP_LINK` =
-`https://t.me/pixel_dungeon_gamebot/pixel_dungeon`.
+Приглашения: «Играть с друзьями» отправляет ссылку
+`https://t.me/pixel_dungeon_gamebot/pixel_dungeon?startapp=room_<код>`.
 
-Приглашения: кнопка «Играть с друзьями» (и «Позвать друга» в меню) отправляет
-ссылку вида `https://t.me/<бот>/<приложение>?startapp=room_<код>`. Друг открывает
-её, выбирает героя и нажимает «Присоединиться».
+## Проверка после выкладки
+
+- Бот отвечает на сообщение кнопкой «Играть», команды `/paysupport` и `/terms` работают.
+- В игре: «Играть с друзьями» — друг заходит по ссылке, вы видите друг друга.
+- «Подземелье дня» → конец забега → таблица дня с вашим местом.
+- Пиксель-Март → купить облик → Telegram показывает оплату звёздами.
+  Проверить можно на самом дешёвом товаре и вернуть звёзды через `/paysupport`
+  (возврат делает владелец бота: Bot API `refundStarPayment`).
 
 ## Запуск на своём компьютере
 
-```bash
+```powershell
 npm install
-npm run server   # сервер кооператива: ws://127.0.0.1:8787
+npm run server   # сервер: ws://127.0.0.1:8787
 npm run dev      # клиент: http://127.0.0.1:5173
 ```
 
 Два игрока в одном браузере: откройте две вкладки
 `http://127.0.0.1:5173/?room=test&player=a&name=Алиса` и
 `http://127.0.0.1:5173/?room=test&player=b&name=Боб&hero=mage`.
+В режиме разработки покупки в Пиксель-Марте проходят без оплаты.
