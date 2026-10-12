@@ -1,4 +1,5 @@
 import type { PlantInfo } from '../plants';
+import type { ArenaRing } from './arena';
 import { deriveSeed, Rng, Stream } from '../rng';
 import { type RunState, useSpecial } from '../run';
 import { Feeling, isBossDepth, type ItemSpawn, type ItemSpec, LevelBuilder, type WellWater } from './builder';
@@ -56,6 +57,13 @@ export interface Level {
   piranhas?: number[];
   /** Plants the level starts with (a garden's sungrass). */
   plants?: PlantInfo[];
+  /**
+   * The region whose look the level takes (0 sewers .. 4 demon halls), when it is not its depth's
+   * (the arena of waves takes each tier's look); absent: the depth's own.
+   */
+  region?: number;
+  /** The arena of waves: its dais, gates and pens (level/arena.ts). */
+  ring?: ArenaRing;
 }
 
 /** How each depth is laid out: the sewers, Goo's lair, the prison, Tengu's prison, the caves, DM-300's caves. */

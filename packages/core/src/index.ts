@@ -21,6 +21,11 @@ export { type ImpQuest, TOKENS_WANTED } from './imp';
 export { CLASS_ARMOR, CLASS_ARMOR_OF } from './classArmor';
 export { BAGS, hasRoom, inBag, slotsUsed } from './bags';
 export * from './world';
+export {
+  type ArenaSpawn, type ArenaState, arenaRemaining, arenaScore, equivalentDepth, hostile, isArena, isChampionsWave, tierOf, waveBudget,
+  wavesCleared, WAVES_PER_TIER,
+} from './arena';
+export { ARENA_CENTRE, ARENA_DEPTHS, type ArenaRing, insideArena } from './level/arena';
 export { castShadow, DARKNESS_VIEW_DISTANCE, LIGHT_DISTANCE, MAX_VIEW_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 export {
   type ChallengeId, CHALLENGES, DARKNESS, isChallenged, NO_ARMOR, NO_FOOD, NO_HEALING, NO_HERBALISM, NO_SCROLLS, SWARM_INTELLIGENCE,

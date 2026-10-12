@@ -32,6 +32,7 @@ import { discover, F, hasFlag, T } from './level/terrain';
 import { deriveSeed, Rng, seedRng, Stream } from './rng';
 import { createRun, type RunState } from './run';
 import { isChallenged, NO_HERBALISM, underChallenges } from './challenges';
+import { arenaJoined, arenaLevelAt, arenaPick, arenaProblem, arenaReady, type ArenaState, arenaTurn, newArena } from './arena';
 
 /*
  * The shared game world. Every change goes through act(), so a server can run
@@ -69,6 +70,9 @@ export type Action =
   | { type: 'endGame' }
   /** Lloyd's beacon: set it where the hero stands, or return to where it was set. */
   | { type: 'beacon'; item: number; mode: 'set' | 'return' }
+  /** The arena of waves: «To battle!» once the party has rested, and one of the three rewards after a wave. */
+  | { type: 'arenaReady' }
+  | { type: 'arenaPick'; choice: number }
   | InventoryAction;
 
 export type ActionResult = { ok: true; effects: Effect[] } | { ok: false; reason: string };
@@ -108,7 +112,14 @@ export interface World {
   impQuest?: ImpQuest | null;
   /** The troll blacksmith's errand, once his forge is found (absent in older saves). */
   smithQuest?: SmithQuest | null;
+  /** What kind of run this is: the arena of waves (arena.ts); absent, the dungeon. */
+  mode?: 'arena';
+  /** The arena of waves' state, in an arena run. */
+  arena?: ArenaState;
 }
+
+/** The kinds of run: down the dungeon, or the arena of waves. */
+export type GameMode = 'dungeon' | 'arena';
 
 /** The Amulet's hall (LastLevel), the bottom of the dungeon: no chasm opens onto it, and nothing lies below. */
 export const DEEPEST_AVAILABLE = 26;
@@ -129,22 +140,29 @@ const BLACKSMITH_STREAM = 4;
 /** Sub-streams of a depth's streams for a hero joining the party, by party size. */
 const JOIN_STREAM = 100;
 
-/** A new run; `challenges` is a bitmask of CHALLENGES (Dungeon.challenges), 0 for none. */
-export function createWorld(seed: number, challenges = 0): World {
+/**
+ * A new run; `challenges` is a bitmask of CHALLENGES (Dungeon.challenges), 0 for none; `mode`
+ * makes it the arena of waves rather than the dungeon.
+ */
+export function createWorld(seed: number, challenges = 0, mode: GameMode = 'dungeon'): World {
   return {
     run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
     challenges, known: [], quest: null, wandQuest: null, impQuest: null, smithQuest: null,
+    ...(mode === 'arena' ? { mode, arena: newArena() } : {}),
   };
 }
 
 /** Starts a new run in place for the same party, under the same challenges. */
 export function restartWorld(world: World, seed: number): void {
   const party = world.heroes.map(({ id, name, heroClass }) => ({ id, name, heroClass }));
-  Object.assign(world, createWorld(seed, world.challenges ?? 0));
+  const mode = world.mode ?? 'dungeon';
+  for (const key of ['mode', 'arena'] as const) delete world[key];
+  Object.assign(world, createWorld(seed, world.challenges ?? 0, mode));
   for (const player of party) addHero(world, player);
 }
 
 export function levelAt(world: World, depth: number): Level {
+  if (world.mode === 'arena') return arenaLevelAt(world, depth);
   for (let d = 1; d <= depth; d++) {
     if (!world.levels[d]) {
       // A party's depths spread wider, with more rooms (party.ts); boss levels keep their layout.
@@ -208,10 +226,14 @@ function welcome(world: World): void {
 }
 
 export function addHero(world: World, player: PlayerInfo): Hero {
-  const level = levelAt(world, 1);
-  const hero = createHero(player, 1, freeCellNear(world, level, 1, level.entrance), floorAt(world, 1).now);
+  // In the arena, heroes come in on the dais of wherever it stands now.
+  const depth = world.arena?.depth ?? 1;
+  const level = levelAt(world, depth);
+  const hero = createHero(player, depth, freeCellNear(world, level, depth, level.entrance), floorAt(world, depth).now);
   world.heroes.push(hero);
-  if (world.heroes.length > 1) welcome(world);
+  // The arena's waves are made for whoever is there when they come; nothing lies about to share.
+  if (world.arena) arenaJoined(world, hero, new Rng(floorAt(world, depth).rng));
+  else if (world.heroes.length > 1) welcome(world);
   // Heroes know what they set out with, and each class one kind more (HeroClass.initHero).
   for (const kind of [...hero.items, ...hero.rings].map((item) => item.kind).concat(CLASS_KNOWLEDGE[hero.heroClass])) {
     if (!world.known.includes(kind)) world.known.push(kind);
@@ -287,6 +309,8 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
   if (world.over) return 'the run is over';
   if (!isAlive(hero)) return 'you are dead';
   if (isInventoryAction(action)) return inventoryProblem(world, hero, action);
+  const inArena = arenaProblem(world, hero, action);
+  if (inArena !== undefined) return inArena;
   const level = levelAt(world, hero.depth);
   switch (action.type) {
     case 'wait':
@@ -366,7 +390,7 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
 
 /* Scheduling */
 
-type Turn = { kind: 'hero'; hero: Hero } | { kind: 'mob'; mob: Mob } | { kind: 'respawn' } | { kind: 'gas' };
+type Turn = { kind: 'hero'; hero: Hero } | { kind: 'mob'; mob: Mob } | { kind: 'respawn' } | { kind: 'gas' } | { kind: 'arena' };
 
 /** Who is due next on a depth; nothing happens on a depth without living heroes. */
 function nextTurn(world: World, depth: number): Turn | undefined {
@@ -383,6 +407,9 @@ function nextTurn(world: World, depth: number): Turn | undefined {
     if (mob.time < time) [turn, time] = [{ kind: 'mob', mob }, mob.time];
   }
   if (floor.respawn >= 0 && floor.respawn < time) [turn, time] = [{ kind: 'respawn' }, floor.respawn];
+  // The arena of waves, while a wave is on: monsters come in, and the wave may be over.
+  const arena = world.arena;
+  if (arena?.phase === 'fight' && arena.depth === depth && arena.tick < time) [turn, time] = [{ kind: 'arena' }, arena.tick];
   // Clouds of gas spread a turn at a time (Blob.act).
   if (floor.gasAt !== undefined && floor.gasAt < time) turn = { kind: 'gas' };
   return turn;
@@ -448,6 +475,11 @@ function advance(world: World, depth: number, effects: Effect[]): void {
     if (turn.kind === 'respawn') {
       floor.now = Math.max(floor.now, floor.respawn);
       respawn(ctx);
+      continue;
+    }
+    if (turn.kind === 'arena') {
+      floor.now = Math.max(floor.now, world.arena!.tick);
+      arenaTurn(ctx);
       continue;
     }
     if (turn.kind === 'gas') {
@@ -728,6 +760,15 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
 
     case 'reward':
       rewardFromGhost(ctx, hero, action.choice);
+      break;
+
+    // Choosing takes no time: the party is resting.
+    case 'arenaReady':
+      arenaReady(ctx, hero);
+      break;
+
+    case 'arenaPick':
+      arenaPick(ctx, hero, action.choice);
       break;
 
     case 'wandReward':
