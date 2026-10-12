@@ -85,9 +85,12 @@ describe('fighting through the sewers', () => {
         expect(hero.lvl).toBeGreaterThan(1);
         expect(hero.ht).toBe((heroClass === 'huntress' ? 15 : 20) + (hero.lvl - 1) * 5);
       }
+      const mobDeaths = effects.filter((e) => e.type === 'died' && e.who.startsWith('#')).length;
+      expect(hero.kills).toBeLessThanOrEqual(mobDeaths);
       if (!isAlive(hero)) {
         expect(world.over).toBe(true);
         expect(effects.at(-1)).toMatchObject({ type: 'died', who: 'p' });
+        expect(hero.killedBy).toBeTruthy();
       }
     }
     expect(kills).toBeGreaterThan(5);

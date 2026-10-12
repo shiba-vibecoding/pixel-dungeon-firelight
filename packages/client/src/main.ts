@@ -1,6 +1,7 @@
 import {
   adjacent, blockers, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, HEAP_SPRITES, type Hero,
-  heroById, type HeroClass, HEIGHT, isAlive, itemDef, itemSprite, levelAt, mobById, T, visibleCells, wandMaxCharges, WIDTH,
+  heroById, type HeroClass, HEIGHT, isAlive, itemDef, itemSprite, levelAt, mobById, type MobKind, T, visibleCells,
+  wandMaxCharges, WIDTH,
   type World,
 } from '@pd/core';
 import * as core from '@pd/core';
@@ -749,10 +750,12 @@ function tick(now: number): void {
     window.setTimeout(() => {
       if (!session?.world?.over) return;
       if (!victory) haptic('error');
+      const cause = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? me.killedBy);
       showRunEnd({
         victory,
         title: victory ? t.victory : solo ? t.youDied : t.partyFell,
         text: victory ? t.victoryText : t.soloFell(me.depth),
+        details: [...(!victory && cause ? [t.killedBy(cause)] : []), t.runStats(me.lvl, me.gold, me.kills)],
         restartLabel: victory ? t.newRun : solo ? t.tryAgain : t.restartRun,
         onRestart: () => {
           session?.restart();

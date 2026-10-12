@@ -309,7 +309,7 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
     while (hero.ooze >= 1 && isAlive(hero)) {
       hero.ooze -= 1;
       ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage: 1 });
-      hurt(ctx, hero, 1, null);
+      hurt(ctx, hero, 1, 'ooze');
     }
     if (isWater(ctx.level.map[hero.pos]!) || !isAlive(hero)) hero.ooze = -1;
   }
@@ -335,7 +335,7 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
     hero.poison = Math.max(0, hero.poison - time);
     if (damage > 0 && isAlive(hero)) {
       ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage });
-      hurt(ctx, hero, damage, null);
+      hurt(ctx, hero, damage, 'poison');
     }
   }
   if (hero.burning > 0) {
@@ -345,7 +345,7 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
       for (let i = ticks(hero.burning); i > 0 && isAlive(hero); i--) {
         const damage = ctx.rng.intRange(1, 3 + Math.trunc(hero.depth / 4));
         ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage });
-        hurt(ctx, hero, damage, null);
+        hurt(ctx, hero, damage, 'burning');
       }
       hero.burning = Math.max(0, hero.burning - time);
     }

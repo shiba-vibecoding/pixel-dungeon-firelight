@@ -186,6 +186,8 @@ export interface EndOptions {
   victory: boolean;
   title: string;
   text: string;
+  /** Extra lines: what killed the hero, the run's numbers. */
+  details: string[];
   onRestart: () => void;
   restartLabel: string;
   onExit: () => void;
@@ -221,6 +223,7 @@ export function showRunEnd(options: EndOptions): void {
       el('div', { className: options.victory ? 'pd-victory' : 'pd-gameover' }),
       el('p', { className: 'pd-heading', textContent: options.title }),
       el('p', { className: 'pd-info', textContent: options.text }),
+      ...options.details.map((line) => el('p', { className: 'pd-note', textContent: line })),
       options.daily && el('p', { className: 'pd-heading', textContent: t.dailyEnd(options.daily.score) }),
       options.daily && board,
       options.daily && button(t.shareResult, options.daily.onShare),

@@ -187,6 +187,9 @@ const en = {
   wandDamage: (min: number, max: number) => `Damage ${min}–${max}.`,
   noCharges: 'Your wand fizzles: it is out of charges for now.',
   resting: 'You rest until healed…',
+  causes: { poison: 'poison', burning: 'fire', ooze: 'caustic ooze', lightning: 'lightning', gripping: 'a gripping trap' } as Record<string, string>,
+  killedBy: (cause: string) => `Killed by ${cause}.`,
+  runStats: (lvl: number, gold: number, kills: number) => `Level ${lvl} · ${gold} gold · ${kills} foes slain`,
   signTitle: 'A sign reads:',
   // Sign.java; the fourth (about the shop on depth 6) gives way to a tip from deeper down.
   signs: [
@@ -387,6 +390,9 @@ const ru: Strings = {
   wandDamage: (min, max) => `Урон ${min}–${max}.`,
   noCharges: 'Палочка потрескивает: заряды кончились.',
   resting: 'Вы отдыхаете, пока не восстановитесь…',
+  causes: { poison: 'яд', burning: 'огонь', ooze: 'едкая слизь', lightning: 'молния', gripping: 'капкан' },
+  killedBy: (cause) => `Причина гибели: ${cause}.`,
+  runStats: (lvl, gold, kills) => `Уровень ${lvl} · золото ${gold} · побеждено врагов: ${kills}`,
   signTitle: 'На табличке написано:',
   signs: [
     'Не будь самоуверенным, используй доступные тебе оружие и броню.',

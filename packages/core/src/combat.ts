@@ -59,18 +59,27 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   return true;
 }
 
-export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | null): void {
+/** What hurts without being a character. */
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping';
+
+export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
+  const by = typeof source === 'string' ? null : source;
   if (!isHero(victim)) {
     if (victim.state === 'sleeping') victim.state = 'wandering';
     victim.alerted = true;
     // In a party, a monster turns on whoever hurt it.
-    if (source && isHero(source)) victim.enemy = source.id;
+    if (by && isHero(by)) victim.enemy = by.id;
   }
   victim.hp -= damage;
   if (!isAlive(victim)) {
-    if (isHero(victim)) heroDied(ctx, victim);
-    else mobDied(ctx, victim);
+    if (isHero(victim)) {
+      victim.killedBy = typeof source === 'string' ? source : isHero(source) ? source.heroClass : source.kind;
+      heroDied(ctx, victim);
+    } else {
+      if (by && isHero(by)) by.kills++;
+      mobDied(ctx, victim);
+    }
   }
 }
 

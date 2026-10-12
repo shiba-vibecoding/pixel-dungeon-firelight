@@ -72,13 +72,13 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
     case 'lightning': {
       const damage = Math.max(1, rng.intBetween(Math.trunc(hero.hp / 3), Math.trunc((2 * hero.hp) / 3)));
       ctx.effects.push({ type: 'hurt', depth, who: hero.id, damage });
-      hurt(ctx, hero, damage, null);
+      hurt(ctx, hero, damage, 'lightning');
       break;
     }
     case 'gripping': {
       const damage = Math.max(0, depth + 3 - rng.intRange(0, Math.trunc(heroArmor(hero) / 2)));
       ctx.effects.push({ type: 'hurt', depth, who: hero.id, damage });
-      hurt(ctx, hero, damage, null);
+      hurt(ctx, hero, damage, 'gripping');
       break;
     }
     case 'summoning': {
@@ -104,7 +104,7 @@ export function mobConditions(ctx: Ctx, mob: Mob): boolean {
   if ((mob.poison ?? 0) > 0) {
     mob.poison!--;
     ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: mob.id, damage: 1 });
-    hurt(ctx, mob, 1, null);
+    hurt(ctx, mob, 1, 'poison');
     if (!isAlive(mob)) return true;
   }
   if ((mob.paralysed ?? 0) > 0) {

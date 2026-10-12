@@ -65,6 +65,9 @@ export interface Hero {
   poison: number;
   burning: number;
   paralysed: number;
+  /** For the end of the run: monsters slain, and what dealt the killing blow. */
+  kills: number;
+  killedBy: string | null;
 }
 
 export interface PlayerInfo {
@@ -101,6 +104,8 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     poison: 0,
     burning: 0,
     paralysed: 0,
+    kills: 0,
+    killedBy: null,
   };
 }
 
