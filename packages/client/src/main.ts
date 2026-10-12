@@ -33,6 +33,7 @@ import { mart } from './mart';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
 import { type Launch, Motion } from './motion';
+import { Scenery } from './scenery';
 import { preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
@@ -120,6 +121,8 @@ setAssets(assets);
 const view = new View(assets);
 /** The world answering touch: doors, grass, water, what falls and what is taken (motion.ts). */
 const motion = new Motion(assets);
+/** Each region's life: torches, drips, veins, lanterns, lava, wells, trap plates (scenery.ts). */
+const scenery = new Scenery();
 const hud = new Hud({
   hero: () => openHero(),
   menu: () => openMenu(),
@@ -1435,6 +1438,7 @@ function tick(now: number): void {
     view.apply(effects, world, session.myId, vnow);
     for (const effect of effects) effectFx(effect, view, world, session.myId, vnow);
     motion.effects(effects, world, me.depth, (e) => itemSprite(e.item, world.run.labels));
+    scenery.effects(effects, me.depth, vnow);
     handleMyEffects(effects, session.myId);
   }
   // An online session learns my class with its first snapshot: wear the look for it.
@@ -1537,7 +1541,10 @@ function tick(now: number): void {
     focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
     lights: lightsFor(level, visible, view, vnow),
     heapLook: (pos: number, at: number) => motion.heapLook(pos, at),
-    under: (c: CanvasRenderingContext2D) => motion.draw(c, level, visible, explored, vnow),
+    under: (c: CanvasRenderingContext2D) => {
+      scenery.draw(c, level, visible, explored, vnow);
+      motion.draw(c, level, visible, explored, vnow);
+    },
     over: (c: CanvasRenderingContext2D) => motion.drawOver(c, vnow),
     mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
     middle,

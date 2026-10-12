@@ -299,10 +299,35 @@ export function render(
     ctx.fillRect((cloud.pos % WIDTH) * TILE, Math.trunc(cloud.pos / WIDTH) * TILE, TILE, TILE);
   }
 
-  // Pools of warm light, added onto what is lit (the dark then covers what is not in sight).
+  // The region's mist, drifting slowly over what can be seen (the dark of the fog covers the rest).
+  const mist = sheet(`fog${regionIndex(level.depth)}`);
+  if (mist && !quality.light) {
+    const pattern = ctx.createPattern(mist.image, 'repeat');
+    if (pattern) {
+      const drift = quality.reducedMotion ? 0 : now / 1000;
+      pattern.setTransform(new DOMMatrix().translate(drift * 6, drift * 3));
+      ctx.fillStyle = pattern;
+      const left = Math.max(0, camera.x);
+      const top = Math.max(0, camera.y);
+      ctx.fillRect(left, top, Math.min(WIDTH * TILE, camera.x + canvas.width / camera.zoom) - left, Math.min(HEIGHT * TILE, camera.y + canvas.height / camera.zoom) - top);
+    }
+  }
+
+  // Pools of warm light, added onto what is lit (the dark then covers what is not in sight): the
+  // design's dithered light, tinted the fire's colour; a gradient until it has loaded.
   ctx.globalCompositeOperation = 'lighter';
-  // Light effects (quality.ts): no glowing pools, which cost a gradient each.
+  const lightSheet = sheet('light');
+  const lightFrame = lightSheet?.anims.light?.[0];
   for (const light of quality.light ? [] : scene.lights ?? []) {
+    if (lightSheet && lightFrame) {
+      ctx.globalAlpha = Math.min(1, light.strength * 2.6);
+      ctx.drawImage(
+        tintedImage(lightSheet, `rgb(${light.color})`), lightFrame.x, lightFrame.y, lightFrame.w, lightFrame.h,
+        light.x - light.radius, light.y - light.radius, light.radius * 2, light.radius * 2,
+      );
+      ctx.globalAlpha = 1;
+      continue;
+    }
     const glow = ctx.createRadialGradient(light.x, light.y, 0, light.x, light.y, light.radius);
     glow.addColorStop(0, `rgba(${light.color}, ${light.strength})`);
     glow.addColorStop(1, `rgba(${light.color}, 0)`);
