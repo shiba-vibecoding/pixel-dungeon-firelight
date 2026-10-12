@@ -49,10 +49,14 @@
 (отвечает кнопкой «Играть») плюс оплату и команды.
 
 ```powershell
-node packages/server/scripts/set-webhook.mjs https://pd-coop.<поддомен>.workers.dev
+node packages/server/scripts/set-webhook.mjs https://pd-coop.<поддомен>.workers.dev --new-secret
 ```
 
-Скрипт спросит токен бота и секрет вебхука (ввод не виден на экране) и напишет `Webhook: https://pd-coop…/telegram/webhook`. Проверка: напишите
+С `--new-secret` скрипт сам придумает секрет вебхука и запишет его на сервер
+(`npx wrangler secret put WEBHOOK_SECRET` тогда не нужен). Без флага он спросит
+секрет, заданный вручную. Токен бота спрашивается скрыто. В конце скрипт стучится
+на сервер с секретом и пишет `Check: the server accepts this secret`, если всё
+сходится. Он напишет также `Webhook: https://pd-coop…/telegram/webhook`. Проверка: напишите
 боту что угодно — он ответит фразой и кнопкой «Играть». Старый Worker после
 этого можно удалить в панели Cloudflare.
 
