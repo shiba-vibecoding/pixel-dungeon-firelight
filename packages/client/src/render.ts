@@ -374,8 +374,15 @@ export function render(
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2);
     } else {
+      // A thrown thing flies in an arc, higher the farther it goes, its shadow running along the floor.
+      const cells = Math.max(Math.abs((p.to % WIDTH) - (p.from % WIDTH)), Math.abs(Math.trunc(p.to / WIDTH) - Math.trunc(p.from / WIDTH)));
+      const height = Math.sin(k * Math.PI) * Math.min(14, 2 + cells * 2.5);
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.28 - height * 0.01})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 6, 4 - height * 0.12, 1.3, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.save();
-      ctx.translate(Math.round(x), Math.round(y));
+      ctx.translate(snap(x), snap(y - height));
       ctx.rotate(k * Math.PI * 4);
       ctx.drawImage(assets.items, (p.sprite % 8) * 16, Math.floor(p.sprite / 8) * 16, 16, 16, -8, -8, 16, 16);
       ctx.restore();

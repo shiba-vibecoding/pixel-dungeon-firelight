@@ -69,10 +69,10 @@ export function forgetSolo(key: string): void {
  * @param key local storage slot, or null not to save
  * @param newSeed seed for a fresh run (also used by restart)
  */
-export function soloSession(key: string | null, heroClass: HeroClass, newSeed: () => number): Session {
+export function soloSession(key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero'): Session {
   const fresh = (): World => {
     const world = createWorld(newSeed());
-    addHero(world, { id: 'me', name: 'You', heroClass });
+    addHero(world, { id: 'me', name, heroClass });
     return world;
   };
   let pending: Effect[] = [];

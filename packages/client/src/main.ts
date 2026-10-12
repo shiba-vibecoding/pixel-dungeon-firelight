@@ -331,7 +331,7 @@ function startSolo(mode: 'continue' | 'new' | 'daily'): void {
   if (mode === 'new') forgetSolo(SOLO_SLOT);
   const daily = mode === 'daily';
   const seed = daily ? dailySeed() : randomSeed();
-  enterGame(soloSession(daily ? dailySlot() : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed())), null);
+  enterGame(soloSession(daily ? dailySlot() : SOLO_SLOT, heroClass, () => (daily ? seed : randomSeed()), playerName.trim() || telegramName() || t.heroDefault), null);
   dailyRun = daily;
 }
 
@@ -364,7 +364,7 @@ function startOnline(roomId: string): void {
       server: SERVER,
       room: roomId,
       playerId: playerId(),
-      name: playerName.trim() || telegramName() || 'Hero',
+      name: playerName.trim() || telegramName() || t.heroDefault,
       heroClass,
       initData: initData(),
       text: { connecting: t.connecting, reconnecting: t.reconnecting, replaced: t.replaced, full: t.partyFull, updating: t.updating },
