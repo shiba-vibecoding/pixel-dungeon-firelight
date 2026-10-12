@@ -5,19 +5,20 @@ import {
   heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, PLANT_KINDS, type SmithLine, T,
   visibleCells, wandMaxCharges, WIDTH,
-  type World,
+  type World, charAt,
 } from '@pd/core';
 import * as core from '@pd/core';
+import { mobDescription, tileText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { audio } from './audio';
 import { BUFF_ICONS, heroBuffs, Hud } from './hud';
-import { t } from './i18n';
-import { itemName } from './itemtext';
+import { capitalize, t } from './i18n';
+import { itemInfo, itemName } from './itemtext';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
   hideOverlay, overlayOpen, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero, showMenu, showQuest, showRunEnd,
-  showSell, showSign, showTitle, showTrade, toast,
+  showInfo, showSell, showSign, showTitle, showTrade, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -676,10 +677,15 @@ canvas.addEventListener('pointerdown', (event) => {
   const button = hud.hit(px, py, Boolean(me && quickIndex(me) >= 0));
   if (button) audio.play('click');
   if (button && button !== 'quick') aim = null;
+  if (button && button !== 'help') examining = false;
   if (button === 'quick') toggleQuickslot();
   else if (button === 'wait') pressWait();
   else if (button === 'search') act(button);
-  else if (button === 'help') showHelp(hideOverlay);
+  else if (button === 'help') {
+    // Toolbar's info button: the next tap on the map examines that cell.
+    examining = !examining;
+    if (examining) view.say(t.examinePrompt, '#cccccc');
+  }
   else if (button === 'backpack') openBackpack();
   else if (button === 'menu') openMenu();
   else if (button === 'hero') openHero();
@@ -687,8 +693,52 @@ canvas.addEventListener('pointerdown', (event) => {
 
   const x = Math.floor((camera.x + px / camera.zoom) / TILE);
   const y = Math.floor((camera.y + py / camera.zoom) / TILE);
-  if (x >= 0 && y >= 0 && x < WIDTH && y < HEIGHT) tapCell(x + y * WIDTH);
+  if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
+  if (examining) {
+    examining = false;
+    examineCell(x + y * WIDTH);
+    return;
+  }
+  tapCell(x + y * WIDTH);
 });
+
+/** The examine tool is on: the next tap on the map tells what is there. */
+let examining = false;
+
+/** What is at a cell: a monster or hero in sight, an item lying there, or the terrain. */
+function examineCell(pos: number): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  if (!exploredCells(world, me.depth)[pos]) {
+    view.say(t.examineUnknown, '#cccccc');
+    return;
+  }
+  const seen = visibleCells(world, me.depth)[pos];
+  const char = seen ? charAt(world, me.depth, pos) : undefined;
+  if (char && 'kind' in char) {
+    const state = char.state === 'passive' ? '' : t.mobStates[char.state] ?? '';
+    const health = char.state === 'passive' ? '' : t.examineHealth(Math.max(0, char.hp), char.ht);
+    showInfo(t.mobs[char.kind], [mobDescription(char), state, health], hideOverlay);
+    return;
+  }
+  if (char) {
+    showInfo(char.name, [`${capitalize(t.classes[char.heroClass])}, ${t.levelShort} ${char.lvl}`, t.examineHealth(char.hp, char.ht)], hideOverlay);
+    return;
+  }
+  const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === pos && h.kind !== 'hidden');
+  if (heap && (seen || heap.kind !== 'heap')) {
+    if (heap.kind === 'heap' || heap.kind === 'forSale') {
+      const item = heap.items[0]!;
+      showInfo(itemName(world, item), itemInfo(world, me, item), hideOverlay);
+    } else {
+      showInfo(t.heapNames[heap.kind] ?? '', [], hideOverlay);
+    }
+    return;
+  }
+  const { name, desc } = tileText(levelAt(world, me.depth).map[pos]!);
+  showInfo(name, [desc], hideOverlay);
+}
 
 function startResting(): void {
   const world = session?.world;

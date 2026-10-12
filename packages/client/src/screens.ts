@@ -319,6 +319,19 @@ export function showQuest(options: QuestOptions): void {
   );
 }
 
+/** A few lines about something looked at (the examine tool's windows). */
+export function showInfo(title: string, lines: readonly string[], onClose: () => void): void {
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('p', { className: 'pd-heading', textContent: capitalize(title) }),
+      ...lines.filter(Boolean).map((line) => el('p', { className: 'pd-info', textContent: line })),
+      button(t.close, onClose),
+    ),
+  );
+}
+
 export interface ReforgeOptions {
   world: World;
   hero: Hero;
