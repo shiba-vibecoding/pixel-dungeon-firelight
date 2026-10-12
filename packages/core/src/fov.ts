@@ -58,6 +58,9 @@ class Obstacles {
 }
 
 /** Cells visible from `pos`, given which cells block line of sight. */
+/** Level.viewDistance: the caves (depths 11-15) are dark, and everyone sees less far there. */
+export const viewDistance = (depth: number): number => (depth >= 11 && depth <= 15 ? 6 : MAX_VIEW_DISTANCE);
+
 export function castShadow(pos: number, losBlocking: (cell: number) => boolean, distance = MAX_VIEW_DISTANCE): boolean[] {
   const fov = new Array<boolean>(LENGTH).fill(false);
   const cx = pos % WIDTH;

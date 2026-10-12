@@ -62,6 +62,12 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     // The vampire bat drinks what it draws.
     if (attacker.kind === 'bat') attacker.hp += Math.min(damage, attacker.ht - attacker.hp);
     if (attacker.kind === 'thief' && !attacker.item && isHero(defender)) steal(ctx, attacker, defender);
+    // Spinner.attackProc: half its bites are venomous, and then it backs off.
+    if (attacker.kind === 'spinner' && ctx.rng.int(2) === 0) {
+      defender.poison = Math.max(defender.poison ?? 0, ctx.rng.intBetween(7, 9));
+      attacker.state = 'fleeing';
+      attacker.target = defender.pos;
+    }
   }
   if (!isHero(defender) && defender.kind === 'swarm') split(ctx, defender, damage);
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
@@ -106,7 +112,7 @@ function split(ctx: Ctx, swarm: Mob, damage: number): void {
 }
 
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
@@ -169,12 +175,13 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 
   if (mob.kind === 'skeleton') explode(ctx, mob);
 
-  if (mob.kind === 'goo' || mob.kind === 'tengu') {
+  if (mob.kind === 'goo' || mob.kind === 'tengu' || mob.kind === 'dm300') {
     const { level } = ctx;
-    // Goo's lair dries out behind the heroes; Tengu's arena opens.
+    // Goo's lair dries out behind the heroes; Tengu's arena opens; the rock
+    // in DM-300's way back crumbles.
     if (level.map[level.entrance] === T.WATER_TILES) level.map[level.entrance] = T.ENTRANCE;
-    if (level.arenaDoor !== undefined && level.map[level.arenaDoor] === T.LOCKED_DOOR) {
-      level.map[level.arenaDoor] = T.DOOR;
+    if (level.arenaDoor !== undefined && (level.map[level.arenaDoor] === T.LOCKED_DOOR || level.map[level.arenaDoor] === T.WALL)) {
+      level.map[level.arenaDoor] = level.map[level.arenaDoor] === T.WALL ? T.EMPTY_DECO : T.DOOR;
       ctx.effects.push({ type: 'arena', depth: ctx.depth, sealed: false });
     }
     if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
@@ -210,6 +217,8 @@ function dropLoot(ctx: Ctx, mob: Mob): Item | null {
       return rng.float() < 0.125 ? createItem('potion.healing') : null;
     case 'brute':
       return rng.float() < 0.5 ? rollGold(rng, ctx.depth) : null;
+    case 'spinner':
+      return rng.float() < 0.125 ? createItem('food.meat') : null;
     default:
       return null;
   }

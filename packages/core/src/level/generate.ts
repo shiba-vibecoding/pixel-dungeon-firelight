@@ -4,6 +4,8 @@ import { Feeling, isBossDepth, type ItemSpawn, type ItemSpec, LevelBuilder, type
 import { stitchTerrain } from './flags';
 import { PAINTERS } from './painters';
 import { RoomType } from './room';
+import { CAVES_STYLE } from './caves';
+import { buildCavesBossLevel, CAVES_BOSS_STYLE } from './caves-boss';
 import { PRISON_STYLE } from './prison';
 import { buildPrisonBossLevel, PRISON_BOSS_STYLE } from './prison-boss';
 import { buildRegularLevel as buildRegular, type RegionStyle } from './regular';
@@ -39,16 +41,17 @@ export interface Level {
   shopkeeper?: number;
 }
 
-/** How each depth is laid out: the sewers, Goo's lair, the prison, Tengu's prison. */
+/** How each depth is laid out: the sewers, Goo's lair, the prison, Tengu's prison, the caves, DM-300's caves. */
 function layoutFor(depth: number): { style: RegionStyle; build: (level: LevelBuilder) => boolean } {
   if (depth === 5) return { style: SEWER_BOSS_STYLE, build: buildSewerBossLevel };
   if (depth === 10) return { style: PRISON_BOSS_STYLE, build: buildPrisonBossLevel };
-  const style = depth < 5 ? SEWER_STYLE : PRISON_STYLE;
+  if (depth === 15) return { style: CAVES_BOSS_STYLE, build: buildCavesBossLevel };
+  const style = depth < 5 ? SEWER_STYLE : depth < 10 ? PRISON_STYLE : CAVES_STYLE;
   return { style, build: (level) => buildRegular(level, style) };
 }
 
 /** The deepest depth the port can generate. */
-export const DEEPEST_LEVEL = 10;
+export const DEEPEST_LEVEL = 15;
 
 const MAX_ATTEMPTS = 128;
 

@@ -1,5 +1,5 @@
 import { type Hero, isAlive, type Mob, type MobKind } from './actors';
-import { castShadow, terrainBlocksSight } from './fov';
+import { castShadow, terrainBlocksSight, viewDistance } from './fov';
 import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
@@ -92,7 +92,7 @@ export type Effect =
   /** A thief made off with something from a hero's pack. */
   | { type: 'stole'; depth: number; mob: string; hero: string; item: Item }
   /** A fleeing thief with nowhere left to run turns to fight. */
-  | { type: 'cornered'; depth: number; mob: string }
+  | { type: 'cornered'; depth: number; mob: string; kind: MobKind }
   /** A badly hurt brute flies into a rage. */
   | { type: 'enraged'; depth: number; mob: string }
   /** A skeleton falls apart in an explosion of bones. */
@@ -113,7 +113,9 @@ export type Effect =
   | { type: 'ate'; hero: string; kind: ItemKind; outcome: MeatOutcome | null }
   | { type: 'hunger'; hero: string; state: 'hungry' | 'starving' }
   /** Gas or flames released at a cell, reaching `radius` cells around. */
-  | { type: 'burst'; depth: number; pos: number; kind: Burst; radius: number }
+  | { type: 'burst'; depth: number; pos: number; kind: Burst; radius: number; silent?: boolean }
+  /** DM-300 mended itself on a spent trap. */
+  | { type: 'repaired'; depth: number; mob: string }
   /** A dewdrop picked up, and the health it gave. */
   | { type: 'dew'; hero: string; amount: number }
   /** Terrain burnt down to embers, opening what it blocked. */
@@ -151,7 +153,7 @@ export function charAt(world: World, depth: number, cell: number): Char | undefi
 
 /** Field of view of one hero. */
 export function heroView(world: World, hero: Hero): boolean[] {
-  return castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map));
+  return castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map), viewDistance(hero.depth));
 }
 
 export function exploredCells(world: World, depth: number): boolean[] {

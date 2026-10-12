@@ -199,7 +199,8 @@ export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 
 export type MobKind =
   | 'rat' | 'gnoll' | 'crab' | 'goo' | 'ghost' | 'shopkeeper' | 'wandmaker'
-  | 'skeleton' | 'thief' | 'swarm' | 'shaman' | 'bat' | 'brute' | 'tengu';
+  | 'skeleton' | 'thief' | 'swarm' | 'shaman' | 'bat' | 'brute' | 'tengu'
+  | 'spinner' | 'dm300';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -236,6 +237,9 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   bat: { name: 'vampire bat', ht: 30, attack: 16, defense: 15, damage: [6, 12], dr: 4, exp: 7, maxLvl: 15, speed: 2, flying: true },
   brute: { name: 'gnoll brute', ht: 40, attack: 20, defense: 15, damage: [8, 18], dr: 8, exp: 8, maxLvl: 15, speed: 1 },
   tengu: { name: 'Tengu', ht: 120, attack: 20, defense: 20, damage: [8, 15], dr: 5, exp: 20, maxLvl: 30, speed: 1 },
+  // The caves (depths 11-15).
+  spinner: { name: 'cave spinner', ht: 50, attack: 20, defense: 14, damage: [12, 16], dr: 6, exp: 9, maxLvl: 16, speed: 1 },
+  dm300: { name: 'DM-300', ht: 200, attack: 28, defense: 18, damage: [18, 24], dr: 10, exp: 30, maxLvl: 30, speed: 1 },
 };
 
 /** The brute, enraged when badly hurt: much harder hits. */
@@ -298,6 +302,12 @@ const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]
   8: [['skeleton', 3], ['shaman', 2], ['gnoll', 1], ['thief', 1], ['swarm', 1], ['bat', 0.02]],
   9: [['skeleton', 3], ['shaman', 3], ['thief', 1], ['swarm', 1], ['bat', 0.02], ['brute', 0.01]],
   10: [['tengu', 1]],
+  // The original's rare fire elementals and dwarf monks of depths 13-14 belong to the city below.
+  11: [['bat', 1], ['brute', 0.2]],
+  12: [['bat', 1], ['brute', 1], ['spinner', 0.2]],
+  13: [['bat', 1], ['brute', 3], ['shaman', 1], ['spinner', 1]],
+  14: [['bat', 1], ['brute', 3], ['shaman', 1], ['spinner', 4]],
+  15: [['dm300', 1]],
 };
 
 export function rollMob(rng: Rng, depth: number): MobKind {

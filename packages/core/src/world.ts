@@ -76,7 +76,7 @@ export interface World {
 }
 
 /** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
-export const DEEPEST_AVAILABLE = 10;
+export const DEEPEST_AVAILABLE = 15;
 const TIME_TO_REST = 1;
 const TIME_TO_SEARCH = 2;
 /** How far a deliberate search reaches; the original only checked adjacent cells. */
@@ -440,7 +440,10 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       if (trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
       if (level.map[hero.pos] === T.WELL) drinkFromWell(ctx, hero);
       if (level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos);
-      if (level.arenaDoor !== undefined) enterArena(ctx, hero);
+      if (level.arenaDoor !== undefined) {
+        if (hero.depth === 15) enterLair(ctx, hero);
+        else enterArena(ctx, hero);
+      }
       search(ctx, hero, false);
       break;
     }
@@ -518,6 +521,41 @@ function enterArena(ctx: Ctx, hero: Hero): void {
   const door = level.arenaDoor!;
   if (fighting && level.map[door] !== T.LOCKED_DOOR && heroesOn(world, depth).every((h) => inside(h.pos))) {
     level.map[door] = T.LOCKED_DOOR;
+    ctx.effects.push({ type: 'arena', depth, sealed: true });
+  }
+}
+
+/**
+ * CavesBossLevel.press: DM-300 starts up somewhere out of sight as soon as a
+ * hero steps out of the stairs room, and the rock closes its door once the
+ * whole party is out in the cave.
+ */
+function enterLair(ctx: Ctx, hero: Hero): void {
+  const { level, floor, world, depth, rng } = ctx;
+  const room = level.rooms.find((r) => r.type === RoomType.ENTRANCE);
+  if (!room) return;
+  const outside = (pos: number): boolean =>
+    cellX(pos) < room.left || cellX(pos) > room.right || cellY(pos) < room.top || cellY(pos) > room.bottom;
+  if (!floor.arenaEntered) {
+    if (!outside(hero.pos)) return;
+    floor.arenaEntered = true;
+    const seen = heroView(world, hero);
+    let pos = -1;
+    for (let attempt = 0; attempt < 500 && pos === -1; attempt++) {
+      const cell = rng.int(LENGTH);
+      if (isPassable(level, cell) && outside(cell) && !seen[cell] && !charAt(world, depth, cell)) pos = cell;
+    }
+    if (pos === -1) return;
+    const dm300 = createMob(`#${++world.nextId}`, 'dm300', pos, 'hunting', floor.now);
+    Object.assign(dm300, { enemy: hero.id, target: hero.pos });
+    floor.mobs.push(dm300);
+    enterCell(level, pos);
+    ctx.effects.push({ type: 'yell', depth, mob: dm300.id, kind: 'dm300', line: 'notice', hero: hero.id });
+  }
+  const fighting = floor.mobs.some((mob) => mob.kind === 'dm300');
+  const door = level.arenaDoor!;
+  if (fighting && level.map[door] !== T.WALL && heroesOn(world, depth).every((h) => outside(h.pos))) {
+    level.map[door] = T.WALL;
     ctx.effects.push({ type: 'arena', depth, sealed: true });
   }
 }

@@ -285,7 +285,7 @@ describe("Tengu's prison", () => {
     return blocker ? { type: 'attack', target: blocker.id } : { type: 'move', to: path[0]! };
   }
 
-  it('Tengu appears in the arena, seals it, and falling opens the way out to victory', () => {
+  it('Tengu appears in the arena, seals it, and falling opens the way down to the caves', () => {
     let won = 0;
     for (const seed of [2, 3, 4]) {
       const world = at(10, seed);
@@ -294,7 +294,7 @@ describe("Tengu's prison", () => {
       hero.weapon = createItem('weapon.longsword', 1, 3);
       const level = levelAt(world, 10);
       const effects: Effect[] = [];
-      for (let i = 0; i < 4000 && !world.over; i++) {
+      for (let i = 0; i < 4000 && !world.over && hero.depth === 10; i++) {
         const action = bossAction(world);
         let result = act(world, 'p', action);
         if (!result.ok) result = act(world, 'p', { type: 'wait' });
@@ -306,7 +306,8 @@ describe("Tengu's prison", () => {
       expect(effects.some((e) => e.type === 'arena' && e.sealed), `seed ${seed}`).toBe(true);
       expect(types.has('bossSlain'), `seed ${seed}`).toBe(true);
       expect(effects.some((e) => e.type === 'arena' && !e.sealed), `seed ${seed}`).toBe(true);
-      expect(world, `seed ${seed}`).toMatchObject({ over: true, victory: true });
+      expect(hero.depth, `seed ${seed}`).toBe(11);
+      expect(world.over, `seed ${seed}`).toBe(false);
       won++;
     }
     expect(won).toBe(3);

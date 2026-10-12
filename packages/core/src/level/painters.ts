@@ -447,7 +447,8 @@ function paintStorage(level: LevelBuilder, room: Room): void {
 /**
  * ShopPainter: the wares laid out along the walls, starting opposite the
  * door, and the shopkeeper among them. Depth 6 sells a quarterstaff or a
- * spear, leather armour, potions, scrolls and food; the seed pouch,
+ * spear and leather armour, depth 11 a sword or a mace and mail armour;
+ * both potions, scrolls and food. The seed pouch, scroll holder,
  * weightstone, scroll of remove curse and ankh of the original are not
  * ported yet.
  */
@@ -471,9 +472,11 @@ function paintShop(level: LevelBuilder, room: Room): void {
     return cell(room.left + 1, room.bottom - 1 - (p - (w * 2 + h)));
   };
 
+  // Each shop's weapon and armour (ShopPainter.range): depth 6, then depth 11.
+  const sixth = level.depth < 11;
   const wares: ItemSpec[] = [
-    { roll: 'kind', kind: rng.int(2) === 0 ? 'weapon.quarterstaff' : 'weapon.spear' },
-    { roll: 'kind', kind: 'armor.leather' },
+    { roll: 'kind', kind: sixth ? rng.int(2) === 0 ? 'weapon.quarterstaff' : 'weapon.spear' : rng.int(2) === 0 ? 'weapon.sword' : 'weapon.mace' },
+    { roll: 'kind', kind: sixth ? 'armor.leather' : 'armor.mail' },
     { roll: 'kind', kind: 'potion.healing' },
     { roll: 'category', categories: ['potion'], tries: 1 },
     { roll: 'category', categories: ['potion'], tries: 1 },

@@ -29,18 +29,17 @@ export function buildPrisonBossLevel(level: LevelBuilder): boolean {
   let roomExit: Room;
   let path: Room[] | null;
   let retry = 0;
+  // The original picks rooms at random until they fit, retrying the whole
+  // level forever; picking among the rooms that fit gets there sooner.
+  const arenas = rooms.filter((r) => r.width() >= 7 && r.height() >= 7 && r.top !== 0);
+  if (arenas.length === 0) return false;
   do {
     if (retry++ > 10) return false;
-    let inner = 0;
-    do {
-      if (inner++ > 10) return false;
-      roomEntrance = rng.element(rooms)!;
-    } while (roomEntrance.width() < 4 || roomEntrance.height() < 4);
-    inner = 0;
-    do {
-      if (inner++ > 10) return false;
-      roomExit = rng.element(rooms)!;
-    } while (roomExit === roomEntrance || roomExit.width() < 7 || roomExit.height() < 7 || roomExit.top === 0);
+    roomExit = rng.element(arenas)!;
+    const exit = roomExit;
+    const entrances = rooms.filter((r) => r !== exit && r.width() >= 4 && r.height() >= 4);
+    if (entrances.length === 0) return false;
+    roomEntrance = rng.element(entrances)!;
     buildDistanceMap(rooms, roomExit);
     path = buildPath(roomEntrance, roomExit);
   } while (!path || path.length < 3);

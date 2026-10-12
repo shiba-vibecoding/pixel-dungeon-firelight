@@ -332,10 +332,11 @@ export class View {
         case 'yell': {
           if (effect.depth !== this.depth) break;
           const hero = effect.hero ? heroById(world, effect.hero) : undefined;
+          const notice = effect.line === 'notice';
           const line =
-            effect.kind === 'goo'
-              ? effect.line === 'notice' ? t.gooNotice : t.gooDeath
-              : effect.line === 'notice' ? t.tenguNotice(hero ? t.classes[hero.heroClass] : '') : t.tenguDeath;
+            effect.kind === 'goo' ? notice ? t.gooNotice : t.gooDeath
+            : effect.kind === 'dm300' ? notice ? t.dm300Notice : t.dm300Death
+            : notice ? t.tenguNotice(hero ? t.classes[hero.heroClass] : '') : t.tenguDeath;
           this.say(`${t.mobs[effect.kind]}: «${line}»`, COLORS.negative, now);
           break;
         }
@@ -415,7 +416,7 @@ export class View {
             }
           }
           if (effect.kind === 'fire') audio.play('burning');
-          if (!trapped) this.say(t.bursts[effect.kind], COLORS.warning, now);
+          if (!trapped && !effect.silent) this.say(t.bursts[effect.kind], COLORS.warning, now);
           break;
         case 'unlocked':
           audio.play('unlock');
@@ -459,7 +460,7 @@ export class View {
           else if (effect.depth === this.depth) this.say(t.robbed(this.name(world, effect.hero)), COLORS.warning, now);
           break;
         case 'cornered':
-          if (effect.depth === this.depth) this.say(t.cornered(t.mobs.thief), COLORS.warning, now);
+          if (effect.depth === this.depth) this.say(t.cornered(t.mobs[effect.kind]), COLORS.warning, now);
           break;
         case 'enraged':
           if (effect.depth !== this.depth) break;
@@ -491,9 +492,14 @@ export class View {
           break;
         case 'arena':
           if (effect.depth === this.depth && effect.sealed) {
-            this.say(t.arenaSealed, COLORS.warning, now);
-            audio.play('door_open', 0.7);
+            this.say(effect.depth === 15 ? t.lairSealed : t.arenaSealed, COLORS.warning, now);
+            audio.play(effect.depth === 15 ? 'rocks' : 'door_open', 0.7);
           }
+          break;
+        case 'repaired':
+          if (effect.depth !== this.depth) break;
+          this.float(effect.mob, '+', COLORS.positive, now);
+          this.say(t.repaired, COLORS.negative, now);
           break;
         case 'trap':
           trapped = true;

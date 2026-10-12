@@ -2,7 +2,7 @@ import {
   createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, type Mob, type MobState, MOBS, rollMob,
 } from './actors';
 import { attack, hurt } from './combat';
-import { castShadow, terrainBlocksSight } from './fov';
+import { castShadow, terrainBlocksSight, viewDistance } from './fov';
 import { charAt, type Ctx, enterCell, heroesOn, isPassable, isWater, leaveCell } from './floor';
 import { isBossDepth } from './level/builder';
 import type { Level, RoomInfo } from './level/generate';
@@ -59,7 +59,7 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
     return;
   }
   if (mob.state === 'passive') {
-    const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map));
+    const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map), viewDistance(ctx.depth));
     if (mob.target !== -1 && mob.target !== mob.pos && getCloser(ctx, mob, mob.target, fov)) {
       spend(mob, 1 / MOBS[mob.kind].speed);
     } else {
@@ -75,8 +75,9 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
   }
   // Goo mends itself in the murky water of its lair.
   if (mob.kind === 'goo' && isWater(ctx.level.map[mob.pos]!) && mob.hp < mob.ht) mob.hp++;
+  if (mob.kind === 'dm300') ventGas(ctx, mob);
 
-  const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map));
+  const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map), viewDistance(ctx.depth));
   const justAlerted = mob.alerted;
   mob.alerted = false;
   const enemy = chooseEnemy(ctx, mob, fov);
@@ -135,11 +136,13 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
       } else {
         spend(mob, TICK);
         if (fled === 'cornered') {
-          // Thief.Fleeing.nowhereToRun: cornered, it turns on its pursuer.
+          // Fleeing.nowhereToRun: cornered, it turns on its pursuer.
           mob.state = 'hunting';
-          ctx.effects.push({ type: 'cornered', depth: ctx.depth, mob: mob.id });
+          ctx.effects.push({ type: 'cornered', depth: ctx.depth, mob: mob.id, kind: mob.kind });
         }
       }
+      // Spinner.act: a spinner comes back once its venom has worn off.
+      if (mob.kind === 'spinner' && mob.state === 'fleeing' && enemyInFov && enemy.poison <= 0) mob.state = 'hunting';
       return;
     }
   }
@@ -180,12 +183,46 @@ function getFurther(ctx: Ctx, mob: Mob, threat: number): 'moved' | 'safe' | 'cor
   return 'moved';
 }
 
+/**
+ * DM300.act: the machine leaks toxic gas all around it. The original's
+ * cloud spreads and lingers; here it hurts whoever stands next to it, as
+ * much as a turn in the gas would (ToxicGas).
+ */
+function ventGas(ctx: Ctx, mob: Mob): void {
+  ctx.effects.push({ type: 'burst', depth: ctx.depth, pos: mob.pos, kind: 'toxic', radius: 1, silent: true });
+  const strength = 5 + ctx.depth * 5;
+  for (const hero of heroesOn(ctx.world, ctx.depth)) {
+    if (distance(hero.pos, mob.pos) > 1) continue;
+    let damage = Math.trunc((hero.ht + strength) / 40);
+    if (ctx.rng.int(40) < (hero.ht + strength) % 40) damage++;
+    ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: hero.id, damage });
+    hurt(ctx, hero, damage, 'gas');
+  }
+}
+
+/**
+ * DM300.move: stepping on a spent trap, it repairs itself; every step shakes
+ * rocks loose next to it, stunning whoever they fall on.
+ */
+function dm300Steps(ctx: Ctx, mob: Mob, to: number): void {
+  const { level, rng, world, depth } = ctx;
+  if (level.map[to] === T.INACTIVE_TRAP && mob.hp < mob.ht) {
+    mob.hp += rng.intBetween(1, mob.ht - mob.hp);
+    ctx.effects.push({ type: 'repaired', depth, mob: mob.id });
+  }
+  const cell = to + NEIGHBOURS8[rng.int(NEIGHBOURS8.length)]!;
+  ctx.effects.push({ type: 'avalanche', depth, cells: [cell] });
+  if (level.map[cell] === T.EMPTY) level.map[cell] = T.EMPTY_DECO;
+  const struck = charAt(world, depth, cell);
+  if (struck && struck !== mob) struck.paralysed = Math.max(struck.paralysed ?? 0, 2);
+}
+
 function notice(ctx: Ctx, mob: Mob, enemy: Hero, state: MobState): void {
   mob.enemySeen = true;
   mob.state = state;
   mob.target = enemy.pos;
   ctx.effects.push({ type: 'noticed', depth: ctx.depth, mob: mob.id });
-  if (mob.kind === 'goo' || mob.kind === 'tengu') {
+  if (mob.kind === 'goo' || mob.kind === 'tengu' || mob.kind === 'dm300') {
     ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'notice', hero: enemy.id });
   }
 }
@@ -224,7 +261,7 @@ const SHURIKEN_SPRITE = 15;
 function tenguJump(ctx: Ctx, mob: Mob): void {
   const { world, depth, level, rng } = ctx;
   mob.jumpIn = TENGU_JUMP_DELAY;
-  const fov = castShadow(mob.pos, terrainBlocksSight(level.map));
+  const fov = castShadow(mob.pos, terrainBlocksSight(level.map), viewDistance(depth));
   const enemy = heroesOn(world, depth).find((hero) => hero.id === mob.enemy);
   const pick = (landing: boolean): number =>
     randomCell(rng, (c) =>
@@ -352,6 +389,7 @@ function moveMob(ctx: Ctx, mob: Mob, to: number): void {
   if (mob.kind === 'goo' && ctx.level.map[ctx.level.entrance] === T.ENTRANCE) {
     ctx.level.map[ctx.level.entrance] = T.WATER_TILES;
   }
+  if (mob.kind === 'dm300') dm300Steps(ctx, mob, to);
 }
 
 /** Dungeon.findPath: the next step, treating characters the mover can see as obstacles. */
@@ -454,8 +492,8 @@ const nextMobId = (world: World): string => `#${++world.nextId}`;
 /** The monsters a new level starts with, asleep in its rooms. */
 export function populate(world: World, level: Level, rng: Rng): Mob[] {
   if (isBossDepth(level.depth)) {
-    // Goo sleeps in its lair; Tengu only appears when someone enters the arena.
-    if (level.depth === 10) return [];
+    // Goo sleeps in its lair; Tengu and DM-300 only appear when someone enters their arena.
+    if (level.depth !== 5) return [];
     const arena = level.rooms.find((room) => room.type === RoomType.BOSS_EXIT)!;
     return [createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0)];
   }
@@ -478,7 +516,7 @@ export function respawn(ctx: Ctx): void {
   const { world, depth, level, floor, rng } = ctx;
   if (floor.mobs.length < nMobs(rng, depth)) {
     const kind = rollMob(rng, depth);
-    const seen = heroesOn(world, depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map)));
+    const seen = heroesOn(world, depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map), viewDistance(depth)));
     const pos = randomRespawnCell(rng, world, level, (cell) => !seen.some((fov) => fov[cell]));
     if (pos !== -1) {
       floor.mobs.push(createMob(nextMobId(world), kind, pos, 'wandering', floor.now));

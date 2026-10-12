@@ -13,21 +13,23 @@ and the web, built for **co-op multiplayer** from the start.
 
 ## What works
 
-The first two acts of the original, depths 1–10:
+The first three acts of the original, depths 1–15:
 
 - Seeded random stream, bit-compatible with the Java version.
-- The sewers (depths 1–4) and the prison (6–9): level generation with the
+- The sewers (depths 1–4), the prison (6–9) and the caves (11–14, darker:
+  everyone sees less far): level generation with the
   original rooms, water and grass, hidden doors, searching, traps (poison,
   fire, toxic and paralytic gas, lightning, gripping, alarm, summoning), tall
   grass that is trampled and sheds healing dew, burnable doors and barricades.
 - Special rooms: treasury, armory, library and crypt behind locked doors with
   their iron keys, magic wells, trap rooms, storage rooms behind barricades,
-  and the shop on depth 6.
+  and the shops on depths 6 and 11.
 - Monsters with the original stats and behaviour: rats, gnoll scouts, sewer
   crabs; skeletons that explode, thieves that steal and run, swarms of flies
-  that split, gnoll shamans with lightning, vampire bats, gnoll brutes.
-- Bosses: Goo on depth 5, Tengu in its locked arena on depth 10; escaping
-  Tengu's prison wins the run.
+  that split, gnoll shamans with lightning, vampire bats, gnoll brutes, cave
+  spinners with their venom.
+- Bosses: Goo on depth 5, Tengu in its locked arena on depth 10, DM-300 on
+  depth 15, leaking gas and repairing itself; getting past DM-300 wins the run.
 - The sad ghost's quest (the dried rose) on depths 2–4, and the old
   wandmaker's (corpse dust, for a choice of two wands) on depths 7–9.
 - Hunger and food (rations, pasties, mystery meat), regeneration, experience
@@ -49,7 +51,8 @@ The first two acts of the original, depths 1–10:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: depths 11+ (caves, city, halls), rings, the wands of amok,
+Not ported yet: depths 16+ (the dwarven city and the demon halls), the
+blacksmith's quest, rings, the wands of amok,
 reach, flock and regrowth, seeds and plants, the remaining special rooms (garden, pool, statue,
 laboratory, vault, weak floor), the wandmaker's rotberry errand, hero subclasses, and gas
 clouds (gas acts at once on everyone within reach instead).

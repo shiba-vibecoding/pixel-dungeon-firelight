@@ -23,7 +23,7 @@ export interface CharSprite {
 }
 
 export interface Assets {
-  /** Tiles and water of each region: the sewers, then the prison. */
+  /** Tiles and water of each region: the sewers, the prison, the caves. */
   tiles: HTMLImageElement[];
   water: HTMLImageElement[];
   heroes: Record<HeroClass, CharSprite>;
@@ -128,6 +128,16 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
     h: 16,
     anims: basic(anim(2, [0, 0, 0, 1, 0, 0, 1, 1], true), anim(12, [4, 5, 6, 7], true), anim(12, [2, 3, 0]), anim(12, [8, 9, 10])),
   },
+  spinner: {
+    w: 16,
+    h: 16,
+    anims: basic(anim(10, [0, 0, 0, 0, 0, 1, 0, 1], true), anim(15, [0, 2, 0, 3], true), anim(12, [0, 4, 5, 0]), anim(12, [6, 7, 8, 9])),
+  },
+  dm300: {
+    w: 22,
+    h: 20,
+    anims: basic(anim(10, [0, 1], true), anim(10, [2, 3], true), anim(15, [4, 5, 6]), anim(20, [0, 7, 0, 7, 0, 7, 0, 7, 0, 7, 0, 7, 8])),
+  },
   tengu: {
     w: 14,
     h: 16,
@@ -135,8 +145,8 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
   },
 };
 
-/** 0 for the sewers (depths 1-5), 1 for the prison (6-10). */
-export const regionOf = (depth: number): number => Math.min(1, Math.max(0, Math.floor((depth - 1) / 5)));
+/** 0 for the sewers (depths 1-5), 1 for the prison (6-10), 2 for the caves (11-15). */
+export const regionOf = (depth: number): number => Math.min(2, Math.max(0, Math.floor((depth - 1) / 5)));
 
 /** Frame of an animation `elapsed` ms after it started; non-looping ones hold the last frame. */
 export function frameAt(animation: Animation, elapsed: number): number {
@@ -162,7 +172,7 @@ const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image
 
 export async function loadAssets(base: string): Promise<Assets> {
   const names = [
-    'tiles0', 'water0', 'tiles1', 'water1', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
+    'tiles0', 'water0', 'tiles1', 'water1', 'tiles2', 'water2', 'spinner', 'dm300', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
     'skeleton', 'thief', 'swarm', 'shaman', 'bat', 'brute', 'tengu', 'shopkeeper', 'wandmaker',
     'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs',
   ] as const;
@@ -176,8 +186,8 @@ export async function loadAssets(base: string): Promise<Assets> {
     return { sheet: sheet(images[kind], spec.w, spec.h), anims: spec.anims };
   };
   return {
-    tiles: [images.tiles0, images.tiles1],
-    water: [images.water0, images.water1],
+    tiles: [images.tiles0, images.tiles1, images.tiles2],
+    water: [images.water0, images.water1, images.water2],
     heroes: {
       warrior: hero(images.warrior),
       mage: hero(images.mage),
