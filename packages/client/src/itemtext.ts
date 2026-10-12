@@ -36,27 +36,19 @@ export function itemName(world: World, item: Item): string {
   return name;
 }
 
-export function itemInfo(world: World, hero: Hero, item: Item): string[] {
-  return [...describe(world, hero, item), ...wearInfo(world, item)];
-}
-
-/** How worn an upgraded item is, once its level is known (WndBag's durability bars, in words). */
-function wearInfo(world: World, item: Item): string[] {
-  if (item.level <= 0 || !isKnown(world, item)) return [];
-  const max = maxDurability(item);
-  if (!Number.isFinite(max)) return [];
-  if (isBroken(item)) return [t.brokenInfo];
-  return [t.durability(Math.ceil(durabilityOf(item)), max)];
-}
-
-/** Share of an upgraded item's uses left, 0 to 1, or null for items that do not wear. */
-export function wearShare(world: World, item: Item): number | null {
+/** How worn an upgraded item is, once its level is known (WndBag's durability bars); null for items that do not wear. */
+export function wearOf(world: World, item: Item): { left: number; max: number } | null {
   if (item.level <= 0 || !isKnown(world, item)) return null;
   const max = maxDurability(item);
-  return Number.isFinite(max) ? Math.max(0, durabilityOf(item) / max) : null;
+  return Number.isFinite(max) ? { left: Math.max(0, Math.ceil(durabilityOf(item))), max } : null;
 }
 
-function describe(world: World, hero: Hero, item: Item): string[] {
+/** The name without its «broken» and its level, for a window's title that shows the level struck through. */
+export function plainName(world: World, item: Item): string {
+  return itemName(world, { ...item, level: 0, durability: undefined });
+}
+
+export function itemInfo(world: World, hero: Hero, item: Item): string[] {
   const category = itemDef(item.kind).category;
   if (category === 'weapon') {
     const stats = weaponStats(item);

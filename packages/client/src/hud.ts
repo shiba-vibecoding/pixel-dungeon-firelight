@@ -1,7 +1,7 @@
 import { FURY_LEVEL, type Hero, isAlive, isHungry, isStarving, maxExp, STARVING } from '@pd/core';
 import { audio } from './audio';
 import { t } from './i18n';
-import { AVATAR, sprites } from './screens';
+import { AVATAR, durabilityBar, markWear, sprites } from './screens';
 import type { LogLine } from './view';
 
 /*
@@ -89,7 +89,7 @@ export interface HudState {
   log: readonly LogLine[];
   buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
   /** The quickslot: a thrown weapon or a wand, ready to use. */
-  quick: { sprite: number; label: string; aiming: boolean } | null;
+  quick: { sprite: number; label: string; aiming: boolean; wear?: { left: number; max: number } | null } | null;
   /** Iron keys for the current depth. */
   keys: number;
   examining: boolean;
@@ -391,7 +391,7 @@ export class Hud {
     this.updateLog(state.log);
 
     const quick = state.quick;
-    if (this.changed('quick', quick ? `${quick.sprite}:${quick.label}:${quick.aiming}` : '')) {
+    if (this.changed('quick', quick ? `${quick.sprite}:${quick.label}:${quick.aiming}:${quick.wear?.left ?? ''}` : '')) {
       const button = this.tools.quick;
       button.classList.toggle('empty', !quick);
       button.classList.toggle('targeting', Boolean(quick?.aiming));
@@ -400,6 +400,12 @@ export class Hud {
         item.dataset.i = String(quick.sprite);
         button.replaceChildren(item);
         if (quick.label) button.append(el('span', 'pd-qty', quick.label));
+        if (quick.wear) {
+          button.append(durabilityBar(quick.wear.left, quick.wear.max));
+          markWear(button);
+        } else {
+          button.classList.remove('has-dur', 'broken');
+        }
         sprites(button);
       } else {
         button.replaceChildren();

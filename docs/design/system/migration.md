@@ -366,6 +366,35 @@
 | `.pd-choices`, `.pd-choice`, `.pd-choice-name`, `.pd-choice-desc`, `.chosen` | выбор пути |
 | `.pd-loading`, `.pd-runner`, `.pd-progress`, `.pd-loading-text`, `.pd-loading-tip`, `.pd-error-icon` | загрузка и ошибка |
 
+### Прочность
+
+```html
+<!-- ячейка: полоска последним ребёнком; у сломанной — .broken -->
+<button class="pd-slot broken">
+  <i class="pd-item" data-i="50"></i><span class="pd-lvl up">+1</span><span class="pd-qty">2/5</span>
+  <i class="pd-dur broken" style="--v:0"></i>
+</button>
+
+<!-- окно предмета: под строкой характеристик -->
+<header class="pd-window-head">… <h2 class="pd-heading">Пылающий меч <span class="pd-lvl-broken">+2</span></h2> …</header>
+<p class="pd-info">Урон 6-15. Нужна сила 12.</p>
+<div class="pd-durability">                    <!-- .low при ≤ 25% -->
+  <p class="pd-info">Прочность: 0 из 84</p>
+  <i class="pd-dur big broken" style="--v:0"></i>
+</div>
+<p class="pd-callout broken">Сломано: работает, как будто его не улучшали…</p>
+```
+
+`PD.durability(el, cur, max)` ставит `--v` и классы сам. Временную полоску у нижнего края и оранжевый «+2» замените этим: полоска та же по месту, но цифры поднимаются над ней, а уровень сломанной вещи гаснет и перечёркивается.
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-dur`, `.low`, `.broken`, `.big` | полоска прочности на ячейке и в окне |
+| `.pd-slot.broken`, `.pd-tool.broken`, `.has-dur` | сломанная вещь; запасной класс вместо `:has()` |
+| `.pd-lvl-broken` | перечёркнутый уровень в заголовке |
+| `.pd-durability`, `.low` | строка «Прочность: …» с полоской в окне предмета |
+| `.pd-callout.broken` | плашка «Сломано: …» |
+
 ## Игровой экран
 
 ### HUD

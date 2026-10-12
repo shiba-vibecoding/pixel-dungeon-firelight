@@ -1,6 +1,6 @@
 /* @ds-bundle: {"format":4,"namespace":"PD","components":[]} */
 /* Pixel Dungeon UI — маленькие помощники без зависимостей.
-   PD.sprite, PD.log, PD.toast, PD.holdToRest, PD.fx, PD.share — можно брать в игру как есть.
+   PD.sprite, PD.log, PD.toast, PD.holdToRest, PD.durability, PD.fx, PD.share — можно брать в игру как есть.
    PD.demo — только для макетов этой дизайн-системы (рисует кусок канализации на canvas). */
 (function () {
   var PD = {};
@@ -16,6 +16,20 @@
       var b = +el.getAttribute('data-b');
       el.style.setProperty("--bx", b % 18); el.style.setProperty("--by", Math.floor(b / 18));
     });
+  };
+
+  /* Прочность: el — .pd-dur; cur/max — остаток и максимум. Ставит --v ступенями по 2px (21 ступень на ячейку 52px),
+     .low при ≤ 25% и .broken при 0. Если у ячейки нет поддержки :has(), добавьте ей .has-dur сами. */
+  PD.durability = function (el, cur, max, steps) {
+    steps = steps || (el.classList.contains('big') ? 40 : 21);
+    var r = max > 0 ? Math.max(0, Math.min(1, cur / max)) : 0;
+    var v = cur <= 0 ? 0 : Math.max(1 / steps, Math.round(r * steps) / steps);
+    el.style.setProperty('--v', v);
+    el.classList.toggle('low', cur > 0 && r <= 0.25);
+    el.classList.toggle('broken', cur <= 0);
+    var slot = el.parentElement; if (slot && /\bpd-(slot|tool)\b/.test(slot.className)) { slot.classList.add('has-dur'); slot.classList.toggle('broken', cur <= 0); }
+    else if (slot && slot.classList.contains('pd-durability')) slot.classList.toggle('low', cur > 0 && r <= 0.25);
+    return v;
   };
 
   /* Лог: держит последние max строк, старшие тускнеют (data-age 0..3), через ttl мс строка гаснет.

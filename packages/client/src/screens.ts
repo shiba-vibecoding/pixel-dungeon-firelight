@@ -7,7 +7,7 @@ import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
-import { isKnown, itemInfo, itemName, wearShare } from './itemtext';
+import { isKnown, itemInfo, itemName, plainName, wearOf } from './itemtext';
 import type { DailyBoard } from './leaderboard';
 import { quality } from './quality';
 import type { RunRecord } from './rankings';
@@ -263,16 +263,13 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
     node.append(el('span', { className: 'pd-qty', textContent: String(item.qty) }));
   }
   if (item.level !== 0 && known) {
-    // ItemSlot: a broken item's level shows in the warning colour (it works as +0).
-    const tone = item.level < 0 ? 'down' : isBroken(item) ? 'broken' : 'up';
-    node.append(el('span', { className: `pd-lvl ${tone}`, textContent: `${item.level > 0 ? '+' : '−'}${Math.abs(item.level)}` }));
+    node.append(el('span', { className: `pd-lvl ${item.level > 0 ? 'up' : 'down'}`, textContent: `${item.level > 0 ? '+' : '−'}${Math.abs(item.level)}` }));
   }
-  // WndBag's durability bars: how worn an upgraded item is.
-  const worn = wearShare(world, item);
-  if (worn !== null && worn < 1) {
-    const bar = el('span', { className: `pd-wear${worn <= 0 ? ' broken' : worn < 1 / 6 ? ' low' : ''}` });
-    bar.style.setProperty('--v', String(worn));
-    node.append(bar);
+  // WndBag's durability bars: how worn an upgraded item is; a broken one's level is struck through (it works as +0).
+  const wear = wearOf(world, item);
+  if (wear) {
+    node.append(durabilityBar(wear.left, wear.max));
+    markWear(node);
   }
   // ItemSlot's top right: the strength it wants, with a «?» while its level is unknown.
   const category = itemDef(item.kind).category;
@@ -291,6 +288,48 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
 
 /** The row of a hero's sprite sheet: the tier of the armour worn. */
 export const armorTier = (hero: Hero): number => itemDef(hero.armor.kind).tier ?? 0;
+
+/**
+ * The design system's durability bar (PD.durability): filled in 2px steps, «low» at a quarter or less,
+ * «broken» when worn out; its slot is marked so the corner digits rise above it.
+ */
+export function durabilityBar(left: number, max: number, big = false): HTMLElement {
+  const bar = el('i', { className: `pd-dur${big ? ' big' : ''}` });
+  const steps = big ? 40 : 21;
+  const share = max > 0 ? Math.max(0, Math.min(1, left / max)) : 0;
+  bar.style.setProperty('--v', String(left <= 0 ? 0 : Math.max(1 / steps, Math.round(share * steps) / steps)));
+  bar.classList.toggle('low', left > 0 && share <= 0.25);
+  bar.classList.toggle('broken', left <= 0);
+  return bar;
+}
+
+/** A slot holding a durability bar lifts its corner digits; a broken one dims and strikes its level. */
+export function markWear(node: HTMLElement): void {
+  const bar = node.querySelector(':scope > .pd-dur');
+  if (!bar) return;
+  node.classList.add('has-dur');
+  node.classList.toggle('broken', bar.classList.contains('broken'));
+}
+
+/** An item's description, its curse and weight set apart as warnings, and how worn it is under its numbers. */
+function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
+  const nodes = described(itemInfo(world, hero, item));
+  const wear = wearOf(world, item);
+  if (!wear) return nodes;
+  const line = el('div', { className: `pd-durability${wear.left > 0 && wear.left / wear.max <= 0.25 ? ' low' : ''}` },
+    info(t.durability(wear.left, wear.max)), durabilityBar(wear.left, wear.max, true));
+  const after = [line, ...(wear.left <= 0 ? [el('p', { className: 'pd-callout broken', textContent: t.brokenInfo })] : [])];
+  return [nodes[0]!, ...after, ...nodes.slice(1)].filter(Boolean);
+}
+
+/** A window title for an item: a broken item's level struck through rather than its name saying «broken». */
+function titleFor(world: World, item: Item, box: HTMLElement): void {
+  if (!isBroken(item) || item.level <= 0 || !isKnown(world, item)) return;
+  const heading = box.querySelector('.pd-heading');
+  if (!heading) return;
+  heading.textContent = `${capitalize(plainName(world, item))} `;
+  heading.append(el('span', { className: 'pd-lvl-broken', textContent: `+${item.level}` }));
+}
 
 /** The item is the one the quickslot shows. */
 const inQuickslot = (hero: Hero, item: Item): boolean => hero.items[quickIndex(hero)] === item;
@@ -596,10 +635,11 @@ export function showTrade(options: TradeOptions): void {
   buy.disabled = short;
   const head = windowOf(
     { title: capitalize(itemName(world, item)), icon: slot(world, item, { hero }), onClose: options.onClose },
-    ...described(itemInfo(world, hero, item)),
+    ...describedItem(world, hero, item),
     actions([buy], []),
     info(t.yourGold(hero.gold), 'pd-note center'),
   );
+  titleFor(world, item, head);
   head.querySelector('.pd-titles')!.append(el('span', { className: `pd-price${short ? ' short' : ''}`, textContent: String(price) }));
   show(head, options.onClose);
 }
@@ -1144,14 +1184,13 @@ function showItem(options: ItemOptions): void {
     const aimed = hero.heroClass === 'warrior' || hero.heroClass === 'rogue';
     use(t.specials[hero.heroClass], () => (aimed ? aimWith('special', -1) : act({ type: 'special' })));
   }
-  show(
-    windowOf(
-      { title: capitalize(itemName(world, item)), icon: slot(world, item, { hero, equipped: index === null }), onClose: back },
-      ...described(itemInfo(world, hero, item)),
-      (main.length > 0 || more.length > 0 || danger.length > 0) && actions(main, more, danger),
-    ),
-    back,
+  const box = windowOf(
+    { title: capitalize(itemName(world, item)), icon: slot(world, item, { hero, equipped: index === null }), onClose: back },
+    ...describedItem(world, hero, item),
+    (main.length > 0 || more.length > 0 || danger.length > 0) && actions(main, more, danger),
   );
+  titleFor(world, item, box);
+  show(box, back);
 }
 
 /** TomeOfMastery: the two ways of the hero's class, as equal cards; the choice can wait. */

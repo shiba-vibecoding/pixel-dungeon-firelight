@@ -22,7 +22,7 @@ import { BADGES, type BadgeId, badgeText, checkBadges, countGame } from './badge
 import { audio } from './audio';
 import { heroBuffs, Hud, type HudStatus } from './hud';
 import { capitalize, t } from './i18n';
-import { itemInfo, itemName } from './itemtext';
+import { itemInfo, itemName, wearOf } from './itemtext';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
@@ -1173,6 +1173,7 @@ function tick(now: number): void {
                 ? `${quickItem.charges}/${wandMaxCharges(quickItem)}`
                 : quickItem.qty > 1 ? String(quickItem.qty) : '',
             aiming: aim !== null,
+            wear: wearOf(world, quickItem),
           }
         : null,
     },
