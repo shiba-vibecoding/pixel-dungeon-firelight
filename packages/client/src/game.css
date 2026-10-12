@@ -48,7 +48,7 @@ canvas#game {
   pointer-events: none;
 }
 #ui[hidden], #toast[hidden], .pd-log[hidden], .pd-mates[hidden] { display: none; }
-#ui .pd-toolbar { pointer-events: auto; }
+#ui .pd-toolbar, #ui .pd-mapctl .pd-mapbtn { pointer-events: auto; }
 /* The arena's «To battle!» takes taps; its note lets them through. The board on a monitor is only words. */
 #ui .pd-fight .pd-button { pointer-events: auto; }
 #ui .pd-fight[hidden], #ui .pd-waveboard[hidden] { display: none; }
