@@ -1,0 +1,52 @@
+<!-- @dsCard group="Живой мир" height=844 width=820 page subtitle="Кнопки карты «+», «−», «вся карта», «к герою» справа над логом и тосты находок «иконка + название» стопкой под HUD. Центр экрана свободен" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Кнопки карты и находки</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .pair { display: flex; gap: 40px; width: 820px; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; --safe-t: 0px; --safe-b: 34px; }
+  .side { width: 390px; box-sizing: border-box; padding: 16px 0; display: flex; flex-direction: column; gap: 14px; color: var(--ink); }
+  .side h2 { margin: 0; font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
+  .side p { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+  .side p b { color: var(--ink); font-weight: 400; }
+  .row { display: flex; gap: 10px; align-items: flex-start; }
+  .st { display: flex; flex-direction: column; align-items: center; gap: 4px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+  .demo-finds { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 10px; background: var(--stone-900); clip-path: var(--notch); }
+  .demo-finds .pd-find { animation: none; }
+</style></head>
+<body>
+<div class="pd-root pair">
+  <div class="phone" id="p"></div>
+  <div class="side">
+    <h2>Кнопки карты</h2>
+    <div class="row">
+      <div class="st"><button class="pd-mapbtn in" aria-label="Приблизить"></button>обычная</div>
+      <div class="st"><button class="pd-mapbtn in pressed" aria-label="Приблизить"></button>нажата</div>
+      <div class="st"><button class="pd-mapbtn out" aria-label="Отдалить" disabled></button>предел</div>
+      <div class="st"><button class="pd-mapbtn all" aria-label="Вся карта"></button>вся карта</div>
+      <div class="st"><button class="pd-mapbtn hero" aria-label="К герою"></button>к герою</div>
+    </div>
+    <p>Значок 12×12 ×2 в кнопке 44×44 (<b>.pd-mapbtn</b>). Нажатие — значок на 1 px ниже и темнее, тень сверху. «−» и «+» гаснут на пределе масштаба. <b>«К герою»</b> появляется с золотой рамкой, только когда карту сдвинули пальцем, и исчезает после возврата.</p>
+    <h2>Находки</h2>
+    <div class="demo-finds">
+      <div class="pd-find" data-age="0"><i class="pd-item" data-i="14"></i><span>Золото</span><b> ×3</b></div>
+      <div class="pd-find" data-age="1"><i class="pd-item" data-i="57"></i><span>Зелье исцеления</span></div>
+      <div class="pd-find good" data-age="2"><i class="pd-item" data-i="72"></i><span>Кольцо ясности</span></div>
+    </div>
+    <p>Справа под HUD, не дольше 2.4 с. Новая сверху, старше трёх уходят, старшие тусклее. Та же вещь подряд не дублируется, а копит <b>«×N»</b>. Длинное название обрезается многоточием, полное — в логе.</p>
+  </div>
+</div>
+<script>
+  var p = document.getElementById('p');
+  PD.demo.game(p, { log: [['Вы нашли 12 золотых монет.', 'good'], ['Вы подобрали зелье исцеления.', ''], ['<span class="pd-ally">Лиса</span> открывает дверь.', '']] });
+  p.insertAdjacentHTML('beforeend', '<div class="pd-mapctl"><button class="pd-mapbtn hero" aria-label="К герою"></button><button class="pd-mapbtn in" aria-label="Приблизить"></button><button class="pd-mapbtn out" aria-label="Отдалить"></button><button class="pd-mapbtn all" aria-label="Вся карта"></button></div><div class="pd-finds"></div>');
+  var box = p.querySelector('.pd-finds'), o = { ttl: 600000 };
+  PD.find(box, 'ring', '<i class="pd-item" data-i="72"></i><span>Кольцо ясности</span>', Object.assign({ type: 'good' }, o));
+  PD.find(box, 'potion', '<i class="pd-item" data-i="57"></i><span>Зелье исцеления</span>', o);
+  PD.find(box, 'gold', '<i class="pd-item" data-i="14"></i><span>Золото</span>', o);
+  PD.find(box, 'gold', '', o); PD.find(box, 'gold', '', o);
+  PD.sprite(document.querySelector('.side'));
+</script>
+</body>
+</html>

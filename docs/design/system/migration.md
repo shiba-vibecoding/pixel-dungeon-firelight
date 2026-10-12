@@ -557,3 +557,40 @@
 ### Toast
 
 `<div id="toast" class="good"><i class="pd-item" data-i="61"></i>Зелье добавлено в быстрый слот</div>` или `PD.toast(el, html, type)`. Для нового значка — `class="badge"` с `<i class="pd-badge" data-i="…">` и `<b>` с названием.
+
+### Кнопки карты
+
+```html
+<div class="pd-mapctl">
+  <button class="pd-mapbtn hero" aria-label="К герою"></button>   <!-- только когда карту сдвинули -->
+  <button class="pd-mapbtn in" aria-label="Приблизить"></button>
+  <button class="pd-mapbtn out" aria-label="Отдалить" disabled></button> <!-- на пределе масштаба -->
+  <button class="pd-mapbtn all" aria-label="Вся карта"></button>
+</div>
+```
+
+Блок кладётся внутрь игрового экрана рядом с `.pd-log`. Отступ снизу считается от `--tool-h` и `--log-h`. Если лог в вашей вёрстке выше 120px, задайте `--log-h`. Значки берутся из `--spr-map-in/out/all/hero` в `bundle.css` (это `ui-map.png`, строка `map-buttons`). `.pressed` — то же, что `:active`, для нажатия с клавиатуры.
+
+### Тосты находок
+
+```html
+<div class="pd-finds"></div>
+```
+
+```js
+PD.find(box, 'gold', '<i class="pd-item" data-i="14"></i><span>Золото</span>');
+PD.find(box, 'potion-heal', '<i class="pd-item" data-i="57"></i><span>Зелье исцеления</span>');
+PD.find(box, 'ring-' + id, '<i class="pd-item" data-i="72"></i><span>Кольцо ясности</span>', { type: 'good' });
+```
+
+Ключ склеивает повторы: если та же вещь пришла снова, пока тост виден, он показывает «×N» и не уходит. Параметры: `ttl` (2400 мс), `max` (3), `type: 'good'` — для опознанной или редкой вещи. Полное название и количество по-прежнему пишутся в лог.
+
+### Новые классы — живой мир
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-mapctl` | столбик кнопок карты справа над логом |
+| `.pd-mapbtn.in` / `.out` / `.all` / `.hero` | кнопка 44×44 со значком 12×12 ×2; `.pressed`, `:disabled` |
+| `.pd-finds` | стопка тостов находок справа под HUD |
+| `.pd-find`, `.pd-find.good`, `[data-age]`, `.gone` | тост «+ иконка + название», `<b>` — счётчик «×N» |
+

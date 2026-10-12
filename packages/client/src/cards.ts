@@ -46,6 +46,18 @@ export const TIMELINES = {
     hold: 2, dur: 2200,
     frames: [[0, { a: 1, flash: 1, rule: 0 }], [66, { a: 1, flash: 0, rule: 0.5 }], [133, { a: 1, flash: 0, rule: 1 }], [2000, { a: 0.66, flash: 0, rule: 0.66 }], [2066, { a: 0.33, flash: 0, rule: 0.33 }], [2133, { a: 0, flash: 0, rule: 0 }]],
   } as Timeline<{ a: number; flash: number; rule: number }>,
+  depth: {
+    hold: 7, dur: 2400,
+    frames: [
+      [0, { band: 0.33, rule: 0, emb: 0, dy: 0, title: 0, sub: 0 }], [66, { band: 0.66, rule: 0.25, emb: 0, dy: 0, title: 0, sub: 0 }],
+      [133, { band: 1, rule: 0.5, emb: 0, dy: 0, title: 0, sub: 0 }], [200, { band: 1, rule: 1, emb: 0.5, dy: 2, title: 0, sub: 0 }],
+      [266, { band: 1, rule: 1, emb: 1, dy: -1, title: 0.5, sub: 0 }], [333, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 0 }],
+      [400, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 0.5 }], [466, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1 }],
+      [2200, { band: 0.66, rule: 0.66, emb: 0.66, dy: 0, title: 0.66, sub: 0.66 }],
+      [2266, { band: 0.33, rule: 0.33, emb: 0.33, dy: 0, title: 0.33, sub: 0.33 }],
+      [2333, { band: 0, rule: 0, emb: 0, dy: 0, title: 0, sub: 0 }],
+    ],
+  } as Timeline<{ band: number; rule: number; emb: number; dy: number; title: number; sub: number }>,
   number: {
     hold: 0, dur: 700,
     frames: [[0, { a: 1, dy: 0 }], [100, { a: 1, dy: -2 }], [200, { a: 1, dy: -4 }], [300, { a: 1, dy: -6 }], [400, { a: 0.66, dy: -8 }], [500, { a: 0.33, dy: -8 }], [600, { a: 0, dy: -8 }]],
@@ -154,6 +166,54 @@ export function bossCard(ctx: CanvasRenderingContext2D, name: string, sub: strin
   }
   if (k.sub > 0) fxText(ctx, sub, width / 2, cy + 36 * px, px, { scale: 1.5, color: FX_COLORS.ink, alpha: k.sub, shadow: 0 });
   return t < TIMELINES.boss.dur;
+}
+
+/**
+ * Going down to a new region: «Depth 6» and the region's name beside its
+ * emblem, on the same band as a boss's name. `emblems` is
+ * assets/world/ui-map.png; region 0..4 picks the 32×32 emblem in its
+ * `emblems` row (atlas ui-map.json), drawn ×2.
+ */
+export function depthCard(
+  ctx: CanvasRenderingContext2D, title: string, region: string, emblems: CanvasImageSource, regionIndex: number,
+  cy: number, width: number, t: number, px: number, emblemRow = { x: 0, y: 24 },
+): boolean {
+  const k = step(TIMELINES.depth, t);
+  const h = 96 * px;
+  if (k.band > 0) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = k.band;
+    ctx.fillStyle = FX_COLORS.band;
+    ctx.fillRect(0, snap(cy - h / 2, 2 * px), width, h);
+    ctx.restore();
+  }
+  const half = Math.round(width * 0.4 * k.rule);
+  if (half > 0) {
+    rule(ctx, width / 2 - half, cy - h / 2 + 6 * px, half * 2, 2 * px, FX_COLORS.line, k.band);
+    rule(ctx, width / 2 - half, cy + h / 2 - 8 * px, half * 2, 2 * px, FX_COLORS.line, k.band);
+  }
+  // The emblem, a gap and the wider of the two lines are centred together; a long title steps down a size.
+  const e = 64 * px, gap = 16 * px;
+  const scale = fits(ctx, title, width * 0.92 - e - gap, px, [3, 2]);
+  ctx.save();
+  ctx.font = `${Math.round(FONTS.ui.em * scale * px)}px "${FONTS.ui.family}"`;
+  let tw = ctx.measureText(title).width;
+  ctx.font = `${Math.round(FONTS.ui.em * 1.5 * px)}px "${FONTS.ui.family}"`;
+  tw = Math.max(tw, ctx.measureText(region).width);
+  ctx.restore();
+  const gx = snap(width / 2 - (e + gap + tw) / 2, 2 * px), tx = gx + e + gap;
+  if (k.emb > 0) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = k.emb;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(emblems, emblemRow.x + regionIndex * 32, emblemRow.y, 32, 32, gx, snap(cy - 32 * px + k.dy * 2 * px, 2 * px), e, e);
+    ctx.restore();
+  }
+  if (k.title > 0) fxText(ctx, title, tx, cy + 2 * px, px, { scale, color: FX_COLORS.gold, alpha: k.title, align: 'left' });
+  if (k.sub > 0) fxText(ctx, region, tx, cy + 28 * px, px, { scale: 1.5, color: FX_COLORS.ink, alpha: k.sub, shadow: 0, align: 'left' });
+  return t < TIMELINES.depth.dur;
 }
 
 /** The largest of `scales` at which `text` fits in `width`. */

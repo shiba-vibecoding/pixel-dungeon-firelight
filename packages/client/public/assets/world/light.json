@@ -1,0 +1,18 @@
+{
+ "image": "light.png",
+ "animations": {
+  "light": {
+   "label": "light 64×64: круг от центра, 4 ступени альфы, Байер",
+   "frames": [
+    {
+     "x": 0,
+     "y": 0,
+     "w": 64,
+     "h": 64,
+     "ms": 0
+    }
+   ],
+   "note": "масштаб — радиус света; destination-out по тьме или additive по цвету огня"
+  }
+ }
+}

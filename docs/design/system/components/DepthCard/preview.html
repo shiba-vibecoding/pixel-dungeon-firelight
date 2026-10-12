@@ -1,0 +1,53 @@
+<!-- @dsCard group="Карточки на canvas" height=900 width=820 page subtitle="Карточка спуска «Глубина 6 · Тюрьма» с эмблемой региона 32×32 ×2 — полоса как у bossCard, 2.4 с. Справа: пять эмблем и ключевые кадры" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Карточка спуска</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .pair { display: flex; gap: 40px; width: 820px; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; --safe-t: 0px; --safe-b: 34px; }
+  .fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+  .side { width: 390px; padding: 16px 0; display: flex; flex-direction: column; gap: 10px; color: var(--ink); }
+  .side h2 { margin: 0; font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
+  .side p { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+  .embs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+  .emb { display: flex; flex-direction: column; align-items: center; gap: 2px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); text-align: center; }
+  .emb canvas { image-rendering: pixelated; }
+  .kf { display: flex; flex-direction: column; gap: 2px; }
+  .kf canvas { display: block; background: var(--stone-800); }
+  .kf span { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--gold-deep); }
+</style></head>
+<body>
+<div class="pd-root pair">
+  <div class="phone" id="p"></div>
+  <div class="side">
+    <h2>Эмблемы регионов</h2>
+    <div class="embs" id="embs"></div>
+    <p>Канализация · Тюрьма · Пещеры · Город гномов · Демонические залы. Щит цвета региона, на нём его босс: Жижа, Тэнгу, DM-300, Король гномов, Йог-Дзот.</p>
+    <h2>Кадры</h2>
+    <div id="kf"></div>
+    <p>Полоса 96 px и черты — как у имени босса. Эмблема влетает на 2 px и садится, затем «Глубина N» Galmuri11 ×3 gold, ниже регион ×1.5 ink. Держится до 2.2 с и гаснет за три шага. При reduced motion — сразу кадр 7, 1.5 с.</p>
+  </div>
+</div>
+<script>
+  var REG = ['Канализация', 'Тюрьма', 'Пещеры', 'Город гномов', 'Демонические залы'];
+  function layer(c, w, h) { var d = window.devicePixelRatio || 1; c.width = w * d; c.height = h * d; c.style.width = w + 'px'; c.style.height = h + 'px'; var g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.imageSmoothingEnabled = false; return g; }
+  document.fonts.load('36px Galmuri11').then(function () { return document.fonts.load('20px Galmuri9'); }).then(function () {
+    PD.demo.images(['emblems'], function (im) {
+      var emb = im.emblems, p = document.getElementById('p');
+      REG.forEach(function (n, i) { var d = document.createElement('div'); d.className = 'emb'; var c = document.createElement('canvas'); var g = layer(c, 64, 64); g.drawImage(emb, i * 32, 0, 32, 32, 0, 0, 64, 64); d.appendChild(c); d.insertAdjacentHTML('beforeend', '<span>' + (i * 5 + 1) + '–' + (i * 5 + 5) + '</span>'); document.getElementById('embs').appendChild(d); });
+      [[133, 'кадр 2 · 133 мс — полоса, черты'], [266, 'кадр 4 · 266 мс — эмблема садится'], [466, 'кадр 7 · 466 мс — держится'], [2266, 'кадр 9 · 2266 мс — гаснет']].forEach(function (k) {
+        var d = document.createElement('div'); d.className = 'kf'; var c = document.createElement('canvas'); d.appendChild(c); d.insertAdjacentHTML('beforeend', '<span>' + k[1] + '</span>'); document.getElementById('kf').appendChild(d);
+        PD.fx.depth(layer(c, 390, 104), 'Глубина 6', 'Тюрьма', emb, 1, 52, 390, k[0]);
+      });
+      PD.demo.game(p, { depth: 6, mates: false, log: [['Вы спускаетесь на глубину 6.', ''], ['Здесь пахнет сыростью и железом.', '']], after: function () {
+        var c = document.createElement('canvas'); c.className = 'fx'; p.appendChild(c); var g = layer(c, 390, 844);
+        var top = p.querySelector('.pd-hud').getBoundingClientRect().bottom - p.getBoundingClientRect().top;
+        var low = p.querySelector('.pd-log').getBoundingClientRect().top - p.getBoundingClientRect().top;
+        PD.fx.depth(g, 'Глубина 6', 'Тюрьма', emb, 1, Math.round((top + low) / 2) - 90, 390, 900);
+      } });
+    });
+  });
+</script>
+</body>
+</html>
