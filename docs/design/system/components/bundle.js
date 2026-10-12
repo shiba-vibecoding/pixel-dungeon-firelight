@@ -32,6 +32,23 @@
     return v;
   };
 
+  /* Громкость шагами: row — .pd-set-row со .pd-steps (5 × .pd-step) и .pd-set-value. get() → 0..1, set(v). Тап по единственной горящей первой — тишина. */
+  PD.steps = function (row, get, set, labels) {
+    labels = labels || { off: 'Выкл' };
+    var box = row.querySelector('.pd-steps'), val = row.querySelector('.pd-set-value'), steps = [].slice.call(box.querySelectorAll('.pd-step'));
+    function paint() { var lit = Math.round(get() * 5); steps.forEach(function (b, i) { b.classList.toggle('on', i < lit); b.setAttribute('aria-pressed', String(i < lit)); }); box.classList.toggle('off', lit === 0); box.setAttribute('aria-valuenow', lit * 20); if (val) val.textContent = lit ? lit * 20 + '%' : labels.off; }
+    steps.forEach(function (b, i) { b.onclick = function () { var lit = Math.round(get() * 5); set(lit === 1 && i === 0 ? 0 : (i + 1) / 5); paint(); }; });
+    paint(); return paint;
+  };
+  /* Переключатель вариантов .pd-seg: role=radiogroup, варианты — .pd-seg-opt с data-v. onChange(v). */
+  PD.seg = function (seg, value, onChange) {
+    var opts = [].slice.call(seg.querySelectorAll('.pd-seg-opt'));
+    function pick(v) { opts.forEach(function (o) { o.setAttribute('aria-checked', String(o.dataset.v === v)); o.tabIndex = o.dataset.v === v ? 0 : -1; }); }
+    opts.forEach(function (o, i) { o.setAttribute('role', 'radio'); o.onclick = function () { pick(o.dataset.v); onChange && onChange(o.dataset.v); };
+      o.onkeydown = function (e) { var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (!d) return; var n = opts[(i + d + opts.length) % opts.length]; n.focus(); n.click(); e.preventDefault(); }; });
+    seg.setAttribute('role', 'radiogroup'); pick(value);
+  };
+
   /* Тосты находок: box — .pd-finds. Та же вещь подряд не дублируется, а копит «×N»; держится 3 штуки, каждая гаснет через ttl. */
   PD.find = function (box, key, html, opts) {
     opts = opts || {}; var ttl = opts.ttl || 2400, max = opts.max || 3;
@@ -142,6 +159,8 @@
       level: { hold: 3, dur: 1600, frames: [[0, { a: 0, dy: 4 }], [66, { a: .5, dy: 2 }], [133, { a: 1, dy: -1 }], [200, { a: 1, dy: 0 }], [1400, { a: .66, dy: -1 }], [1466, { a: .33, dy: -2 }], [1533, { a: 0, dy: -3 }]] },
       boss: { hold: 6, dur: 3000, frames: [[0, { band: .33, rule: 0, name: 0, sub: 0 }], [66, { band: .66, rule: .25, name: 0, sub: 0 }], [133, { band: 1, rule: .5, name: 0, sub: 0 }], [200, { band: 1, rule: 1, name: .5, sub: 0 }], [266, { band: 1, rule: 1, name: 1, sub: 0 }], [466, { band: 1, rule: 1, name: 1, sub: .5 }], [533, { band: 1, rule: 1, name: 1, sub: 1 }], [2733, { band: .66, rule: .66, name: .66, sub: .66 }], [2800, { band: .33, rule: .33, name: .33, sub: .33 }], [2866, { band: 0, rule: 0, name: 0, sub: 0 }]] },
       slain: { hold: 2, dur: 2200, frames: [[0, { a: 1, flash: 1, rule: 0 }], [66, { a: 1, flash: 0, rule: .5 }], [133, { a: 1, flash: 0, rule: 1 }], [2000, { a: .66, flash: 0, rule: .66 }], [2066, { a: .33, flash: 0, rule: .33 }], [2133, { a: 0, flash: 0, rule: 0 }]] },
+      /* вступление к региону: шапка как у depth, затем строки текста по одной (кадр на половину яркости, кадр на полную); держится 5,6 с */
+      intro: { hold: 15, dur: 5800, frames: [[0, { band: .33, rule: 0, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }], [66, { band: .66, rule: .25, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }], [133, { band: 1, rule: .5, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }], [200, { band: 1, rule: 1, emb: .5, dy: 2, title: 0, sub: 0, lines: 0 }], [266, { band: 1, rule: 1, emb: 1, dy: -1, title: .5, sub: 0, lines: 0 }], [333, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 0, lines: 0 }], [400, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: .5, lines: 0 }], [466, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 0 }], [600, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: .5 }], [666, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 1 }], [800, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 1.5 }], [866, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 2 }], [1000, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 2.5 }], [1066, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 3 }], [1200, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 3.5 }], [1266, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 4 }], [5600, { band: .66, rule: .66, emb: .66, dy: 0, title: .66, sub: .66, lines: 2.64 }], [5666, { band: .33, rule: .33, emb: .33, dy: 0, title: .33, sub: .33, lines: 1.32 }], [5733, { band: 0, rule: 0, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }]] },
       depth: { hold: 7, dur: 2400, frames: [[0, { band: .33, rule: 0, emb: 0, dy: 0, title: 0, sub: 0 }], [66, { band: .66, rule: .25, emb: 0, dy: 0, title: 0, sub: 0 }], [133, { band: 1, rule: .5, emb: 0, dy: 0, title: 0, sub: 0 }], [200, { band: 1, rule: 1, emb: .5, dy: 2, title: 0, sub: 0 }], [266, { band: 1, rule: 1, emb: 1, dy: -1, title: .5, sub: 0 }], [333, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 0 }], [400, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: .5 }], [466, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1 }], [2200, { band: .66, rule: .66, emb: .66, dy: 0, title: .66, sub: .66 }], [2266, { band: .33, rule: .33, emb: .33, dy: 0, title: .33, sub: .33 }], [2333, { band: 0, rule: 0, emb: 0, dy: 0, title: 0, sub: 0 }]] },
       number: { hold: 0, dur: 700, frames: [[0, { a: 1, dy: 0 }], [100, { a: 1, dy: -2 }], [200, { a: 1, dy: -4 }], [300, { a: 1, dy: -6 }], [400, { a: .66, dy: -8 }], [500, { a: .33, dy: -8 }], [600, { a: 0, dy: -8 }]] }
     },
@@ -174,6 +193,29 @@
       if (k.title > 0) PD.fx.text(ctx, title, tx, cy + 2, { scale: ts, color: FX_COLORS.gold, alpha: k.title, align: 'left' });
       if (k.sub > 0) PD.fx.text(ctx, region, tx, cy + 28, { scale: 1.5, color: FX_COLORS.ink, alpha: k.sub, shadow: 0, align: 'left' });
       return t < PD.fx.timelines.depth.dur;
+    },
+    /* разбивка текста на строки по ширине w для шрифта font (по словам) */
+    wrap: function (ctx, text, font, w) {
+      ctx.save(); ctx.font = font; var out = [], line = '';
+      text.split(/\s+/).forEach(function (word) { var tryL = line ? line + ' ' + word : word; if (line && ctx.measureText(tryL).width > w) { out.push(line); line = word; } else line = tryL; });
+      if (line) out.push(line); ctx.restore(); return out;
+    },
+    /* вступление к региону при первом входе: шапка карточки спуска + 2–4 строки Galmuri9 ×1.5 ink под ней, на той же полосе.
+       cy — центр шапки (как у depth); полоса растёт вниз на высоту текста. Тап по экрану — пропустить (t = 5600). */
+    intro: function (ctx, title, region, text, emblem, ex, cy, width, t) {
+      var k = PD.fx.step(PD.fx.timelines.intro, t), tw = Math.min(width * .84, 344);
+      var lines = PD.fx.wrap(ctx, text, '15px "Galmuri9"', tw).slice(0, 4), lh = 21, top = snap(cy - 48, 2), h = 96 + lines.length * lh + 14;
+      if (k.band > 0) { ctx.save(); ctx.globalAlpha = k.band; ctx.fillStyle = FX_COLORS.band; ctx.fillRect(0, top, width, h); ctx.restore(); }
+      var rw = Math.round(width * .4 * k.rule);
+      if (rw > 0) { PD.fx.rule(ctx, width / 2 - rw, top + 6, rw * 2, 2, FX_COLORS.line, k.band); PD.fx.rule(ctx, width / 2 - rw, top + h - 8, rw * 2, 2, FX_COLORS.line, k.band); }
+      ctx.save(); ctx.font = '36px "Galmuri11"'; var ts = ctx.measureText(title).width > width * .92 - 80 ? 2 : 3; ctx.font = (12 * ts) + 'px "Galmuri11"'; var ww = ctx.measureText(title).width; ctx.font = '18px "Galmuri11"'; ww = Math.max(ww, ctx.measureText(region).width); ctx.restore();
+      var gx = snap(width / 2 - (80 + ww) / 2, 2), tx = gx + 80;
+      if (k.emb > 0 && emblem) { ctx.save(); ctx.globalAlpha = k.emb; ctx.imageSmoothingEnabled = false; ctx.drawImage(emblem, ex * 32, 0, 32, 32, gx, snap(cy - 32 + k.dy * 2, 2), 64, 64); ctx.restore(); }
+      if (k.title > 0) PD.fx.text(ctx, title, tx, cy + 2, { scale: ts, color: FX_COLORS.gold, alpha: k.title, align: 'left' });
+      if (k.sub > 0) PD.fx.text(ctx, region, tx, cy + 28, { scale: 1.5, color: FX_COLORS.ink, alpha: k.sub, shadow: 0, align: 'left' });
+      var fade = k.band < 1 ? k.band : 1;
+      lines.forEach(function (ln, i) { var a = Math.max(0, Math.min(1, k.lines - i)); if (k.band < 1) a = fade; if (a > 0) PD.fx.text(ctx, ln, width / 2, top + 96 + 12 + i * lh, { font: 'small', scale: 1.5, color: FX_COLORS.ink, alpha: a, shadow: 0 }); });
+      return t < PD.fx.timelines.intro.dur;
     },
     /* «Уровень 3!» — над героем, на 3 клетки выше; Galmuri11 ×3, gold, тень 1 */
     level: function (ctx, text, x, y, t) {
@@ -425,6 +467,108 @@
     PD.sprite(el);
     PD.demo.map(el.querySelector('canvas'), { fy: o.fy || 0.46, after: o.after, names: o.names });
   };
+
+  /* Титульный экран для макетов: фон-карта, логотип, окно с классами, шестерёнка настроек в углу. o: { en, challenges: n } */
+  PD.demo.title = function (el, o) {
+    o = o || {}; var en = !!o.en;
+    var L = en ? { k: 'Class', cls: ['Warrior', 'Mage', 'Rogue', 'Huntress'], name: 'Warrior', about: 'Tough and strong. Starts with a short sword; food heals him.', field: "Hero's name", cont: 'Continue', meta: 'Warrior, level 3 · depth 4', neu: 'New game', coop: 'Play with friends', daily: 'Daily dungeon', dnote: 'Today everyone gets the same dungeon', down: 'Descend', ranks: 'Daily rankings', sub: 'co-op edition', prefs: 'Settings', ch: 'Challenges' }
+      : { k: 'Класс', cls: ['Воин', 'Маг', 'Разбойник', 'Охотница'], name: 'Воин', about: 'Крепкий и сильный. Начинает с коротким мечом; еда его подлечивает.', field: 'Имя героя', cont: 'Продолжить', meta: 'Воин, уровень 3 · глубина 4', neu: 'Новая игра', coop: 'Играть с друзьями', daily: 'Подземелье дня', dnote: 'Сегодня у всех одно подземелье', down: 'Спуститься', ranks: 'Рекорды дня', sub: 'кооперативное издание', prefs: 'Настройки', ch: 'Испытания' };
+    var faces = L.cls.map(function (c, i) { return '<button class="pd-class' + (i ? '' : ' selected') + '" role="radio" aria-checked="' + !i + '" aria-label="' + c + '"><i class="pd-class-face" style="--av:' + i + '"></i></button>'; }).join('');
+    el.innerHTML = '<canvas class="bg" style="position:absolute;inset:0;width:100%;height:100%;opacity:.45"></canvas>' +
+      '<div class="pd-corner"><button class="pd-iconbtn prefs' + (o.pressed ? ' pressed' : '') + '" aria-label="' + L.prefs + '"></button></div>' +
+      '<main class="pd-title-screen" style="background:none"><div class="pd-logo"><span class="pd-logo-kicker">TELEGRAM</span><img alt="Pixel Dungeon" src="' + SRC.logo + '"><span class="pd-logo-sub">' + L.sub + '</span></div>' +
+      '<section class="pd-window"><div class="pd-classes" role="radiogroup" aria-label="' + L.k + '">' + faces + '</div>' +
+      '<div class="pd-class-info"><span class="pd-class-name">' + L.name + '</span><p class="pd-note">' + L.about + '</p></div>' +
+      '<div class="pd-field"><label>' + L.field + '</label><input class="pd-input" value="QA" maxlength="16"></div>' +
+      '<div class="pd-actions"><button class="pd-button primary big stacked">' + L.cont + '<span class="pd-btn-sub">' + L.meta + '</span></button>' +
+      '<div class="pd-row"><button class="pd-button">' + L.neu + '</button><button class="pd-button pd-ch-btn" aria-label="' + L.ch + '"><i class="pd-icon" style="width:24px;height:24px;background-image:var(--spr-challenge-' + (o.challenges ? 'on' : 'off') + ')"></i>' + L.ch + (o.challenges ? '<b class="pd-ch-n">' + o.challenges + '</b>' : '') + '</button></div>' +
+      '<button class="pd-button ally">' + L.coop + '</button></div>' +
+      '<div class="pd-daily"><div class="pd-daily-head"><i class="pd-icon" style="background-image:var(--spr-stairs)"></i><h3>' + L.daily + '</h3></div><p class="pd-note">' + L.dnote + '</p><div class="pd-row"><button class="pd-button">' + L.down + '</button><button class="pd-button">' + L.ranks + '</button></div></div>' +
+      '</section></main>';
+    PD.demo.map(el.querySelector('canvas'), { fy: 0.3, names: false });
+  };
+
+  /* Окна «Настройки», «Об игре», «Испытания», «Журнал» для макетов. Разметка — та же, что в migration.md. lang: 'ru' | 'en' */
+  var WT = {
+    ru: { settings: 'Настройки', sound: 'Звук', music: 'Музыка', sounds: 'Звуки', vibro: 'Вибрация', vibroNote: 'При ударах и находках', screen: 'Игра', fx: 'Эффекты', fxOpts: [['auto', 'Авто'], ['full', 'Полные'], ['light', 'Лёгкие']], fxNote: { auto: 'Полные, пока телефон успевает.', full: 'Частицы, свет, виньетка, тряска.', light: 'Меньше частиц, без света и виньетки.' }, full: 'Во весь экран', lang: 'Язык', langNote: 'Сначала — как в Telegram', more: 'Ещё', about: 'Об игре', privacy: 'Конфиденциальность', terms: 'Условия', reset: 'Сбросить данные', resetNote: 'Стирает героев, забеги, значки и настройки на этом устройстве.', off: 'Выкл',
+      aboutT: 'Об игре', sub: 'кооперативное издание', build: 'Сборка b3882db · 12.10.2026', based: 'по Pixel Dungeon 1.9.2a',
+      credits: [['Оригинальная игра, графика и звуки', 'Watabou', 'Олег Доля'], ['Музыка оригинала', 'Cube_Code', ''], ['Шрифт Galmuri', 'Minseo Lee', 'SIL OFL 1.1'], ['Порт для Telegram, кооператив, музыка регионов', 'shiba-vibecoding', '']],
+      source: 'Исходный код (GPL-3.0)', sourceUrl: 'github.com/shiba-vibecoding/pixel-dungeon-telegram', origin: 'Сайт оригинала', originUrl: 'pixeldungeon.watabou.ru', legal: 'Неофициальный порт. Pixel Dungeon © Watabou, распространяется по GPL-3.0; этот порт — тоже.',
+      resetQ: 'Сбросить данные?', resetText: 'С этого устройства сотрутся сохранённый забег, герои, значки, рекорды и настройки. Вернуть их нельзя.', resetKeep: 'Покупки Пиксель-Марта и подписка хранятся на сервере и останутся.', resetYes: 'Стереть всё', cancel: 'Отмена',
+      chT: 'Испытания', chOn: function (n) { return 'Включено: ' + n + ' из 7'; }, chLocked: 'Откроются после <b>первой победы</b> — когда вынесете Амулет Йендора наверх.', chFoot: 'Выбираются перед новой игрой и действуют весь забег.',
+      ch: [['На диете', 'Еда не встречается — на её месте золото.'], ['Вера — мой доспех', 'Новая броня не встречается — на её месте золото.'], ['Фармакофобия', 'Зелья исцеления не встречаются.'], ['Бесплодная земля', 'Трава не роняет семена и росу, сумки для семян нет.'], ['Разум роя', 'Заметив вас, монстр зовёт всех остальных на уровне.'], ['Во тьму', 'Видно на 3 клетки вместо 8.'], ['Запретные руны', 'Из свитков остаются только свитки улучшения.']],
+      jT: 'Журнал', jTab: 'Отметки', catTab: 'Каталог', jEmpty: 'Пока пусто. Сюда попадут колодцы, сады, статуи и встречи с жителями подземелья.',
+      j: [[7, 'Печальное привидение', 3, 'done'], [0, 'Колодец здоровья', 4, ''], [4, 'Алхимический котёл', 5, ''], [5, 'Сад', 6, 'here'], [8, 'Старый мастер палочек', 6, 'here'], [6, 'Ожившая статуя', 8, ''], [2, 'Колодец превращений', 9, ''], [3, 'Жертвенная комната', 11, ''], [9, 'Тролль-кузнец', 13, ''], [10, 'Амбициозный бес', 17, '']],
+      cats: ['Зелья', 'Свитки', 'Кольца', 'Палочки'], idd: 'Опознано · коснитесь, чтобы прочитать', notIdd: 'Ещё не опознано', known: function (a, b) { return 'Известно ' + a + ' из ' + b; },
+      potions: [[57, 'Зелье Исцеления', 1], [61, 'Зелье Опыта', 1], [58, 'Зелье Ясновидения', 1], [56, 'Зелье Невидимости', 0], [63, 'Зелье Силы', 1], [62, 'Зелье Ядовитого Газа', 1], [59, 'Зелье Парализующего Газа', 0], [60, 'Зелье Жидкого Пламени', 1], [64, 'Зелье Холода', 0], [65, 'Зелье Левитации', 0], [66, 'Зелье Очищения', 0], [67, 'Зелье Мощи', 0]] },
+    en: { settings: 'Settings', sound: 'Sound', music: 'Music', sounds: 'Sounds', vibro: 'Vibration', vibroNote: 'On hits and finds', screen: 'Game', fx: 'Effects', fxOpts: [['auto', 'Auto'], ['full', 'Full'], ['light', 'Light']], fxNote: { auto: 'Full while the phone keeps up.', full: 'Particles, lights, vignette and shake.', light: 'Fewer particles, no lights or vignette.' }, full: 'Full screen', lang: 'Language', langNote: 'At first, as in Telegram', more: 'More', about: 'About', privacy: 'Privacy', terms: 'Terms', reset: 'Reset data', resetNote: 'Erases heroes, runs, badges and settings on this device.', off: 'Off',
+      aboutT: 'About', sub: 'co-op edition', build: 'Build b3882db · 12.10.2026', based: 'after Pixel Dungeon 1.9.2a',
+      credits: [['Original game, graphics and sounds', 'Watabou', 'Oleg Dolya'], ['Original music', 'Cube_Code', ''], ['Galmuri font', 'Minseo Lee', 'SIL OFL 1.1'], ['Telegram port, co-op, region music', 'shiba-vibecoding', '']],
+      source: 'Source code (GPL-3.0)', sourceUrl: 'github.com/shiba-vibecoding/pixel-dungeon-telegram', origin: 'Original game website', originUrl: 'pixeldungeon.watabou.ru', legal: 'An unofficial port. Pixel Dungeon © Watabou, released under GPL-3.0; so is this port.',
+      resetQ: 'Reset data?', resetText: 'The saved run, heroes, badges, records and settings will be erased from this device. They cannot be brought back.', resetKeep: 'Pixel-Mart purchases and the subscription are kept on the server and stay.', resetYes: 'Erase everything', cancel: 'Cancel',
+      chT: 'Challenges', chOn: function (n) { return n + ' of 7 on'; }, chLocked: 'They open after <b>your first victory</b> — once you carry the Amulet of Yendor up.', chFoot: 'Chosen before a new game; they last the whole run.',
+      ch: [['On diet', 'No food turns up — gold lies in its place.'], ['Faith is my armor', 'No new armor turns up — gold lies in its place.'], ['Pharmacophobia', 'No potions of healing turn up.'], ['Barren land', 'Grass drops no seeds or dew; no seed pouch.'], ['Swarm intelligence', 'A monster that spots you calls all the others.'], ['Into darkness', 'You see 3 cells instead of 8.'], ['Forbidden runes', 'Only scrolls of upgrade remain.']],
+      jT: 'Journal', jTab: 'Notes', catTab: 'Catalog', jEmpty: 'Nothing yet. Wells, gardens, statues and the people you meet will be noted here.',
+      j: [[7, 'Sad ghost', 3, 'done'], [0, 'Well of health', 4, ''], [4, 'Alchemy pot', 5, ''], [5, 'Garden', 6, 'here'], [8, 'Old wandmaker', 6, 'here'], [6, 'Animated statue', 8, ''], [2, 'Well of transmutation', 9, ''], [3, 'Sacrificial chamber', 11, ''], [9, 'Troll blacksmith', 13, ''], [10, 'Ambitious imp', 17, '']],
+      cats: ['Potions', 'Scrolls', 'Rings', 'Wands'], idd: 'Identified · tap to read', notIdd: 'Not identified yet', known: function (a, b) { return a + ' of ' + b + ' known'; },
+      potions: [[57, 'Potion of Healing', 1], [61, 'Potion of Experience', 1], [58, 'Potion of Mind Vision', 1], [56, 'Potion of Invisibility', 0], [63, 'Potion of Strength', 1], [62, 'Potion of Toxic Gas', 1], [59, 'Potion of Paralytic Gas', 0], [60, 'Potion of Liquid Flame', 1], [64, 'Potion of Frost', 0], [65, 'Potion of Levitation', 0], [66, 'Potion of Purity', 0], [67, 'Potion of Might', 0]] }
+  };
+  function head(title, sub) { return '<div class="pd-window-head"><div class="pd-titles"><h2 class="pd-heading">' + title + '</h2>' + (sub ? '<span class="pd-sub">' + sub + '</span>' : '') + '</div><button class="pd-close" aria-label="Закрыть"></button></div>'; }
+  function steps(label, v, off) { var b = ''; for (var i = 0; i < 5; i++) b += '<button class="pd-step' + (i < v ? ' on' : '') + '" aria-label="' + label + ' ' + (i + 1) * 20 + '%"></button>'; return '<div class="pd-set-row"><span class="pd-set-label"><span class="pd-info">' + label + '</span><span class="pd-set-value">' + (v ? v * 20 + '%' : off) + '</span></span><div class="pd-steps' + (v ? '' : ' off') + '" role="slider" aria-label="' + label + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + v * 20 + '">' + b + '</div></div>'; }
+  function sw(label, on, note) { return '<button class="pd-switch" role="switch" aria-checked="' + on + '"><span class="pd-set-label"><span class="pd-info">' + label + '</span>' + (note ? '<span class="pd-set-value">' + note + '</span>' : '') + '</span><span class="pd-switch-box"></span></button>'; }
+  function seg(opts, v, cls) { return '<div class="pd-seg' + (cls ? ' ' + cls : '') + '" role="radiogroup">' + opts.map(function (o) { return '<button class="pd-seg-opt" role="radio" data-v="' + o[0] + '" aria-checked="' + (o[0] === v) + '">' + o[1] + '</button>'; }).join('') + '</div>'; }
+  /* тексты вступления к регионам: глубины 6, 11, 16, 21 */
+  PD.demo.intros = {
+    ru: [null, 'Когда-то здесь держали преступников. Теперь камеры стерегут их скелеты, а по коридорам шныряют воры.', 'Заброшенные шахты гномов. В темноте висят летучие мыши, а гноллы-громилы не любят гостей.', 'Великий город гномов опустел. Его улицы стерегут монахи, колдуны и големы.', 'Гномы копали слишком глубоко. Ниже — только демоны и Амулет Йендора.'],
+    en: [null, 'Criminals were once kept here. Now their skeletons guard the cells, and thieves prowl the halls.', "The dwarves' abandoned mines. Bats hang in the dark, and gnoll brutes do not like guests.", 'The great dwarven city stands empty. Monks, warlocks and golems keep its streets.', 'The dwarves dug too deep. Below lie only demons and the Amulet of Yendor.']
+  };
+  PD.demo.win = {
+    t: WT,
+    settings: function (lang, o) {
+      var L = WT[lang || 'ru']; o = o || {}; var fx = o.fx || 'auto';
+      return '<section class="pd-window settings" role="dialog" aria-label="' + L.settings + '">' + head(L.settings) + '<div class="pd-scroll pd-settings">' +
+        '<div class="pd-col"><section class="pd-set-group"><h3 class="pd-set-head">' + L.sound + '</h3>' + steps(L.music, o.music == null ? 3 : o.music, L.off) + steps(L.sounds, o.sounds == null ? 4 : o.sounds, L.off) + sw(L.vibro, true, L.vibroNote) + '</section>' +
+        '<section class="pd-set-group"><h3 class="pd-set-head">' + L.screen + '</h3><div class="pd-set-row stack"><span class="pd-info">' + L.fx + '</span>' + seg(L.fxOpts, fx) + '<p class="pd-note">' + L.fxNote[fx] + '</p></div>' + sw(L.full, false) +
+        '<div class="pd-set-row"><span class="pd-info">' + L.lang + '</span>' + seg([['ru', 'Русский'], ['en', 'English']], lang || 'ru', 'inline') + '</div></section></div>' +
+        '<div class="pd-col">' +
+        '<section class="pd-set-group"><h3 class="pd-set-head">' + L.more + '</h3><button class="pd-linkrow"><span>' + L.about + '</span></button><button class="pd-linkrow ext"><span>' + L.privacy + '</span></button><button class="pd-linkrow ext"><span>' + L.terms + '</span></button></section>' +
+        '<section class="pd-set-group danger"><button class="pd-button danger">' + L.reset + '</button></section></div>' +
+        '</div></section>';
+    },
+    about: function (lang) {
+      var L = WT[lang || 'ru'];
+      return '<section class="pd-window" role="dialog" aria-label="' + L.aboutT + '">' + head(L.aboutT) + '<div class="pd-scroll pd-about">' +
+        '<div class="pd-about-logo"><img alt="Pixel Dungeon" src="' + SRC.logo + '"><span class="pd-logo-sub">' + L.sub + '</span><span class="pd-set-value">' + L.based + '</span><span class="pd-build">' + L.build + '</span></div>' +
+        '<dl class="pd-credits">' + L.credits.map(function (c) { return '<div class="pd-credit"><dt>' + c[0] + '</dt><dd>' + c[1] + (c[2] ? '<small>' + c[2] + '</small>' : '') + '</dd></div>'; }).join('') + '</dl>' +
+        '<div><button class="pd-linkrow ext"><span>' + L.source + '<small>' + L.sourceUrl + '</small></span></button><button class="pd-linkrow ext"><span>' + L.origin + '<small>' + L.originUrl + '</small></span></button></div>' +
+        '<p class="pd-legal">' + L.legal + '</p></div></section>';
+    },
+    reset: function (lang) {
+      var L = WT[lang || 'ru'];
+      return '<section class="pd-window narrow" role="alertdialog" aria-label="' + L.resetQ + '"><h2 class="pd-heading center">' + L.resetQ + '</h2><p class="pd-info center">' + L.resetText + '</p><p class="pd-note center">' + L.resetKeep + '</p>' +
+        '<div class="pd-actions"><button class="pd-button danger">' + L.resetYes + '</button><button class="pd-button quiet">' + L.cancel + '</button></div></section>';
+    },
+    challenges: function (lang, o) {
+      var L = WT[lang || 'ru']; o = o || {}; var on = o.on || [], locked = !!o.locked;
+      return '<section class="pd-window" role="dialog" aria-label="' + L.chT + '">' + head(L.chT, locked ? '' : L.chOn(on.length)) + '<div class="pd-scroll" style="display:flex;flex-direction:column;gap:var(--space-3)">' +
+        (locked ? '<p class="pd-lockplate"><span>' + L.chLocked + '</span></p>' : '') +
+        '<div class="pd-challenges' + (locked ? ' locked' : '') + '">' + L.ch.map(function (c, i) { var a = on.indexOf(i) >= 0; return '<button class="pd-challenge" role="switch" aria-checked="' + a + '"' + (locked ? ' aria-disabled="true"' : '') + '><i class="pd-ch-icon" style="--c:' + i + '"></i><span class="pd-ch-text"><span class="pd-ch-name">' + c[0] + '</span><span class="pd-ch-desc">' + c[1] + '</span></span><span class="pd-switch-box"></span></button>'; }).join('') + '</div>' +
+        '<p class="pd-note">' + L.chFoot + '</p></div></section>';
+    },
+    journal: function (lang, o) {
+      var L = WT[lang || 'ru']; o = o || {}; var cat = !!o.catalog;
+      var tabs = '<div class="pd-tabs" role="tablist"><button class="pd-tab" role="tab" aria-selected="' + !cat + '">' + L.jTab + '</button><button class="pd-tab" role="tab" aria-selected="' + cat + '">' + L.catTab + '</button></div>';
+      var body;
+      if (!cat) body = o.empty ? '<div class="pd-empty"><i class="pd-jicon" style="--j:4;opacity:.5"></i>' + L.jEmpty + '</div>' : '<div class="pd-journal">' + L.j.map(function (r) { return '<button class="pd-jrow ' + r[3] + '"><i class="pd-jicon" style="--j:' + r[0] + '"></i><span class="pd-jname">' + r[1] + '</span><span class="pd-jdepth">' + r[2] + '</span></button>'; }).join('') + '</div>';
+      else { var k = L.potions.filter(function (p) { return p[2]; }).length;
+        body = '<div class="pd-tabs compact" role="tablist">' + L.cats.map(function (c, i) { return '<button class="pd-tab" role="tab" aria-selected="' + !i + '">' + c + '</button>'; }).join('') + '</div><div class="pd-cat-count">' + L.known(k, L.potions.length) + '</div>' +
+          '<div class="pd-grid pd-catalog" role="listbox">' + L.potions.map(function (p, i) { return '<button class="pd-slot' + (p[2] ? '' : ' unknown') + (i === (o.sel || 0) ? ' selected' : '') + '" role="option" aria-label="' + p[1] + '"><i class="pd-item' + (p[2] ? '' : ' silhouette') + '" data-i="' + (p[2] ? p[0] : 56) + '"></i></button>'; }).join('') + '</div>' +
+          (function () { var p = L.potions[o.sel || 0]; return '<div class="pd-cat-detail' + (p[2] ? '' : ' unknown') + '"><i class="pd-item' + (p[2] ? '' : ' silhouette') + '" data-i="' + (p[2] ? p[0] : 56) + '"></i><span><b>' + p[1] + '</b><small>' + (p[2] ? L.idd : L.notIdd) + '</small></span></div>'; })(); }
+      return '<section class="pd-window wide" role="dialog" aria-label="' + L.jT + '">' + head(L.jT) + tabs + '<div class="pd-scroll" style="display:flex;flex-direction:column;gap:var(--space-2)">' + body + '</div></section>';
+    }
+  };
+  /* окно поверх экрана макета: box — .phone; html — строка окна */
+  PD.demo.overlay = function (box, html) { var o = document.createElement('div'); o.className = 'pd-overlay static'; o.innerHTML = html; box.appendChild(o); PD.sprite(o); return o; };
 
   window.PD = PD;
 })();

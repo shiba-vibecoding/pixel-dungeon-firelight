@@ -62,8 +62,8 @@ canvas#game {
 /* NPC and monster portraits are drawn from their sprite sheets on a small canvas. */
 .pd-portrait canvas { image-rendering: pixelated; }
 
-/* Windows that may grow long scroll inside, keeping the frame and the cross in place. */
-.pd-window > .pd-scroll { max-height: 55vh; }
+/* Windows that may grow long scroll inside, keeping the frame and the cross in place: as tall as the screen allows. */
+.pd-window > .pd-scroll { min-height: 0; flex: 0 1 auto; }
 
 
 /* Reward cards without an item slot: a pair to reforge. */
@@ -124,3 +124,12 @@ canvas#game {
 .pd-tool.bag.got { animation: pd-bag-hop 0.32s cubic-bezier(0.3, 0, 0.3, 1); }
 @keyframes pd-bag-hop { 30% { transform: translateY(-5px) scale(1.08, 0.94); } 60% { transform: translateY(0) scale(0.96, 1.05); } 80% { transform: translateY(-1px) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .pd-tool.bag.got { animation: none; } }
+
+/*
+ * A window's shadow is a plain box shadow: a filter over the whole window repainted the
+ * window, and everything in it, at every tap and every line scrolled, which phones felt as a
+ * sluggish menu. The frame's corners are a pixel or two square in the shadow; nobody can tell.
+ */
+.pd-window { filter: none; box-shadow: 0 8px 0 rgba(0, 0, 0, 0.45); }
+/* The windows float on a layer of their own, so the map moving beneath never repaints them. */
+#overlay.open { will-change: transform; }

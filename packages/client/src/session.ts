@@ -23,6 +23,13 @@ export interface Session {
   generation: number;
   /** True while my last action is in flight or queued behind companions. */
   readonly busy: boolean;
+  /**
+   * Online, a step of a walk may follow the last one before the room has answered: the
+   * room's answer takes longer than a step on many phones' networks, and a walk paced
+   * by it stutters. Null when the next action must wait; else the cell my last step,
+   * still on its way, goes to (where the next one starts from).
+   */
+  readonly stepAhead: number | null;
   send(action: Action): void;
   /** A new run after the party has fallen. */
   restart(): void;
@@ -114,6 +121,7 @@ export function soloSession(key: string | null, heroClass: HeroClass, newSeed: (
     status: '',
     generation: 0,
     busy: false,
+    stepAhead: null,
     send(action) {
       const result = act(session.world!, 'me', action);
       if (result.ok) {
@@ -162,12 +170,30 @@ export interface OnlineOptions {
   text: { connecting: string; reconnecting: string; replaced: string; full: string; updating: string };
 }
 
+/** Steps of a walk that may be on their way to the room at once. */
+const STEPS_AHEAD = 3;
+/** A word to the room this often keeps the line warm (mobile networks drop quiet ones) and proves it alive. */
+const PING_MS = 4000;
+/** Nothing heard for this long: the connection is dead, however open it looks. */
+const SILENCE_MS = 10_000;
+/** Out of sight this long (Telegram minimised, another chat open): leave the room, so the party is not held up. */
+const AWAY_MS = 5000;
+
 export function onlineSession(options: OnlineOptions): Session {
   let seq = 0;
   let socket: WebSocket | null = null;
-  let inFlight = false;
+  /** My actions sent and not yet come back from the room. */
+  let inFlight = 0;
+  /** Where the last of them, if they are all steps, leads; null otherwise. */
+  let ahead: number | null = null;
   let closed = false;
   let pending: Effect[] = [];
+  /** When the room was last heard from (performance.now()). */
+  let lastHeard = 0;
+  /** Left the room while the app was out of sight; back when it shows again. */
+  let away = false;
+  let awayTimer = 0;
+  let retryTimer = 0;
 
   const transmit = (message: ClientMessage): void => {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
@@ -182,11 +208,20 @@ export function onlineSession(options: OnlineOptions): Session {
     generation: 0,
     get busy() {
       const me = session.world && heroById(session.world, session.myId);
-      return inFlight || Boolean(me?.intent);
+      return inFlight > 0 || Boolean(me?.intent);
+    },
+    get stepAhead() {
+      const me = session.world && heroById(session.world, session.myId);
+      const open = socket?.readyState === WebSocket.OPEN;
+      return open && inFlight > 0 && inFlight < STEPS_AHEAD && ahead !== null && !me?.intent ? ahead : null;
     },
     send(action) {
-      if (socket?.readyState !== WebSocket.OPEN || session.busy) return;
-      inFlight = true;
+      if (socket?.readyState !== WebSocket.OPEN) return;
+      // Only a step may follow steps still on their way; anything else waits for the room.
+      const follows = action.type === 'move' && session.stepAhead !== null;
+      if (session.busy && !follows) return;
+      inFlight++;
+      ahead = action.type === 'move' && (inFlight === 1 || ahead !== null) ? action.to : null;
       transmit({ type: 'act', action });
     },
     restart() {
@@ -199,6 +234,11 @@ export function onlineSession(options: OnlineOptions): Session {
     },
     close() {
       closed = true;
+      clearTimeout(awayTimer);
+      clearTimeout(retryTimer);
+      clearInterval(pinger);
+      document.removeEventListener('visibilitychange', onVisibility);
+      removeEventListener('online', onOnline);
       socket?.close();
     },
     looks: {},
@@ -229,7 +269,8 @@ export function onlineSession(options: OnlineOptions): Session {
         session.myId = message.you;
         session.online = message.online;
         seq = message.seq;
-        inFlight = false;
+        inFlight = 0;
+        ahead = null;
         session.generation++;
         break;
       case 'event': {
@@ -250,7 +291,8 @@ export function onlineSession(options: OnlineOptions): Session {
           return;
         }
         if (message.event.type === 'restart') session.generation++;
-        if (message.event.type === 'act' && message.event.heroId === session.myId) inFlight = false;
+        if (message.event.type === 'act' && message.event.heroId === session.myId) inFlight = Math.max(0, inFlight - 1);
+        if (inFlight === 0) ahead = null;
         break;
       }
       case 'presence':
@@ -265,7 +307,9 @@ export function onlineSession(options: OnlineOptions): Session {
         if (signals.length > 16) signals.shift();
         break;
       case 'rejected':
-        inFlight = false;
+        // Steps sent after a refused one are refused too, or soon will be: the walk stops here.
+        inFlight = Math.max(0, inFlight - 1);
+        ahead = null;
         pending.push({ type: 'interrupted', hero: session.myId, reason: message.reason });
         break;
     }
@@ -281,15 +325,20 @@ export function onlineSession(options: OnlineOptions): Session {
       url.searchParams.set('id', options.playerId);
       url.searchParams.set('name', options.name);
     }
-    socket = new WebSocket(url);
+    const ws = new WebSocket(url);
+    socket = ws;
     let opened = false;
-    socket.onopen = () => {
+    ws.onopen = () => {
       opened = true;
       failures = 0;
+      lastHeard = performance.now();
       session.status = '';
       if (myLook) transmit({ type: 'look', look: myLook });
     };
-    socket.onmessage = (event) => {
+    ws.onmessage = (event) => {
+      lastHeard = performance.now();
+      // The room's answer to a ping, given without waking it.
+      if (event.data === 'pong') return;
       try {
         receive(JSON.parse(String(event.data)) as ServerMessage);
       } catch (error) {
@@ -298,9 +347,11 @@ export function onlineSession(options: OnlineOptions): Session {
         transmit({ type: 'sync' });
       }
     };
-    socket.onclose = (event) => {
-      inFlight = false;
-      if (closed) return;
+    ws.onclose = (event) => {
+      if (socket !== ws) return;
+      inFlight = 0;
+      ahead = null;
+      if (closed || away) return;
       // A room that cannot be reached (refused, or the network) is worth knowing about once it keeps happening.
       if (!opened && ++failures === 3) report('socket', `cannot connect: close ${event.code}${event.reason ? ` ${event.reason}` : ''}`, undefined, { telegram: Boolean(options.initData) });
       if (opened && event.code !== 1000 && event.code !== 1001 && event.code < 4000) report('socket', `dropped: close ${event.code}`);
@@ -338,9 +389,69 @@ export function onlineSession(options: OnlineOptions): Session {
         return;
       }
       session.status = options.text.reconnecting;
-      setTimeout(connect, 1500);
+      retry();
     };
   };
+
+  /** Connects again soon: at once after a dropped line, then less and less often while the network is down. */
+  const retry = (): void => {
+    clearTimeout(retryTimer);
+    retryTimer = window.setTimeout(connect, Math.min(4000, 250 * 2 ** Math.min(4, failures)));
+  };
+
+  /** Drops a connection that has gone silent (half open: it looks fine and carries nothing) and makes a new one. */
+  const reconnectNow = (): void => {
+    const dead = socket;
+    socket = null;
+    inFlight = 0;
+    ahead = null;
+    if (dead) {
+      dead.onclose = null;
+      dead.onmessage = null;
+      try {
+        dead.close();
+      } catch {
+        // Already gone.
+      }
+    }
+    clearTimeout(retryTimer);
+    session.status = options.text.reconnecting;
+    connect();
+  };
+
+  const pinger = window.setInterval(() => {
+    if (closed || away || socket?.readyState !== WebSocket.OPEN) return;
+    if (performance.now() - lastHeard > SILENCE_MS) {
+      reconnectNow();
+      return;
+    }
+    socket.send('ping');
+  }, PING_MS);
+
+  const onVisibility = (): void => {
+    clearTimeout(awayTimer);
+    if (document.hidden) {
+      // A moment out of sight keeps the room; a while, and the party goes on without waiting for me.
+      awayTimer = window.setTimeout(() => {
+        away = true;
+        socket?.close(1000, 'away');
+      }, AWAY_MS);
+      return;
+    }
+    if (away) {
+      away = false;
+      reconnectNow();
+    } else if (socket?.readyState === WebSocket.OPEN && performance.now() - lastHeard > PING_MS * 1.5) {
+      // Back from a short absence: make sure the line survived it.
+      socket.send('ping');
+    }
+  };
+  const onOnline = (): void => {
+    if (!closed && !away && socket?.readyState !== WebSocket.OPEN) reconnectNow();
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+  addEventListener('online', onOnline);
+
   connect();
   return session;
 }

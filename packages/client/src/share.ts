@@ -1,6 +1,6 @@
 import type { HeroClass } from '@pd/core';
 import { fxText } from './cards';
-import { lang, t } from './i18n';
+import { lang, locale, t } from './i18n';
 import { AVATAR } from './screens';
 
 /*
@@ -88,7 +88,7 @@ export async function shareCard(data: ShareCard): Promise<Blob | null> {
   fxText(g, data.won ? t.victory : data.cause, x0, 264, 1, { scale: 2, color: data.won ? C.gold : C.bad, align: 'left', shadow: 0 });
   const stats: Array<[string, string, string]> = [
     [t.statDepth, String(data.depth), C.ink],
-    [t.score, data.score.toLocaleString('ru-RU'), C.gold],
+    [t.score, data.score.toLocaleString(locale), C.gold],
     [t.place, data.place ? String(data.place) : '—', C.ally],
   ];
   stats.forEach(([label, value, color], i) => {

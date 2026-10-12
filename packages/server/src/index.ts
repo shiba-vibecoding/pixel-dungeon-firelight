@@ -116,6 +116,13 @@ export class Room extends DurableObject<Env> {
   private readonly writer = new ChunkWriter();
   private readonly signals = new SignalLimiter();
 
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    // Pings are answered by the runtime itself, without waking the room: mobile networks drop
+    // quiet sockets, and a half-open one left a player frozen until the client noticed.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+
   private playerOf(ws: WebSocket): PlayerInfo {
     return ws.deserializeAttachment() as PlayerInfo;
   }

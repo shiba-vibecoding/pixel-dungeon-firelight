@@ -6,12 +6,11 @@ import { audio } from './audio';
 import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
-import { capitalize, t } from './i18n';
+import { capitalize, locale, t } from './i18n';
 import { isKnown, itemInfo, itemName, plainName, wearOf } from './itemtext';
 import type { DailyBoard } from './leaderboard';
 import { mart } from './mart';
-import { quality } from './quality';
-import { canFullscreen, isFullscreen, setFullscreen } from './telegram';
+import { countChallenges } from './meta';
 import type { RunRecord } from './rankings';
 import { type Assets, heroSprite } from './sprites';
 import type { LogLine } from './view';
@@ -103,6 +102,11 @@ export function hideOverlay(): void {
 
 export function overlayOpen(): boolean {
   return root.classList.contains('open');
+}
+
+/** A window over the map (not the title's bare screen): the map beneath needs fewer frames. */
+export function windowOverMap(): boolean {
+  return root.classList.contains('open') && !root.classList.contains('bare');
 }
 
 /** Closes the open window the way its cross would; false if it has none. */
@@ -357,6 +361,10 @@ export interface TitleOptions {
   onDailyBoard?: () => void;
   onRankings(): void;
   onMart(): void;
+  onSettings(): void;
+  /** Challenges switched on for the next new game (a bit mask). */
+  challenges: number;
+  onChallenges(): void;
 }
 
 export function showTitle(options: TitleOptions): void {
@@ -420,7 +428,15 @@ export function showTitle(options: TitleOptions): void {
     (main.length ? rest : main).push(resume);
   }
   const fresh = button(save ? t.newRun : t.solo, options.onSolo, main.length ? '' : 'primary big');
-  (main.length ? rest : main).push(fresh);
+  // The challenges go with a new game: beside it, the cup lit when some are on.
+  const on = countChallenges(options.challenges);
+  const challenges = button(t.meta.challenges, options.onChallenges);
+  const cup = el('i', { className: 'pd-icon' });
+  cup.style.cssText = `width:24px;height:24px;background-image:var(--spr-challenge-${on ? 'on' : 'off'})`;
+  challenges.prepend(cup);
+  if (on) challenges.append(el('b', { className: 'pd-ch-n', textContent: String(on) }));
+  if (main.length) rest.push(el('div', { className: 'pd-row' }, fresh, challenges));
+  else main.push(fresh, challenges);
 
   const daily = el(
     'div',
@@ -441,6 +457,11 @@ export function showTitle(options: TitleOptions): void {
     el(
       'main',
       { className: 'pd-title-screen' },
+      el(
+        'div',
+        { className: 'pd-corner' },
+        el('button', { className: 'pd-iconbtn prefs', ariaLabel: t.meta.settings, onclick: () => (audio.play('click'), options.onSettings()) }),
+      ),
       logo,
       el(
         'section',
@@ -472,97 +493,14 @@ export interface MenuOptions {
   onInvite(): void;
   onHelp(): void;
   onBadges(): void;
+  onJournal(): void;
+  onSettings(): void;
   onMart(): void;
   onTreat(): void;
-  /** Full effects or light ones (quality.ts). */
-  onEffects(full: boolean): void;
   onExit(): void;
 }
 
-/** A level in five steps (the music's, the sounds'): a tap on a step sets it; on the lit first step, silence. */
-function volumeRow(label: string, value: () => number, set: (volume: number) => void, sample: () => void): HTMLElement {
-  const steps = el('span', { className: 'pd-volume-steps' });
-  const paint = (): void => {
-    const lit = Math.round(value() * 5);
-    [...steps.children].forEach((node, i) => node.classList.toggle('on', i < lit));
-    row.setAttribute('aria-valuenow', String(lit));
-  };
-  for (let i = 1; i <= 5; i++) {
-    const step = el('button', {
-      className: 'pd-volume-step',
-      onclick: () => {
-        const lit = Math.round(value() * 5);
-        set(lit === 1 && i === 1 ? 0 : i / 5);
-        paint();
-        sample();
-      },
-    });
-    step.setAttribute('aria-label', `${label} ${i * 20}%`);
-    steps.append(step);
-  }
-  const row = el('div', { className: 'pd-volume' }, el('span', { className: 'pd-info', textContent: label }), steps);
-  row.setAttribute('role', 'meter');
-  row.setAttribute('aria-valuemin', '0');
-  row.setAttribute('aria-valuemax', '5');
-  paint();
-  return row;
-}
-
 export function showMenu(options: MenuOptions): void {
-  const music = volumeRow(t.musicVolume, () => audio.musicVolume, (v) => audio.setMusicVolume(v), () => undefined);
-  const sounds = volumeRow(t.soundVolume, () => audio.soundVolume, (v) => audio.setSoundVolume(v), () => audio.play('coin', 1, 0.6));
-  // Over the whole screen: in Telegram (8.0+) or a browser that allows it.
-  const full = canFullscreen()
-    ? el(
-      'button',
-      {
-        className: 'pd-switch',
-        onclick: () => {
-          const on = full!.getAttribute('aria-checked') !== 'true';
-          audio.play('click');
-          full!.setAttribute('aria-checked', String(on));
-          setFullscreen(on);
-        },
-      },
-      el('span', { className: 'pd-info', textContent: t.fullscreen }),
-      el('span', { className: 'pd-switch-box' }),
-    )
-    : null;
-  if (full) {
-    full.setAttribute('role', 'switch');
-    full.setAttribute('aria-checked', String(isFullscreen()));
-  }
-  const sound = el(
-    'button',
-    {
-      className: 'pd-switch',
-      onclick: () => {
-        audio.setEnabled(!audio.enabled);
-        audio.play('click');
-        sound.setAttribute('aria-checked', String(audio.enabled));
-      },
-    },
-    el('span', { className: 'pd-info', textContent: t.sound }),
-    el('span', { className: 'pd-switch-box' }),
-  );
-  sound.setAttribute('role', 'switch');
-  sound.setAttribute('aria-checked', String(audio.enabled));
-  const effects = el(
-    'button',
-    {
-      className: 'pd-switch',
-      onclick: () => {
-        const full = effects.getAttribute('aria-checked') !== 'true';
-        audio.play('click');
-        effects.setAttribute('aria-checked', String(full));
-        options.onEffects(full);
-      },
-    },
-    el('span', { className: 'pd-info', textContent: t.effects }),
-    el('span', { className: 'pd-switch-box' }),
-  );
-  effects.setAttribute('role', 'switch');
-  effects.setAttribute('aria-checked', String(!quality.light));
   show(
     windowOf(
       { title: t.menu, sub: options.room ? t.room(options.room) : undefined, onClose: options.onResume, narrow: true },
@@ -571,14 +509,9 @@ export function showMenu(options: MenuOptions): void {
         { className: 'pd-menu-list' },
         button(t.resume, options.onResume, 'primary'),
         options.room && button(t.invite, options.onInvite, 'ally'),
-        button(t.help, options.onHelp),
-        button(t.badges, options.onBadges),
-        button(t.mart, options.onMart),
-        full,
-        sound,
-        music,
-        sounds,
-        effects,
+        el('div', { className: 'pd-row' }, button(t.meta.journal, options.onJournal), button(t.help, options.onHelp)),
+        el('div', { className: 'pd-row' }, button(t.badges, options.onBadges), button(t.mart, options.onMart)),
+        button(t.meta.settings, options.onSettings),
         button(t.treat, options.onTreat, 'quiet'),
         button(t.toMenu, options.onExit, 'quiet'),
       ),
@@ -1037,7 +970,7 @@ function boardView(board: DailyBoard | null): HTMLElement {
         el('span', { className: 'pd-rank-n', textContent: String(i + 1) }),
         face,
         el('span', { className: 'pd-rank-name', textContent: entry.name }, el('small', { textContent: `${t.classes[entry.heroClass]} · ${t.depthShort(entry.depth)}${entry.won ? ' · ★' : ''}` })),
-        el('span', { className: 'pd-rank-score', textContent: entry.score.toLocaleString('ru-RU') }),
+        el('span', { className: 'pd-rank-score', textContent: entry.score.toLocaleString(locale) }),
       ),
     );
   });
@@ -1104,7 +1037,7 @@ export function showRankings(records: readonly RunRecord[], onClose: () => void,
           { className: 'pd-rank-name', textContent: `${record.name} · ${t.classes[record.heroClass]}` },
           el('small', { textContent: `${t.levelShort} ${record.lvl} · ${t.depthShort(record.depth)}${what ? ` · ${what}` : ''}` }),
         ),
-        el('span', { className: 'pd-rank-score', textContent: record.score.toLocaleString('ru-RU') }),
+        el('span', { className: 'pd-rank-score', textContent: record.score.toLocaleString(locale) }),
       ),
     );
   });

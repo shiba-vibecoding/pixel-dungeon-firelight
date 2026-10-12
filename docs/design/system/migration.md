@@ -594,3 +594,185 @@ PD.find(box, 'ring-' + id, '<i class="pd-item" data-i="72"></i><span>Кольц�
 | `.pd-finds` | стопка тостов находок справа под HUD |
 | `.pd-find`, `.pd-find.good`, `[data-age]`, `.gone` | тост «+ иконка + название», `<b>` — счётчик «×N» |
 
+
+### Кнопка настроек на титуле
+
+```html
+<div class="pd-corner"><button class="pd-iconbtn prefs" aria-label="Настройки"></button></div>
+```
+
+Блок кладётся внутрь `.pd-title-screen`, сразу перед `.pd-logo`. Кнопка «Испытания» встаёт в ряд к «Новой игре»:
+
+```html
+<div class="pd-row">
+  <button class="pd-button">Новая игра</button>
+  <button class="pd-button"><i class="pd-icon" style="width:24px;height:24px;background-image:var(--spr-challenge-on)"></i>Испытания<b class="pd-ch-n">2</b></button>
+</div>
+```
+
+Если не включено ни одного испытания — `--spr-challenge-off` и без `.pd-ch-n`. До первой победы кнопка тоже есть: она открывает окно с замком.
+
+### Настройки
+
+```html
+<section class="pd-window settings" role="dialog" aria-label="Настройки">
+  <div class="pd-window-head"><div class="pd-titles"><h2 class="pd-heading">Настройки</h2></div><button class="pd-close" aria-label="Закрыть"></button></div>
+  <div class="pd-scroll pd-settings">
+    <div class="pd-col">
+      <section class="pd-set-group"><h3 class="pd-set-head">Звук</h3>
+        <div class="pd-set-row">
+          <span class="pd-set-label"><span class="pd-info">Музыка</span><span class="pd-set-value">60%</span></span>
+          <div class="pd-steps" role="slider" aria-label="Музыка" aria-valuemin="0" aria-valuemax="100" aria-valuenow="60">
+            <button class="pd-step on" aria-label="Музыка 20%"></button> … пять кнопок
+          </div>
+        </div>
+        … «Звуки» так же
+        <button class="pd-switch" role="switch" aria-checked="true"><span class="pd-set-label"><span class="pd-info">Вибрация</span><span class="pd-set-value">При ударах и находках</span></span><span class="pd-switch-box"></span></button>
+      </section>
+      <section class="pd-set-group"><h3 class="pd-set-head">Игра</h3>
+        <div class="pd-set-row stack"><span class="pd-info">Эффекты</span>
+          <div class="pd-seg" role="radiogroup"><button class="pd-seg-opt" role="radio" data-v="auto" aria-checked="true">Авто</button><button class="pd-seg-opt" role="radio" data-v="full" aria-checked="false">Полные</button><button class="pd-seg-opt" role="radio" data-v="light" aria-checked="false">Лёгкие</button></div>
+          <p class="pd-note">Полные, пока телефон успевает.</p>
+        </div>
+        <button class="pd-switch" role="switch" aria-checked="false"><span class="pd-set-label"><span class="pd-info">Во весь экран</span></span><span class="pd-switch-box"></span></button>
+        <div class="pd-set-row"><span class="pd-info">Язык</span><div class="pd-seg inline" role="radiogroup"><button class="pd-seg-opt" data-v="ru" aria-checked="true">Русский</button><button class="pd-seg-opt" data-v="en" aria-checked="false">English</button></div></div>
+      </section>
+    </div>
+    <div class="pd-col">
+      <section class="pd-set-group"><h3 class="pd-set-head">Ещё</h3>
+        <button class="pd-linkrow"><span>Об игре</span></button>
+        <button class="pd-linkrow ext"><span>Конфиденциальность</span></button>
+        <button class="pd-linkrow ext"><span>Условия</span></button>
+      </section>
+      <section class="pd-set-group danger"><button class="pd-button danger">Сбросить данные</button></section>
+    </div>
+  </div>
+</section>
+```
+
+```js
+PD.steps(musicRow, () => audio.musicVolume, (v) => audio.setMusicVolume(v));   // вернёт paint() для обновления извне
+PD.seg(fxSeg, quality.mode, (v) => quality.set(v));                            // 'auto' | 'full' | 'light'
+PD.seg(langSeg, lang, (v) => setLanguage(v));
+```
+
+Что поменять в `screens.ts`:
+
+- `volumeRow` с `.pd-volume`/`.pd-volume-step` (шаги 12×20 px) замените на `.pd-steps`/`.pd-step` — у каждого шага цель 44×44.
+- Выключатель «Звук» больше не нужен: ноль громкости — это касание единственной горящей первой ступени.
+- Переключатель «Эффекты» вкл/выкл замените на `.pd-seg` с тремя вариантами из `quality.ts`.
+- `.pd-col` на телефоне — `display: contents`, колонки появляются только на широком экране.
+
+Язык по умолчанию берётся из Telegram (как сейчас в `i18n.ts`), выбор в настройках его перекрывает. Пояснение под эффектами меняется вместе с выбором: «Полные, пока телефон успевает» / «Частицы, свет, виньетка, тряска» / «Меньше частиц, без света и виньетки».
+
+### Сброс данных
+
+```html
+<section class="pd-window narrow" role="alertdialog" aria-labelledby="rq">
+  <h2 class="pd-heading center" id="rq">Сбросить данные?</h2>
+  <p class="pd-info center">С этого устройства сотрутся сохранённый забег, герои, значки, рекорды и настройки. Вернуть их нельзя.</p>
+  <p class="pd-note center">Покупки Пиксель-Марта и подписка хранятся на сервере и останутся.</p>
+  <div class="pd-actions"><button class="pd-button danger">Стереть всё</button><button class="pd-button quiet">Отмена</button></div>
+</section>
+```
+
+Фокус при открытии — на «Отмене».
+
+### Об игре
+
+```html
+<section class="pd-window" role="dialog" aria-label="Об игре">
+  …шапка с крестиком…
+  <div class="pd-scroll pd-about">
+    <div class="pd-about-logo"><img src="assets/banner-title.png" alt="Pixel Dungeon"><span class="pd-logo-sub">кооперативное издание</span><span class="pd-set-value">по Pixel Dungeon 1.9.2a</span><span class="pd-build">Сборка b3882db · 12.10.2026</span></div>
+    <dl class="pd-credits">
+      <div class="pd-credit"><dt>Оригинальная игра, графика и звуки</dt><dd>Watabou<small>Олег Доля</small></dd></div>
+      <div class="pd-credit"><dt>Музыка оригинала</dt><dd>Cube_Code</dd></div>
+      <div class="pd-credit"><dt>Шрифт Galmuri</dt><dd>Minseo Lee<small>SIL OFL 1.1</small></dd></div>
+      <div class="pd-credit"><dt>Порт для Telegram, кооператив, музыка регионов</dt><dd>…</dd></div>
+    </dl>
+    <div><a class="pd-linkrow ext" href="https://github.com/shiba-vibecoding/pixel-dungeon-telegram"><span>Исходный код (GPL-3.0)<small>github.com/shiba-vibecoding/pixel-dungeon-telegram</small></span></a>
+         <a class="pd-linkrow ext" href="http://pixeldungeon.watabou.ru"><span>Сайт оригинала<small>pixeldungeon.watabou.ru</small></span></a></div>
+    <p class="pd-legal">Неофициальный порт. Pixel Dungeon © Watabou, распространяется по GPL-3.0; этот порт — тоже.</p>
+  </div>
+</section>
+```
+
+Строку сборки задайте при сборке, например `define: { __BUILD__: … }` в Vite с хешем коммита и датой. Ссылки открывайте через `Telegram.WebApp.openLink`. Имя в строке «Порт» впишите своё.
+
+### Испытания
+
+```html
+<div class="pd-challenges">            <!-- .locked до первой победы, тогда сверху <p class="pd-lockplate"><span>Откроются после <b>первой победы</b> …</span></p> -->
+  <button class="pd-challenge" role="switch" aria-checked="true">
+    <i class="pd-ch-icon" style="--c:0"></i>
+    <span class="pd-ch-text"><span class="pd-ch-name">На диете</span><span class="pd-ch-desc">Еда не встречается — на её месте золото.</span></span>
+    <span class="pd-switch-box"></span>
+  </button>
+  …
+</div>
+```
+
+`--c` — номер в `challenges.png`: 0 NO_FOOD, 1 NO_ARMOR, 2 NO_HEALING, 3 NO_HERBALISM, 4 SWARM_INTELLIGENCE, 5 DARKNESS, 6 NO_SCROLLS (маски 1, 2, 4, …, 64, как в оригинале). В закрытом списке поставьте кнопкам `aria-disabled="true"`, переключатель сам заменится замком. Число включённых пишется в подзаголовке окна: «Включено: 2 из 7».
+
+### Журнал и каталог
+
+```html
+<section class="pd-window wide" role="dialog" aria-label="Журнал">
+  …шапка…
+  <div class="pd-tabs" role="tablist"><button class="pd-tab" role="tab" aria-selected="true">Отметки</button><button class="pd-tab" role="tab" aria-selected="false">Каталог</button></div>
+  <div class="pd-scroll">
+    <div class="pd-journal">
+      <button class="pd-jrow here"><i class="pd-jicon" style="--j:5"></i><span class="pd-jname">Сад</span><span class="pd-jdepth">6</span></button>
+      …
+    </div>
+  </div>
+</section>
+```
+
+Номер `--j` в `journal.png` совпадает с порядком `Journal.Feature` оригинала:
+
+| `--j` | Отметка |
+| --- | --- |
+| 0 | WELL_OF_HEALTH |
+| 1 | WELL_OF_AWARENESS |
+| 2 | WELL_OF_TRANSMUTATION |
+| 3 | SACRIFICIAL_FIRE |
+| 4 | ALCHEMY |
+| 5 | GARDEN |
+| 6 | STATUE |
+| 7 | GHOST |
+| 8 | WANDMAKER |
+| 9 | TROLL |
+| 10 | IMP |
+
+`.here` — отметка текущей глубины (в оригинале она тоже подсвечена), `.done` — квест выполнен. Пустой журнал — `.pd-empty`.
+
+Каталог:
+
+```html
+<div class="pd-tabs compact" role="tablist"><button class="pd-tab" role="tab" aria-selected="true">Зелья</button>…Свитки, Кольца, Палочки</div>
+<div class="pd-cat-count">Известно 6 из 12</div>
+<div class="pd-grid pd-catalog" role="listbox">
+  <button class="pd-slot" role="option" aria-label="Зелье Исцеления"><i class="pd-item" data-i="57"></i></button>
+  <button class="pd-slot unknown" role="option" aria-label="Зелье Холода"><i class="pd-item silhouette" data-i="56"></i></button>
+</div>
+<div class="pd-cat-detail unknown"><i class="pd-item silhouette" data-i="56"></i><span><b>Зелье Холода</b><small>Ещё не опознано</small></span></div>
+```
+
+Опознанная вещь показана своим спрайтом из этого забега. Неопознанная — силуэтом общей формы вида (зелье — 56, свиток — 40, кольцо — 72, палочка — 68), без цвета, ведь цвет ещё ничего не значит. Касание опознанной вещи открывает окно вещи; касание неопознанной только показывает имя. Журнал открывается из меню в игре, кнопкой «Журнал» рядом со «Справкой».
+
+### Новые классы — меню и титул
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-corner`, `.pd-iconbtn.prefs` | угол титула и кнопка-иконка 44×44 без подложки |
+| `.pd-window.settings`, `.pd-settings`, `.pd-col` | окно настроек; две колонки от 880 px |
+| `.pd-set-group`, `.pd-set-head`, `.pd-set-row(.stack)`, `.pd-set-label`, `.pd-set-value` | группы и строки настроек |
+| `.pd-steps`, `.pd-step.on` | громкость пятью шагами 44×44 |
+| `.pd-seg(.inline)`, `.pd-seg-opt[aria-checked]` | выбор одного из вариантов |
+| `.pd-linkrow(.ext)` | строка-ссылка на всю ширину |
+| `.pd-about`, `.pd-about-logo`, `.pd-build`, `.pd-credits`, `.pd-credit`, `.pd-legal` | «Об игре» |
+| `.pd-challenges(.locked)`, `.pd-challenge`, `.pd-ch-icon`, `.pd-lockplate`, `.pd-ch-n` | «Испытания» |
+| `.pd-window.wide`, `.pd-journal`, `.pd-jrow(.here/.done)`, `.pd-jicon`, `.pd-empty` | «Журнал» |
+| `.pd-catalog`, `.pd-slot.unknown`, `.pd-item.silhouette`, `.pd-cat-detail`, `.pd-cat-count` | «Каталог» |

@@ -863,6 +863,81 @@ const en = {
     'No weapons allowed in the presence of His Majesty!',
     'Pixel-Mart. Special prices for demon hunters!',
   ],
+  /** Settings, about, challenges, journal and region intros (design system v9). */
+  meta: {
+    settings: 'Settings',
+    sound: 'Sound',
+    vibration: 'Vibration',
+    vibrationNote: 'On hits and finds',
+    game: 'Game',
+    effects: 'Effects',
+    fxModes: { auto: 'Auto', full: 'Full', light: 'Light' } as Record<'auto' | 'full' | 'light', string>,
+    fxNotes: {
+      auto: 'Full while the phone keeps up.',
+      full: 'Particles, lights, vignette and shake.',
+      light: 'Fewer particles, no lights or vignette.',
+    } as Record<'auto' | 'full' | 'light', string>,
+    language: 'Language',
+    more: 'More',
+    about: 'About',
+    privacy: 'Privacy',
+    terms: 'Terms',
+    reset: 'Reset data',
+    off: 'Off',
+    subtitle: 'co-op edition',
+    basedOn: 'after Pixel Dungeon 1.9.2a',
+    build: (commit: string, date: string) => `Build ${commit} · ${date}`,
+    credits: [
+      ['Original game, graphics and sounds', 'Watabou', 'Oleg Dolya'],
+      ['Original music', 'Cube_Code', ''],
+      ['Galmuri font', 'Lee Minseo', 'SIL OFL 1.1'],
+      ['Telegram port, co-op, region music', 'shiba-vibecoding', ''],
+    ] as ReadonlyArray<readonly [string, string, string]>,
+    source: 'Source code (GPL-3.0)',
+    origin: 'Original game website',
+    legal: 'An unofficial port. Pixel Dungeon © Watabou, released under GPL-3.0; so is this port.',
+    resetTitle: 'Reset data?',
+    resetText: 'The saved run, heroes, badges, records and settings will be erased from this device. They cannot be brought back.',
+    resetKeep: 'Pixel-Mart purchases and the subscription are kept on the server and stay.',
+    resetYes: 'Erase everything',
+    cancel: 'Cancel',
+    challenges: 'Challenges',
+    challengesOn: (n: number) => `${n} of 7 on`,
+    challengesLocked: 'They open after your first victory, once you take the Amulet of Yendor.',
+    challengesFoot: 'Chosen before a new game; they last the whole run.',
+    challengeList: [
+      ['On diet', 'No food turns up; gold lies in its place.'],
+      ['Faith is my armor', 'No armor turns up; gold lies in its place.'],
+      ['Pharmacophobia', 'No potions of healing turn up.'],
+      ['Barren land', 'Grass drops no seeds or dew; no seed pouch.'],
+      ['Swarm intelligence', 'A monster that spots you calls all the others.'],
+      ['Into darkness', 'You see 3 cells instead of 8.'],
+      ['Forbidden runes', 'Only scrolls of upgrade remain.'],
+    ] as ReadonlyArray<readonly [string, string]>,
+    journal: 'Journal',
+    notes: 'Notes',
+    catalog: 'Catalog',
+    journalEmpty: 'Nothing yet. Wells, gardens, statues and the people you meet will be noted here.',
+    features: [
+      'Well of Health', 'Well of Awareness', 'Well of Transmutation', 'Sacrificial chamber', 'Alchemy pot', 'Garden',
+      'Animated statue', 'Sad ghost', 'Old wandmaker', 'Troll blacksmith', 'Ambitious imp',
+    ] as readonly string[],
+    categories: ['Potions', 'Scrolls', 'Rings', 'Wands'] as readonly string[],
+    identified: 'Identified · tap to read',
+    notIdentified: 'Not identified yet',
+    known: (a: number, b: number) => `${a} of ${b} known`,
+    intros: [
+      "The dungeon lies right beneath the city: its upper levels are the city's sewers. It is still fairly safe here.",
+      'Criminals were once kept here. Now their skeletons guard the cells, and thieves prowl the halls.',
+      "The dwarves' abandoned mines. Bats hang in the dark, and gnoll brutes do not like guests.",
+      'The great dwarven city stands empty. Monks, warlocks and golems keep its streets.',
+      'The dwarves dug too deep. Below lie only demons and the Amulet of Yendor.',
+    ] as readonly string[],
+    newRunTitle: 'Start a new game?',
+    newRunText: 'The saved run will be lost.',
+    newRunYes: 'New game',
+    saveFailed: 'The run could not be saved: the device is out of space.',
+  },
 };
 
 type Strings = typeof en;
@@ -1678,6 +1753,80 @@ const ru: Strings = {
     'В присутствии Его Величества оружие запрещено!',
     'Пиксель-Март. Особые цены для охотников на демонов!',
   ],
+  meta: {
+    settings: 'Настройки',
+    sound: 'Звук',
+    vibration: 'Вибрация',
+    vibrationNote: 'При ударах и находках',
+    game: 'Игра',
+    effects: 'Эффекты',
+    fxModes: { auto: 'Авто', full: 'Полные', light: 'Лёгкие' },
+    fxNotes: {
+      auto: 'Полные, пока телефон успевает.',
+      full: 'Частицы, свет, виньетка, тряска.',
+      light: 'Меньше частиц, без света и виньетки.',
+    },
+    language: 'Язык',
+    more: 'Ещё',
+    about: 'Об игре',
+    privacy: 'Конфиденциальность',
+    terms: 'Условия',
+    reset: 'Сбросить данные',
+    off: 'Выкл',
+    subtitle: 'кооперативное издание',
+    basedOn: 'по Pixel Dungeon 1.9.2a',
+    build: (commit: string, date: string) => `Сборка ${commit} · ${date}`,
+    credits: [
+      ['Оригинальная игра, графика и звуки', 'Watabou', 'Олег Доля'],
+      ['Музыка оригинала', 'Cube_Code', ''],
+      ['Шрифт Galmuri', 'Lee Minseo', 'SIL OFL 1.1'],
+      ['Порт для Telegram, кооператив, музыка регионов', 'shiba-vibecoding', ''],
+    ],
+    source: 'Исходный код (GPL-3.0)',
+    origin: 'Сайт оригинала',
+    legal: 'Неофициальный порт. Pixel Dungeon © Watabou, распространяется по GPL-3.0; этот порт — тоже.',
+    resetTitle: 'Сбросить данные?',
+    resetText: 'С этого устройства сотрутся сохранённый забег, герои, значки, рекорды и настройки. Вернуть их нельзя.',
+    resetKeep: 'Покупки Пиксель-Марта и подписка хранятся на сервере и останутся.',
+    resetYes: 'Стереть всё',
+    cancel: 'Отмена',
+    challenges: 'Испытания',
+    challengesOn: (n: number) => `Включено: ${n} из 7`,
+    challengesLocked: 'Откроются после первой победы, когда вы добудете Амулет Йендора.',
+    challengesFoot: 'Выбираются перед новой игрой и действуют весь забег.',
+    challengeList: [
+      ['На диете', 'Еда не встречается — на её месте золото.'],
+      ['Вера — мой доспех', 'Броня не встречается — на её месте золото.'],
+      ['Фармакофобия', 'Зелья исцеления не встречаются.'],
+      ['Бесплодная земля', 'Трава не роняет семена и росу, сумки для семян нет.'],
+      ['Разум роя', 'Заметив вас, монстр зовёт всех остальных на уровне.'],
+      ['Во тьму', 'Видно на 3 клетки вместо 8.'],
+      ['Запретные руны', 'Из свитков остаются только свитки улучшения.'],
+    ],
+    journal: 'Журнал',
+    notes: 'Отметки',
+    catalog: 'Каталог',
+    journalEmpty: 'Пока пусто. Сюда попадут колодцы, сады, статуи и встречи с жителями подземелья.',
+    features: [
+      'Колодец здоровья', 'Колодец знания', 'Колодец превращений', 'Жертвенная комната', 'Алхимический котёл', 'Сад',
+      'Ожившая статуя', 'Печальное привидение', 'Старый мастер палочек', 'Тролль-кузнец', 'Амбициозный бес',
+    ],
+    categories: ['Зелья', 'Свитки', 'Кольца', 'Палочки'],
+    identified: 'Опознано · коснитесь, чтобы прочитать',
+    notIdentified: 'Ещё не опознано',
+    known: (a: number, b: number) => `Известно ${a} из ${b}`,
+    intros: [
+      'Подземелье начинается прямо под городом: его верхние уровни — городская канализация. Здесь пока сравнительно безопасно.',
+      'Когда-то здесь держали преступников. Теперь камеры стерегут их скелеты, а по коридорам шныряют воры.',
+      'Заброшенные шахты гномов. В темноте висят летучие мыши, а гноллы-громилы не любят гостей.',
+      'Великий город гномов опустел. Его улицы стерегут монахи, колдуны и големы.',
+      'Гномы копали слишком глубоко. Ниже — только демоны и Амулет Йендора.',
+    ],
+    newRunTitle: 'Начать новую игру?',
+    newRunText: 'Сохранённый забег будет потерян.',
+    newRunYes: 'Новая игра',
+    saveFailed: 'Забег не сохранился: на устройстве нет места.',
+  },
 };
 
 function capitalize(text: string): string {
@@ -1687,10 +1836,20 @@ function capitalize(text: string): string {
 function language(): 'ru' | 'en' {
   const telegram = (globalThis as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { language_code?: string } } } } })
     .Telegram?.WebApp?.initDataUnsafe?.user?.language_code;
-  const code = new URLSearchParams(location.search).get('lang') ?? telegram ?? navigator.language ?? 'en';
+  let chosen: string | null = null;
+  try {
+    // Chosen in the settings; otherwise as in Telegram, or the browser.
+    chosen = localStorage.getItem('pd-lang');
+  } catch {
+    // Storage blocked: go by Telegram.
+  }
+  const code = new URLSearchParams(location.search).get('lang') ?? chosen ?? telegram ?? navigator.language ?? 'en';
   return /^(ru|uk|be|kk)/i.test(code) ? 'ru' : 'en';
 }
 
 export const lang = language();
 export const t: Strings = lang === 'ru' ? ru : en;
+/** For dates and numbers in the language of the text around them. */
+export const locale = lang === 'ru' ? 'ru-RU' : 'en-US';
+if (typeof document !== 'undefined') document.documentElement.lang = lang;
 export { capitalize };

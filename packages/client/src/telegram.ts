@@ -15,6 +15,7 @@ interface WebApp {
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
   openTelegramLink?(url: string): void;
+  openLink?(url: string): void;
   openInvoice?(url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void): void;
   HapticFeedback?: {
     impactOccurred(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft'): void;
@@ -152,9 +153,28 @@ async function share(
   }
 }
 
+/** Vibration on hits and finds, unless turned off in the settings (kept on this device). */
+export const haptics = {
+  on: ((): boolean => {
+    try {
+      return localStorage.getItem('pd-haptics') !== 'off';
+    } catch {
+      return true;
+    }
+  })(),
+  set(on: boolean): void {
+    this.on = on;
+    try {
+      localStorage.setItem('pd-haptics', on ? 'on' : 'off');
+    } catch {
+      // For this session only.
+    }
+  },
+};
+
 export function haptic(kind: 'hit' | 'hurt' | 'success' | 'error'): void {
   const feedback = webApp?.HapticFeedback;
-  if (!feedback || !inTelegram) return;
+  if (!feedback || !inTelegram || !haptics.on || !(webApp!.isVersionAtLeast?.('6.1') ?? false)) return;
   switch (kind) {
     case 'hit':
       feedback.impactOccurred('light');
@@ -183,6 +203,12 @@ export function openInvoice(link: string): Promise<'paid' | 'cancelled' | 'faile
     }
     webApp.openInvoice(link, (status) => resolve(status));
   });
+}
+
+/** Opens a web page outside the game: Telegram's own browser, or a new tab. */
+export function openExternal(url: string): void {
+  if (webApp?.openLink && inTelegram) webApp.openLink(url);
+  else window.open(url, '_blank', 'noopener');
 }
 
 /** Opens a t.me link inside Telegram (a subscription's settings, a chat), or in a new tab elsewhere. */

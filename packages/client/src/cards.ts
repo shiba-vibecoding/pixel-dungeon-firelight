@@ -58,6 +58,23 @@ export const TIMELINES = {
       [2333, { band: 0, rule: 0, emb: 0, dy: 0, title: 0, sub: 0 }],
     ],
   } as Timeline<{ band: number; rule: number; emb: number; dy: number; title: number; sub: number }>,
+  /** A region's first visit: the descent's head, then its lines of text one by one; held 5.6 s. */
+  intro: {
+    hold: 15, dur: 5800,
+    frames: [
+      [0, { band: 0.33, rule: 0, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }], [66, { band: 0.66, rule: 0.25, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }],
+      [133, { band: 1, rule: 0.5, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }], [200, { band: 1, rule: 1, emb: 0.5, dy: 2, title: 0, sub: 0, lines: 0 }],
+      [266, { band: 1, rule: 1, emb: 1, dy: -1, title: 0.5, sub: 0, lines: 0 }], [333, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 0, lines: 0 }],
+      [400, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 0.5, lines: 0 }], [466, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 0 }],
+      [600, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 0.5 }], [666, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 1 }],
+      [800, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 1.5 }], [866, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 2 }],
+      [1000, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 2.5 }], [1066, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 3 }],
+      [1200, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 3.5 }], [1266, { band: 1, rule: 1, emb: 1, dy: 0, title: 1, sub: 1, lines: 4 }],
+      [5600, { band: 0.66, rule: 0.66, emb: 0.66, dy: 0, title: 0.66, sub: 0.66, lines: 2.64 }],
+      [5666, { band: 0.33, rule: 0.33, emb: 0.33, dy: 0, title: 0.33, sub: 0.33, lines: 1.32 }],
+      [5733, { band: 0, rule: 0, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }],
+    ],
+  } as Timeline<{ band: number; rule: number; emb: number; dy: number; title: number; sub: number; lines: number }>,
   number: {
     hold: 0, dur: 700,
     frames: [[0, { a: 1, dy: 0 }], [100, { a: 1, dy: -2 }], [200, { a: 1, dy: -4 }], [300, { a: 1, dy: -6 }], [400, { a: 0.66, dy: -8 }], [500, { a: 0.33, dy: -8 }], [600, { a: 0, dy: -8 }]],
@@ -177,22 +194,36 @@ export function bossCard(ctx: CanvasRenderingContext2D, name: string, sub: strin
 export function depthCard(
   ctx: CanvasRenderingContext2D, title: string, region: string, emblems: CanvasImageSource, regionIndex: number,
   cy: number, width: number, t: number, px: number, emblemRow = { x: 0, y: 24 },
+  /** A region's first visit: a few lines about it under the head, on the same band (PD.fx.intro). */
+  text = '',
 ): boolean {
-  const k = step(TIMELINES.depth, t);
-  const h = 96 * px;
+  const timeline = text ? TIMELINES.intro : TIMELINES.depth;
+  const k: { band: number; rule: number; emb: number; dy: number; title: number; sub: number; lines?: number } = step(timeline, t);
+  const lines = text ? wrap(ctx, text, `${Math.round(FONTS.small.em * 1.5 * px)}px "${FONTS.small.family}"`, Math.min(width * 0.84, 344 * px)).slice(0, 4) : [];
+  const lh = 21 * px;
+  const extra = lines.length ? lines.length * lh + 14 * px : 0;
+  // The text's band grows both ways from where the card sits, so it reaches no nearer the hero below than it must.
+  cy -= extra / 2;
+  const top = snap(cy - 48 * px, 2 * px);
+  const h = 96 * px + extra;
   if (k.band > 0) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = k.band;
     ctx.fillStyle = FX_COLORS.band;
-    ctx.fillRect(0, snap(cy - h / 2, 2 * px), width, h);
+    ctx.fillRect(0, top, width, h);
     ctx.restore();
   }
   const half = Math.round(width * 0.4 * k.rule);
   if (half > 0) {
-    rule(ctx, width / 2 - half, cy - h / 2 + 6 * px, half * 2, 2 * px, FX_COLORS.line, k.band);
-    rule(ctx, width / 2 - half, cy + h / 2 - 8 * px, half * 2, 2 * px, FX_COLORS.line, k.band);
+    rule(ctx, width / 2 - half, top + 6 * px, half * 2, 2 * px, FX_COLORS.line, k.band);
+    rule(ctx, width / 2 - half, top + h - 8 * px, half * 2, 2 * px, FX_COLORS.line, k.band);
   }
+  // The lines come one by one (half bright for a frame, then full), and fade with the band.
+  lines.forEach((line, i) => {
+    const a = k.band < 1 ? k.band : Math.max(0, Math.min(1, (k.lines ?? 0) - i));
+    if (a > 0) fxText(ctx, line, width / 2, top + 108 * px + i * lh, px, { font: 'small', scale: 1.5, color: FX_COLORS.ink, alpha: a, shadow: 0 });
+  });
   // The emblem, a gap and the wider of the two lines are centred together; a long title steps down a size.
   const e = 64 * px, gap = 16 * px;
   const scale = fits(ctx, title, width * 0.92 - e - gap, px, [3, 2]);
@@ -213,7 +244,27 @@ export function depthCard(
   }
   if (k.title > 0) fxText(ctx, title, tx, cy + 2 * px, px, { scale, color: FX_COLORS.gold, alpha: k.title, align: 'left' });
   if (k.sub > 0) fxText(ctx, region, tx, cy + 28 * px, px, { scale: 1.5, color: FX_COLORS.ink, alpha: k.sub, shadow: 0, align: 'left' });
-  return t < TIMELINES.depth.dur;
+  return t < timeline.dur;
+}
+
+/** Splits text into lines no wider than `width` (by words) in the given font. */
+function wrap(ctx: CanvasRenderingContext2D, text: string, font: string, width: number): string[] {
+  ctx.save();
+  ctx.font = font;
+  const out: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    const longer = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(longer).width > width) {
+      out.push(line);
+      line = word;
+    } else {
+      line = longer;
+    }
+  }
+  if (line) out.push(line);
+  ctx.restore();
+  return out;
 }
 
 /** The largest of `scales` at which `text` fits in `width`. */

@@ -443,7 +443,8 @@ export function render(
   const emblems = sheet('ui-map');
   if (descent && emblems) {
     const region = regionIndex(descent.depth);
-    if (!depthCard(ctx, t.depthTitle(descent.depth), t.regionNames[region] ?? '', emblems.image, region, middle, canvas.width, now - descent.start, px)) {
+    const text = descent.intro ? (t.meta.intros[region] ?? '') : '';
+    if (!depthCard(ctx, t.depthTitle(descent.depth), t.regionNames[region] ?? '', emblems.image, region, middle, canvas.width, now - descent.start, px, undefined, text)) {
       view.depthCard = null;
     }
   }

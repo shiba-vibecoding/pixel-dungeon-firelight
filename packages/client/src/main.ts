@@ -18,7 +18,7 @@ import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
 let lastVisual = 0;
 /** When my hero fell, on the visual clock, or 0 while alive. */
 let fallenAt = 0;
-import { BADGES, type BadgeId, badgeText, checkBadges, countGame } from './badges';
+import { BADGES, type BadgeId, badgeText, checkBadges, countGame, earnedBadges } from './badges';
 import { audio } from './audio';
 import { heroBuffs, Hud, type HudStatus } from './hud';
 import { capitalize, t } from './i18n';
@@ -26,10 +26,11 @@ import { itemInfo, itemName, wearOf } from './itemtext';
 import { bakeLevel, type Camera, patchLevel, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  armorTier, closeOverlay, hideOverlay, overlayOpen, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
+  armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
   showHistory, showMenu, showRankings, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
 import { mart } from './mart';
+import { eraseDevice, showChallenges, showJournal, showSettings } from './meta';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
 import { type Launch, Motion } from './motion';
@@ -337,7 +338,7 @@ function startSolo(mode: 'continue' | 'new' | 'daily'): void {
 
 /** Who I am on the leaderboard: Telegram proves it; elsewhere a remembered id. */
 function identity(): Identity {
-  return { initData: initData(), id: playerId(), name: playerName.trim() || telegramName() || 'Hero' };
+  return { initData: initData(), id: playerId(), name: playerName.trim() || telegramName() || t.heroDefault };
 }
 
 function dailyBoard(): Promise<DailyBoard | null> {
@@ -373,6 +374,24 @@ function startOnline(roomId: string): void {
   );
 }
 
+/** Challenges for the next new solo game (a bit mask, Challenges.MASKS), kept on this device. */
+let challenges = Number(stored('pd-challenges')) || 0;
+/** Challenges open with the first victory, as the original's VICTORY badge opens them. */
+const challengesOpen = (): boolean => earnedBadges().has('victory');
+
+/** Erases this device's runs, badges and settings, and starts the page afresh. */
+function resetDevice(): void {
+  // The run must not be written back on the way out.
+  session?.close();
+  session = null;
+  eraseDevice();
+  location.reload();
+}
+
+function settings(onClose: () => void): void {
+  showSettings({ onClose, onEffects: () => resize(), onReset: resetDevice });
+}
+
 function toTitle(): void {
   session?.close();
   session = null;
@@ -405,7 +424,8 @@ function toTitle(): void {
       store('pd-name', value);
     },
     onContinue: () => startSolo('continue'),
-    onSolo: () => startSolo('new'),
+    // A new game over a saved one asks first: the saved run is lost.
+    onSolo: () => (saved ? showConfirm(t.meta.newRunTitle, t.meta.newRunText, t.meta.newRunYes, t.meta.cancel, () => startSolo('new'), toTitle) : startSolo('new')),
     onCoop: () => {
       const id = newRoomId();
       startOnline(id);
@@ -416,6 +436,18 @@ function toTitle(): void {
     onDailyBoard: SERVER ? () => showDailyBoard(dailyBoard(), toTitle) : undefined,
     onRankings: () => showRankings(rankings(), toTitle),
     onMart: () => showMart({ heroClass, onClose: toTitle }),
+    onSettings: () => settings(toTitle),
+    challenges: challengesOpen() ? challenges : 0,
+    onChallenges: () =>
+      showChallenges({
+        mask: challenges,
+        unlocked: challengesOpen(),
+        onChange: (mask) => {
+          challenges = mask;
+          store('pd-challenges', String(mask));
+        },
+        onClose: toTitle,
+      }),
   });
 }
 
@@ -434,12 +466,14 @@ function openMenu(): void {
     },
     onHelp: () => showHelp(hideOverlay),
     onBadges: () => showBadges(hideOverlay),
+    onJournal: () => {
+      const world = session?.world;
+      const me = world && heroById(world, session!.myId);
+      if (world && me) showJournal({ world, hero: me, onClose: openMenu });
+    },
+    onSettings: () => settings(openMenu),
     onMart: () => showMart({ heroClass: myClass(), onClose: hideOverlay }),
     onTreat: () => showTreat(hideOverlay),
-    onEffects: (full) => {
-      quality.setMode(full ? 'full' : 'light');
-      resize();
-    },
     onExit: toTitle,
   });
 }
@@ -516,7 +550,20 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
   const me = heroById(world, session!.myId);
   // Resting turns are not paced like steps: there is nothing to animate.
   const pace = walk.resting ? 0 : STEP_MS;
-  if (!me || !isAlive(me) || session!.busy || overlayOpen() || now - walk.lastSent < pace) return;
+  // Online, the next step of a calm walk goes out before the room has answered the last one,
+  // from where that one leads: the room's answer takes longer than a step on many networks.
+  const walking = walk.queue.length > 0 || (held.code !== '' && !walk.chase && !walk.resting && !walk.stairs && !walk.pickup);
+  const ahead = threats.size === 0 && walking ? session!.stepAhead : null;
+  if (!me || !isAlive(me) || (session!.busy && ahead === null) || overlayOpen() || now - walk.lastSent < pace) return;
+  if (ahead !== null) {
+    // An arrow held down goes on from where the last step leads, as long as the way is open.
+    const next = walk.queue.shift() ?? ahead + held.dx + held.dy * WIDTH;
+    const level = levelAt(world, me.depth);
+    const open = findPath(level, ahead, next, occupiedCells(world, me.depth), exploredCells(world, me.depth), (me.levitating ?? 0) > 0);
+    if (!adjacent(ahead, next) || open?.length !== 1) walk.reset();
+    else send({ type: 'move', to: next }, now);
+    return;
+  }
   const level = levelAt(world, me.depth);
 
   // An arrow held down walks on, a step as soon as the last is done: the keyboard's own repeat
@@ -1106,6 +1153,8 @@ canvas.addEventListener('wheel', (event) => {
 
 function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;
+  // A region's intro is read first: the tap that skips it does nothing else.
+  if (view.skipIntro(fx.time(performance.now()))) return;
   const x = Math.floor((camera.x + px / camera.zoom) / TILE);
   const y = Math.floor((camera.y + py / camera.zoom) / TILE);
   if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
@@ -1404,8 +1453,18 @@ function drawBackdrop(now: number): void {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+/** Under a window the map is drawn at 15 frames a second: dimmed and still, it needs no more, and the window's taps and scrolling get the phone to themselves. */
+const UNDER_WINDOW_MS = 66;
+let lastUnderWindow = 0;
+
 function frame(now: number): void {
   requestAnimationFrame(frame);
+  if (session && windowOverMap()) {
+    if (now - lastUnderWindow < UNDER_WINDOW_MS) return;
+    lastUnderWindow = now;
+    // These slow frames are on purpose: «auto» effects must not take them for a struggling phone.
+    lastFrame = now;
+  }
   tick(now);
 }
 

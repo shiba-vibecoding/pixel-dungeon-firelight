@@ -1,0 +1,22 @@
+<!-- @dsCard group="Настройки и об игре" height=844 width=820 page subtitle="«Испытания»: 7 переключателей с иконками 16×16 ×2. Слева — под замком до первой победы, справа — два включены" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Испытания</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .pair { display: flex; gap: 40px; width: 820px; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; --safe-t: 0px; --safe-b: 34px; }
+</style></head>
+<body>
+<div class="pd-root pair">
+  <div class="phone" id="p1"></div>
+  <div class="phone" id="p2"></div>
+</div>
+<script>
+  var p1 = document.getElementById('p1'), p2 = document.getElementById('p2');
+  PD.demo.title(p1); PD.demo.title(p2);
+  PD.demo.overlay(p1, PD.demo.win.challenges('ru', { locked: true })); PD.demo.overlay(p2, PD.demo.win.challenges('ru', { on: [0, 5] }));
+  PD.sprite(document.body);
+</script>
+</body>
+</html>

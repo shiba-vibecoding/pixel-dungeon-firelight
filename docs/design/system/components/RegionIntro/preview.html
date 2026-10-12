@@ -1,0 +1,38 @@
+<!-- @dsCard group="Карточки на canvas" height=900 width=820 page subtitle="Вступление к региону при первом входе в тюрьму, пещеры, город и залы: шапка карточки спуска и 2–4 строки текста на той же полосе, 5,8 с, тап — пропустить" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Вступление к региону</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .pair { display: flex; gap: 40px; width: 820px; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; --safe-t: 0px; --safe-b: 34px; }
+  .fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+  .side { width: 390px; padding: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+  .side h2 { margin: 0; font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
+  .side p { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+  .side canvas { display: block; background: var(--stone-800); }
+</style></head>
+<body>
+<div class="pd-root pair">
+  <div class="phone" id="p"></div>
+  <div class="side" id="side"><h2>Четыре региона</h2></div>
+</div>
+<script>
+  var REG = ['Канализация', 'Тюрьма', 'Пещеры', 'Город гномов', 'Демонические залы'];
+  function layer(c, w, h) { var d = window.devicePixelRatio || 1; c.width = w * d; c.height = h * d; c.style.width = w + 'px'; c.style.height = h + 'px'; var g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.imageSmoothingEnabled = false; return g; }
+  document.fonts.load('36px Galmuri11').then(function () { return document.fonts.load('20px Galmuri9'); }).then(function () {
+    PD.demo.images(['emblems'], function (im) {
+      var emb = im.emblems, p = document.getElementById('p'), side = document.getElementById('side'), T = PD.demo.intros.ru;
+      [2, 3, 4].forEach(function (r) { var c = document.createElement('canvas'); side.appendChild(c); var g = layer(c, 390, 182); PD.fx.intro(g, 'Глубина ' + (r * 5 + 1), REG[r], T[r], emb, r, 50, 390, 1400); });
+      side.insertAdjacentHTML('beforeend', '<p>Полоса — как у карточки спуска, но ниже на высоту текста: Galmuri9 ×1.5, ink, по центру, не шире 344 px, до 4 строк. Строки появляются по одной через 133 мс (кадр на половину яркости, кадр на полную). Держится до 5,6 с; тап по экрану сразу переводит в угасание. Показывается вместо обычной карточки спуска один раз — при первом входе в регион на этом устройстве.</p>');
+      PD.demo.game(p, { depth: 6, mates: false, log: [['Вы спускаетесь на глубину 6.', '']], after: function () {
+        var c = document.createElement('canvas'); c.className = 'fx'; p.appendChild(c); var g = layer(c, 390, 844);
+        var top = p.querySelector('.pd-hud').getBoundingClientRect().bottom - p.getBoundingClientRect().top;
+        var low = p.querySelector('.pd-log').getBoundingClientRect().top - p.getBoundingClientRect().top;
+        PD.fx.intro(g, 'Глубина 6', 'Тюрьма', T[1], emb, 1, Math.round((top + low) / 2) - 120, 390, 1400);
+      } });
+    });
+  });
+</script>
+</body>
+</html>

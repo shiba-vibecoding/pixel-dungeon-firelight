@@ -1,0 +1,40 @@
+<!-- @dsCard group="Настройки и об игре" height=700 width=820 page subtitle="Новые иконки 16×16 в стиле спрайтов игры: 7 испытаний (×1, ×2, ×4) и 11 отметок журнала; шестерёнка и кубок испытаний — из icons.png оригинала" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Иконки испытаний и журнала</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .wrap { width: 820px; box-sizing: border-box; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; color: var(--ink); }
+  h2 { margin: 0; font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
+  h2 span { margin-left: 8px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+  .row { display: grid; gap: 8px; }
+  .row.ch { grid-template-columns: repeat(4, 1fr); }
+  .row.j { grid-template-columns: repeat(6, 1fr); }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; background: var(--stone-900); clip-path: var(--notch); text-align: center; font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); }
+  .cell b { font-weight: 400; color: var(--ink); }
+  .sizes { display: flex; align-items: flex-end; gap: 6px; }
+  .x1 { --u: 1px; } .x2 { --u: 2px; } .x4 { --u: 4px; }
+  .x1, .x2, .x4 { width: calc(16 * var(--u)); height: calc(16 * var(--u)); background: var(--atlas-challenges) no-repeat; background-size: calc(112 * var(--u)) calc(16 * var(--u)); background-position: calc(var(--c) * -16 * var(--u)) 0; image-rendering: pixelated; }
+  .misc { display: flex; gap: 8px; }
+  .misc .cell { flex: 1; flex-direction: row; justify-content: flex-start; gap: 12px; text-align: left; }
+</style></head>
+<body>
+<div class="pd-root wrap">
+  <h2>Испытания<span>challenges.png 112×16 · по 16 px, порядок как в Challenges.java</span></h2>
+  <div class="row ch" id="ch"></div>
+  <h2>Журнал<span>journal.png 176×16 · колодцы, жертвенник, котёл, сад, статуя, жители</span></h2>
+  <div class="row j" id="j"></div>
+  <h2>Из оригинала<span>icons.png</span></h2>
+  <div class="misc">
+    <div class="cell"><i class="pd-icon" style="width:32px;height:32px;background-image:var(--spr-prefs)"></i><span><b>PREFS 16×16</b><br>шестерёнка на титуле, ×2</span></div>
+    <div class="cell"><i class="pd-icon" style="width:48px;height:48px;background-image:var(--spr-challenge-off)"></i><i class="pd-icon" style="width:48px;height:48px;background-image:var(--spr-challenge-on)"></i><span><b>CHALLENGE_OFF / ON 24×24</b><br>кнопка «Испытания»: ни одного / хотя бы одно</span></div>
+  </div>
+</div>
+<script>
+  var L = PD.demo.win.t.ru;
+  document.getElementById('ch').innerHTML = L.ch.map(function (c, i) { return '<div class="cell"><span class="sizes"><i class="x1" style="--c:' + i + '"></i><i class="x2" style="--c:' + i + '"></i><i class="x4" style="--c:' + i + '"></i></span><b>' + c[0] + '</b></div>'; }).join('');
+  var J = ['Колодец здоровья', 'Колодец знания', 'Колодец превращений', 'Жертвенная комната', 'Алхимический котёл', 'Сад', 'Ожившая статуя', 'Печальное привидение', 'Старый мастер палочек', 'Тролль-кузнец', 'Амбициозный бес'];
+  document.getElementById('j').innerHTML = J.map(function (n, i) { return '<div class="cell"><i class="pd-jicon" style="--j:' + i + '"></i><b>' + n + '</b></div>'; }).join('');
+</script>
+</body>
+</html>

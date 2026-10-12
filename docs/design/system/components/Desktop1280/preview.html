@@ -1,0 +1,50 @@
+<!-- @dsCard group="Настройки и об игре" height=860 width=1280 page subtitle="Широкий экран 1280×800 (Telegram Desktop во весь экран, планшет): настройки в две колонки, журнал шире, остальные окна — те же 400 px по центру" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Широкий экран</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .bar { width: 1280px; height: 52px; box-sizing: border-box; padding: 4px 16px; display: flex; align-items: center; gap: 12px; }
+  .bar .pd-tabs { flex: 1; }
+  .screen { position: relative; width: 1280px; height: 800px; overflow: hidden; --safe-t: 0px; --safe-b: 0px; }
+</style></head>
+<body>
+<div class="pd-root">
+  <div class="bar"><div class="pd-tabs compact" role="tablist" id="tabs"></div><div class="pd-seg inline" id="lang"><button class="pd-seg-opt" data-v="ru">RU</button><button class="pd-seg-opt" data-v="en">EN</button></div></div>
+  <div class="screen" id="s"></div>
+</div>
+<script>
+  var STATES = [['title', 'Титул'], ['settings', 'Настройки'], ['about', 'Об игре'], ['challenges', 'Испытания'], ['journal', 'Журнал'], ['catalog', 'Каталог'], ['intro', 'Вступление']];
+  var q = new URLSearchParams(location.search), state = q.get('s') || 'settings', lang = q.get('lang') || 'ru', SW = +(q.get('w') || 1280), SH = +(q.get('h') || 800);
+  var scr = document.getElementById('s'); scr.style.width = SW + 'px'; scr.style.height = SH + 'px'; if (SW < 880) scr.style.setProperty('--safe-b', '34px');
+  var REG = { ru: 'Тюрьма', en: 'Prison' }, DEPTH = { ru: 'Глубина 6', en: 'Depth 6' };
+  function render() {
+    document.getElementById('tabs').innerHTML = STATES.map(function (x) { return '<button class="pd-tab" role="tab" data-s="' + x[0] + '" aria-selected="' + (x[0] === state) + '">' + x[1] + '</button>'; }).join('');
+    var s = document.getElementById('s'), W = PD.demo.win;
+    var inGame = state === 'journal' || state === 'catalog' || state === 'intro';
+    if (inGame) PD.demo.game(s, { depth: 6, mates: false, after: state === 'intro' ? intro : null }); else PD.demo.title(s, { en: lang === 'en', challenges: state === 'locked' ? 0 : 2 });
+    if (state === 'settings') PD.demo.overlay(s, W.settings(lang));
+    if (state === 'reset') PD.demo.overlay(s, W.reset(lang));
+    if (state === 'locked') PD.demo.overlay(s, W.challenges(lang, { locked: true }));
+    if (state === 'about') PD.demo.overlay(s, W.about(lang));
+    if (state === 'challenges') PD.demo.overlay(s, W.challenges(lang, { on: [0, 5] }));
+    if (state === 'journal') PD.demo.overlay(s, W.journal(lang));
+    if (state === 'catalog') PD.demo.overlay(s, W.journal(lang, { catalog: true, sel: 6 }));
+    PD.sprite(s);
+  }
+  function intro() {
+    document.fonts.load('36px Galmuri11').then(function () { return document.fonts.load('20px Galmuri9'); }).then(function () {
+      PD.demo.images(['emblems'], function (im) {
+        var s = document.getElementById('s'), c = document.createElement('canvas'); c.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none';
+        s.appendChild(c); var d = window.devicePixelRatio || 1; c.width = SW * d; c.height = SH * d; var g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.imageSmoothingEnabled = false;
+        var hb = s.querySelector('.pd-hud').getBoundingClientRect().bottom - s.getBoundingClientRect().top, lt = s.querySelector('.pd-log').getBoundingClientRect().top - s.getBoundingClientRect().top;
+        PD.fx.intro(g, DEPTH[lang], REG[lang], PD.demo.intros[lang][1], im.emblems, 1, Math.round((hb + lt) / 2) - 120, SW, 1400);
+      });
+    });
+  }
+  document.getElementById('tabs').onclick = function (e) { var b = e.target.closest('[data-s]'); if (b) { state = b.dataset.s; render(); } };
+  PD.seg(document.getElementById('lang'), lang, function (v) { lang = v; render(); });
+  render();
+</script>
+</body>
+</html>

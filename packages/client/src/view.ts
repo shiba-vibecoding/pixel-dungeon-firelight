@@ -1,5 +1,5 @@
 import {
-  adjacent, cellX, cellY, type Effect, type Enchantment, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind,
+  adjacent, cellX, cellY, type Effect, F, terrainFlags, type Enchantment, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind,
   WIDTH, type World,
   type Look,
 } from '@pd/core';
@@ -54,6 +54,8 @@ export interface Puppet {
   /** Where the current step started, in world pixels: wherever the walker was, not the middle of a cell. */
   fromX?: number;
   fromY?: number;
+  /** A diagonal step past a wall's corner bends towards the open side (world pixels of the curve's pull), so it never cuts through the wall. */
+  bend?: { x: number; y: number };
   /** A hero's Pixel-Mart look (effect, the patron's star); undefined for monsters. */
   look?: Look;
   /** Hero class or monster kind. */
@@ -133,6 +135,36 @@ export const COLORS = {
   neutral: '#cccccc',
 };
 
+/**
+ * A diagonal step with a wall (or a door, a statue) on one side and room on the
+ * other: the step curves through the open cell's side instead of over the
+ * wall's corner. Open on both sides, or squeezed between two walls, it goes straight.
+ */
+function cornerBend(map: readonly number[] | undefined, from: number, to: number): { x: number; y: number } | undefined {
+  if (!map || !adjacent(from, to) || cellX(from) === cellX(to) || cellY(from) === cellY(to)) return undefined;
+  const side1 = cellX(to) + cellY(from) * WIDTH;
+  const side2 = cellX(from) + cellY(to) * WIDTH;
+  const solid = (cell: number): boolean => ((terrainFlags[map[cell] ?? 0] ?? 0) & F.SOLID) !== 0;
+  const open = solid(side1) === solid(side2) ? null : solid(side1) ? side2 : side1;
+  return open === null ? undefined : { x: cellX(open) * TILE, y: cellY(open) * TILE };
+}
+
+/** When a region's intro starts to fade (cards.ts, TIMELINES.intro). */
+const INTRO_FADE_MS = 5600;
+
+/** Whether this device has not yet shown the region's intro; notes it as shown. */
+function firstVisit(region: number): boolean {
+  try {
+    const seen = (localStorage.getItem('pd-intro-seen') ?? '').split(',').filter(Boolean);
+    if (seen.includes(String(region))) return false;
+    localStorage.setItem('pd-intro-seen', [...seen, region].join(','));
+    return true;
+  } catch {
+    // Without storage, only the card: the intro would come back every time.
+    return false;
+  }
+}
+
 export class View {
   readonly puppets = new Map<string, Puppet>();
   floaters: Floater[] = [];
@@ -149,7 +181,8 @@ export class View {
   /** My level-up card: the new level, and when it appeared. */
   levelCard: { lvl: number; start: number } | null = null;
   /** A new region's card on the way down: the depth, and when it appeared. */
-  depthCard: { depth: number; start: number } | null = null;
+  /** The descent's card; `intro` on a region's first visit on this device, with its few lines of text. */
+  depthCard: { depth: number; start: number; intro: boolean } | null = null;
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
   projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string }> = [];
 
@@ -169,7 +202,15 @@ export class View {
 
   /** Coming into a region (or setting out): its card, over the band in the middle. */
   enterRegion(depth: number, now: number): void {
-    this.depthCard = { depth, start: now };
+    this.depthCard = { depth, start: now, intro: firstVisit(Math.floor((depth - 1) / 5)) };
+  }
+
+  /** A tap skips a region's intro to its fading; true if there was one to skip. */
+  skipIntro(now: number): boolean {
+    const card = this.depthCard;
+    if (!card?.intro || now - card.start >= INTRO_FADE_MS) return false;
+    card.start = now - INTRO_FADE_MS;
+    return true;
   }
 
   /**
@@ -222,6 +263,7 @@ export class View {
         // been sent that very moment: no standstill of a frame or two at every cell.
         const late = now - (puppet.moveStart + STEP_MS);
         const chained = walking && late >= 0 && late < STEP_MS / 2 && adjacent(pos, puppet.to);
+        puppet.bend = cornerBend(world.levels[this.depth]?.map, puppet.to, pos);
         puppet.from = at;
         puppet.fromX = here.x;
         puppet.fromY = here.y;
@@ -309,10 +351,15 @@ export class View {
     const k = Math.min(1, Math.max(0, (now - puppet.moveStart) / STEP_MS));
     const fromX = puppet.fromX ?? cellX(puppet.from) * TILE;
     const fromY = puppet.fromY ?? cellY(puppet.from) * TILE;
-    return {
-      x: fromX + (cellX(puppet.to) * TILE - fromX) * k,
-      y: fromY + (cellY(puppet.to) * TILE - fromY) * k,
-    };
+    const toX = cellX(puppet.to) * TILE;
+    const toY = cellY(puppet.to) * TILE;
+    const bend = puppet.bend;
+    if (bend && k < 1) {
+      // Round the corner: a curve pulled towards the open cell beside it.
+      const a = (1 - k) * (1 - k), b = 2 * (1 - k) * k, c = k * k;
+      return { x: a * fromX + b * bend.x + c * toX, y: a * fromY + b * bend.y + c * toY };
+    }
+    return { x: fromX + (toX - fromX) * k, y: fromY + (toY - fromY) * k };
   }
 
   private cellOf(puppet: Puppet, now: number): number {

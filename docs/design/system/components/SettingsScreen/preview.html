@@ -1,0 +1,24 @@
+<!-- @dsCard group="Настройки и об игре" height=844 width=820 page subtitle="Шестерёнка оригинала в углу титула (44×44, тихая) и окно «Настройки»: громкость пятью шагами 44 px, эффекты, вибрация, язык, полный экран, ссылки, опасный сброс" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Настройки</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .pair { display: flex; gap: 40px; width: 820px; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; --safe-t: 0px; --safe-b: 34px; }
+</style></head>
+<body>
+<div class="pd-root pair">
+  <div class="phone" id="p1"></div>
+  <div class="phone" id="p2"></div>
+</div>
+<script>
+  PD.demo.title(document.getElementById('p1'), { challenges: 2 });
+  var p2 = document.getElementById('p2');
+  PD.demo.title(p2, { pressed: true });
+  var o = PD.demo.overlay(p2, PD.demo.win.settings('ru'));
+  o.querySelectorAll('.pd-seg').forEach(function (s) { PD.seg(s, s.querySelector('[aria-checked="true"]').dataset.v); });
+  PD.sprite(document.body);
+</script>
+</body>
+</html>
