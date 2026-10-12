@@ -1510,8 +1510,39 @@ function drawBackdrop(now: number): void {
 const UNDER_WINDOW_MS = 66;
 let lastUnderWindow = 0;
 
+/** Frames of the co-op log's current stretch: how many, how many slow, the slowest (ms). */
+const frames = { count: 0, slow: 0, worst: 0, since: 0, prev: 0, sentAt: 0 };
+
+/** Writes how smoothly frames came, every 15 s of online play; and sends the log every few minutes, to see what players feel. */
+function noteFrame(now: number): void {
+  const dt = frames.prev ? now - frames.prev : 0;
+  frames.prev = now;
+  if (session?.mode !== 'online' || document.hidden) {
+    frames.since = now;
+    return;
+  }
+  if (!frames.since) frames.since = now;
+  // A window over the map draws it on purpose at 15 a second.
+  if (dt > 0 && dt < 2000 && !windowOverMap()) {
+    frames.count++;
+    if (dt > 100) frames.slow++;
+    frames.worst = Math.max(frames.worst, dt);
+  }
+  if (now - frames.since >= 15_000) {
+    const seconds = (now - frames.since) / 1000;
+    netlog(`frames: ${Math.round(frames.count / seconds)} a second, ${frames.slow} slow (>100 ms), worst ${Math.round(frames.worst)} ms`);
+    Object.assign(frames, { count: 0, slow: 0, worst: 0, since: now });
+  }
+  if (!frames.sentAt) frames.sentAt = now;
+  else if (now - frames.sentAt > 4 * 60_000) {
+    frames.sentAt = now;
+    sendNetlog('periodic');
+  }
+}
+
 function frame(now: number): void {
   requestAnimationFrame(frame);
+  noteFrame(now);
   if (session && windowOverMap()) {
     if (now - lastUnderWindow < UNDER_WINDOW_MS) return;
     lastUnderWindow = now;
@@ -1812,7 +1843,7 @@ function tick(now: number): void {
     if (loggedWait.count > 0) {
       const lasted = now - loggedWait.since;
       netlog(`waited ${(lasted / 1000).toFixed(1)} s for ${loggedWait.count} companion(s)`);
-      if (lasted > 6000 && session.mode === 'online') sendNetlog('long wait');
+      if (lasted > 4000 && session.mode === 'online') sendNetlog('long wait');
     }
     if (waitingNow > 0) netlog(`waiting for ${waitingNow} companion(s)`);
     loggedWait.count = waitingNow;

@@ -80,6 +80,8 @@ export interface World {
   heroes: Hero[];
   /** Cells the party has seen, per depth; shared by all heroes. */
   explored: Record<number, boolean[]>;
+  /** The deepest depth any hero has stood on (absent in older saves); fallen heroes get up only below it. */
+  reached?: number;
   /** Accepted actions so far. */
   turn: number;
   /** Last monster id handed out. */
@@ -379,6 +381,21 @@ function nextTurn(world: World, depth: number): Turn | undefined {
 
 function companionWaiting(world: World, hero: Hero): boolean {
   return world.heroes.some((other) => other !== hero && other.depth === hero.depth && isAlive(other) && other.intent);
+}
+
+/**
+ * What a hero does on their turn while their player is away or has looked away (the co-op
+ * room plays it for them, so the party need not wait): strike back at a monster beside them
+ * that is after them, the weakest first; otherwise wait. Never anything else: no items, no
+ * steps, nothing a player would mind being chosen for them.
+ */
+export function autoAction(world: World, heroId: string): Action {
+  const hero = heroById(world, heroId);
+  if (!hero || !isAlive(hero)) return { type: 'wait' };
+  const foes = floorAt(world, hero.depth).mobs
+    .filter((mob) => mob.state === 'hunting' && mob.enemy === hero.id && adjacent(mob.pos, hero.pos) && !(hero.charmed > 0 && hero.charmedBy === mob.id))
+    .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1));
+  return foes.length > 0 ? { type: 'attack', target: foes[0]!.id } : { type: 'wait' };
 }
 
 /** Heroes everyone else on their depth is waiting for. */
@@ -1104,8 +1121,15 @@ function place(world: World, hero: Hero, level: Level, near: number): void {
   observe(world, hero);
 }
 
-/** Fallen heroes get back up at the stairs whenever a companion goes deeper. */
+/**
+ * Fallen heroes get back up at the stairs when a companion goes deeper than the party has
+ * been before: going up and down again is no cure.
+ */
 function reviveFallen(world: World, depth: number, effects: Effect[]): void {
+  // Worlds from before this was kept: as deep as anyone stands now.
+  const reached = world.reached ?? Math.max(0, ...world.heroes.filter((h) => h.depth !== depth || !isAlive(h)).map((h) => h.depth));
+  world.reached = Math.max(reached, depth);
+  if (depth <= reached) return;
   const level = levelAt(world, depth);
   for (const fallen of world.heroes) {
     if (isAlive(fallen)) continue;

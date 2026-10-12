@@ -219,6 +219,16 @@ describe('co-op turns on the server', () => {
     expect(replicas.bob.world).toEqual(world);
   });
 
+  it('plays a hero who has looked away: they strike back at what attacks them', () => {
+    const { room } = standoff();
+    const deliveries = [
+      ...room.receive('alice', { type: 'act', action: { type: 'wait' } }, IDLE_TIMEOUT + 1),
+      ...room.receive('alice', { type: 'act', action: { type: 'wait' } }, IDLE_TIMEOUT + 2),
+    ];
+    const played = deliveries.flatMap((d) => (d.message.type === 'event' && d.message.event.type === 'act' && d.message.event.heroId === 'bob' ? [d.message.event.action.type] : []));
+    expect(played).toContain('attack');
+  });
+
   it('never waits for a disconnected hero', () => {
     const { room, replicas } = standoff();
     const world = room.state().world;

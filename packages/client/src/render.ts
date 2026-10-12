@@ -109,6 +109,29 @@ function drawFog(ctx: CanvasRenderingContext2D, level: Level, visible: readonly 
 let fine = 1;
 const snap = (v: number): number => Math.round(v / fine) * fine;
 
+/** A soft pixel puff of gas, 12×12, in a colour (made once per colour). */
+const puffs = new Map<string, HTMLCanvasElement>();
+function puffImage(color: string): HTMLCanvasElement {
+  let image = puffs.get(color);
+  if (image) return image;
+  image = document.createElement('canvas');
+  image.width = image.height = 12;
+  const g = image.getContext('2d')!;
+  for (let y = 0; y < 12; y++) {
+    for (let x = 0; x < 12; x++) {
+      const d = Math.hypot(x - 5.5, y - 5.5);
+      if (d > 5.6) continue;
+      // Thick in the middle, dithered thin at the rim.
+      const a = d < 3 ? 0.85 : d < 4.6 ? 0.55 : (x + y) % 2 === 0 ? 0.35 : 0;
+      if (!a) continue;
+      g.fillStyle = `rgba(${color}, ${a})`;
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+  puffs.set(color, image);
+  return image;
+}
+
 function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y: number, now: number): void {
   const { sheet, anims } = puppet.sprite;
   const anim = puppet.anim === 'idle' && puppet.pumped ? 'pump' : puppet.anim;
@@ -119,7 +142,14 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   const lunge = puppet.lungeStart !== undefined && now - puppet.lungeStart < LUNGE_MS ? Math.sin((Math.PI * (now - puppet.lungeStart)) / LUNGE_MS) : 0;
   const knock = knockback(puppet, now);
   const dx = snap(x + (TILE - sheet.w) / 2 + lunge * (puppet.lungeX ?? 0)) + knock * (puppet.knockX ?? 0);
-  const dy = snap(y + TILE - sheet.h + lunge * (puppet.lungeY ?? 0)) + knock * (puppet.knockY ?? 0);
+  // Floating: a few pixels up, bobbing slowly, with its shadow left on the floor.
+  const hover = puppet.levitating && puppet.alive ? 4 + Math.round(Math.sin(now / 320)) : 0;
+  const dy = snap(y + TILE - sheet.h + lunge * (puppet.lungeY ?? 0)) + knock * (puppet.knockY ?? 0) - hover;
+  if (hover) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(snap(x + 4), snap(y + TILE - 2), 8, 2);
+    ctx.fillRect(snap(x + 5), snap(y + TILE - 3), 6, 1);
+  }
 
   ctx.save();
   if (puppet.invisible) ctx.globalAlpha = 0.4;
@@ -313,12 +343,26 @@ export function render(
     ctx.fillRect((flash.cell % WIDTH) * TILE, Math.trunc(flash.cell / WIDTH) * TILE, TILE, TILE);
   }
 
-  // Gas where it can be seen, thicker where there is more of it, slowly swirling.
+  // Gas where it can be seen: a faint haze over the cell and puffs drifting in it, thicker where
+  // there is more (the original's Speck clouds), never flat squares.
   for (const cloud of scene.gas ?? []) {
     if (!visible[cloud.pos]) continue;
-    const swirl = 0.85 + 0.15 * Math.sin(now / 400 + cloud.pos);
-    ctx.fillStyle = `rgba(${cloud.color}, ${Math.min(0.55, 0.12 + cloud.volume / 120) * swirl})`;
-    ctx.fillRect((cloud.pos % WIDTH) * TILE, Math.trunc(cloud.pos / WIDTH) * TILE, TILE, TILE);
+    const cx = (cloud.pos % WIDTH) * TILE;
+    const cy = Math.trunc(cloud.pos / WIDTH) * TILE;
+    const thick = Math.min(1, 0.25 + cloud.volume / 60);
+    ctx.fillStyle = `rgba(${cloud.color}, ${0.1 * thick})`;
+    ctx.fillRect(cx, cy, TILE, TILE);
+    const puff = puffImage(cloud.color);
+    const drift = quality.reducedMotion ? 0 : now;
+    const puffs = quality.light ? 1 : 2;
+    for (let i = 0; i < puffs; i++) {
+      const seed = cloud.pos * 7 + i * 13;
+      const px = cx + 2 + Math.sin(drift / (900 + i * 300) + seed) * 4;
+      const py = cy + 1 + Math.cos(drift / (1100 + i * 250) + seed * 1.3) * 3 - i * 2;
+      ctx.globalAlpha = Math.min(0.75, 0.3 + 0.45 * thick) * (0.8 + 0.2 * Math.sin(drift / 500 + seed));
+      ctx.drawImage(puff, Math.round(px), Math.round(py));
+    }
+    ctx.globalAlpha = 1;
   }
 
   // The region's mist, drifting slowly over what can be seen (the dark of the fog covers the rest).

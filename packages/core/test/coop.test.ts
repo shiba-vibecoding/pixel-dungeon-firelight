@@ -50,4 +50,22 @@ describe('co-op', () => {
     rat.enemy = 'alice';
     expect(isSafe(world, bob)).toBe(true);
   });
+
+  it('gets the fallen up only on a depth the party has not reached before', () => {
+    const { world } = party();
+    const alice = heroById(world, 'alice')!;
+    const bob = heroById(world, 'bob')!;
+    bob.hp = 0;
+    alice.pos = levelAt(world, 1).exit;
+    expect(act(world, 'alice', { type: 'descend' }).ok).toBe(true);
+    expect(bob.hp).toBeGreaterThan(0);
+    expect(bob.depth).toBe(2);
+    // Up and down again: no cure.
+    bob.hp = 0;
+    alice.pos = levelAt(world, 2).entrance;
+    expect(act(world, 'alice', { type: 'ascend' }).ok).toBe(true);
+    alice.pos = levelAt(world, 1).exit;
+    expect(act(world, 'alice', { type: 'descend' }).ok).toBe(true);
+    expect(bob.hp).toBe(0);
+  });
 });

@@ -1,5 +1,5 @@
 import {
-  applyEvent, blockers, type ClientMessage, createWorld, type PlayerInfo, type ServerMessage, type World,
+  applyEvent, autoAction, blockers, type ClientMessage, createWorld, type PlayerInfo, type ServerMessage, type World,
   type WorldEvent,
 } from '@pd/core';
 
@@ -230,9 +230,15 @@ export class RoomLogic {
     return deliveries;
   }
 
+  /** A turn played for a hero whose player is not at the controls: they strike back if attacked, else wait (core autoAction). */
   private autoWait(heroId: string): Delivery[] {
-    const event: WorldEvent = { type: 'act', heroId, action: { type: 'wait' } };
-    return applyEvent(this.saved.world, event).ok ? [this.broadcast(event)] : [];
+    const action = autoAction(this.saved.world, heroId);
+    let event: WorldEvent = { type: 'act', heroId, action };
+    if (!applyEvent(this.saved.world, event).ok) {
+      event = { type: 'act', heroId, action: { type: 'wait' } };
+      if (!applyEvent(this.saved.world, event).ok) return [];
+    }
+    return [this.broadcast(event)];
   }
 
   private commit(event: WorldEvent, recipients: string[]): Delivery[] {

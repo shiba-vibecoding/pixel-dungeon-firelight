@@ -107,6 +107,8 @@ export interface Puppet {
   /** Burning or poisoned: embers or bubbles rise off it. */
   burning?: boolean;
   poisoned?: boolean;
+  /** Floating (a potion of levitation): it hovers over the floor, its shadow below. */
+  levitating?: boolean;
 }
 
 export interface Floater {
@@ -374,6 +376,7 @@ export class View {
         puppet.look = this.looks[hero.id];
         puppet.burning = hero.burning > 0;
         puppet.poisoned = hero.poison > 0;
+        puppet.levitating = (hero.levitating ?? 0) > 0;
         puppet.row = itemDef(hero.armor.kind).tier ?? 0;
         puppet.label = hero.id === myId ? '' : hero.name;
       }
