@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p packages/core && tsc -p packages/core/test && tsc -p packages/client && tsc -p packages/server && tsc -p packages/server/test",
+    "typecheck": "tsc -p packages/core && tsc -p packages/core/test && tsc -p packages/client && tsc -p packages/client/test && tsc -p packages/server && tsc -p packages/server/test",
     "dev": "npm run dev -w @pd/client",
     "server": "npm run dev -w @pd/server",
     "build": "npm run build -w @pd/client",

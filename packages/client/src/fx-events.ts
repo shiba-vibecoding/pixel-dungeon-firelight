@@ -1,7 +1,8 @@
 import { type Effect, HEIGHT, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
-import { type BurstOptions, fx } from './fx';
-import { TILE, type View } from './view';
+import { type BurstOptions, fx, type Piece } from './fx';
+import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
+import { duration } from './sprites';
 
 /*
  * What the dungeon's events look like beyond the sprites: blood and sparks on
@@ -45,7 +46,111 @@ function material(kind: string): { colors: readonly string[]; glow: boolean } {
   }
 }
 
+/**
+ * What a creature comes apart into: chunks of meat, bone chips, blobs of slime,
+ * stone and metal bits, embers that burn out, or (for ghosts) only wisps; what
+ * a chunk smears where it bounces, the pool spreading under the body, and
+ * whether a body is left at all.
+ */
+interface Gore {
+  pieces: readonly Piece[];
+  smear: string | null;
+  pool: { color: string; edge: string } | null;
+  corpse: boolean;
+  /** Chunks that glow and burn out, leaving nothing. */
+  embers?: boolean;
+  /** Nothing solid: it leaves as a wisp. */
+  wisp?: boolean;
+}
+
+const MEAT: Gore = {
+  pieces: [['#c42020', '#5a0808'], ['#8a1010', '#420404'], ['#e07070', '#a03030'], ['#d83030', '#6a0a0a']],
+  smear: '#7a0e0e', pool: { color: '#7a0e0e', edge: '#4e0606' }, corpse: true,
+};
+const BONE_CHIPS: Gore = {
+  pieces: [['#ece6cc', '#8f8a78'], ['#d6cfb4', '#7a7462'], ['#c4bea6', '#6a6555']], smear: null, pool: null, corpse: true,
+};
+const SLIME: Gore = {
+  pieces: [['#5fcf2f', '#2a6a14'], ['#a6e86a', '#4f8f2f'], ['#2f8f1f', '#164a0c']],
+  smear: '#2f8f1f', pool: { color: '#2f7f1f', edge: '#1a4a10' }, corpse: true,
+};
+const RUBBLE: Gore = {
+  pieces: [['#9a958a', '#4a4740'], ['#c0b8a4', '#5e584c'], ['#6e6a62', '#38352f'], ['#c8ccd4', '#5a5e66']], smear: null, pool: null, corpse: true,
+};
+const EMBERS: Gore = {
+  pieces: [['#ffcf60', '#ff7a20'], ['#ffefa0', '#ffb040'], ['#ff7a20', '#c03008']], smear: null, pool: null, corpse: false, embers: true,
+};
+const ECTOPLASM: Gore = { pieces: [], smear: null, pool: null, corpse: false, wisp: true };
+const VOID_FLESH: Gore = {
+  pieces: [['#b050d0', '#4a1a6a'], ['#6a2a9a', '#30104a'], ['#e8a0ff', '#8a50b0']],
+  smear: '#4a1a6a', pool: { color: '#4a1a6a', edge: '#2a0a3a' }, corpse: true,
+};
+const CHITIN: Gore = {
+  pieces: [['#ffd020', '#8a6a08'], ['#4a3a18', '#1a1206'], ['#fff0a0', '#b09030']], smear: null, pool: null, corpse: true,
+};
+
+function goreOf(kind: string): Gore {
+  switch (kind as MobKind) {
+    case 'goo': case 'acidic': case 'spinner': case 'rottingFist': case 'larva': case 'swarm':
+      return SLIME;
+    case 'skeleton': case 'undead':
+      return BONE_CHIPS;
+    case 'golem': case 'dm300': case 'statue':
+      return RUBBLE;
+    case 'wraith': case 'curse': case 'ghost': case 'mirror':
+      return ECTOPLASM;
+    case 'elemental': case 'burningFist':
+      return EMBERS;
+    case 'eye': case 'yog':
+      return VOID_FLESH;
+    case 'bee':
+      return CHITIN;
+    default:
+      return MEAT;
+  }
+}
+
 const BOSSES = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
+
+/** The way the last blow on each creature went, so its death can throw it apart that way. */
+const blows = new Map<string, { angle: number; at: number }>();
+/** A blow this recent still counts as the one that killed. */
+const BLOW_MS = 1500;
+
+/** Where a character stands on the floor (its feet), and how high its middle is over them. */
+function feetOf(view: View, puppet: Puppet, now: number): { x: number; y: number; z: number } {
+  const { x, y } = view.position(puppet, now);
+  return { x: x + TILE / 2, y: y + TILE - 3, z: Math.min(puppet.sprite.sheet.h, TILE) / 2 - 1 };
+}
+
+/** Chunks thrown off a body: a handful on a kill (more for a boss), one or two off a heavy blow. */
+function throwGibs(feet: { x: number; y: number; z: number }, gore: Gore, count: number, angle: number | undefined, force: number, now: number): void {
+  if (gore.wisp || gore.pieces.length === 0) return;
+  fx.gib(feet.x, feet.y, feet.z, now, {
+    count, pieces: gore.pieces, smear: gore.smear, angle, glow: gore.embers, life: [500, 950],
+    speed: [26 * force, 72 * force], up: [70, 70 + 60 * force], size: [2.4, 4.2],
+  });
+}
+
+/** The body of a slain monster stays where it fell once its death has played (not the ghostly or fiery). */
+function layBody(view: View, puppet: Puppet, gore: Gore, boss: boolean, now: number): void {
+  const { sheet, anims } = puppet.sprite;
+  if (!gore.corpse || puppet.isHero || !sheet.image.complete) return;
+  const die = anims.die;
+  const frame = die.frames[die.frames.length - 1] ?? 0;
+  const end = now + duration(die);
+  // The sprite stays whole to the end of its death; then the body takes its place.
+  puppet.laid = true;
+  puppet.removeAt = end;
+  const at = view.position(puppet, end);
+  fx.corpse({
+    image: sheet.image, sx: (frame % sheet.cols) * sheet.w, sy: (Math.floor(frame / sheet.cols) + puppet.row) * sheet.h, w: sheet.w, h: sheet.h,
+    flip: puppet.flip, x: at.x + (TILE - sheet.w) / 2, y: at.y + TILE - sheet.h, at: end,
+    // A boss lies there for the rest of the visit; anything else for a minute.
+    life: boss ? 3_600_000 : 60_000,
+    pool: gore.pool ? { start: now + duration(die) * 0.4, radius: Math.max(4, Math.min(10, Math.round(sheet.w * 0.35))) + (boss ? 3 : 0), ...gore.pool } : undefined,
+  });
+}
 
 const cellCentre = (cell: number): { x: number; y: number } => ({ x: (cell % WIDTH) * TILE + TILE / 2, y: Math.trunc(cell / WIDTH) * TILE + TILE / 2 });
 
@@ -93,28 +198,57 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       const share = Math.min(1, effect.damage / Math.max(1, target.ht));
       const angle = from ? Math.atan2(to.y - from.y, to.x - from.x) : undefined;
       const { colors, glow } = material(target.kind);
+      // The view has already marked the slain dead; its health is still from before the blow.
+      const killing = !target.alive || target.hp - effect.damage <= 0;
+      const heavy = share >= 0.25 || killing;
+      const gore = goreOf(target.kind);
+      if (angle !== undefined) {
+        if (blows.size > 200) blows.clear();
+        blows.set(effect.target, { angle, at: now });
+        // The struck reels back along the blow, a few whole pixels, and springs back.
+        const reach = heavy ? 3 : 2;
+        target.knockStart = now;
+        target.knockX = Math.round(Math.cos(angle) * reach);
+        target.knockY = Math.round(Math.sin(angle) * reach);
+        // A heavy blow cuts a white streak across them.
+        if (heavy) fx.slash(to.x, to.y, angle, now);
+      }
       // The «Sparks» effect: a hero's blows strike gold as well.
       if (attacker?.look?.effect === 'sparks') {
         burst(to, now, { count: 8 + Math.round(share * 12), colors: SPARKS, glow: true, speed: [40, 110], life: [180, 420], gravity: 140, drag: 0.1, size: [1, 2], angle, cone: 1.4 });
       }
       burst(to, now, {
-        count: 6 + Math.round(share * 30) + Math.min(10, effect.damage), colors, glow, speed: [35, 100 + share * 90], life: [280, 680],
-        gravity: 260, drag: 0.12, size: [1, 3], angle, cone: 1.7, spread: 2,
+        count: 6 + Math.round(share * 30) + Math.min(10, effect.damage) + (heavy ? 8 : 0), colors, glow,
+        speed: [35, 100 + share * 90 + (heavy ? 30 : 0)], life: [280, 680], gravity: 260, drag: 0.12, size: [1, 3], angle, cone: 1.7, spread: 2,
       });
-      // What spilt stays on the floor a while.
+      // What spilt stays on the floor.
       if (!glow) fx.splat(to.x, to.y, now, colors, 2 + Math.round(share * 8));
+      // A very heavy blow that does not kill still tears a chunk or two off.
+      if (!killing && share >= 0.3) throwGibs(feetOf(view, target, now), gore, share >= 0.5 ? 2 : 1, angle, 0.8, now);
       const mine = effect.attacker === myId || effect.target === myId;
       if (effect.target === myId) {
         // The hero's own wounds: the screen's edges flush red, and the view jolts.
         fx.flash('200, 0, 0', 0.28 + share * 0.7, 380 + share * 300, now, true);
         fx.shake(1 + share * 7, 160 + share * 200, now);
         if (share >= 0.2) fx.hitStop(70);
-      } else if (mine && (share >= 0.25 || target.hp - effect.damage <= 0)) {
+      } else if (mine && heavy) {
         audio.play('hit', 0.55, 0.8);
         fx.shake(1.5 + share * 3, 160, now);
         fx.hitStop(55 + share * 50);
-        // A heavy blow's number lands big.
-        for (const floater of view.floaters) if (floater.start === now && floater.text === String(effect.damage)) floater.scale = 1.5;
+        // A heavy blow's number lands big, my killing blow's bigger still.
+        const kill = killing && effect.attacker === myId;
+        for (const floater of view.floaters) if (floater.start === now && floater.text === String(effect.damage)) floater.scale = kill ? 2 : 1.5;
+        if (kill) {
+          // And the floor round the slain is kicked up in a ring.
+          const feet = feetOf(view, target, now);
+          fx.ring(feet.x, feet.y, now, gore.pieces.length > 0 && !gore.embers ? [...DUST, gore.pieces[0]![0]] : DUST, 14);
+          if (gore.smear) {
+            for (let i = 0; i < 6; i++) {
+              const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+              fx.splat(feet.x + Math.cos(a) * 7, feet.y - 4 + Math.sin(a) * 3.5, now, [gore.smear], 1, 1);
+            }
+          }
+        }
       }
       return;
     }
@@ -132,10 +266,22 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       const at = centreOf(view, effect.who, now) ?? cellCentre(effect.pos);
       const kind = puppet?.kind ?? effect.kind ?? '';
       const boss = BOSSES.has(kind);
-      burst(at, now, { count: boss ? 90 : 28, ...material(kind), speed: [30, boss ? 160 : 120], life: [400, boss ? 1400 : 850], gravity: 180, drag: 0.15, size: [1, boss ? 4 : 3] });
+      const gore = goreOf(kind);
+      // A spray of droplets (kept small: the chunks below are what reads as pieces of it).
+      burst(at, now, { count: boss ? 90 : 24, ...material(kind), speed: [30, boss ? 160 : 120], life: [400, boss ? 1400 : 850], gravity: 180, drag: 0.15, size: [1, boss ? 3 : 2] });
       if (!material(kind).glow) fx.splat(at.x, at.y, now, material(kind).colors, boss ? 40 : 10, boss ? 14 : 7);
-      // What was alive leaves as a faint wisp.
-      burst(at, now, { count: boss ? 30 : 6, colors: ['#ffffff', '#d8e8ff'], glow: true, speed: [4, 14], life: [600, 1100], rise: 18, drag: 0.3, size: [1, 1] });
+      // It comes apart: chunks fly the way the killing blow went (whoever struck it, so the whole party sees them).
+      const blow = blows.get(effect.who);
+      blows.delete(effect.who);
+      const angle = blow && now - blow.at < BLOW_MS ? blow.angle : undefined;
+      const feet = puppet ? feetOf(view, puppet, now) : { x: at.x, y: at.y + 5, z: 5 };
+      throwGibs(feet, gore, boss ? 16 : 4 + Math.floor(Math.random() * 4), angle, boss ? 1.3 : 1, now);
+      if (puppet) layBody(view, puppet, gore, boss, now);
+      // What was alive leaves as a faint wisp (a ghost as nothing else).
+      burst(at, now, {
+        count: (boss ? 30 : 6) * (gore.wisp ? 3 : 1), colors: gore.wisp ? [...ECTO, '#ffffff'] : ['#ffffff', '#d8e8ff'], glow: true,
+        speed: [4, gore.wisp ? 24 : 14], life: [600, gore.wisp ? 1500 : 1100], rise: 18, drag: 0.3, size: [1, gore.wisp ? 3 : 1], spread: gore.wisp ? 5 : 2,
+      });
       if (boss) {
         fx.shake(7, 900, now);
         fx.flash('255, 255, 255', 0.55, 500, now);
@@ -429,6 +575,11 @@ export function ambientFx(view: View, now: number, dt: number): void {
     const { x, y } = view.position(puppet, now);
     if (puppet.burning && chance(14)) {
       fx.burst(x + 3 + Math.random() * 10, y + 6 + Math.random() * 8, now, { count: 1, colors: FIRE, glow: true, speed: [2, 8], life: [400, 800], rise: 22, drag: 0.5, size: [1, 1], spread: 0 });
+    }
+    // Badly wounded, a walker leaves drops behind it.
+    if (puppet.hp < puppet.ht * 0.4 && now - puppet.moveStart < STEP_MS && chance(3.5)) {
+      const smear = goreOf(puppet.kind).smear;
+      if (smear) fx.splat(x + TILE / 2, y + TILE - 7, now, [smear], 1, 2.5);
     }
     if (puppet.poisoned && chance(3)) {
       fx.burst(x + 4 + Math.random() * 8, y + 6, now, { count: 1, colors: ICHOR, speed: [1, 4], life: [500, 900], rise: 10, drag: 0.5, size: [1, 1], spread: 0 });

@@ -1581,6 +1581,8 @@ function tick(now: number): void {
   }
 
   const level = levelAt(world, me.depth);
+  // Chunks thrown in a fight land on this floor, never in its walls.
+  fx.floor = level.map;
 
   // Footsteps, doors and stairs of my own hero.
   if (lastPlace.generation === session.generation && isAlive(me)) {
