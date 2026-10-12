@@ -533,6 +533,8 @@ function tapCell(cell: number): void {
     view.say(t.barricade, '#ff8800');
     return;
   }
+  // The alchemy pot: what it is for, then walk up to it as usual.
+  if (level.map[cell] === T.ALCHEMY) view.say(t.alchemyPot, '#ffff44');
   walk.queue = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored) ?? [];
   if (walk.queue.length === 0) return;
   walk.pickup = heapAt(world, me.depth, cell);

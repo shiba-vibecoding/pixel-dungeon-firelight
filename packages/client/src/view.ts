@@ -509,6 +509,12 @@ export class View {
           break;
         case 'planted':
           break;
+        case 'brewed':
+          if (effect.depth !== this.depth) break;
+          audio.play('puff');
+          this.flashes.push({ cell: effect.pos, start: now, color: '255, 255, 255', duration: 700 });
+          this.say(t.brewed, COLORS.highlight, now);
+          break;
         case 'mimic':
           if (effect.depth !== this.depth) break;
           this.say(t.isMimic, COLORS.negative, now);

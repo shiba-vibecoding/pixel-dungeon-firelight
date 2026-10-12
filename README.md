@@ -26,7 +26,7 @@ Yendor on depth 26:
   barricades.
 - Special rooms: treasury, armory, library and crypt behind locked doors with
   their iron keys, magic wells, trap rooms, storage rooms behind barricades,
-  gardens,
+  gardens, laboratories with an alchemy pot (three seeds brew a potion),
   and the shops on depths 6, 11, 16 and 21.
 - Monsters with the original stats and behaviour: rats, gnoll scouts, sewer
   crabs; skeletons that explode, thieves that steal and run, swarms of flies
@@ -64,7 +64,7 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: the rotberry, alchemy and the ring of herbalism; the wands of amok, reach, flock and
+Not ported yet: the rotberry and the ring of herbalism; the wands of amok, reach, flock and
 regrowth; hero subclasses (the Tome of Mastery); the ankh; the blacksmith's
 and the imp's quests and the wandmaker's rotberry errand; the remaining special
 rooms (pool, statue, laboratory, vault, weak floor) and chasms you can

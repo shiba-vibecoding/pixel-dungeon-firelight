@@ -71,6 +71,8 @@ export type Effect =
   /** A seed took root; a plant was set off by someone stepping on it. */
   | { type: 'planted'; depth: number; pos: number; kind: PlantKind }
   | { type: 'plantTriggered'; depth: number; pos: number; kind: PlantKind; who: string }
+  /** Seeds in an alchemy pot brewed into a potion. */
+  | { type: 'brewed'; depth: number; pos: number }
   /** A chest that was a mimic springs at the hero. */
   | { type: 'mimic'; depth: number; mob: string; hero: string }
   /** A torch lit; a succubus's charm; a scorpio's crippling sting. */

@@ -3,12 +3,12 @@ import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
 import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, leaveCell } from './floor';
 import {
-  buyPrice, type Heap, isStackable, type Item, itemDef, type ItemKind, itemPrice, magicMissileDamage, missileStats,
-  wandMaxCharges,
+  buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
+  magicMissileDamage, missileStats, wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
 import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
-import { discover, F, hasFlag } from './level/terrain';
+import { discover, F, hasFlag, T } from './level/terrain';
 import { type Burst, burst } from './traps';
 import { plant, SEED_PLANTS } from './plants';
 import { zapWand } from './wands';
@@ -152,6 +152,7 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       const item = hero.items.splice(action.item, 1)[0]!;
       dropItem(ctx.floor, hero.pos, item);
       ctx.effects.push({ type: 'dropped', hero: hero.id, item });
+      if (ctx.level.map[hero.pos] === T.ALCHEMY) brew(ctx, hero.pos);
       return TIME_TO_DROP;
     }
     case 'throw':
@@ -203,7 +204,13 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     if (--item.qty <= 0) hero.items.splice(index, 1);
     const end = ballistica(ctx, hero.pos, target).at(-1)!;
     ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: kind });
-    plant(ctx, end, SEED_PLANTS[kind]!);
+    // Into an alchemy pot, it goes into the brew instead.
+    if (ctx.level.map[end] === T.ALCHEMY) {
+      dropItem(ctx.floor, end, createItem(kind));
+      brew(ctx, end);
+    } else {
+      plant(ctx, end, SEED_PLANTS[kind]!);
+    }
     return;
   }
   const boomerang = item.kind === 'missile.boomerang';
@@ -307,6 +314,40 @@ function pickUp(ctx: Ctx, hero: Hero): void {
   if (left.length > 0) ctx.effects.push({ type: 'packFull', hero: hero.id });
   heap.items = left;
   if (left.length === 0) ctx.floor.heaps.splice(ctx.floor.heaps.indexOf(heap), 1);
+}
+
+/** The potion each seed brews into (Plant.Seed.alchemyClass); icecap's frost is not ported. */
+const ALCHEMY: Partial<Record<ItemKind, ItemKind>> = {
+  'seed.firebloom': 'potion.liquidFlame',
+  'seed.sorrowmoss': 'potion.toxicGas',
+  'seed.dreamweed': 'potion.invisibility',
+  'seed.sungrass': 'potion.healing',
+  'seed.earthroot': 'potion.paralyticGas',
+  'seed.fadeleaf': 'potion.mindVision',
+};
+const SEEDS_TO_POTION = 3;
+
+/**
+ * Heap.transmute: three seeds or more in an alchemy pot brew a potion, most
+ * often the one the seeds are good for, now and then a random one. Anything
+ * but seeds spoils the brew.
+ */
+function brew(ctx: Ctx, pos: number): void {
+  const heap = ctx.floor.heaps.find((h) => h.pos === pos);
+  if (!heap || !heap.items.every((item) => itemDef(item.kind).category === 'seed')) return;
+  const count = heap.items.reduce((n, item) => n + item.qty, 0);
+  if (count < SEEDS_TO_POTION) return;
+  const { rng } = ctx;
+  let potion: Item;
+  if (rng.int(count) === 0) {
+    potion = new ItemGenerator(rng, ctx.depth).of('potion');
+  } else {
+    const seed = heap.items[rng.chances(heap.items.map((item) => item.qty))]!;
+    const kind = ALCHEMY[seed.kind];
+    potion = kind ? createItem(kind) : new ItemGenerator(rng, ctx.depth).of('potion');
+  }
+  heap.items = [potion];
+  ctx.effects.push({ type: 'brewed', depth: ctx.depth, pos });
 }
 
 /** What mystery meat can do to whoever eats it. */

@@ -512,6 +512,33 @@ function paintShop(level: LevelBuilder, room: Room): void {
   for (const d of room.doors()) d.set(DoorType.REGULAR);
 }
 
+/**
+ * LaboratoryPainter: an alchemy pot in the far corner, a few potions about,
+ * and a locked door whose key lies somewhere on the level.
+ */
+function paintLaboratory(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY_SP, 1);
+  const door = entranceOf(room);
+  const side = rng.int(2) === 0;
+  const pot =
+    door.x === room.left ? { x: room.right - 1, y: side ? room.top + 1 : room.bottom - 1 }
+    : door.x === room.right ? { x: room.left + 1, y: side ? room.top + 1 : room.bottom - 1 }
+    : door.y === room.top ? { x: side ? room.left + 1 : room.right - 1, y: room.bottom - 1 }
+    : { x: side ? room.left + 1 : room.right - 1, y: room.top + 1 };
+  level.setXY(pot.x, pot.y, T.ALCHEMY);
+  const n = rng.intRange(2, 3);
+  for (let i = 0; i < n; i++) {
+    let pos: number;
+    do {
+      pos = room.random(rng);
+    } while (level.map[pos] !== T.EMPTY_SP || level.items.some((spawn) => spawn.pos === pos));
+    level.dropItem(pos, HeapType.HEAP, { roll: 'category', categories: ['potion'], tries: 1 });
+  }
+  lockWithKey(level, room);
+}
+
 /** GardenPainter: tall grass around, grass within, and a bush or two of sungrass. */
 function paintGarden(level: LevelBuilder, room: Room): void {
   const { rng } = level;
@@ -588,6 +615,7 @@ export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painte
   [RoomType.STORAGE, paintStorage],
   [RoomType.SHOP, paintShop],
   [RoomType.GARDEN, paintGarden],
+  [RoomType.LABORATORY, paintLaboratory],
   [RoomType.STANDARD, paintStandard],
   [RoomType.ENTRANCE, paintEntrance],
   [RoomType.EXIT, paintExit],

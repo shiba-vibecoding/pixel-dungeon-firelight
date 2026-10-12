@@ -290,6 +290,8 @@ const en = {
   ringNegative: 'Its level is negative: it works the other way round.',
   putOn: 'Put on',
   plantSeed: 'Plant',
+  alchemyPot: 'An alchemy pot: drop or throw three seeds into it to brew a potion.',
+  brewed: 'The seeds in the pot brew into a potion!',
   plants: {
     firebloom: 'The Firebloom bursts into flames!', icecap: 'The Icecap freezes everything around!',
     sorrowmoss: 'The Sorrowmoss poisons you!', dreamweed: 'The Dreamweed releases a cloud of confusion!',
@@ -700,6 +702,8 @@ const ru: Strings = {
   ringNegative: 'Его уровень отрицательный: оно действует наоборот.',
   putOn: 'Надеть',
   plantSeed: 'Посадить',
+  alchemyPot: 'Алхимический котёл: бросьте в него три семени, чтобы сварить зелье.',
+  brewed: 'Семена в котле превращаются в зелье!',
   plants: {
     firebloom: 'Огнецвет вспыхивает пламенем!', icecap: 'Ледянка замораживает всё вокруг!',
     sorrowmoss: 'Скорбный мох отравляет вас!', dreamweed: 'Дрём-трава выпускает облако дурмана!',
