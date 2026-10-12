@@ -1,41 +1,15 @@
-import { FURY_LEVEL, type Hero, isAlive, isHungry, isStarving, itemDef, maxExp } from '@pd/core';
+import { FURY_LEVEL, type Hero, isAlive, isHungry, isStarving, maxExp, STARVING } from '@pd/core';
+import { audio } from './audio';
 import { t } from './i18n';
-import { FONT } from './render';
-import { type Assets, ICONS } from './sprites';
-import { COLORS, type LogLine } from './view';
+import { AVATAR, sprites } from './screens';
+import type { LogLine } from './view';
 
 /*
- * The in-game HUD, drawn with the original textures: the status pane on top
- * (StatusPane: avatar, health and experience bars, level, depth, menu) and
- * the toolbar at the bottom (Toolbar: wait, search, help).
+ * The in-game HUD in the design system's markup (docs/design/system): the
+ * status band on top (portrait, health, experience, satiety, depth, keys,
+ * menu, buffs, companions), the log and the toolbar at the bottom. The
+ * middle of the screen stays free for the map and its effects.
  */
-
-export type HudButton = 'wait' | 'search' | 'help' | 'backpack' | 'quick' | 'menu' | 'hero';
-
-interface Area {
-  id: HudButton;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-export interface HudState {
-  me: Hero;
-  /** Other heroes in the party, for the co-op roster. */
-  party: Hero[];
-  online: readonly string[];
-  /** Companions the dungeon is waiting for, when my action is queued. */
-  waitingFor: string[];
-  status: string;
-  log: readonly LogLine[];
-  /** BuffIndicator icons to show under the health bar. */
-  buffs: readonly number[];
-  /** The quickslot: a thrown weapon or a wand, ready to use. */
-  quick: { sprite: number; label: string; aiming: boolean } | null;
-  /** Iron keys for the current depth. */
-  keys: number;
-}
 
 /** Buff icons in buffs.png (BuffIndicator). */
 export const BUFF_ICONS = {
@@ -77,223 +51,353 @@ export function heroBuffs(me: Hero): Array<{ name: BuffName; turns?: number }> {
   ];
 }
 
-const TOOLS: ReadonlyArray<{ id: HudButton; sx: number; w: number }> = [
-  { id: 'wait', sx: 0, w: 20 },
-  { id: 'search', sx: 20, w: 20 },
-  { id: 'help', sx: 40, w: 21 },
-];
-const BACKPACK = { id: 'backpack' as const, sx: 60, w: 23 };
-const QUICKSLOT = { id: 'quick' as const, sx: 83, w: 22 };
+export interface HudHandlers {
+  hero(): void;
+  menu(): void;
+  /** A tap on the hourglass: wait a turn. */
+  wait(): void;
+  /** Holding it: rest until healed. */
+  rest(): void;
+  search(): void;
+  examine(): void;
+  quick(): void;
+  backpack(): void;
+  history(): void;
+  /** A tap on a buff icon: what it is. */
+  buff(name: BuffName, turns?: number): void;
+  /** A tap on a companion. */
+  mate(id: string): void;
+}
+
+export interface HudState {
+  me: Hero;
+  /** Other heroes in the party, for the co-op roster. */
+  party: Hero[];
+  online: readonly string[];
+  /** A passing state under the HUD (connecting, waiting for companions, choosing a target). */
+  notice: string;
+  /** Shown beside the notice: e.g. cancelling the choice of a target. */
+  cancel: { label: string; onClick(): void } | null;
+  log: readonly LogLine[];
+  buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
+  /** The quickslot: a thrown weapon or a wand, ready to use. */
+  quick: { sprite: number; label: string; aiming: boolean } | null;
+  /** Iron keys for the current depth. */
+  keys: number;
+  examining: boolean;
+  /** Something new in the backpack since it was last opened. */
+  newLoot: boolean;
+}
+
+/** How long a log line stays, and how many are shown at once (three on short screens). */
+const LOG_MS = 8000;
+const HOLD_MS = 600;
+
+type Child = Node | string | null | undefined | false;
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', ...children: Child[]): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  for (const child of children) if (child) node.append(child);
+  return node;
+}
+
+function icon(sprite: string, width?: number, height?: number): HTMLElement {
+  const node = el('i', 'pd-icon');
+  node.style.backgroundImage = `var(--spr-${sprite})`;
+  if (width) node.style.width = `${width}px`;
+  if (height) node.style.height = `${height}px`;
+  return node;
+}
+
+/** A toolbar glyph from toolbar.png, cut by the design system (--w/--h: its size in pixels). */
+function glyph(sprite: string, w: number, h: number): HTMLElement {
+  const node = icon(sprite);
+  node.style.setProperty('--w', String(w));
+  node.style.setProperty('--h', String(h));
+  return node;
+}
 
 export class Hud {
-  /** Device pixels per HUD pixel. */
-  ui = 3;
-  width = 0;
-  height = 0;
-  private areas: Area[] = [];
-  private pressed: { id: HudButton; until: number } | null = null;
+  readonly root: HTMLElement;
+  private readonly band: HTMLElement;
+  private readonly avatar: HTMLElement;
+  private readonly level: HTMLElement;
+  private readonly hp: HTMLElement;
+  private readonly hpText: HTMLElement;
+  private readonly xp: HTMLElement;
+  private readonly food: HTMLElement;
+  private readonly depth: Text;
+  private readonly keys: Text;
+  private readonly buffBox: HTMLElement;
+  private readonly mates: HTMLElement;
+  private readonly notice: HTMLElement;
+  private readonly log: HTMLElement;
+  private readonly more: HTMLElement;
+  private readonly tools: Record<'wait' | 'search' | 'examine' | 'quick' | 'bag', HTMLButtonElement>;
+  /** What each part last showed, so the DOM is only touched when something changed. */
+  private shown: Record<string, string> = {};
+  private hold: { start: number; timer: number; fired: boolean } | null = null;
 
-  constructor(private readonly assets: Assets) {}
+  constructor(private readonly handlers: HudHandlers) {
+    this.root = document.getElementById('ui')!;
+    const tap = (fn: () => void) => (): void => {
+      audio.play('click');
+      fn();
+    };
 
-  /** HUD pixels kept clear at the top (notch, Telegram's buttons) and bottom (home indicator). */
-  private top = 0;
-  private bottom = 0;
-
-  layout(deviceWidth: number, deviceHeight: number, insetTop = 0, insetBottom = 0): void {
-    // Roughly the original's proportions: a phone is about 240 HUD pixels wide.
-    this.ui = Math.max(2, Math.round(Math.min(deviceWidth, deviceHeight * 0.75) / 240));
-    this.width = Math.floor(deviceWidth / this.ui);
-    this.height = Math.floor(deviceHeight / this.ui);
-    this.top = Math.ceil(insetTop / this.ui);
-    this.bottom = Math.ceil(insetBottom / this.ui);
-    let x = 0;
-    const y = this.height - this.bottom - 25;
-    this.areas = TOOLS.map((tool) => {
-      const area = { id: tool.id, x, y, w: tool.w, h: 25 };
-      x += tool.w;
-      return area;
-    });
-    this.areas.push({ id: BACKPACK.id, x: this.width - BACKPACK.w, y, w: BACKPACK.w, h: 25 });
-    this.areas.push({ id: QUICKSLOT.id, x: this.width - BACKPACK.w - QUICKSLOT.w, y, w: QUICKSLOT.w, h: 25 });
-    this.areas.push({ id: 'menu', x: this.width - 20, y: this.top, w: 20, h: 20 });
-    // The portrait opens the hero's details.
-    this.areas.push({ id: 'hero', x: 0, y: this.top, w: 30, h: 30 });
-  }
-
-  /** The button under a point in device pixels, if any. */
-  hit(px: number, py: number, hasQuickslot = true): HudButton | null {
-    const x = px / this.ui;
-    const y = py / this.ui;
-    const area = this.areas.find(
-      (a) => (hasQuickslot || a.id !== 'quick') && x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h,
+    const avatarButton = el('button', 'pd-avatar');
+    avatarButton.ariaLabel = t.heroLabel;
+    this.avatar = el('i');
+    avatarButton.append(this.avatar);
+    avatarButton.onclick = tap(() => handlers.hero());
+    this.level = el('span', 'pd-hero-lvl');
+    this.hpText = el('span', 'pd-bar-text');
+    this.hp = el('div', 'pd-bar', this.hpText);
+    this.xp = el('div', 'pd-bar thin xp');
+    this.food = el('div', 'pd-bar thin food');
+    this.depth = document.createTextNode('');
+    this.keys = document.createTextNode('');
+    const menu = el('button', 'pd-menu');
+    menu.ariaLabel = t.menu;
+    menu.onclick = tap(() => handlers.menu());
+    this.buffBox = el('div', 'pd-buffs');
+    this.mates = el('div', 'pd-mates');
+    this.notice = el('div', 'pd-hud-notice');
+    this.band = el(
+      'header',
+      'pd-hud',
+      el(
+        'div',
+        'pd-hud-main',
+        el('div', 'pd-avatar-wrap', avatarButton, this.level),
+        el(
+          'div',
+          'pd-hud-bars',
+          this.hp,
+          el(
+            'div',
+            'pd-bars-small',
+            el('div', 'pd-bar-pair', icon('star'), this.xp),
+            el('div', 'pd-bar-pair', icon('food'), this.food),
+          ),
+        ),
+        el(
+          'div',
+          'pd-hud-side',
+          el('span', 'pd-stat', icon('depth'), this.depth),
+          el('span', 'pd-stat', icon('key', 14, 18), this.keys),
+        ),
+        menu,
+      ),
+      this.buffBox,
+      this.mates,
+      this.notice,
     );
-    if (area) this.pressed = { id: area.id, until: performance.now() + 150 };
-    return area?.id ?? null;
+
+    this.more = el('button', 'pd-log-more', t.history);
+    this.more.onclick = tap(() => handlers.history());
+    this.log = el('div', 'pd-log', this.more);
+
+    const tool = (label: string, className: string, ...content: Child[]): HTMLButtonElement => {
+      const node = el('button', `pd-tool${className ? ` ${className}` : ''}`, ...content);
+      node.ariaLabel = label;
+      return node;
+    };
+    this.tools = {
+      wait: tool(t.waitLabel, '', glyph('tool-wait', 12, 12)),
+      search: tool(t.searchLabel, '', glyph('tool-search', 12, 12)),
+      examine: tool(t.examineLabel, '', glyph('tool-info', 8, 12)),
+      quick: tool(t.quickLabel, 'quick empty'),
+      bag: tool(t.backpack, 'bag', glyph('tool-backpack', 14, 15)),
+    };
+    this.tools.search.onclick = tap(() => handlers.search());
+    this.tools.examine.onclick = tap(() => handlers.examine());
+    this.tools.quick.onclick = tap(() => handlers.quick());
+    this.tools.bag.onclick = tap(() => handlers.backpack());
+    this.holdToRest(this.tools.wait);
+    const toolbar = el('nav', 'pd-toolbar', ...Object.values(this.tools));
+    toolbar.ariaLabel = t.actionsLabel;
+
+    this.root.replaceChildren(this.band, this.log, toolbar);
   }
 
-  /** True if a point (device pixels) is covered by the HUD, so taps there do not walk. */
-  covers(px: number, py: number): boolean {
-    const y = py / this.ui;
-    return y < this.top + 34 || y >= this.height - this.bottom - 25;
-  }
-
-  draw(ctx: CanvasRenderingContext2D, state: HudState, now: number): void {
-    const { assets, ui } = this;
-    const W = this.width;
-    const T = this.top;
-    const B = this.height - this.bottom;
-    ctx.imageSmoothingEnabled = false;
-    ctx.globalAlpha = 1;
-    if (T > 0) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, W * ui + ui, T * ui);
-    }
-
-    // Status pane: a nine-patch whose middle column stretches.
-    ctx.setTransform(ui, 0, 0, ui, 0, T * ui);
-    const status = assets.status;
-    ctx.drawImage(status, 0, 0, 80, 64, 0, 0, 80, 64);
-    if (W > 128) ctx.drawImage(status, 80, 0, 1, 64, 80, 0, W - 128, 64);
-    ctx.drawImage(status, 80, 0, 48, 64, W - 48, 0, 48, 64);
-
-    const me = state.me;
-    if (isAlive(me)) {
-      const sheet = assets.heroes[me.heroClass].sheet.image;
-      ctx.drawImage(sheet, 1, (itemDef(me.armor.kind).tier ?? 0) * 15, 11, 15, 10, 8, 11, 15);
-      if (me.hp <= me.ht / 4) {
-        ctx.fillStyle = `rgba(204, 0, 0, ${0.25 + 0.15 * Math.sin(now / 150)})`;
-        ctx.fillRect(10, 8, 11, 15);
-      }
-    } else {
-      const [sx, sy, w, h] = ICONS.skull;
-      ctx.drawImage(assets.icons, sx, sy, w, h, 11, 11, w, h);
-    }
-
-    const hp = Math.max(0, me.hp) / me.ht;
-    ctx.drawImage(assets.hpBar, 0, 0, Math.ceil(64 * hp), 4, 30, 3, Math.ceil(64 * hp), 4);
-    const exp = me.exp / maxExp(me);
-    if (exp > 0) ctx.drawImage(assets.expBar, 0, 0, 16, 1, 0, 0, W * exp, 1);
-    state.buffs.forEach((icon, i) => {
-      ctx.drawImage(assets.buffs, (icon % 18) * 7, Math.floor(icon / 18) * 7, 7, 7, 32 + i * 8, 11, 7, 7);
-    });
-    ctx.setTransform(ui, 0, 0, ui, 0, 0);
-
-    // Pressed toolbar buttons light up briefly.
-    for (const area of this.areas) {
-      const tool =
-        TOOLS.find((tl) => tl.id === area.id) ??
-        (area.id === BACKPACK.id ? BACKPACK : area.id === QUICKSLOT.id && state.quick ? QUICKSLOT : undefined);
-      if (!tool) continue;
-      ctx.drawImage(assets.toolbar, tool.sx, 7, tool.w, 25, area.x, area.y, tool.w, 25);
-      if (tool === QUICKSLOT && state.quick) {
-        const { sprite, aiming } = state.quick;
-        ctx.drawImage(assets.items, (sprite % 8) * 16, Math.floor(sprite / 8) * 16, 16, 16, area.x + 3, area.y + 5, 16, 16);
-        if (aiming) {
-          ctx.strokeStyle = `rgba(255, 235, 164, ${0.6 + 0.4 * Math.sin(now / 120)})`;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(area.x + 1.5, area.y + 1.5, area.w - 3, area.h - 3);
+  /** The hourglass: a tap waits a turn; holding it fills a bar in steps, then rests until healed. */
+  private holdToRest(button: HTMLButtonElement): void {
+    const stop = (): void => {
+      if (!this.hold) return;
+      clearInterval(this.hold.timer);
+      button.classList.remove('holding');
+      button.style.removeProperty('--hold');
+      this.hold = null;
+    };
+    button.addEventListener('pointerdown', () => {
+      stop();
+      audio.play('click');
+      button.classList.remove('resting');
+      const hold = { start: performance.now(), fired: false, timer: 0 };
+      hold.timer = window.setInterval(() => {
+        const v = Math.min(1, (performance.now() - hold.start) / HOLD_MS);
+        button.style.setProperty('--hold', String(Math.floor(v * 8) / 8));
+        if (v >= 1 && !hold.fired) {
+          hold.fired = true;
+          clearInterval(hold.timer);
+          button.classList.remove('holding');
+          this.handlers.rest();
         }
-      }
-      if (this.pressed?.id === area.id && now < this.pressed.until) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.fillRect(area.x, area.y, area.w, area.h);
-      }
-    }
-    if (state.quick?.label) {
-      const area = this.areas.find((a) => a.id === QUICKSLOT.id)!;
-      this.text(ctx, state.quick.label, area.x + area.w - 2, area.y + area.h - 2, 6, '#ffffff', 'right');
-      ctx.setTransform(ui, 0, 0, ui, 0, 0);
-    }
-
-    // Text at device resolution.
-    this.text(ctx, String(me.lvl), 27.5, T + 31, 8, '#ffeba4', 'center');
-    this.text(ctx, String(me.depth), W - 42, T + 11.5, 8, '#cacfc2', 'right');
-    if (state.keys > 0) this.text(ctx, String(state.keys), W - 26, T + 11.5, 8, '#cacfc2', 'right');
-    this.text(ctx, `${Math.max(0, me.hp)}/${me.ht}`, 34 + state.buffs.length * 8, T + 17, 7, '#ffffff', 'left');
-
-    let y = T + 40;
-    for (const hero of state.party) {
-      const online = state.online.includes(hero.id);
-      const color = !isAlive(hero) ? '#888888' : online ? '#ffffff' : '#aaaaaa';
-      this.text(ctx, `${hero.name}${online ? '' : ' ⌁'}`, 4, y, 6, color, 'left');
-      ctx.setTransform(ui, 0, 0, ui, 0, 0);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(4, y + 1.5, 26, 2);
-      ctx.fillStyle = isAlive(hero) ? '#cc2222' : '#444';
-      ctx.fillRect(4.5, y + 2, 25 * Math.max(0, hero.hp / hero.ht), 1);
-      y += 10;
-    }
-
-    const notice = state.status || (state.waitingFor.length > 0 ? t.waitingFor(state.waitingFor.join(', ')) : '');
-    if (notice) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.font = `${Math.round(7 * ui)}px ${FONT}`;
-      const lines = this.wrap(ctx, notice, (W - 24) * ui);
-      const top = T + 44 + state.party.length * 10;
-      const [sx, sy, w, h] = ICONS.busy;
-      ctx.setTransform(ui, 0, 0, ui, 0, 0);
-      ctx.save();
-      ctx.translate(8, top - 2);
-      ctx.rotate(now / 300);
-      ctx.drawImage(assets.icons, sx, sy, w, h, -w / 2, -h / 2, w, h);
-      ctx.restore();
-      lines.forEach((line, i) => this.text(ctx, line, W / 2 + 4, top + i * 9, 7, COLORS.highlight, 'center'));
-    }
-
-    // Message log above the toolbar, wrapped to the screen; old lines fade away.
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.font = `${Math.round(8 * ui)}px ${FONT}`;
-    const rows: Array<{ text: string; color: string; alpha: number }> = [];
-    for (const line of state.log.filter((l) => now - l.time < 8000).slice(-4)) {
-      const age = now - line.time;
-      const alpha = age < 6000 ? 1 : 1 - (age - 6000) / 2000;
-      for (const text of this.wrap(ctx, line.text, (W - 6) * ui)) rows.push({ text, color: line.color, alpha });
-    }
-    rows.slice(-5).forEach((row, i, shown) => {
-      this.text(ctx, row.text, 3, B - 29 - (shown.length - 1 - i) * 10, 8, row.color, 'left', row.alpha);
+      }, 30);
+      button.classList.add('holding');
+      this.hold = hold;
     });
-    if (this.bottom > 0) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, B * ui, W * ui + ui, this.bottom * ui + ui);
-    }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    button.addEventListener('pointerup', () => {
+      const hold = this.hold;
+      stop();
+      if (hold && !hold.fired) this.handlers.wait();
+    });
+    button.addEventListener('pointerleave', stop);
+    button.addEventListener('pointercancel', stop);
   }
 
-  /** Splits text into lines no wider than `width` device pixels, at spaces. */
-  private wrap(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
-    const lines: string[] = [];
-    let line = '';
-    for (const word of text.split(' ')) {
-      const candidate = line ? `${line} ${word}` : word;
-      if (line && ctx.measureText(candidate).width > width) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = candidate;
+  show(on: boolean): void {
+    this.root.hidden = !on;
+  }
+
+  /** Sets a part's content only when it changed. */
+  private changed(key: string, value: string): boolean {
+    if (this.shown[key] === value) return false;
+    this.shown[key] = value;
+    return true;
+  }
+
+  update(state: HudState, resting: boolean): void {
+    const { me } = state;
+    const dead = !isAlive(me);
+    if (this.changed('av', `${me.heroClass}`)) this.avatar.style.setProperty('--av', String(AVATAR[me.heroClass]));
+    if (this.changed('lvl', String(me.lvl))) this.level.textContent = String(me.lvl);
+    const hp = Math.max(0, me.hp);
+    if (this.changed('hp', `${hp}/${me.ht}/${me.poison > 0}`)) {
+      this.hp.style.setProperty('--v', String(hp / me.ht));
+      this.hp.classList.toggle('low', hp <= me.ht / 4);
+      this.hp.classList.toggle('poisoned', me.poison > 0);
+      this.hpText.textContent = `${hp}/${me.ht}`;
+    }
+    if (this.changed('xp', `${me.exp}/${maxExp(me)}`)) this.xp.style.setProperty('--v', String(Math.min(1, me.exp / maxExp(me))));
+    if (this.changed('food', String(Math.round(me.hunger)))) {
+      this.food.style.setProperty('--v', String(Math.max(0, 1 - me.hunger / STARVING)));
+      this.food.classList.toggle('hungry', isHungry(me) && !isStarving(me));
+      this.food.classList.toggle('starving', isStarving(me));
+    }
+    if (this.changed('depth', String(me.depth))) this.depth.data = String(me.depth);
+    if (this.changed('keys', String(state.keys))) this.keys.data = String(state.keys);
+    this.avatar.parentElement!.classList.toggle('dead', dead);
+
+    const buffKey = state.buffs.map((b) => `${b.name}:${b.turns !== undefined && b.turns <= 3 ? 'f' : ''}`).join(',');
+    if (this.changed('buffs', buffKey)) {
+      this.buffBox.replaceChildren(
+        ...state.buffs.map((buff) => {
+          const glyphNode = el('i');
+          glyphNode.dataset.b = String(BUFF_ICONS[buff.name]);
+          const node = el('button', `pd-buff${buff.turns !== undefined && buff.turns <= 3 ? ' fading' : ''}`, glyphNode);
+          node.ariaLabel = t.buffs[buff.name];
+          node.onclick = () => this.handlers.buff(buff.name, buff.turns);
+          return node;
+        }),
+      );
+      sprites(this.buffBox);
+    }
+
+    const mateKey = state.party
+      .map((h) => `${h.id}:${h.name}:${h.heroClass}:${Math.max(0, h.hp)}/${h.ht}:${h.depth}:${state.online.includes(h.id)}`)
+      .join('|') + `@${me.depth}`;
+    if (this.changed('mates', mateKey)) {
+      this.mates.hidden = state.party.length === 0;
+      this.mates.replaceChildren(
+        ...state.party.map((hero) => {
+          const face = el('i', 'pd-mate-face');
+          face.style.setProperty('--av', String(AVATAR[hero.heroClass]));
+          const bar = el('div', 'pd-bar');
+          bar.style.setProperty('--v', String(Math.max(0, hero.hp) / hero.ht));
+          const away = hero.depth !== me.depth || !state.online.includes(hero.id);
+          const node = el(
+            'button',
+            `pd-mate${!isAlive(hero) ? ' dead' : away ? ' away' : ''}`,
+            face,
+            el('span', 'pd-mate-name', hero.name),
+            bar,
+            el('span', 'pd-mate-depth', String(hero.depth)),
+          );
+          node.onclick = () => this.handlers.mate(hero.id);
+          return node;
+        }),
+      );
+    }
+
+    if (this.changed('notice', `${state.notice}|${state.cancel?.label ?? ''}`)) {
+      this.notice.hidden = !state.notice;
+      this.notice.replaceChildren(el('span', '', state.notice));
+      if (state.cancel) {
+        const cancel = el('button', 'pd-button quiet', state.cancel.label);
+        const onClick = state.cancel.onClick;
+        cancel.onclick = () => {
+          audio.play('click');
+          onClick();
+        };
+        this.notice.append(cancel);
       }
     }
-    if (line) lines.push(line);
-    return lines;
+
+    this.updateLog(state.log);
+
+    const quick = state.quick;
+    if (this.changed('quick', quick ? `${quick.sprite}:${quick.label}:${quick.aiming}` : '')) {
+      const button = this.tools.quick;
+      button.classList.toggle('empty', !quick);
+      button.classList.toggle('targeting', Boolean(quick?.aiming));
+      if (quick) {
+        const item = el('i', 'pd-item');
+        item.dataset.i = String(quick.sprite);
+        button.replaceChildren(item);
+        if (quick.label) button.append(el('span', 'pd-qty', quick.label));
+        sprites(button);
+      } else {
+        button.replaceChildren();
+      }
+    }
+    this.tools.examine.classList.toggle('active', state.examining);
+    this.tools.bag.classList.toggle('alert', state.newLoot);
+    this.tools.wait.classList.toggle('resting', resting);
+    for (const button of Object.values(this.tools)) button.disabled = dead;
   }
 
-  private text(
-    ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, color: string,
-    align: CanvasTextAlign, alpha = 1,
-  ): void {
-    const { ui } = this;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = alpha;
-    ctx.font = `${Math.round(size * ui)}px ${FONT}`;
-    ctx.textAlign = align;
-    ctx.textBaseline = 'alphabetic';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(2, ui * 0.9);
-    ctx.strokeStyle = '#000';
-    ctx.strokeText(text, x * ui, y * ui);
-    ctx.fillStyle = color;
-    ctx.fillText(text, x * ui, y * ui);
-    ctx.globalAlpha = 1;
+  /** The last few lines, older ones dimmer; each goes out after a while and frees the band. */
+  private updateLog(log: readonly LogLine[]): void {
+    const now = performance.now();
+    const max = innerHeight < 700 ? 3 : 4;
+    const lines = log.filter((line) => now - line.time < LOG_MS).slice(-max);
+    const key = lines.map((line) => `${line.time}:${line.count ?? 1}`).join(',');
+    if (!this.changed('log', key)) return;
+    this.log.hidden = lines.length === 0;
+    this.log.replaceChildren(
+      ...lines.map((line, i) => {
+        const row = el('div', `pd-log-line${line.tone ? ` ${line.tone}` : ''}`, line.text);
+        if ((line.count ?? 1) > 1) row.append(el('span', 'pd-n', `×${line.count}`));
+        row.dataset.age = String(Math.min(3, lines.length - 1 - i));
+        return row;
+      }),
+      this.more,
+    );
+  }
+
+  /** The band of the screen left for the map, in CSS pixels from the top: between the HUD and the log or toolbar. */
+  freeZone(): { top: number; bottom: number } {
+    if (this.root.hidden) return { top: 0, bottom: innerHeight };
+    const top = this.band.getBoundingClientRect().bottom;
+    const toolbar = this.root.querySelector('.pd-toolbar')!.getBoundingClientRect().top;
+    return { top, bottom: toolbar };
+  }
+
+  /** The HUD's height, for toasts to appear under it. */
+  height(): number {
+    return this.root.hidden ? 0 : this.band.getBoundingClientRect().bottom;
   }
 }

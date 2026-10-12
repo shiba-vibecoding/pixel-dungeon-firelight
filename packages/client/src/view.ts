@@ -92,7 +92,21 @@ export interface LogLine {
   text: string;
   color: string;
   time: number;
+  /** The design system's tone for the colour: good, bad, warn, hl (highlight) or muted. */
+  tone?: string;
+  /** The depth it was said on, for the history's markers. */
+  depth?: number;
+  /** The same message in a row, shown as «×N». */
+  count?: number;
 }
+
+/** Log colours of the original (GLog), as the design system's line tones. */
+const TONES: Record<string, string> = {
+  '#44ff44': 'good', '#ff4444': 'bad', '#ff8800': 'warn', '#ffff44': 'hl', '#cccccc': 'muted',
+};
+
+/** How many messages the history keeps. */
+const HISTORY = 200;
 
 export const COLORS = {
   default: '#ffffff',
@@ -133,9 +147,20 @@ export class View {
     this.projectiles = [];
   }
 
-  say(text: string, color = COLORS.default, now = performance.now()): void {
-    this.log.push({ text, color, time: now });
-    if (this.log.length > 8) this.log.shift();
+  /**
+   * Adds a message to the log. Messages are stamped with real time whatever
+   * `_now` says: the log fades by the wall clock, which hit-stop never slows.
+   */
+  say(text: string, color = COLORS.default, _now?: number): void {
+    const now = performance.now();
+    const last = this.log[this.log.length - 1];
+    if (last && last.text === text && now - last.time < 8000) {
+      last.count = (last.count ?? 1) + 1;
+      last.time = now;
+      return;
+    }
+    this.log.push({ text, color, time: now, tone: TONES[color.toLowerCase()], depth: this.depth || undefined });
+    if (this.log.length > HISTORY) this.log.shift();
   }
 
   /**

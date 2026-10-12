@@ -8,6 +8,8 @@ import {
   type World, charAt,
 } from '@pd/core';
 import * as core from '@pd/core';
+import './ui.css';
+import './game.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -16,7 +18,7 @@ import { ambientFx, effectFx, lightsFor, regionFx } from './fx-events';
 let lastVisual = 0;
 /** When my hero fell, on the visual clock, or 0 while alive. */
 let fallenAt = 0;
-import { type BadgeId, badgeText, checkBadges, countGame } from './badges';
+import { BADGES, type BadgeId, badgeText, checkBadges, countGame } from './badges';
 import { audio } from './audio';
 import { BUFF_ICONS, heroBuffs, Hud } from './hud';
 import { capitalize, t } from './i18n';
@@ -24,8 +26,8 @@ import { itemInfo, itemName } from './itemtext';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  hideOverlay, overlayOpen, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero, showMenu, showQuest, showRunEnd,
-  showBadges, showInfo, showSell, showSign, showTitle, showTrade, toast,
+  armorTier, closeOverlay, hideOverlay, overlayOpen, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
+  showHistory, showMenu, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -49,11 +51,47 @@ initTelegram('#1f1d1d');
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const assets = await loadAssets(`${import.meta.env.BASE_URL}assets/`);
-await document.fonts.load('16px "Pixelify Sans"').catch(() => undefined);
+await Promise.all([document.fonts.load('18px Galmuri11'), document.fonts.load('15px Galmuri9')]).catch(() => undefined);
 document.getElementById('loading')?.remove();
+setAssets(assets);
 
 const view = new View(assets);
-const hud = new Hud(assets);
+const hud = new Hud({
+  hero: () => openHero(),
+  menu: () => openMenu(),
+  wait: () => {
+    aim = null;
+    examining = false;
+    act('wait');
+  },
+  rest: () => startResting(),
+  search: () => {
+    aim = null;
+    examining = false;
+    act('search');
+  },
+  // The info button: the next tap on the map examines that cell.
+  examine: () => {
+    aim = null;
+    examining = !examining;
+  },
+  quick: () => {
+    examining = false;
+    toggleQuickslot();
+  },
+  backpack: () => {
+    examining = false;
+    openBackpack();
+  },
+  history: () => showHistory(view.log, hideOverlay),
+  buff: (name, turns) => toast(turns ? `${t.buffs[name]} (${t.turnsLeft(turns)})` : t.buffs[name]),
+  mate: (id) => {
+    const hero = session?.world && heroById(session.world, id);
+    if (hero) toast(`${hero.name} · ${t.classes[hero.heroClass]} · ${t.newDepth(hero.depth)}`, { tone: 'ally' });
+  },
+});
+/** Something was picked up since the backpack was last opened. */
+let newLoot = false;
 const camera: Camera = { x: 0, y: 0, zoom: 2 };
 
 /* Preferences */
@@ -133,7 +171,9 @@ function enterGame(next: Session, roomId: string | null): void {
   walk.reset();
   audio.playMusic('game');
   // Telegram's back button opens the menu, or closes whatever window is open.
-  backButton(() => (overlayOpen() ? hideOverlay() : openMenu()));
+  backButton(() => (overlayOpen() ? closeOverlay() : openMenu()));
+  hud.show(true);
+  newLoot = false;
   view.log = [];
   view.say(t.welcome);
   hideOverlay();
@@ -212,11 +252,13 @@ function toTitle(): void {
   setRoomInUrl(null);
   audio.playMusic('theme');
   backButton(null);
+  hud.show(false);
   const invited = invitedRoom();
+  const saved = loadSolo(SOLO_SLOT)?.heroes[0];
   showTitle({
     heroClass,
     invitedRoom: invited && SERVER ? invited : null,
-    hasSave: loadSolo(SOLO_SLOT) !== null,
+    save: saved ? { heroClass: saved.heroClass, lvl: saved.lvl, depth: saved.depth } : null,
     coopAvailable: Boolean(SERVER),
     askName: inTelegram ? null : playerName,
     onClass: (value) => {
@@ -460,7 +502,7 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
 function announceBadges(ids: readonly BadgeId[]): void {
   for (const id of ids) {
     audio.play('badge');
-    toast(t.badgeEarned(badgeText(id)));
+    toast(t.badgeEarned(badgeText(id)), { tone: 'badge', badge: BADGES.find((b) => b.id === id)?.image });
   }
 }
 
@@ -476,6 +518,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'smith' && effect.hero === myId) talkWithSmith(effect.line);
     if (effect.type === 'shop' && effect.hero === myId) openShop();
     if (effect.type === 'fell' && effect.hero === myId) justFell = true;
+    if (effect.type === 'pickedUp' && effect.hero === myId && effect.item.kind !== 'gold') newLoot = true;
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     const hurt =
       (effect.type === 'attack' && effect.target === myId) ||
@@ -678,6 +721,7 @@ function openBackpack(): void {
   if (!world || !me) return;
   walk.reset();
   aim = null;
+  newLoot = false;
   showBackpack({
     world,
     hero: me,
@@ -691,26 +735,10 @@ function openBackpack(): void {
 
 canvas.addEventListener('pointerdown', (event) => {
   if (!session?.world || overlayOpen()) return;
+  // The HUD, log and toolbar are HTML over the canvas: what reaches here is a tap on the map.
   const rect = canvas.getBoundingClientRect();
   const px = (event.clientX - rect.left) * (canvas.width / rect.width);
   const py = (event.clientY - rect.top) * (canvas.height / rect.height);
-  const me = heroById(session.world, session.myId);
-  const button = hud.hit(px, py, Boolean(me && quickIndex(me) >= 0));
-  if (button) audio.play('click');
-  if (button && button !== 'quick') aim = null;
-  if (button && button !== 'help') examining = false;
-  if (button === 'quick') toggleQuickslot();
-  else if (button === 'wait') pressWait();
-  else if (button === 'search') act(button);
-  else if (button === 'help') {
-    // Toolbar's info button: the next tap on the map examines that cell.
-    examining = !examining;
-    if (examining) view.say(t.examinePrompt, '#cccccc');
-  }
-  else if (button === 'backpack') openBackpack();
-  else if (button === 'menu') openMenu();
-  else if (button === 'hero') openHero();
-  if (button || hud.covers(px, py)) return;
 
   const x = Math.floor((camera.x + px / camera.zoom) / TILE);
   const y = Math.floor((camera.y + py / camera.zoom) / TILE);
@@ -740,18 +768,24 @@ function examineCell(pos: number): void {
   if (char && 'kind' in char) {
     const state = char.state === 'passive' ? '' : t.mobStates[char.state] ?? '';
     const health = char.state === 'passive' ? '' : t.examineHealth(Math.max(0, char.hp), char.ht);
-    showInfo(t.mobs[char.kind], [mobDescription(char), state, health], hideOverlay);
+    showInfo(t.mobs[char.kind], [mobDescription(char), state], hideOverlay, {
+      icon: portrait(char.kind),
+      ...(health ? { health: [Math.max(0, char.hp), char.ht] as const } : {}),
+    });
     return;
   }
   if (char) {
-    showInfo(char.name, [`${capitalize(t.classes[char.heroClass])}, ${t.levelShort} ${char.lvl}`, t.examineHealth(char.hp, char.ht)], hideOverlay);
+    showInfo(char.name, [`${capitalize(t.classes[char.heroClass])}, ${t.levelShort} ${char.lvl}`], hideOverlay, {
+      icon: portrait(char.heroClass, armorTier(char)),
+      health: [Math.max(0, char.hp), char.ht],
+    });
     return;
   }
   const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === pos && h.kind !== 'hidden');
   if (heap && (seen || heap.kind !== 'heap')) {
     if (heap.kind === 'heap' || heap.kind === 'forSale') {
       const item = heap.items[0]!;
-      showInfo(itemName(world, item), itemInfo(world, me, item), hideOverlay);
+      showInfo(itemName(world, item), itemInfo(world, me, item), hideOverlay, { icon: slot(world, item, { hero: me }) });
     } else {
       showInfo(t.heapNames[heap.kind] ?? '', [], hideOverlay);
     }
@@ -776,30 +810,6 @@ function startResting(): void {
   view.say(t.resting, '#cccccc');
 }
 
-/* The hourglass: a tap waits a turn, holding it rests until healed (as in the original). */
-let waitPress: { timer: number; long: boolean } | null = null;
-
-function pressWait(): void {
-  const press = {
-    long: false,
-    timer: window.setTimeout(() => {
-      press.long = true;
-      startResting();
-    }, 400),
-  };
-  waitPress = press;
-}
-
-function releaseWait(): void {
-  if (!waitPress) return;
-  clearTimeout(waitPress.timer);
-  if (!waitPress.long) act('wait');
-  waitPress = null;
-}
-
-addEventListener('pointerup', releaseWait);
-addEventListener('pointercancel', releaseWait);
-
 const KEYS: Record<string, [number, number]> = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
   KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0],
@@ -812,7 +822,7 @@ addEventListener('keydown', (event) => {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!world || !me || overlayOpen()) {
-    if (event.code === 'Escape' && session && overlayOpen()) hideOverlay();
+    if (event.code === 'Escape' && session && overlayOpen()) closeOverlay();
     return;
   }
   const dir = KEYS[event.code];
@@ -849,9 +859,16 @@ function resize(): void {
   canvas.height = Math.round(canvas.clientHeight * dpr);
   // About 12 tiles across the narrow side, at an integer zoom for crisp pixels.
   camera.zoom = Math.max(1, Math.round(Math.min(canvas.width, canvas.height) / (TILE * 12)));
-  const safe = getComputedStyle(document.getElementById('safe-area')!);
-  hud.layout(canvas.width, canvas.height, parseFloat(safe.paddingTop) * dpr || 0, parseFloat(safe.paddingBottom) * dpr || 0);
-  document.documentElement.style.setProperty('--px', String(hud.ui / dpr));
+}
+
+/** Toasts appear just under the HUD, however tall it has grown (buffs, companions, a notice). */
+let hudBottom = -1;
+
+function placeToasts(): void {
+  const bottom = Math.round(hud.height());
+  if (bottom === hudBottom) return;
+  hudBottom = bottom;
+  document.documentElement.style.setProperty('--hud-bottom', `${bottom}px`);
 }
 addEventListener('resize', resize);
 onLayoutChange(() => requestAnimationFrame(resize));
@@ -906,14 +923,14 @@ function tick(now: number): void {
   const me = world && heroById(world, session.myId);
   if (!world || !me) {
     drawBackdrop(now);
-    hud.draw(
-      ctx,
+    hud.update(
       {
-        me: placeholderHero, party: [], online: [], waitingFor: [], status: session.status, log: [], buffs: [], quick: null,
-        keys: 0,
+        me: placeholderHero, party: [], online: [], notice: session.status, cancel: null, log: [], buffs: [], quick: null,
+        keys: 0, examining: false, newLoot: false,
       },
-      now,
+      false,
     );
+    placeToasts();
     return;
   }
 
@@ -1000,8 +1017,11 @@ function tick(now: number): void {
   const mine = view.puppets.get(me.id);
   const at = mine ? view.position(mine, vnow) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
   const kick = fx.shakeOffset(vnow);
+  // The hero stands in the middle of the band the HUD and the toolbar leave free, not of the screen.
+  const free = hud.freeZone();
+  const middle = ((free.top + free.bottom) / 2) * (canvas.height / (canvas.clientHeight || 1));
   camera.x = Math.round(at.x + TILE / 2 - canvas.width / camera.zoom / 2) + kick.x;
-  camera.y = Math.round(at.y + TILE / 2 - canvas.height / camera.zoom / 2) + kick.y;
+  camera.y = Math.round(at.y + TILE / 2 - middle / camera.zoom) + kick.y;
   // What lies hidden (the phantom fish) is not drawn until found.
   const heaps = (world.floors[me.depth]?.heaps ?? []).filter((heap) => heap.kind !== 'hidden').map((heap) => ({
     pos: heap.pos,
@@ -1030,20 +1050,30 @@ function tick(now: number): void {
     busySince && now - busySince > 400
       ? blockers(world).filter((id) => id !== me.id).map((id) => heroById(world, id)?.name ?? '?')
       : [];
-  const status =
-    session.status || (!isAlive(me) && !world.over ? `${t.youDied}. ${t.youDiedCoop}` : aim ? t.chooseTarget : '');
+  const notice =
+    session.status ||
+    (!isAlive(me) && !world.over ? `${t.youDied}. ${t.youDiedCoop}`
+      : aim ? t.chooseTarget
+      : examining ? t.examinePrompt
+      : waitingFor.length > 0 ? t.waitingFor(waitingFor.join(', '))
+      : '');
   const quick = quickIndex(me);
   const quickItem = me.items[quick];
-  hud.draw(
-    ctx,
+  const cancelChoice = (): void => {
+    aim = null;
+    examining = false;
+  };
+  hud.update(
     {
       me,
       party: session.mode === 'online' ? world.heroes.filter((h) => h.id !== me.id) : [],
       online: session.online,
-      waitingFor,
-      status,
+      notice,
+      cancel: aim || examining ? { label: t.cancel, onClick: cancelChoice } : null,
       log: view.log,
-      buffs: heroBuffs(me).map((buff) => BUFF_ICONS[buff.name]),
+      buffs: heroBuffs(me),
+      examining,
+      newLoot,
       keys: me.items.filter((i) => i.kind === 'key.iron' && i.depth === me.depth).length,
       quick: quickItem
         ? {
@@ -1056,8 +1086,9 @@ function tick(now: number): void {
           }
         : null,
     },
-    now,
+    walk.resting,
   );
+  placeToasts();
 
   if (world.over && deathShown !== session.generation) {
     deathShown = session.generation;
@@ -1091,8 +1122,8 @@ function tick(now: number): void {
       showRunEnd({
         victory,
         title: victory ? t.victory : solo ? t.youDied : t.partyFell,
-        text: victory ? t.victoryText : t.soloFell(me.depth),
-        details: [...(!victory && cause ? [t.killedBy(cause)] : []), t.runStats(me.lvl, me.gold, me.kills)],
+        cause: victory ? t.victoryText : [t.soloFell(me.depth), cause ? t.killedBy(cause) : ''].filter(Boolean).join(' '),
+        hero: { name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, lvl: me.lvl, depth: me.depth, gold: me.gold, kills: me.kills },
         restartLabel: victory ? t.newRun : solo ? t.tryAgain : t.restartRun,
         onRestart: () => {
           session?.restart();

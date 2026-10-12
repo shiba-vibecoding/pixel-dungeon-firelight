@@ -96,6 +96,8 @@ interface Store {
   games: number;
   /** The last run counted, so a run is counted once however often it is reopened. */
   lastRun?: number;
+  /** Badges already shown in the badges window; absent for stores from before it was kept. */
+  seen?: BadgeId[];
 }
 
 const KEY = 'pd-badges';
@@ -120,6 +122,14 @@ function save(): void {
 }
 
 export const earnedBadges = (): ReadonlySet<BadgeId> => new Set(store.earned);
+
+/** Badges earned since the badges window was last opened: they get a golden dot. */
+export const unseenBadges = (): ReadonlySet<BadgeId> => new Set(store.earned.filter((id) => !(store.seen ?? store.earned).includes(id)));
+
+export function markBadgesSeen(): void {
+  store.seen = [...store.earned];
+  save();
+}
 
 const RARE_KINDS = ['albino', 'bandit', 'shielded', 'senior', 'acidic'];
 const BOSSES: Readonly<Record<string, BadgeId>> = { goo: 'boss1', tengu: 'boss2', dm300: 'boss3', king: 'boss4' };

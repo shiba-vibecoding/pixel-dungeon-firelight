@@ -1,22 +1,34 @@
 import {
-  type Action, BACKPACK_SIZE, type Hero, inBag, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, type ItemRef, maxExp, type MobKind,
-  SUBCLASSES, wandMaxCharges, type World, CLASS_ARMOR_OF,
+  type Action, armorStats, BACKPACK_SIZE, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
+  itemSprite, maxExp, type MobKind, SUBCLASSES, wandMaxCharges, weaponStats, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
-import { chooseQuickslot, isQuickslotted, quickUse } from './quickslot';
-import { BADGES, badgeText, earnedBadges } from './badges';
+import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
+import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
-import { isKnown, itemInfo, itemName, spriteOffset } from './itemtext';
+import { isKnown, itemInfo, itemName } from './itemtext';
 import type { DailyBoard } from './leaderboard';
+import type { Assets } from './sprites';
+import type { LogLine } from './view';
 
 /*
- * DOM windows over the game: title screen, menu, help, death. They use the
- * original window and button frames through CSS border-image (see index.html).
+ * DOM windows over the game, in the design system's markup (docs/design/system):
+ * a window has a head with a title and a cross, then text, then its actions,
+ * the main one red and first, the dangerous ones last behind a line.
  */
 
 const root = document.getElementById('overlay')!;
 const HERO_CLASSES: readonly HeroClass[] = ['warrior', 'mage', 'rogue', 'huntress'];
+/** Heroes in avatars.png and in the heroes strip, in this order. */
+export const AVATAR: Readonly<Record<HeroClass, number>> = { warrior: 0, mage: 1, rogue: 2, huntress: 3 };
+
+let assets: Assets | null = null;
+
+/** The sprite sheets portraits are cut from. */
+export function setAssets(loaded: Assets): void {
+  assets = loaded;
+}
 
 type Child = Node | string | null | undefined | false;
 
@@ -30,6 +42,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return element;
 }
 
+/** A button of the design system: '' secondary, 'primary' (one per window), 'danger', 'quiet', 'ally'. */
 function button(label: string, onClick: () => void, className = ''): HTMLButtonElement {
   const click = (): void => {
     audio.play('click');
@@ -38,25 +51,246 @@ function button(label: string, onClick: () => void, className = ''): HTMLButtonE
   return el('button', { className: `pd-button ${className}`.trim(), textContent: label, onclick: click });
 }
 
-function show(content: HTMLElement, dim = true): void {
+/**
+ * Lays out a window's actions as the design asks: the main one first, the
+ * others two to a row, the dangerous ones last behind a line.
+ */
+function actions(primary: readonly HTMLElement[], secondary: readonly HTMLElement[], danger: readonly HTMLElement[] = []): HTMLElement {
+  const box = el('div', { className: 'pd-actions' }, ...primary);
+  // A label too long for half a row (Russian ones often are) takes a whole row.
+  const short = (node: HTMLElement): boolean => (node.textContent ?? '').length <= 11;
+  for (let i = 0; i < secondary.length; i++) {
+    const node = secondary[i]!;
+    const next = secondary[i + 1];
+    if (next && short(node) && short(next)) {
+      box.append(el('div', { className: 'pd-row' }, node, next));
+      i++;
+    } else {
+      box.append(node);
+    }
+  }
+  if (danger.length > 0) box.append(el('div', { className: 'pd-danger-zone' }, ...danger));
+  return box;
+}
+
+/** What closes the window open now, by its cross, a tap beside it or Telegram's back button. */
+let closer: (() => void) | null = null;
+
+root.addEventListener('pointerdown', (event) => {
+  if (event.target === root && closer) {
+    audio.play('click');
+    closer();
+  }
+});
+
+function show(content: HTMLElement, onClose: (() => void) | null, bare = false): void {
+  closer = onClose;
   root.replaceChildren(content);
-  root.classList.toggle('dim', dim);
-  root.hidden = false;
+  root.classList.add('open');
+  root.classList.toggle('bare', bare);
+  sprites(content);
 }
 
 export function hideOverlay(): void {
-  root.hidden = true;
+  closer = null;
+  root.classList.remove('open', 'bare');
   root.replaceChildren();
 }
 
 export function overlayOpen(): boolean {
-  return !root.hidden;
+  return root.classList.contains('open');
 }
+
+/** Closes the open window the way its cross would; false if it has none. */
+export function closeOverlay(): boolean {
+  if (!overlayOpen()) return false;
+  if (closer) closer();
+  else return false;
+  return true;
+}
+
+/** Sets --ix/--iy (items.png, badges.png: 8 a row) and --bx/--by (buffs.png: 18 a row) from data-i and data-b. */
+export function sprites(scope: ParentNode): void {
+  scope.querySelectorAll<HTMLElement>('[data-i]').forEach((node) => {
+    const i = Number(node.dataset.i);
+    node.style.setProperty('--ix', String(i % 8));
+    node.style.setProperty('--iy', String(Math.floor(i / 8)));
+  });
+  scope.querySelectorAll<HTMLElement>('[data-b]').forEach((node) => {
+    const b = Number(node.dataset.b);
+    node.style.setProperty('--bx', String(b % 18));
+    node.style.setProperty('--by', String(Math.floor(b / 18)));
+  });
+}
+
+function closeButton(onClose: () => void): HTMLButtonElement {
+  return el('button', {
+    className: 'pd-close',
+    ariaLabel: t.close,
+    onclick: () => {
+      audio.play('click');
+      onClose();
+    },
+  });
+}
+
+interface WindowOptions {
+  title?: string;
+  /** A line under the title. */
+  sub?: string;
+  /** An item slot or a portrait before the title. */
+  icon?: HTMLElement | null;
+  /** The cross; a window without one wants an answer. */
+  onClose?: () => void;
+  narrow?: boolean;
+  className?: string;
+}
+
+/** A window: the head (icon, title, cross), then the body. */
+function windowOf(options: WindowOptions, ...body: Child[]): HTMLElement {
+  const head =
+    (options.title || options.icon || options.onClose) &&
+    el(
+      'header',
+      { className: 'pd-window-head' },
+      options.icon,
+      el(
+        'div',
+        { className: 'pd-titles' },
+        options.title && el('h2', { className: 'pd-heading', textContent: options.title }),
+        options.sub && el('span', { className: 'pd-note', textContent: options.sub }),
+      ),
+    );
+  const box = el(
+    'section',
+    { className: `pd-window${options.narrow ? ' narrow' : ''}${options.className ? ` ${options.className}` : ''}` },
+    head,
+    ...body,
+  );
+  box.setAttribute('role', options.onClose ? 'dialog' : 'alertdialog');
+  if (options.onClose) box.append(closeButton(options.onClose));
+  return box;
+}
+
+const info = (text: string, className = 'pd-info'): HTMLElement => el('p', { className, textContent: text });
+
+/* Portraits */
+
+/**
+ * The first frame of a character's sprite, up to three times its size, on a
+ * small canvas; for a hero, `row` is the armour's tier, as on the map.
+ */
+export function portrait(kind: MobKind | HeroClass, row = 0): HTMLElement {
+  const box = el('div', { className: 'pd-portrait' });
+  const sprite = assets && (kind in assets.heroes ? assets.heroes[kind as HeroClass] : assets.mobs[kind as MobKind]);
+  if (!sprite) return box;
+  const { sheet } = sprite;
+  const frame = sprite.anims.idle.frames[0] ?? 0;
+  const canvas = el('canvas', { width: sheet.w, height: sheet.h });
+  const scale = Math.max(1, Math.min(3, Math.floor(52 / Math.max(sheet.w, sheet.h))));
+  canvas.style.width = `${sheet.w * scale}px`;
+  canvas.style.height = `${sheet.h * scale}px`;
+  const ctx = canvas.getContext('2d')!;
+  const sy = (Math.floor(frame / sheet.cols) + row) * sheet.h;
+  ctx.drawImage(sheet.image, (frame % sheet.cols) * sheet.w, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+  box.append(canvas);
+  return box;
+}
+
+/** A health bar of the design system; `v` from 0 to 1. */
+export function healthBar(hp: number, ht: number, text = true): HTMLElement {
+  const bar = el('div', { className: `pd-bar${hp <= ht / 4 ? ' low' : ''}` }, text && el('span', { className: 'pd-bar-text', textContent: `${Math.max(0, hp)}/${ht}` }));
+  bar.style.setProperty('--v', String(Math.max(0, Math.min(1, hp / ht))));
+  return bar;
+}
+
+/* Item slots */
+
+function itemIcon(world: World, item: Item): HTMLElement {
+  const icon = el('i', { className: 'pd-item' });
+  icon.dataset.i = String(itemSprite(item, world.run.labels));
+  return icon;
+}
+
+/** A sprite of the design system's own (--spr-*), at a size in CSS pixels. */
+function picture(sprite: string, width?: number, height?: number): HTMLElement {
+  const node = el('i', { className: 'pd-icon' });
+  node.style.backgroundImage = `var(--spr-${sprite})`;
+  if (width) node.style.width = `${width}px`;
+  if (height) node.style.height = `${height}px`;
+  return node;
+}
+
+/** An item's description, its curse set apart as a warning. */
+function described(lines: readonly string[]): HTMLElement[] {
+  return lines.filter(Boolean).map((line) =>
+    line === t.cursedInfo ? el('p', { className: 'pd-callout cursed', textContent: line })
+    : line === t.tooHeavy ? el('p', { className: 'pd-callout bad', textContent: line })
+    : info(line));
+}
+
+interface SlotOptions {
+  onClick?: () => void;
+  /** Worn: the equipment row. */
+  equipped?: boolean;
+  hero?: Hero;
+  /** An empty equipment place: the silhouette of what goes there (items.png 5, 6, 7). */
+  placeholder?: number;
+}
+
+/** A 52×52 slot: the sprite and up to three corner labels (level, strength, quantity). */
+export function slot(world: World, item: Item | undefined, options: SlotOptions = {}): HTMLElement {
+  if (!item) {
+    if (options.placeholder !== undefined) {
+      const icon = el('i', { className: 'pd-item' });
+      icon.dataset.i = String(options.placeholder);
+      return el('div', { className: 'pd-slot placeholder' }, icon);
+    }
+    return el('div', { className: 'pd-slot empty' });
+  }
+  const known = isKnown(world, item);
+  const cursed = Boolean(item.cursed) && (known || options.equipped);
+  const node = el('button', {
+    className: `pd-slot${options.equipped ? ' equipped' : ''}${cursed ? ' cursed' : ''}`,
+    ariaLabel: capitalize(itemName(world, item)),
+  });
+  node.append(itemIcon(world, item));
+  if (item.charges !== undefined) {
+    node.append(el('span', { className: 'pd-qty', textContent: `${item.charges}/${wandMaxCharges(item)}` }));
+  } else if (item.qty > 1) {
+    node.append(el('span', { className: 'pd-qty', textContent: String(item.qty) }));
+  }
+  if (item.level !== 0 && known) {
+    node.append(el('span', { className: `pd-lvl ${item.level > 0 ? 'up' : 'down'}`, textContent: `${item.level > 0 ? '+' : '−'}${Math.abs(item.level)}` }));
+  }
+  // ItemSlot's top right: the strength it wants, with a «?» while its level is unknown.
+  const category = itemDef(item.kind).category;
+  const str = category === 'weapon' ? weaponStats(item).str : category === 'armor' ? armorStats(item).str : null;
+  if (str !== null && !options.equipped) {
+    node.append(el('span', { className: `pd-tag${options.hero && options.hero.str < str ? ' bad' : ''}`, textContent: known ? String(str) : `${str}?` }));
+  }
+  if (cursed) node.append(el('span', { className: 'pd-mark curse' }));
+  if (options.hero && inQuickslot(options.hero, item)) node.append(el('span', { className: 'pd-mark quick' }));
+  node.onclick = () => {
+    audio.play('click');
+    options.onClick?.();
+  };
+  return node;
+}
+
+/** The row of a hero's sprite sheet: the tier of the armour worn. */
+export const armorTier = (hero: Hero): number => itemDef(hero.armor.kind).tier ?? 0;
+
+/** The item is the one the quickslot shows. */
+const inQuickslot = (hero: Hero, item: Item): boolean => hero.items[quickIndex(hero)] === item;
+
+/* Title */
 
 export interface TitleOptions {
   heroClass: HeroClass;
   invitedRoom: string | null;
-  hasSave: boolean;
+  /** The solo run that can be continued, if any. */
+  save: { heroClass: HeroClass; lvl: number; depth: number } | null;
   coopAvailable: boolean;
   /** Shown outside Telegram, where the name is not known. */
   askName: string | null;
@@ -73,66 +307,109 @@ export interface TitleOptions {
 
 export function showTitle(options: TitleOptions): void {
   let selected = options.heroClass;
-  const info = el('p', { className: 'pd-info', textContent: t.classInfo[selected] });
+  const name = el('span', { className: 'pd-class-name', textContent: t.classes[selected] });
+  const about = info(t.classInfo[selected], 'pd-note');
   const classes = el('div', { className: 'pd-classes' });
+  classes.setAttribute('role', 'radiogroup');
   const renderClasses = (): void => {
     classes.replaceChildren(
-      ...HERO_CLASSES.map((heroClass) =>
-        el(
+      ...HERO_CLASSES.map((heroClass) => {
+        const face = el('i', { className: 'pd-class-face' });
+        face.style.setProperty('--av', String(AVATAR[heroClass]));
+        const node = el(
           'button',
           {
             className: `pd-class${heroClass === selected ? ' selected' : ''}`,
+            ariaLabel: t.classes[heroClass],
             onclick: () => {
+              audio.play('click');
               selected = heroClass;
-              info.textContent = t.classInfo[heroClass];
+              name.textContent = t.classes[heroClass];
+              about.textContent = t.classInfo[heroClass];
               options.onClass(heroClass);
               renderClasses();
             },
           },
-          el('span', { className: `pd-class-icon icon-${heroClass}` }),
-          el('span', { textContent: t.classes[heroClass] }),
-        ),
-      ),
+          face,
+        );
+        node.setAttribute('role', 'radio');
+        node.setAttribute('aria-checked', String(heroClass === selected));
+        return node;
+      }),
     );
   };
   renderClasses();
 
-  const name =
+  const field =
     options.askName !== null &&
-    el('input', {
-      className: 'pd-input',
-      value: options.askName,
-      maxLength: 20,
-      placeholder: t.yourName,
-      oninput: (event: Event) => options.onName((event.target as HTMLInputElement).value),
-    });
+    el(
+      'div',
+      { className: 'pd-field' },
+      el('label', { htmlFor: 'pd-name', textContent: t.heroName }),
+      el('input', {
+        id: 'pd-name',
+        className: 'pd-input',
+        value: options.askName,
+        maxLength: 20,
+        placeholder: t.yourName,
+        oninput: (event: Event) => options.onName((event.target as HTMLInputElement).value),
+      }),
+    );
+
+  const { save } = options;
+  const main: HTMLElement[] = [];
+  const rest: HTMLElement[] = [];
+  if (options.invitedRoom) main.push(button(t.join(options.invitedRoom), options.onJoin, 'primary big'));
+  if (save) {
+    const resume = button(t.continueRun, options.onContinue, `${main.length ? '' : 'primary big '}stacked`);
+    resume.append(el('span', { className: 'pd-btn-sub', textContent: t.continueMeta(t.classes[save.heroClass], save.lvl, save.depth) }));
+    (main.length ? rest : main).push(resume);
+  }
+  const fresh = button(save ? t.newRun : t.solo, options.onSolo, main.length ? '' : 'primary big');
+  (main.length ? rest : main).push(fresh);
+
+  const daily = el(
+    'div',
+    { className: 'pd-daily' },
+    el('div', { className: 'pd-daily-head' }, picture('stairs'), el('h3', { textContent: t.daily })),
+    info(t.dailyInfo, 'pd-note'),
+    el('div', { className: 'pd-row' }, button(t.descendDaily, options.onDaily), options.onDailyBoard && button(t.dailyBoard, options.onDailyBoard)),
+  );
+
+  const logo = el(
+    'div',
+    { className: 'pd-logo' },
+    el('img', { src: 'assets/banner-title.png', alt: 'Pixel Dungeon' }),
+    el('span', { className: 'pd-logo-sub', textContent: t.subtitle }),
+  );
 
   show(
     el(
-      'div',
-      { className: 'pd-title' },
-      el('div', { className: 'pd-banner' }),
-      el('p', { className: 'pd-subtitle', textContent: t.subtitle }),
+      'main',
+      { className: 'pd-title-screen' },
+      logo,
       el(
-        'div',
+        'section',
         { className: 'pd-window' },
         classes,
-        info,
-        name,
-        options.invitedRoom && button(t.join(options.invitedRoom), options.onJoin, 'primary'),
-        options.hasSave && button(t.continueRun, options.onContinue, options.invitedRoom ? '' : 'primary'),
-        button(options.hasSave ? t.newRun : t.solo, options.onSolo),
-        options.coopAvailable
-          ? button(t.coop, options.onCoop)
-          : el('p', { className: 'pd-note', textContent: t.coopUnavailable }),
-        button(t.daily, options.onDaily),
-        el('p', { className: 'pd-note', textContent: t.dailyInfo }),
-        options.onDailyBoard && button(t.dailyBoard, options.onDailyBoard),
+        el('div', { className: 'pd-class-info' }, name, about),
+        field,
+        el(
+          'div',
+          { className: 'pd-actions' },
+          ...main,
+          ...rest,
+          options.coopAvailable ? button(t.coop, options.onCoop, 'ally') : info(t.coopUnavailable, 'pd-note center'),
+        ),
+        daily,
       ),
     ),
-    false,
+    null,
+    true,
   );
 }
+
+/* Menu */
 
 export interface MenuOptions {
   room: string | null;
@@ -144,44 +421,82 @@ export interface MenuOptions {
 }
 
 export function showMenu(options: MenuOptions): void {
-  const sound = button(audio.enabled ? t.soundOn : t.soundOff, () => {
-    audio.setEnabled(!audio.enabled);
-    sound.textContent = audio.enabled ? t.soundOn : t.soundOff;
-  });
+  const sound = el(
+    'button',
+    {
+      className: 'pd-switch',
+      onclick: () => {
+        audio.setEnabled(!audio.enabled);
+        audio.play('click');
+        sound.setAttribute('aria-checked', String(audio.enabled));
+      },
+    },
+    el('span', { className: 'pd-info', textContent: t.sound }),
+    el('span', { className: 'pd-switch-box' }),
+  );
+  sound.setAttribute('role', 'switch');
+  sound.setAttribute('aria-checked', String(audio.enabled));
   show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      options.room && el('p', { className: 'pd-heading', textContent: t.room(options.room) }),
-      button(t.resume, options.onResume, 'primary'),
-      options.room && button(t.invite, options.onInvite),
-      button(t.help, options.onHelp),
-      button(t.badges, options.onBadges),
-      sound,
-      button(t.toMenu, options.onExit),
+    windowOf(
+      { title: t.menu, sub: options.room ? t.room(options.room) : undefined, onClose: options.onResume, narrow: true },
+      el(
+        'div',
+        { className: 'pd-menu-list' },
+        button(t.resume, options.onResume, 'primary'),
+        options.room && button(t.invite, options.onInvite, 'ally'),
+        button(t.help, options.onHelp),
+        button(t.badges, options.onBadges),
+        sound,
+        button(t.toMenu, options.onExit, 'quiet'),
+      ),
     ),
+    options.onResume,
   );
 }
 
-/** WndBadges: every badge, the ones earned bright; a tap tells what each is for. */
+/* Badges */
+
+/** WndBadges: every badge, the ones earned bright, new ones with a golden dot; a tap tells what each is for. */
 export function showBadges(onClose: () => void): void {
   const earned = earnedBadges();
-  const about = el('p', { className: 'pd-info', textContent: t.badgesCount(earned.size, BADGES.length) });
-  const grid = el(
-    'div',
-    { className: 'pd-badges' },
-    ...BADGES.map((badge) => {
-      const icon = el('button', { className: `pd-badge${earned.has(badge.id) ? '' : ' locked'}` });
-      icon.style.backgroundPosition = `calc(${-(badge.image % 8) * 16}px * var(--s)) calc(${-Math.floor(badge.image / 8) * 16}px * var(--s))`;
-      icon.onclick = () => {
-        audio.play('click');
-        about.textContent = badgeText(badge.id);
-      };
-      return icon;
-    }),
+  const fresh = unseenBadges();
+  markBadgesSeen();
+  const big = el('i', { className: 'pd-badge big' });
+  const name = el('span', { className: 'pd-badge-name' });
+  const detail = el('div', { className: 'pd-badge-detail' }, big, name);
+  const select = (id: BadgeId, image: number, node: HTMLElement | null): void => {
+    big.dataset.i = String(image);
+    big.classList.toggle('dim', !earned.has(id));
+    name.textContent = badgeText(id);
+    detail.classList.toggle('locked', !earned.has(id));
+    grid.querySelectorAll('.selected').forEach((n) => n.classList.remove('selected'));
+    node?.classList.add('selected');
+    sprites(detail);
+  };
+  const grid = el('div', { className: 'pd-grid c6' });
+  for (const badge of BADGES) {
+    const icon = el('i', { className: `pd-badge${earned.has(badge.id) ? '' : ' dim'}` });
+    icon.dataset.i = String(badge.image);
+    const node = el('button', { className: `pd-slot${fresh.has(badge.id) ? ' new' : ''}`, ariaLabel: badgeText(badge.id) }, icon);
+    node.onclick = () => {
+      audio.play('click');
+      select(badge.id, badge.image, node);
+    };
+    grid.append(node);
+  }
+  const first = BADGES.find((b) => fresh.has(b.id)) ?? BADGES.find((b) => earned.has(b.id)) ?? BADGES[0]!;
+  show(
+    windowOf(
+      { title: t.badges, sub: t.badgesCount(earned.size, BADGES.length), onClose },
+      el('div', { className: 'pd-scroll' }, grid),
+      detail,
+    ),
+    onClose,
   );
-  show(el('div', { className: 'pd-window' }, el('p', { className: 'pd-heading', textContent: t.badges }), grid, about, button(t.close, onClose)));
+  select(first.id, first.image, grid.children[BADGES.indexOf(first)] as HTMLElement);
 }
+
+/* Hero */
 
 export interface HeroOptions {
   hero: Hero;
@@ -189,36 +504,45 @@ export interface HeroOptions {
   onClose(): void;
 }
 
+function stats(rows: ReadonlyArray<readonly [string, string, string?]>): HTMLElement {
+  return el(
+    'dl',
+    { className: 'pd-stats' },
+    ...rows.map(([label, value, tone]) => el('div', {}, el('dt', { textContent: label }), el('dd', { className: tone ?? '', textContent: value }))),
+  );
+}
+
 /** WndHero: the hero's numbers and what currently ails or helps them. */
 export function showHero(options: HeroOptions): void {
   const { hero } = options;
-  const row = (label: string, value: string): HTMLElement =>
-    el('div', { className: 'pd-row pd-stat' }, el('span', { textContent: label }), el('span', { textContent: value }));
   const buffs = options.buffs.map((buff) => {
-    const icon = el('span', { className: 'pd-buff' });
-    icon.style.backgroundPosition = `calc(${-(BUFF_ICONS[buff.name] % 18) * 7}px * var(--s)) calc(${-Math.floor(BUFF_ICONS[buff.name] / 18) * 7}px * var(--s))`;
+    const icon = el('i');
+    icon.dataset.b = String(BUFF_ICONS[buff.name]);
     const text = buff.turns ? `${t.buffs[buff.name]} (${t.turnsLeft(buff.turns)})` : t.buffs[buff.name];
-    return el('div', { className: 'pd-row' }, icon, el('span', { textContent: text }));
+    return el('div', { className: 'pd-row' }, el('span', { className: 'pd-buff' }, icon), info(text));
   });
   show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('p', {
-        className: 'pd-heading',
-        textContent: t.heroTitle(hero.subclass ? capitalize(t.subclasses[hero.subclass]) : t.classes[hero.heroClass], hero.lvl),
-      }),
-      row(t.strength, String(hero.str)),
-      row(t.health, `${Math.max(0, hero.hp)}/${hero.ht}`),
-      row(t.experience, `${hero.exp}/${maxExp(hero)}`),
-      row(t.goldLabel, String(hero.gold)),
-      row(t.slain, String(hero.kills)),
-      el('p', { className: 'pd-heading', textContent: t.conditions }),
-      ...(buffs.length > 0 ? buffs : [el('p', { className: 'pd-info', textContent: t.noConditions })]),
-      button(t.close, options.onClose),
+    windowOf(
+      {
+        title: t.heroTitle(hero.subclass ? capitalize(t.subclasses[hero.subclass]) : t.classes[hero.heroClass], hero.lvl),
+        icon: portrait(hero.heroClass, armorTier(hero)),
+        onClose: options.onClose,
+      },
+      stats([
+        [t.strength, String(hero.str)],
+        [t.health, `${Math.max(0, hero.hp)}/${hero.ht}`],
+        [t.experience, `${hero.exp}/${maxExp(hero)}`],
+        [t.goldLabel, String(hero.gold), 'gold'],
+        [t.slain, String(hero.kills)],
+      ]),
+      el('h3', { className: 'pd-heading', textContent: t.conditions }),
+      ...(buffs.length > 0 ? buffs : [info(t.noConditions, 'pd-note')]),
     ),
+    options.onClose,
   );
 }
+
+/* Shops */
 
 export interface TradeOptions {
   world: World;
@@ -232,22 +556,20 @@ export interface TradeOptions {
 /** WndTradeItem for a shop's ware: what it is, and what it costs. */
 export function showTrade(options: TradeOptions): void {
   const { world, hero, item, price } = options;
+  const short = hero.gold < price;
   const buy = button(t.buyFor(price), () => {
     options.onBuy();
     options.onClose();
   }, 'primary');
-  buy.disabled = hero.gold < price;
-  show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('div', { className: 'pd-row' }, slot(world, item), el('p', { className: 'pd-heading', textContent: capitalize(itemName(world, item)) })),
-      ...itemInfo(world, hero, item).map((line) => el('p', { className: 'pd-info', textContent: line })),
-      buy,
-      el('p', { className: 'pd-note', textContent: t.yourGold(hero.gold) }),
-      button(t.close, options.onClose),
-    ),
+  buy.disabled = short;
+  const head = windowOf(
+    { title: capitalize(itemName(world, item)), icon: slot(world, item, { hero }), onClose: options.onClose },
+    ...described(itemInfo(world, hero, item)),
+    actions([buy], []),
+    info(t.yourGold(hero.gold), 'pd-note center'),
   );
+  head.querySelector('.pd-titles')!.append(el('span', { className: `pd-price${short ? ' short' : ''}`, textContent: String(price) }));
+  show(head, options.onClose);
 }
 
 export interface SellOptions {
@@ -260,35 +582,32 @@ export interface SellOptions {
 /** Shopkeeper.sell: what the pack is worth to him, item by item. */
 export function showSell(options: SellOptions): void {
   const { world, hero } = options;
-  const rows = hero.items.flatMap((item, index) => {
+  const cards = hero.items.flatMap((item, index) => {
     const price = itemPrice(item, world.known.includes(item.kind));
     if (price <= 0) return [];
     return [
       el(
         'div',
-        { className: 'pd-row' },
-        slot(world, item),
-        el(
-          'div',
-          { className: 'pd-offer' },
-          el('p', { className: 'pd-note', textContent: capitalize(itemName(world, item)) }),
-          button(t.sellFor(price), () => options.onSell(index)),
-        ),
+        { className: 'pd-reward' },
+        slot(world, item, { hero }),
+        el('div', { className: 'pd-reward-name', textContent: capitalize(itemName(world, item)) }),
+        el('div', { className: 'pd-reward-desc' }),
+        button(t.sellFor(price), () => options.onSell(index), 'danger small'),
       ),
     ];
   });
   show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: capitalize(t.mobs.shopkeeper) }),
-      el('p', { className: 'pd-info', textContent: rows.length > 0 ? t.sellInfo : t.nothingToSell }),
-      ...rows,
-      el('p', { className: 'pd-note', textContent: t.yourGold(hero.gold) }),
-      button(t.close, options.onClose),
+    windowOf(
+      { title: capitalize(t.mobs.shopkeeper), icon: portrait('shopkeeper'), onClose: options.onClose },
+      info(cards.length > 0 ? t.sellInfo : t.nothingToSell, 'pd-speech'),
+      cards.length > 0 && el('div', { className: 'pd-scroll' }, el('div', { className: 'pd-rewards' }, ...cards)),
+      info(t.yourGold(hero.gold), 'pd-note center'),
     ),
+    options.onClose,
   );
 }
+
+/* Quests */
 
 export interface QuestOptions {
   world: World;
@@ -304,56 +623,65 @@ export interface QuestOptions {
   onClose(): void;
 }
 
-/** A word with a quest giver (WndQuest, WndSadGhost, WndWandmaker). */
+/** A word with a quest giver (WndQuest, WndSadGhost, WndWandmaker): portrait, name, speech, rewards or answers. */
 export function showQuest(options: QuestOptions): void {
   const { hero, offers = [] } = options;
   // The rewards are shown for what they are.
   const world = { ...options.world, known: [...options.world.known, ...offers.map((item) => item.kind)] };
-  const offer = (item: Item, index: number): HTMLElement =>
+  const card = (item: Item, index: number): HTMLElement =>
+    el(
+      'div',
+      { className: 'pd-reward' },
+      slot(world, item, { hero }),
+      el('div', { className: 'pd-reward-name', textContent: capitalize(itemName(world, item)) }),
+      el('div', { className: 'pd-reward-desc', textContent: itemInfo(world, hero, item).join(' ') }),
+      button(t.take, () => {
+        options.onChoose?.(index);
+        options.onClose();
+      }, offers.length === 1 ? 'primary small' : 'small'),
+    );
+  const answers = options.answers ?? [];
+  // A question wants an answer: no cross. The first answer is the yes.
+  const answerRow =
+    answers.length > 0 &&
     el(
       'div',
       { className: 'pd-row' },
-      slot(world, item),
-      el(
-        'div',
-        { className: 'pd-offer' },
-        ...itemInfo(world, hero, item).map((line) => el('p', { className: 'pd-note', textContent: line })),
-        button(t.takeReward(itemName(world, item)), () => {
-          options.onChoose?.(index);
-          options.onClose();
-        }, 'primary'),
-      ),
-    );
-  show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: capitalize(t.mobs[options.who]) }),
-      el('p', { className: 'pd-info', textContent: options.text }),
-      ...offers.map(offer),
-      ...(options.answers ?? []).map((answer, i) =>
+      ...[...answers].reverse().map((answer, i) =>
         button(answer.label, () => {
           answer.onAnswer();
           options.onClose();
-        }, i === 0 ? 'primary' : undefined),
-      ),
-      ...(options.answers ? [] : [button(t.close, options.onClose)]),
-    ),
+        }, i === answers.length - 1 ? 'primary' : 'quiet')),
+    );
+  const box = windowOf(
+    { title: capitalize(t.mobs[options.who]), icon: portrait(options.who), onClose: answers.length > 0 ? undefined : options.onClose },
+    info(options.text, 'pd-speech'),
+    offers.length > 0 && el('div', { className: 'pd-rewards' }, ...offers.map(card)),
+    answerRow,
   );
+  show(box, answers.length > 0 ? null : options.onClose);
+}
+
+/* Examine */
+
+export interface InfoExtras {
+  /** A portrait or an item slot beside the title. */
+  icon?: HTMLElement;
+  /** A creature's health, as a bar under its name. */
+  health?: readonly [number, number];
 }
 
 /** A few lines about something looked at (the examine tool's windows). */
-export function showInfo(title: string, lines: readonly string[], onClose: () => void): void {
-  show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: capitalize(title) }),
-      ...lines.filter(Boolean).map((line) => el('p', { className: 'pd-info', textContent: line })),
-      button(t.close, onClose),
-    ),
+export function showInfo(title: string, lines: readonly string[], onClose: () => void, extras: InfoExtras = {}): void {
+  const box = windowOf(
+    { title: capitalize(title), icon: extras.icon, onClose },
+    ...described(lines),
   );
+  if (extras.health) box.querySelector('.pd-titles')!.append(healthBar(extras.health[0], extras.health[1]));
+  show(box, onClose);
 }
+
+/* The blacksmith */
 
 export interface ReforgeOptions {
   world: World;
@@ -390,72 +718,100 @@ export function showReforge(options: ReforgeOptions): void {
       pairs.push({ first: keep.ref, second: melt.ref, better, worse: better === keep.item ? melt.item : keep.item });
     }
   });
-  show(
+  const card = (pair: (typeof pairs)[number]): HTMLElement =>
     el(
       'div',
-      { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: capitalize(t.mobs.blacksmith) }),
-      el('p', { className: 'pd-info', textContent: options.text }),
-      ...(pairs.length === 0
-        ? [el('p', { className: 'pd-note', textContent: t.nothingToReforge })]
-        : pairs.map((pair) =>
-          button(t.reforgePair(itemName(world, pair.better), itemName(world, pair.worse)), () => {
-            options.onReforge(pair.first, pair.second);
-            options.onClose();
-          }, 'primary'))),
-      button(t.close, options.onClose),
+      { className: 'pd-reward' },
+      el('div', { className: 'pd-reforge' }, slot(world, pair.better, { hero }), el('span', { className: 'pd-reforge-arrow' }), slot(world, pair.worse, { hero })),
+      el('div', { className: 'pd-reward-name', textContent: capitalize(itemName(world, pair.better)) }),
+      el('div', { className: 'pd-reward-desc', textContent: t.reforgePair(itemName(world, pair.better), itemName(world, pair.worse)) }),
+      button(t.reforge, () => {
+        options.onReforge(pair.first, pair.second);
+        options.onClose();
+      }, pairs.length === 1 ? 'primary small' : 'small'),
+    );
+  show(
+    windowOf(
+      { title: capitalize(t.mobs.blacksmith), icon: portrait('blacksmith'), onClose: options.onClose },
+      info(options.text, 'pd-speech'),
+      pairs.length === 0
+        ? info(t.nothingToReforge, 'pd-note')
+        : el('div', { className: 'pd-scroll' }, el('div', { className: 'pd-rewards pd-reforges' }, ...pairs.map(card))),
     ),
+    options.onClose,
   );
 }
 
-/** The tip on a level's sign (Sign.read). */
+/* Small windows */
+
+/** The tip on a level's sign (Sign.read): no cross, a tap anywhere closes it. */
 export function showSign(text: string, onClose: () => void): void {
-  show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('p', { className: 'pd-note', textContent: t.signTitle }),
-      el('p', { className: 'pd-info', textContent: text }),
-      button('OK', onClose, 'primary'),
-    ),
-  );
+  const sign = el('div', { className: 'pd-sign' }, info(t.signTitle, 'pd-note'), info(text));
+  show(sign, onClose);
+  sign.onclick = () => {
+    audio.play('click');
+    onClose();
+  };
 }
 
-/** Chasm.heroJump's WndOptions: a question with a yes and a no. */
+/** Chasm.heroJump's WndOptions: a question with a yes and a no; the yes is dangerous here. */
 export function showConfirm(title: string, text: string, yes: string, no: string, onYes: () => void, onClose: () => void): void {
   show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: title }),
-      el('p', { className: 'pd-info', textContent: text }),
-      button(yes, () => {
-        onClose();
-        onYes();
-      }),
-      button(no, onClose, 'primary'),
+    windowOf(
+      { narrow: true },
+      el('h2', { className: 'pd-heading center', textContent: title }),
+      info(text, 'pd-info center'),
+      el(
+        'div',
+        { className: 'pd-row' },
+        button(no, onClose, 'quiet'),
+        button(yes, () => {
+          onClose();
+          onYes();
+        }, 'danger'),
+      ),
     ),
+    onClose,
   );
 }
 
 export function showHelp(onClose: () => void): void {
   show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: t.help }),
-      el('ul', { className: 'pd-help' }, ...t.helpText.map((line) => el('li', { textContent: line }))),
-      button('OK', onClose, 'primary'),
+    windowOf(
+      { title: t.help, onClose },
+      el('div', { className: 'pd-scroll' }, el('ul', { className: 'pd-help' }, ...t.helpText.map((line) => el('li', { textContent: line })))),
+      actions([button('OK', onClose, 'primary')], []),
     ),
+    onClose,
   );
 }
+
+/** The log's history: every message kept, newest last, depths marked. */
+export function showHistory(lines: readonly LogLine[], onClose: () => void): void {
+  const list = el('div', { className: 'pd-history' });
+  let depth = -1;
+  for (const line of lines) {
+    if (line.depth !== undefined && line.depth !== depth) {
+      depth = line.depth;
+      list.append(el('div', { className: 'pd-depth-mark', textContent: t.newDepth(depth) }));
+    }
+    const row = el('div', { className: `pd-log-line ${line.tone ?? ''}`.trim(), textContent: line.text });
+    if ((line.count ?? 1) > 1) row.append(el('span', { className: 'pd-n', textContent: `×${line.count}` }));
+    list.append(row);
+  }
+  const scroll = el('div', { className: 'pd-scroll' }, list);
+  show(windowOf({ title: t.history, onClose }, scroll), onClose);
+  scroll.scrollTop = scroll.scrollHeight;
+}
+
+/* The end of a run */
 
 export interface EndOptions {
   victory: boolean;
   title: string;
-  text: string;
-  /** Extra lines: what killed the hero, the run's numbers. */
-  details: string[];
+  /** What befell the hero: where and by what. */
+  cause: string;
+  hero: { name: string; heroClass: HeroClass; lvl: number; depth: number; gold: number; kills: number };
   onRestart: () => void;
   restartLabel: string;
   onExit: () => void;
@@ -463,96 +819,77 @@ export interface EndOptions {
   daily?: { score: number; board: Promise<DailyBoard | null>; onShare: () => void };
 }
 
-/** Today's best runs, as a list; `you` is highlighted. */
+/** Today's best runs, as rows; mine is highlighted. */
 function boardView(board: DailyBoard | null): HTMLElement {
-  if (!board) return el('p', { className: 'pd-note', textContent: t.boardOffline });
-  if (board.top.length === 0) return el('p', { className: 'pd-note', textContent: t.noResults });
-  const list = el('ol', { className: 'pd-board' });
-  for (const entry of board.top.slice(0, 10)) {
-    list.append(
+  if (!board) return info(t.boardOffline, 'pd-note');
+  if (board.top.length === 0) return info(t.noResults, 'pd-note');
+  const ranks = el('div', { className: 'pd-ranks' });
+  board.top.slice(0, 10).forEach((entry, i) => {
+    const face = el('i', { className: 'pd-rank-face' });
+    face.style.setProperty('--av', String(AVATAR[entry.heroClass]));
+    ranks.append(
       el(
-        'li',
-        { className: entry.id === board.you ? 'me' : '' },
-        el('span', { className: 'who', textContent: `${entry.name} · ${t.classes[entry.heroClass]}` }),
-        el('span', { className: 'what', textContent: `${entry.won ? '★ ' : ''}${t.depthShort(entry.depth)} · ${entry.score}` }),
+        'div',
+        { className: `pd-rank${entry.id === board.you ? ' me' : ''}` },
+        el('span', { className: 'pd-rank-n', textContent: String(i + 1) }),
+        face,
+        el('span', { className: 'pd-rank-name', textContent: entry.name }, el('small', { textContent: `${t.classes[entry.heroClass]} · ${t.depthShort(entry.depth)}${entry.won ? ' · ★' : ''}` })),
+        el('span', { className: 'pd-rank-score', textContent: entry.score.toLocaleString('ru-RU') }),
       ),
     );
-  }
-  return el('div', {}, list, board.rank && board.rank > 10 ? el('p', { className: 'pd-note', textContent: t.yourPlace(board.rank) }) : null);
+  });
+  return el('div', {}, ranks, board.rank && board.rank > 10 ? info(t.yourPlace(board.rank), 'pd-note center') : null);
 }
 
 /** The end of a run: the whole party fell, or it won. */
 export function showRunEnd(options: EndOptions): void {
-  const board = el('div', {}, options.daily && el('p', { className: 'pd-note', textContent: t.loading }));
+  const { hero } = options;
+  const avatar = el('i');
+  avatar.style.setProperty('--av', String(AVATAR[hero.heroClass]));
+  const board = el('div', { className: 'pd-scroll' }, options.daily && info(t.loading, 'pd-note center'));
+  const rows: Array<readonly [string, string, string?]> = [
+    [t.statDepth, String(hero.depth)],
+    [t.statLevel, String(hero.lvl)],
+    [t.goldLabel, String(hero.gold), 'gold'],
+    [t.slain, String(hero.kills)],
+  ];
+  if (options.daily) rows.push([t.daily, String(options.daily.score), 'ally']);
   show(
     el(
-      'div',
-      { className: 'pd-window' },
-      el('div', { className: options.victory ? 'pd-victory' : 'pd-gameover' }),
-      el('p', { className: 'pd-heading', textContent: options.title }),
-      el('p', { className: 'pd-info', textContent: options.text }),
-      ...options.details.map((line) => el('p', { className: 'pd-note', textContent: line })),
-      options.daily && el('p', { className: 'pd-heading', textContent: t.dailyEnd(options.daily.score) }),
+      'section',
+      { className: `pd-window pd-runend${options.victory ? ' win' : ''}` },
+      el('h2', { className: 'pd-display', textContent: options.title }),
+      options.cause && el('p', { className: 'pd-cause', textContent: options.cause }),
+      el(
+        'div',
+        { className: 'pd-runend-hero' },
+        el('div', { className: 'pd-avatar' }, avatar),
+        el('div', { className: 'pd-info', textContent: `${hero.name} · ${t.classes[hero.heroClass]}` }),
+      ),
+      stats(rows),
       options.daily && board,
-      options.daily && button(t.shareResult, options.daily.onShare),
-      button(options.restartLabel, options.onRestart, 'primary'),
-      button(t.toMenu, options.onExit),
+      actions(
+        options.daily ? [button(t.shareResult, options.daily.onShare, 'primary')] : [button(options.restartLabel, options.onRestart, 'primary')],
+        options.daily ? [button(options.restartLabel, options.onRestart)] : [],
+      ),
+      button(t.toMenu, options.onExit, 'quiet'),
     ),
+    null,
   );
   void options.daily?.board.then((loaded) => {
-    const rank = loaded?.rank;
-    board.replaceChildren(
-      ...(rank ? [el('p', { className: 'pd-info', textContent: t.yourPlace(rank) })] : []),
-      boardView(loaded),
-    );
+    board.replaceChildren(...(loaded?.rank ? [info(t.yourPlace(loaded.rank), 'pd-info center')] : []), boardView(loaded));
+    sprites(board);
   });
 }
 
 /** Today's leaderboard from the title screen. */
 export function showDailyBoard(loading: Promise<DailyBoard | null>, onClose: () => void): void {
-  const body = el('div', {}, el('p', { className: 'pd-note', textContent: t.loading }));
-  show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('p', { className: 'pd-heading', textContent: t.dailyBoard }),
-      body,
-      button(t.close, onClose),
-    ),
-  );
+  const body = el('div', { className: 'pd-scroll' }, info(t.loading, 'pd-note'));
+  show(windowOf({ title: t.dailyBoard, sub: t.dailyInfo, onClose }, body), onClose);
   void loading.then((board) => body.replaceChildren(boardView(board)));
 }
 
 /* Backpack */
-
-function itemIcon(world: World, item: Item): HTMLElement {
-  const [x, y] = spriteOffset(world, item);
-  const icon = el('span', { className: 'pd-item' });
-  icon.style.backgroundPosition = `calc(${-x}px * var(--s)) calc(${-y}px * var(--s))`;
-  return icon;
-}
-
-function slot(world: World, item: Item | undefined, onClick?: () => void, label?: string): HTMLElement {
-  const node = el('button', { className: `pd-slot${item ? '' : ' empty'}`, disabled: !item });
-  if (item) {
-    node.append(itemIcon(world, item));
-    if (item.qty > 1) node.append(el('span', { className: 'pd-qty', textContent: String(item.qty) }));
-    if (item.charges !== undefined) {
-      node.append(el('span', { className: 'pd-qty', textContent: `${item.charges}/${wandMaxCharges(item)}` }));
-    }
-    if (item.level !== 0 && isKnown(world, item)) {
-      node.append(
-        el('span', { className: `pd-lvl ${item.level > 0 ? 'up' : 'down'}`, textContent: `${item.level > 0 ? '+' : ''}${item.level}` }),
-      );
-    }
-    if (label) node.append(el('span', { className: 'pd-tag', textContent: label }));
-    node.onclick = () => {
-      audio.play('click');
-      onClick?.();
-    };
-  }
-  return node;
-}
 
 export interface BackpackOptions {
   world: World;
@@ -573,36 +910,43 @@ export function showBackpack(options: BackpackOptions): void {
   const grid = el('div', { className: 'pd-grid' });
   for (let i = 0; i < Math.max(BACKPACK_SIZE, loose.length); i++) {
     const entry = loose[i];
-    grid.append(slot(world, entry?.item, entry && (() => open(entry.item, entry.index))));
+    grid.append(slot(world, entry?.item, entry ? { hero, onClick: () => open(entry.item, entry.index) } : {}));
   }
-  const bags = el('div', { className: 'pd-grid' }, ...bagged.map(({ item, index }) => slot(world, item, () => open(item, index))));
-  show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el(
-        'div',
-        { className: 'pd-row' },
-        el('p', { className: 'pd-heading', textContent: t.backpack }),
-        el('span', { className: 'pd-gold' }, itemIcon(world, { kind: 'gold', qty: 1, level: 0 }), String(hero.gold)),
-      ),
-      el(
-        'div',
-        { className: 'pd-row equipped' },
-        // Bare-handed after a monk's blow: an empty slot.
-        slot(world, hero.weapon ?? undefined, hero.weapon ? () => open(hero.weapon!, null) : undefined, hero.weapon ? t.equippedLabel : t.bareHanded),
-        slot(world, hero.armor, () => open(hero.armor, null), t.equippedLabel),
-        ...[0, 1].map((i) => {
-          const ring = hero.rings[i];
-          return slot(world, ring, ring && (() => open(ring, null, i)), ring && t.equippedLabel);
-        }),
-        el('span', { className: 'pd-stats', textContent: `${t.strShort} ${hero.str}` }),
-      ),
-      grid,
-      ...(bagged.length > 0 ? [el('p', { className: 'pd-note', textContent: t.inBags }), bags] : []),
-      button(t.close, options.onClose),
-    ),
+  const coin = picture('coin', 16, 14);
+  const head = el(
+    'header',
+    { className: 'pd-bag-head' },
+    el('h2', { className: 'pd-heading', textContent: t.backpack }),
+    el('span', { className: 'pd-stat gold' }, coin, String(hero.gold)),
+    el('span', { className: 'pd-stat' }, el('span', { className: 'pd-stat-label', textContent: t.strength }), String(hero.str)),
   );
+  const equip = el(
+    'div',
+    { className: 'pd-equip' },
+    // Bare-handed after a monk's blow: the weapon's silhouette.
+    slot(world, hero.weapon ?? undefined, { hero, equipped: true, placeholder: 5, onClick: () => hero.weapon && open(hero.weapon, null) }),
+    slot(world, hero.armor, { hero, equipped: true, placeholder: 6, onClick: () => open(hero.armor, null) }),
+    ...[0, 1].map((i) => {
+      const ring = hero.rings[i];
+      return slot(world, ring, { hero, equipped: true, placeholder: 7, onClick: () => ring && open(ring, null, i) });
+    }),
+  );
+  const box = el(
+    'section',
+    { className: 'pd-window' },
+    head,
+    equip,
+    grid,
+    ...(bagged.length > 0
+      ? [
+          el('div', { className: 'pd-bagrow-title' }, info(t.inBags, 'pd-note')),
+          el('div', { className: 'pd-bagrow' }, ...bagged.map(({ item, index }) => slot(world, item, { hero, onClick: () => open(item, index) }))),
+        ]
+      : []),
+    closeButton(options.onClose),
+  );
+  box.setAttribute('role', 'dialog');
+  show(box, options.onClose);
 }
 
 interface ItemOptions extends BackpackOptions {
@@ -616,136 +960,137 @@ interface ItemOptions extends BackpackOptions {
 function showItem(options: ItemOptions): void {
   const { world, hero, item, index } = options;
   const category = itemDef(item.kind).category;
+  const back = (): void => showBackpack(options);
   const act = (action: Action): void => {
     options.onAction(action);
     options.onClose();
   };
-  const actions: HTMLElement[] = [];
+  const aimWith = (kind: 'throw' | 'zap' | 'special', at: number): void => {
+    options.onClose();
+    options.onAim(at, kind);
+  };
+  // What the item is for comes first and red; the rest are stone; dropping it goes last.
+  const main: HTMLElement[] = [];
+  const more: HTMLElement[] = [];
+  const danger: HTMLElement[] = [];
+  const use = (label: string, onClick: () => void): void => {
+    (main.length === 0 ? main : more).push(button(label, onClick, main.length === 0 ? 'primary' : ''));
+  };
   if (index !== null) {
-    if (category === 'potion') {
-      actions.push(button(t.drink, () => act({ type: 'use', item: index }), 'primary'));
-      actions.push(
-        button(t.throwItem, () => {
-          options.onClose();
-          options.onAim(index, 'throw');
-        }),
-      );
-    }
-    if (category === 'food' || item.kind === 'quest.fish') actions.push(button(t.eat, () => act({ type: 'use', item: index }), 'primary'));
-    if (category === 'torch') actions.push(button(t.light, () => act({ type: 'use', item: index }), 'primary'));
-    if (category === 'tome') {
-      actions.push(
-        button(t.readTome, () => {
-          // TomeOfMastery: the two ways of the hero's class, to choose from.
-          show(
-            el(
-              'div',
-              { className: 'pd-window' },
-              el('p', { className: 'pd-heading', textContent: t.chooseWay }),
-              ...SUBCLASSES[hero.heroClass].flatMap((way) => [
-                el('p', { className: 'pd-info', textContent: t.subclassInfo[way] }),
-                button(capitalize(t.subclasses[way]), () => act({ type: 'master', item: index, subclass: way }), 'primary'),
-              ]),
-              button(t.back, () => showBackpack(options)),
-            ),
-          );
-        }, 'primary'),
-      );
-    }
-    if (item.kind === 'weapon.pickaxe') {
-      actions.push(button(t.mine, () => act({ type: 'mine' }), 'primary'));
-    }
-    if (category === 'kit') {
-      actions.push(button(t.applyKit, () => act({ type: 'use', item: index, target: 'armor' }), 'primary'));
-    }
-    if (category === 'seed') {
-      actions.push(
-        button(t.plantSeed, () => {
-          options.onClose();
-          options.onAim(index, 'throw');
-        }, 'primary'),
-      );
-    }
+    if (category === 'potion') use(t.drink, () => act({ type: 'use', item: index }));
+    if (category === 'food' || item.kind === 'quest.fish') use(t.eat, () => act({ type: 'use', item: index }));
+    if (category === 'torch') use(t.light, () => act({ type: 'use', item: index }));
+    if (category === 'tome') use(t.readTome, () => showWays(options, index, act));
+    if (item.kind === 'weapon.pickaxe') use(t.mine, () => act({ type: 'mine' }));
+    if (category === 'kit') use(t.applyKit, () => act({ type: 'use', item: index, target: 'armor' }));
+    if (category === 'seed') use(t.plantSeed, () => aimWith('throw', index));
     if (category === 'scroll') {
       if (item.kind === 'scroll.upgrade' && isKnown(world, item)) {
-        actions.push(button(t.upgradeWeapon, () => act({ type: 'use', item: index, target: 'weapon' }), 'primary'));
-        actions.push(button(t.upgradeArmor, () => act({ type: 'use', item: index, target: 'armor' }), 'primary'));
+        use(t.upgradeWeapon, () => act({ type: 'use', item: index, target: 'weapon' }));
+        use(t.upgradeArmor, () => act({ type: 'use', item: index, target: 'armor' }));
       } else if (item.kind === 'scroll.enchantment' && isKnown(world, item)) {
-        actions.push(button(t.enchantWeapon, () => act({ type: 'use', item: index, target: 'weapon' }), 'primary'));
-        actions.push(button(t.enchantArmor, () => act({ type: 'use', item: index, target: 'armor' }), 'primary'));
+        use(t.enchantWeapon, () => act({ type: 'use', item: index, target: 'weapon' }));
+        use(t.enchantArmor, () => act({ type: 'use', item: index, target: 'armor' }));
       } else {
-        actions.push(button(t.read, () => act({ type: 'use', item: index }), 'primary'));
+        use(t.read, () => act({ type: 'use', item: index }));
       }
     }
     if (category === 'weapon' || category === 'armor' || category === 'ring') {
-      actions.push(button(category === 'ring' ? t.putOn : t.equip, () => act({ type: 'equip', item: index }), 'primary'));
+      use(category === 'ring' ? t.putOn : t.equip, () => act({ type: 'equip', item: index }));
     }
     if (category === 'beacon') {
       // LloydsBeacon: set it here, or go back to where it was set.
-      actions.push(button(t.beaconSet, () => act({ type: 'beacon', item: index, mode: 'set' }), 'primary'));
-      if (item.returnTo) actions.push(button(t.beaconReturn, () => act({ type: 'beacon', item: index, mode: 'return' }), 'primary'));
+      if (item.returnTo) use(t.beaconReturn, () => act({ type: 'beacon', item: index, mode: 'return' }));
+      use(t.beaconSet, () => act({ type: 'beacon', item: index, mode: 'set' }));
     }
     if (category === 'weightstone' && hero.weapon) {
       // Weightstone.WndBalance: the weapon in hand, balanced the way it is not yet.
       for (const imbue of ['speed', 'accuracy'] as const) {
-        if (hero.weapon.imbue === imbue) continue;
-        actions.push(button(t.balanceFor[imbue], () => act({ type: 'balance', item: index, imbue }), 'primary'));
+        if (hero.weapon.imbue !== imbue) use(t.balanceFor[imbue], () => act({ type: 'balance', item: index, imbue }));
       }
     }
-    if (category === 'wipeout') actions.push(button(t.read, () => act({ type: 'use', item: index }), 'primary'));
-    if (category === 'vial' && item.volume) actions.push(button(t.drink, () => act({ type: 'use', item: index }), 'primary'));
-    if (category === 'honeypot') actions.push(button(t.shatterPot, () => act({ type: 'use', item: index })));
+    if (category === 'wipeout') use(t.read, () => act({ type: 'use', item: index }));
+    if (category === 'vial' && item.volume) use(t.drink, () => act({ type: 'use', item: index }));
     if (category === 'missile' || category === 'wand' || category === 'bomb' || category === 'honeypot') {
       const kind = category === 'wand' ? 'zap' : 'throw';
-      actions.push(
-        button(kind === 'throw' ? t.throwItem : t.zap, () => {
-          options.onClose();
-          options.onAim(index, kind);
-        }, 'primary'),
-      );
+      use(kind === 'throw' ? t.throwItem : t.zap, () => aimWith(kind, index));
     }
+    if (category === 'potion') use(t.throwItem, () => aimWith('throw', index));
+    if (category === 'honeypot') use(t.shatterPot, () => act({ type: 'use', item: index }));
     // QuickSlot: any item with a use can be kept one tap away.
-    if (quickUse(item.kind) && !isQuickslotted(item.kind)) {
-      actions.push(button(t.toQuickslot, () => {
+    if (quickUse(item.kind) && !inQuickslot(hero, item)) {
+      more.push(button(t.toQuickslot, () => {
         chooseQuickslot(item.kind);
-        showBackpack(options);
+        back();
       }));
     }
-    actions.push(button(t.dropItem, () => act({ type: 'drop', item: index })));
+    danger.push(button(t.dropItem, () => act({ type: 'drop', item: index }), 'danger'));
   } else if (options.ring !== undefined) {
     const ring = options.ring;
-    actions.push(button(t.takeOff, () => act({ type: 'remove', ring }), 'primary'));
+    use(t.takeOff, () => act({ type: 'remove', ring }));
   } else if (item === hero.armor && item.kind === CLASS_ARMOR_OF[hero.heroClass]) {
     // ClassArmor.doSpecial: the leap and the smoke bomb want a cell; the others act at once.
     const aimed = hero.heroClass === 'warrior' || hero.heroClass === 'rogue';
-    actions.push(
-      button(t.specials[hero.heroClass], () => {
-        if (!aimed) return act({ type: 'special' });
-        options.onClose();
-        options.onAim(-1, 'special');
-      }, 'primary'),
-    );
+    use(t.specials[hero.heroClass], () => (aimed ? aimWith('special', -1) : act({ type: 'special' })));
   }
   show(
-    el(
-      'div',
-      { className: 'pd-window' },
-      el('div', { className: 'pd-row' }, slot(world, item), el('p', { className: 'pd-heading', textContent: capitalize(itemName(world, item)) })),
-      ...itemInfo(world, hero, item).map((line) => el('p', { className: 'pd-info', textContent: line })),
-      ...actions,
-      button(t.back, () => showBackpack(options)),
+    windowOf(
+      { title: capitalize(itemName(world, item)), icon: slot(world, item, { hero, equipped: index === null }), onClose: back },
+      ...described(itemInfo(world, hero, item)),
+      (main.length > 0 || more.length > 0 || danger.length > 0) && actions(main, more, danger),
     ),
+    back,
   );
 }
 
+/** TomeOfMastery: the two ways of the hero's class, as cards to choose from. */
+function showWays(options: ItemOptions, index: number, act: (action: Action) => void): void {
+  const { hero } = options;
+  show(
+    windowOf(
+      { title: t.chooseWay, onClose: () => showBackpack(options) },
+      el(
+        'div',
+        { className: 'pd-rewards' },
+        ...SUBCLASSES[hero.heroClass].map((way) =>
+          el(
+            'div',
+            { className: 'pd-reward pd-way' },
+            el('div', { className: 'pd-reward-name', textContent: capitalize(t.subclasses[way]) }),
+            el('div', { className: 'pd-reward-desc', textContent: t.subclassInfo[way] }),
+            button(t.choose, () => act({ type: 'master', item: index, subclass: way }), 'small'),
+          )),
+      ),
+    ),
+    () => showBackpack(options),
+  );
+}
+
+/* Toast */
+
 let toastTimer = 0;
 
-export function toast(text: string): void {
+export interface ToastOptions {
+  tone?: 'good' | 'warn' | 'ally' | 'badge';
+  /** An item sprite or a badge image beside the text. */
+  item?: number;
+  badge?: number;
+}
+
+/** One message at a time under the HUD; it fades out by itself. */
+export function toast(text: string, options: ToastOptions = {}): void {
   const node = document.getElementById('toast')!;
-  node.textContent = text;
+  const icon = options.badge !== undefined ? el('i', { className: 'pd-badge' }) : options.item !== undefined ? el('i', { className: 'pd-item' }) : null;
+  if (icon) icon.dataset.i = String(options.badge ?? options.item);
+  node.className = `pd-toast${options.tone ? ` ${options.tone}` : ''}`;
+  node.replaceChildren(...[icon, el('span', { textContent: text })].filter((n): n is HTMLElement => n !== null));
+  sprites(node);
   node.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => {
-    node.hidden = true;
-  }, 2500);
+    node.classList.add('hide');
+    toastTimer = window.setTimeout(() => {
+      node.hidden = true;
+    }, 260);
+  }, 2400);
 }

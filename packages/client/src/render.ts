@@ -6,7 +6,7 @@ import { t } from './i18n';
 
 /* Canvas renderer for the world, using the original 16px tiles and sprites. */
 
-export const FONT = '"Pixelify Sans", ui-monospace, monospace';
+export const FONT = '"Galmuri11", "Galmuri9", ui-monospace, monospace';
 /** How long a boss's title card stays up. */
 const BOSS_CARD_MS = 3200;
 const LEVEL_CARD_MS = 1800;
