@@ -801,8 +801,10 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
   for (const hero of world.heroes) {
     if (hero.depth === depth && isAlive(hero) && hero.id !== session!.myId && (hero.rooted > 0 || hero.paralysed > 0)) cells.add(hero.pos);
   }
-  // The ghost and magic sheep step aside: the hero swaps places with them.
-  for (const mob of world.floors[depth]?.mobs ?? []) if (!swapsWithHero(mob)) cells.add(mob.pos);
+  // Only monsters in sight are walked round: the way is planned with what the player can see, not
+  // with what hides in the dark. The ghost and magic sheep step aside: the hero swaps places with them.
+  const seen = visibleCells(world, depth);
+  for (const mob of world.floors[depth]?.mobs ?? []) if (!swapsWithHero(mob) && seen[mob.pos]) cells.add(mob.pos);
   cells.delete(except);
   return cells;
 }
