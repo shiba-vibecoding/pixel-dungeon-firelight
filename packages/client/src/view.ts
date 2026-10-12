@@ -327,8 +327,8 @@ export class View {
     const puppet = this.puppets.get(id);
     if (!puppet) return;
     const { x, y } = this.position(puppet, now);
-    // Stack texts that appear together so they stay readable.
-    const stacked = this.floaters.filter((f) => now - f.start < 250 && Math.abs(f.x - x - TILE / 2) < 4).length;
+    // Stack texts that appear together over the same one so they stay readable (not over a neighbour).
+    const stacked = this.floaters.filter((f) => now - f.start < 250 && Math.abs(f.x - x - TILE / 2) < 4 && y - f.y >= 0 && y - f.y < 15).length;
     this.floaters.push({ text, color, x: x + TILE / 2, y: y - stacked * 7, start: now, ...(word ? { word } : {}) });
   }
 

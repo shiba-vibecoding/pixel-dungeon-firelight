@@ -8,8 +8,11 @@
 export type FxMode = 'auto' | 'full' | 'light';
 
 const KEY = 'pd-fx';
-/** A frame slower than this, on average, is a phone struggling (about 33 frames a second). */
-const SLOW_FRAME_MS = 30;
+/**
+ * A frame slower than this, on average, is a phone struggling (under about 26 frames a second).
+ * A steady 30 is not: a phone saving its battery runs every app at 30 and copes well.
+ */
+const SLOW_FRAME_MS = 38;
 /** Frames are watched this long before «auto» decides anything. */
 const SETTLE_MS = 4000;
 
