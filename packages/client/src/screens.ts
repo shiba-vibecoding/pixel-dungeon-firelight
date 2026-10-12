@@ -1320,6 +1320,7 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
       drag.node.dispatchEvent(new Event('pointercancel'));
       drag.node.setPointerCapture?.(event.pointerId);
       const ghost = el('div', { className: 'pd-drag-ghost' }, slot(world, drag.item, { hero }));
+      sprites(ghost);
       document.body.append(ghost);
       drag.ghost = ghost;
       box.classList.add('dragging');

@@ -1457,13 +1457,12 @@ canvas.addEventListener('pointermove', (event) => {
   hideHover();
   hover.cell = cell;
   if (cell < 0) return;
-  const { clientX, clientY } = event;
-  hover.timer = window.setTimeout(() => {
-    const tip = cellTip(cell);
-    hover.frame.className = `pd-hover${tip?.kind === 'foe' ? ' foe' : ''}`;
-    hover.frame.style.display = tip ? '' : 'none';
-    if (tip) tooltip.show(tip, clientX, clientY);
-  }, 300);
+  // Only the cell's corners: a popup at every cell under the mouse got in the way (players asked).
+  // What a cell holds is a right click away.
+  const tip = cellTip(cell);
+  hover.frame.className = `pd-hover${tip?.kind === 'foe' ? ' foe' : ''}`;
+  hover.frame.style.display = tip ? '' : 'none';
+  placeHover();
 });
 canvas.addEventListener('pointerleave', hideHover);
 canvas.addEventListener('pointerdown', hideHover);
