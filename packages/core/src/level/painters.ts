@@ -809,7 +809,31 @@ function paintRatKing(level: LevelBuilder, room: Room): void {
   level.ratKing = room.random(rng);
 }
 
+/**
+ * AltarPainter: a pedestal in the middle of a chasm (of tall grass above a
+ * boss's level), reached by a single path from the door, where the
+ * sacrificial fire burns among embers.
+ */
+function paintAltar(level: LevelBuilder, room: Room): void {
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, isBossDepth(level.depth + 1) ? T.HIGH_GRASS : T.CHASM, 1);
+  const c = room.center(level.rng);
+  const door = entranceOf(room);
+  if (door.x === room.left || door.x === room.right) {
+    const p = level.drawInside(room, door, Math.abs(door.x - c.x) - 2, T.EMPTY_SP);
+    for (; p.y !== c.y; p.y += p.y < c.y ? 1 : -1) level.setXY(p.x, p.y, T.EMPTY_SP);
+  } else {
+    const p = level.drawInside(room, door, Math.abs(door.y - c.y) - 2, T.EMPTY_SP);
+    for (; p.x !== c.x; p.x += p.x < c.x ? 1 : -1) level.setXY(p.x, p.y, T.EMPTY_SP);
+  }
+  level.fill(c.x - 1, c.y - 1, 3, 3, T.EMBERS);
+  level.setXY(c.x, c.y, T.PEDESTAL);
+  level.altar = { pos: cell(c.x, c.y), volume: 5 + level.depth * 5 };
+  door.set(DoorType.EMPTY);
+}
+
 export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painter>([
+  [RoomType.ALTAR, paintAltar],
   [RoomType.RAT_KING, paintRatKing],
   [RoomType.BLACKSMITH, paintBlacksmith],
   [RoomType.STATUE, paintStatue],

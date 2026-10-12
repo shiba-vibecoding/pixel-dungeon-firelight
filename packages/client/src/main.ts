@@ -933,6 +933,7 @@ function tick(now: number): void {
   ];
   const scene = {
     level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, plants, gas, seeAll: me.mindVision > 0,
+      ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
   };
   render(ctx, scene, view, session.myId, assets, camera, now);
 

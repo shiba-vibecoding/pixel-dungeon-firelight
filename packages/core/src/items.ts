@@ -16,7 +16,7 @@ import type { RunState } from './run';
 
 export type ItemCategory =
   | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
-  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone' | 'beacon' | 'honeypot' | 'vial' | 'bag';
+  | 'tome' | 'quest' | 'ankh' | 'kit' | 'bomb' | 'weightstone' | 'beacon' | 'honeypot' | 'vial' | 'bag' | 'wipeout';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -153,6 +153,8 @@ export const ITEMS = {
   'food.overpriced': { category: 'food', sprite: 115, energy: 100 },
   /** Shattered, it lets out a golden bee that fights for whoever broke it, for a while (Honeypot). */
   honeypot: { category: 'honeypot', sprite: 125 },
+  /** The sacrificial fire's reward: read, it kills every monster on the level but its boss (ScrollOfWipeOut). */
+  wipeOut: { category: 'wipeout', sprite: 117 },
   /** Thrown, it blows up where it lands (Bomb). */
   bomb: { category: 'bomb', sprite: 124 },
   /** Goo's legacy now and then: takes its bearer back to a place set beforehand (LloydsBeacon). */
@@ -268,7 +270,7 @@ export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
   return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || category === 'torch' ||
-    category === 'seed' || category === 'bomb' || category === 'honeypot' || category === 'weightstone' || (category === 'missile' && kind !== 'missile.boomerang') || kind === 'quest.token' || kind === 'quest.ore';
+    category === 'seed' || category === 'bomb' || category === 'honeypot' || category === 'wipeout' || category === 'weightstone' || (category === 'missile' && kind !== 'missile.boomerang') || kind === 'quest.token' || kind === 'quest.ore';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
@@ -337,6 +339,8 @@ export function itemPrice(item: Item, known: boolean): number {
       return 50 * item.qty;
     case 'bag':
       return 50;
+    case 'wipeout':
+      return 100 * item.qty;
     case 'weightstone':
       return 40 * item.qty;
     default:

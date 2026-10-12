@@ -102,6 +102,8 @@ export interface Scene {
   gas?: ReadonlyArray<{ pos: number; volume: number; color: string }>;
   /** Mind vision: every monster on the level shows. */
   seeAll: boolean;
+  /** Where an altar's sacrificial fire burns, while it does. */
+  altar?: number;
 }
 
 export function render(
@@ -147,6 +149,19 @@ export function render(
       assets.items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16,
       (heap.pos % WIDTH) * TILE, Math.trunc(heap.pos / WIDTH) * TILE - 1 + bob, 16, 16,
     );
+  }
+
+  // The sacrificial fire: a flickering blue flame on its pedestal (SacrificialParticle).
+  if (scene.altar !== undefined && explored[scene.altar]) {
+    const x = (scene.altar % WIDTH) * TILE + TILE / 2;
+    const y = Math.trunc(scene.altar / WIDTH) * TILE + TILE / 2;
+    const flicker = 0.75 + 0.25 * Math.sin(now / 90) * Math.sin(now / 37);
+    const glow = ctx.createRadialGradient(x, y - 3, 0, x, y - 3, 9);
+    glow.addColorStop(0, `rgba(200, 240, 255, ${0.9 * flicker})`);
+    glow.addColorStop(0.4, `rgba(68, 136, 238, ${0.6 * flicker})`);
+    glow.addColorStop(1, 'rgba(68, 136, 238, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(x - 9, y - 12, 18, 18);
   }
 
   // Freshly discovered secrets glow for a moment.

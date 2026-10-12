@@ -23,6 +23,7 @@ import { mine, mineProblem, TIME_TO_MINE } from './smith';
 import { transmute } from './transmute';
 import { DEW_VIAL_VOLUME, drinkFromVial } from './vial';
 import { hasRoom } from './bags';
+import { wipeOut } from './altar';
 import { applyArmorKit, CLASS_ARMOR, CLASS_ARMOR_OF, classSpecial, specialProblem, TIME_TO_APPLY_KIT } from './classArmor';
 import type { World } from './world';
 
@@ -124,11 +125,12 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial'].includes(category) && item.kind !== 'quest.fish') {
+      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial', 'wipeout'].includes(category) && item.kind !== 'quest.fish') {
         return 'that cannot be used';
       }
       if (category === 'kit' && CLASS_ARMOR.includes(hero.armor.kind)) return 'your armour is already a class armour';
       if (category === 'vial' && !item.volume) return 'your dew vial is empty';
+      if (category === 'wipeout' && (hero.blind ?? 0) > 0) return 'you cannot read while blinded';
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
       // The blacksmith's pickaxe is a tool: no scroll improves it.
       if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
@@ -198,6 +200,12 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       if (itemDef(hero.items[action.item]!.kind).category === 'food') {
         eat(ctx, hero, action.item);
         return TIME_TO_EAT;
+      }
+      if (itemDef(hero.items[action.item]!.kind).category === 'wipeout') {
+        const scroll = hero.items[action.item]!;
+        if (--scroll.qty <= 0) hero.items.splice(action.item, 1);
+        wipeOut(ctx, hero);
+        return TIME_TO_USE;
       }
       if (hero.items[action.item]!.kind === 'quest.fish') {
         // PhantomFish.execute: eaten, it leaves the hero unseen for a while.

@@ -76,6 +76,8 @@ export class LevelBuilder {
   blacksmithWanted = false;
   blacksmithPlaced = false;
   blacksmith = -1;
+  /** An altar room: where the sacrificial fire burns, and how much it hungers for. */
+  altar: { pos: number; volume: number } | null = null;
   /** The sewers' boss level: where the Rat King sits in his hidden treasury. */
   ratKing = -1;
   /** A statue room's level: where the animated statue stands. */

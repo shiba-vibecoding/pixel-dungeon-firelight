@@ -42,6 +42,8 @@ export interface Floor {
   /** Clouds of gas, as [cell, volume] pairs in cell order, and when they next spread (see gas.ts). */
   gas?: Partial<Record<GasKind, Array<[number, number]>>>;
   gasAt?: number;
+  /** An altar room's sacrificial fire: where it burns, and how much more it hungers for (0 once it has gone out). */
+  altar?: { pos: number; volume: number };
 }
 
 /** Level.drop: an item that comes down on a chasm falls through it, to land on the depth below. */
@@ -201,6 +203,10 @@ export type Effect =
   | { type: 'vialSaved'; hero: string }
   /** The imp of the last shop greets the heroes. */
   | { type: 'greeting'; depth: number; mob: string }
+  /** The sacrificial fire marked someone; an offering was made to it (the last one puts it out); a scroll of wipe out was read. */
+  | { type: 'marked'; depth: number; who: string }
+  | { type: 'sacrifice'; depth: number; pos: number; outcome: 'worthy' | 'unworthy' | 'reward' }
+  | { type: 'wipedOut'; depth: number; hero: string }
   /** A bomb went off. */
   | { type: 'exploded'; depth: number; pos: number }
   /** A weapon balanced with a weightstone. */

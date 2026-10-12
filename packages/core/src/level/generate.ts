@@ -46,6 +46,8 @@ export interface Level {
   shopkeeper?: number;
   /** Where the troll blacksmith keeps his forge. */
   blacksmith?: number;
+  /** Where the sacrificial fire of an altar room burns, and how much it hungers for. */
+  altar?: { pos: number; volume: number };
   /** Where the Rat King holds court, beside Goo's lair. */
   ratKing?: number;
   /** Where an animated statue stands guard, and a pool's piranhas swim. */
@@ -148,6 +150,7 @@ export function generateLevel(run: RunState, depth: number): Level {
       ...(level.statue >= 0 ? { statue: level.statue } : {}),
       ...(level.blacksmith >= 0 ? { blacksmith: level.blacksmith } : {}),
       ...(level.ratKing >= 0 ? { ratKing: level.ratKing } : {}),
+      ...(level.altar ? { altar: level.altar } : {}),
       ...(level.piranhas.length > 0 ? { piranhas: level.piranhas } : {}),
       ...(level.plants.length > 0 ? { plants: level.plants } : {}),
     };

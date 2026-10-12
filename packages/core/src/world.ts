@@ -16,6 +16,7 @@ import { faceCurse, faceCurseProblem, type GhostQuest, rewardFromGhost, rewardPr
 import { trapAt, triggerTrap } from './traps';
 import { evolveGas } from './gas';
 import { scorchPack } from './cooking';
+import { altarMarksHero } from './altar';
 import { type ImpQuest, impRewardProblem, ringFromImp, spawnImp, talkToImp } from './imp';
 import { type ItemRef, reforge, reforgeProblem, type SmithQuest, spawnBlacksmith, talkToSmith } from './smith';
 import { spawnWandmaker, talkToWandmaker, type WandQuest, wandFromWandmaker, wandRewardProblem } from './wandmaker';
@@ -141,6 +142,7 @@ export function levelAt(world: World, depth: number): Level {
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
         now: 0,
         plants: [...(level.plants ?? [])],
+        ...(level.altar ? { altar: { ...level.altar } } : {}),
         // Boss levels and the Amulet's hall never fill up again, and hold only what their layout asks for.
         respawn: isBossDepth(d) || d >= 26 ? -1 : TIME_TO_RESPAWN,
         heaps: createItems(
@@ -388,6 +390,7 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   if (haste !== 0) time *= 1.1 ** -haste;
   hero.time += time;
   hero.regen += time;
+  if (hero.depth === ctx.depth) altarMarksHero(ctx, hero, time);
   // Regeneration: a ring of mending makes wounds close faster.
   const regenDelay = REGENERATION_DELAY / 1.2 ** ringBonus(hero, 'ring.mending');
   while (hero.regen >= regenDelay) {

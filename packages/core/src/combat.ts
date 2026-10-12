@@ -15,6 +15,7 @@ import { curseBroken, questKill } from './quest';
 import { seedGas } from './gas';
 import { DEW_VIAL_VOLUME, drinkFromVial } from './vial';
 import { looseItems } from './bags';
+import { sacrifice } from './altar';
 import { T } from './level/terrain';
 import { isBossDepth } from './level/builder';
 
@@ -336,6 +337,7 @@ function mobDied(ctx: Ctx, mob: Mob): void {
     curseBroken(ctx, mob);
     return;
   }
+  sacrifice(ctx, mob);
 
   // Everyone fighting on the depth learns from the kill, not just the killer.
   const stats = mobStats(mob);
@@ -469,6 +471,7 @@ function heroDied(ctx: Ctx, hero: Hero): void {
     resurrect(ctx, hero);
     return;
   }
+  sacrifice(ctx, hero);
   hero.hp = 0;
   hero.intent = null;
   leaveCell(ctx.world, ctx.level, ctx.depth, hero.pos);

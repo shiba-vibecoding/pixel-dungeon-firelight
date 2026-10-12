@@ -110,6 +110,8 @@ export interface Hero {
   blind?: number;
   /** Bleeding (an albino rat's bite): how hard it still bleeds; it hurts every turn, less and less. */
   bleeding?: number;
+  /** Turns left of being marked by the sacrificial fire: dying meanwhile, the hero is an offering. */
+  marked?: number;
   /** Turns left of floating above traps and chasms (a potion of levitation). */
   levitating?: number;
   /** Turns left of breathing no gas (a potion of purity). */
@@ -432,6 +434,8 @@ export interface Mob {
   time: number;
   /** Goo only: pumped up for a big attack. */
   pumped?: boolean;
+  /** Turns left of being marked by the sacrificial fire: dying meanwhile, it is an offering. */
+  marked?: number;
   /** The imp who keeps the last shop has greeted the heroes. */
   greeted?: boolean;
   /** The Rat King: woken by someone (though he says he was not asleep). */

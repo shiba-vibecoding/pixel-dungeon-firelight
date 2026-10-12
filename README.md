@@ -120,7 +120,12 @@ Bags from the shops (a seed pouch, a scroll holder, a wand holster) hold
 their kind without taking room in the backpack, out of reach of fire and
 thieves; keys never take room, as every hero carries a key ring.
 
-Not ported yet: the altar room's sacrificial fire and the scroll of wipe out.
+An altar room's sacrificial fire draws every monster on its level; whoever
+stands in it is marked, and marked creatures slain are offerings. Once it
+has had enough, it goes out and leaves a scroll of wipe out, which kills
+every monster on a level but its boss (and frees a shop's wares).
+
+Every item, monster, quest and room of the original is now in.
 
 Where this port differs on purpose: co-op throughout; golden bees and mirror
 images are ignored by monsters rather than fought; Lloyd's beacon is not

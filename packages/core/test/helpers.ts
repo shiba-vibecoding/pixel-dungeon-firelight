@@ -27,6 +27,9 @@ export function botAction(world: World, id: string, deepest = 4): Action {
   const healing = hero.items.findIndex((item) => item.kind === 'potion.healing');
   if (hero.hp < hero.ht / 3 && healing >= 0) return { type: 'use', item: healing };
   if (enemy) return { type: 'attack', target: enemy.id };
+  // Disarmed by a monk: take up a weapon from the pack again.
+  const weapon = hero.items.findIndex((item) => item.kind.startsWith('weapon.') && !item.cursed);
+  if (!hero.weapon && weapon >= 0) return { type: 'equip', item: weapon };
   const food = hero.items.findIndex((item) => item.kind.startsWith('food.'));
   if (hero.hunger >= HUNGRY && food >= 0) return { type: 'use', item: food };
   if (floor.heaps.some((heap) => heap.pos === hero.pos && heap.kind !== 'forSale') && hero.items.length < 20) {

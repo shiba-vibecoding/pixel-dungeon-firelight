@@ -715,6 +715,24 @@ export class View {
         case 'greeting':
           if (effect.depth === this.depth) this.say(`${t.mobs.impShopkeeper}: «${t.impGreeting}»`, COLORS.default, now);
           break;
+        case 'marked':
+          if (effect.depth === this.depth) {
+            audio.play('burning');
+            this.float(effect.who, t.marked, COLORS.warning, now);
+          }
+          break;
+        case 'sacrifice':
+          if (effect.depth === this.depth) {
+            this.say(t.sacrifice[effect.outcome], effect.outcome === 'reward' ? COLORS.highlight : COLORS.warning, now);
+            this.flashes.push({ cell: effect.pos, start: now, color: '102, 255, 255', duration: 900 });
+          }
+          break;
+        case 'wipedOut':
+          if (effect.depth === this.depth) {
+            audio.play('cursed');
+            this.say(t.wipedOut, COLORS.negative, now);
+          }
+          break;
         case 'bee':
           if (effect.depth === this.depth) {
             audio.play('shatter');

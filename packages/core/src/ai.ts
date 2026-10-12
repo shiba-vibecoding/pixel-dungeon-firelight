@@ -4,6 +4,7 @@ import {
 import { attack, hurt } from './combat';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 import { charAt, type Ctx, enterCell, heroesOn, heroView, isPassable, isWater, leaveCell } from './floor';
+import { altarCallsMob } from './altar';
 import { type Item, itemDef, ItemGenerator, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
 import { KING_PEDESTALS } from './level/city-boss';
@@ -103,6 +104,8 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
     }
     return;
   }
+  // SacrificialFire.evolve: drawn to the altar's fire, and marked while in it.
+  altarCallsMob(ctx, mob);
   // Piranha.act: out of the water, a piranha dies.
   if (mob.kind === 'piranha' && !isWater(ctx.level.map[mob.pos]!)) {
     hurt(ctx, mob, mob.hp, 'dry');
