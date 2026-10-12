@@ -30,6 +30,7 @@ import {
   showHistory, showMenu, showRankings, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
 import { quality } from './quality';
+import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -1193,13 +1194,21 @@ function tick(now: number): void {
         ? (() => {
             const depth = Object.keys(world.levels).length;
             const score = (me.gold + me.lvl * depth * 100) * (victory ? 2 : 1);
+            const board = submitRun(world, me);
             return {
               score,
-              board: submitRun(world, me),
+              board,
+              // The day's result as a picture where the phone can share files, as text and a link elsewhere.
               onShare: () => {
-                void shareDaily(t.shareText(score, depth)).then((result) => {
-                  if (result === 'copied') toast(t.linkCopied);
-                });
+                void (async () => {
+                  const text = t.shareText(score, depth);
+                  const killer = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? me.killedBy);
+                  const shared = await sharePicture({
+                    name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, level: me.lvl, depth, score,
+                    place: (await board)?.rank ?? null, won: victory, cause: killer ? capitalize(t.killedBy(killer)) : t.soloFell(me.depth),
+                  }, text);
+                  if (!shared && (await shareDaily(text)) === 'copied') toast(t.linkCopied);
+                })();
               },
             };
           })()
