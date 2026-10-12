@@ -6,6 +6,8 @@ import { PAINTERS } from './painters';
 import { RoomType } from './room';
 import { CAVES_STYLE } from './caves';
 import { CITY_STYLE } from './city';
+import { HALLS_STYLE } from './halls';
+import { buildHallsBossLevel, buildLastLevel, HALLS_BOSS_STYLE, LAST_STYLE } from './halls-boss';
 import { buildCityBossLevel, CITY_BOSS_STYLE } from './city-boss';
 import { buildCavesBossLevel, CAVES_BOSS_STYLE } from './caves-boss';
 import { PRISON_STYLE } from './prison';
@@ -49,17 +51,19 @@ function layoutFor(depth: number): { style: RegionStyle; build: (level: LevelBui
   if (depth === 10) return { style: PRISON_BOSS_STYLE, build: buildPrisonBossLevel };
   if (depth === 15) return { style: CAVES_BOSS_STYLE, build: buildCavesBossLevel };
   if (depth === 20) return { style: CITY_BOSS_STYLE, build: buildCityBossLevel };
-  const style = depth < 5 ? SEWER_STYLE : depth < 10 ? PRISON_STYLE : depth < 15 ? CAVES_STYLE : CITY_STYLE;
+  if (depth === 25) return { style: HALLS_BOSS_STYLE, build: buildHallsBossLevel };
+  if (depth === 26) return { style: LAST_STYLE, build: buildLastLevel };
+  const style = depth < 5 ? SEWER_STYLE : depth < 10 ? PRISON_STYLE : depth < 15 ? CAVES_STYLE : depth < 20 ? CITY_STYLE : HALLS_STYLE;
   return { style, build: (level) => buildRegular(level, style) };
 }
 
 /** The deepest depth the port can generate. */
-export const DEEPEST_LEVEL = 20;
+export const DEEPEST_LEVEL = 26;
 
 const MAX_ATTEMPTS = 128;
 
 function rollFeeling(rng: Rng, depth: number): Feeling {
-  if (depth <= 1 || isBossDepth(depth)) {
+  if (depth <= 1 || isBossDepth(depth) || depth >= 26) {
     return Feeling.NONE;
   }
   switch (rng.int(10)) {

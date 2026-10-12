@@ -51,7 +51,7 @@ export interface ItemSpawn {
 }
 
 export const isBossDepth = (depth: number): boolean => depth % 5 === 0 && depth > 0 && depth <= 25;
-export const isShopDepth = (depth: number): boolean => depth === 6 || depth === 11 || depth === 16;
+export const isShopDepth = (depth: number): boolean => depth === 6 || depth === 11 || depth === 16 || depth === 21;
 
 /** Mutable state of one level while it is being generated. */
 export class LevelBuilder {

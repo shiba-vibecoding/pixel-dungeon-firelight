@@ -336,6 +336,7 @@ export class View {
           const line =
             effect.kind === 'goo' ? notice ? t.gooNotice : t.gooDeath
             : effect.kind === 'dm300' ? notice ? t.dm300Notice : t.dm300Death
+            : effect.kind === 'yog' ? notice ? t.yogNotice : t.yogDeath
             : effect.kind === 'king'
               ? effect.line === 'summon' ? t.kingSummon : notice ? t.kingNotice : t.kingDeath(hero ? t.classes[hero.heroClass] : '')
             : notice ? t.tenguNotice(hero ? t.classes[hero.heroClass] : '') : t.tenguDeath;
@@ -500,6 +501,16 @@ export class View {
           break;
         case 'weakened':
           if (effect.hero === myId) this.say(t.weakened, COLORS.negative, now);
+          break;
+        case 'charmed':
+          if (effect.hero === myId) this.say(t.charmed, COLORS.negative, now);
+          break;
+        case 'crippled':
+          if (effect.hero === myId) this.say(t.crippled, COLORS.negative, now);
+          break;
+        case 'lit':
+          audio.play('burning', 1.4, 0.5);
+          if (effect.hero === myId) this.say(t.lit, COLORS.default, now);
           break;
         case 'repaired':
           if (effect.depth !== this.depth) break;

@@ -1,5 +1,5 @@
 import { type Hero, isAlive, type Mob, type MobKind } from './actors';
-import { castShadow, terrainBlocksSight, viewDistance } from './fov';
+import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
@@ -65,6 +65,10 @@ export type Effect =
   | { type: 'yell'; depth: number; mob: string; kind: MobKind; line: 'notice' | 'death' | 'summon'; hero?: string }
   /** A warlock's shadow bolt left the hero weakened. */
   | { type: 'weakened'; hero: string }
+  /** A torch lit; a succubus's charm; a scorpio's crippling sting. */
+  | { type: 'lit'; hero: string }
+  | { type: 'charmed'; hero: string }
+  | { type: 'crippled'; hero: string }
   | { type: 'bossSlain'; depth: number; kind: MobKind }
   | { type: 'victory'; hero: string }
   | { type: 'opened'; depth: number; pos: number; heap: HeapKind }
@@ -155,7 +159,8 @@ export function charAt(world: World, depth: number, cell: number): Char | undefi
 
 /** Field of view of one hero. */
 export function heroView(world: World, hero: Hero): boolean[] {
-  return castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map), viewDistance(hero.depth));
+  const distance = hero.light > 0 ? Math.max(viewDistance(hero.depth), LIGHT_DISTANCE) : viewDistance(hero.depth);
+  return castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map), distance);
 }
 
 export function exploredCells(world: World, depth: number): boolean[] {

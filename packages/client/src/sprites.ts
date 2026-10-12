@@ -23,7 +23,7 @@ export interface CharSprite {
 }
 
 export interface Assets {
-  /** Tiles and water of each region: the sewers, the prison, the caves, the city. */
+  /** Tiles and water of each region: the sewers, the prison, the caves, the city, the halls. */
   tiles: HTMLImageElement[];
   water: HTMLImageElement[];
   heroes: Record<HeroClass, CharSprite>;
@@ -171,6 +171,41 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
       anim(12, [10, 11, 12, 13]),
     ),
   },
+  succubus: {
+    w: 12,
+    h: 15,
+    anims: basic(anim(8, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1], true), anim(15, [3, 4, 5, 6, 7, 8], true), anim(12, [9, 10, 11]), anim(10, [12])),
+  },
+  eye: {
+    w: 16,
+    h: 18,
+    anims: basic(anim(8, [0, 1, 2], true), anim(12, [5, 6], true), anim(8, [4, 3]), anim(8, [7, 8, 9])),
+  },
+  scorpio: {
+    w: 18,
+    h: 17,
+    anims: basic(anim(12, [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 2, 1, 2], true), anim(8, [5, 5, 6, 6], true), anim(15, [0, 3, 4]), anim(12, [0, 7, 8, 9, 10])),
+  },
+  yog: {
+    w: 20,
+    h: 19,
+    anims: basic(anim(10, [0, 1, 2, 2, 1, 0, 3, 4, 4, 3, 0, 5, 6, 6, 5], true), anim(12, [0], true), anim(12, [0]), anim(10, [0, 7, 8, 9])),
+  },
+  rottingFist: {
+    w: 24,
+    h: 17,
+    anims: basic(anim(2, [0, 0, 1], true), anim(3, [0, 1], true), anim(2, [0]), anim(10, [0, 2, 3, 4])),
+  },
+  burningFist: {
+    w: 24,
+    h: 17,
+    anims: basic(anim(2, [0, 0, 1], true), anim(3, [0, 1], true), anim(8, [0, 5, 6]), anim(10, [0, 2, 3, 4])),
+  },
+  larva: {
+    w: 12,
+    h: 8,
+    anims: basic(anim(5, [4, 4, 4, 4, 4, 5, 5], true), anim(12, [0, 1, 2, 3], true), anim(15, [6, 5, 7]), anim(10, [8])),
+  },
   tengu: {
     w: 14,
     h: 16,
@@ -178,8 +213,8 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
   },
 };
 
-/** 0 for the sewers (depths 1-5), 1 for the prison (6-10), 2 for the caves (11-15), 3 for the city (16-20). */
-export const regionOf = (depth: number): number => Math.min(3, Math.max(0, Math.floor((depth - 1) / 5)));
+/** 0 for the sewers (depths 1-5), 1 for the prison (6-10), 2 for the caves (11-15), 3 for the city (16-20), 4 for the halls. */
+export const regionOf = (depth: number): number => Math.min(4, Math.max(0, Math.floor((depth - 1) / 5)));
 
 /** Frame of an animation `elapsed` ms after it started; non-looping ones hold the last frame. */
 export function frameAt(animation: Animation, elapsed: number): number {
@@ -206,7 +241,8 @@ const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image
 export async function loadAssets(base: string): Promise<Assets> {
   const names = [
     'tiles0', 'water0', 'tiles1', 'water1', 'tiles2', 'water2', 'spinner', 'dm300', 'tiles3', 'water3',
-    'elemental', 'monk', 'warlock', 'golem', 'king', 'undead', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
+    'elemental', 'monk', 'warlock', 'golem', 'king', 'undead', 'tiles4', 'water4',
+    'succubus', 'eye', 'scorpio', 'yog', 'rottingFist', 'burningFist', 'larva', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
     'skeleton', 'thief', 'swarm', 'shaman', 'bat', 'brute', 'tengu', 'shopkeeper', 'wandmaker',
     'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs',
   ] as const;
@@ -220,8 +256,8 @@ export async function loadAssets(base: string): Promise<Assets> {
     return { sheet: sheet(images[kind], spec.w, spec.h), anims: spec.anims };
   };
   return {
-    tiles: [images.tiles0, images.tiles1, images.tiles2, images.tiles3],
-    water: [images.water0, images.water1, images.water2, images.water3],
+    tiles: [images.tiles0, images.tiles1, images.tiles2, images.tiles3, images.tiles4],
+    water: [images.water0, images.water1, images.water2, images.water3, images.water4],
     heroes: {
       warrior: hero(images.warrior),
       mage: hero(images.mage),

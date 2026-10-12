@@ -46,6 +46,8 @@ const TIME_TO_DROP = 1;
 const TIME_TO_THROW = 1;
 const TIME_TO_ZAP = 1;
 const TIME_TO_EAT = 3;
+/** Light.DURATION. */
+const LIGHT_TURNS = 250;
 
 const MIND_VISION_DURATION = 20;
 const INVISIBILITY_DURATION = 15;
@@ -74,7 +76,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (category !== 'potion' && category !== 'scroll' && category !== 'food') return 'that cannot be used';
+      if (category !== 'potion' && category !== 'scroll' && category !== 'food' && category !== 'torch') return 'that cannot be used';
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
       return null;
     case 'equip':
@@ -106,6 +108,14 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       if (itemDef(hero.items[action.item]!.kind).category === 'food') {
         eat(ctx, hero, action.item);
         return TIME_TO_EAT;
+      }
+      if (itemDef(hero.items[action.item]!.kind).category === 'torch') {
+        // Torch.execute: lit, it lights the way for a good while.
+        const torch = hero.items[action.item]!;
+        if (--torch.qty <= 0) hero.items.splice(action.item, 1);
+        hero.light = Math.max(hero.light, LIGHT_TURNS);
+        ctx.effects.push({ type: 'lit', hero: hero.id });
+        return TIME_TO_USE;
       }
       use(ctx, hero, action.item, action.target ?? 'weapon');
       return TIME_TO_USE;
@@ -249,6 +259,13 @@ function pickUp(ctx: Ctx, hero: Hero): void {
       drinkDew(ctx, hero, item);
     } else if (collect(hero, item)) {
       ctx.effects.push({ type: 'pickedUp', hero: hero.id, item });
+      if (item.kind === 'quest.amulet') {
+        // The Amulet of Yendor: the end of the journey, and the run is won.
+        ctx.world.victory = true;
+        ctx.world.over = true;
+        for (const other of ctx.world.heroes) other.intent = null;
+        ctx.effects.push({ type: 'victory', hero: hero.id });
+      }
     } else {
       left.push(item);
     }
@@ -327,6 +344,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
       hero.ooze = -1;
       hero.poison = 0;
       hero.weakened = 0;
+      hero.crippled = 0;
       ctx.effects.push({ type: 'healed', hero: hero.id, amount });
       break;
     }

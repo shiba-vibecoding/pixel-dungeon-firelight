@@ -15,7 +15,7 @@ import type { RunState } from './run';
  */
 
 export type ItemCategory =
-  | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'food' | 'dew' | 'key' | 'quest';
+  | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'food' | 'dew' | 'torch' | 'key' | 'quest';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -101,6 +101,10 @@ export const ITEMS = {
   'quest.rose': { category: 'quest', sprite: 100 },
   /** What the old wandmaker is after. */
   'quest.dust': { category: 'quest', sprite: 121 },
+  /** Lit, it lets one see further in the dark halls for a while. */
+  torch: { category: 'torch', sprite: 84 },
+  /** The Amulet of Yendor, at the very bottom of the dungeon. */
+  'quest.amulet': { category: 'quest', sprite: 87 },
 } as const satisfies Record<string, ItemDef>;
 
 export type ItemKind = keyof typeof ITEMS;
@@ -121,7 +125,8 @@ export interface Item {
 export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
-  return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || kind === 'missile.dart';
+  return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || category === 'torch' ||
+    kind === 'missile.dart';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
@@ -166,6 +171,8 @@ export function itemPrice(item: Item, known: boolean): number {
       return item.kind === 'missile.dart' ? 2 * item.qty : 30;
     case 'wand':
       return levelled(50);
+    case 'torch':
+      return 10 * item.qty;
     default:
       return 0;
   }

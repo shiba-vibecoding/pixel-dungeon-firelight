@@ -38,8 +38,8 @@ export type Burst = 'toxic' | 'paralytic' | 'fire';
  * spreads and lingers; here it reaches everyone within `radius` at once.
  * Flames set the grass around alight, but not those standing in water.
  */
-export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS): void {
-  ctx.effects.push({ type: 'burst', depth: ctx.depth, pos, kind, radius });
+export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS, silent = false): void {
+  ctx.effects.push({ type: 'burst', depth: ctx.depth, pos, kind, radius, ...(silent ? { silent } : {}) });
   const { level } = ctx;
   for (const char of around(ctx, pos, radius)) {
     if (kind === 'toxic') char.poison = Math.max(char.poison ?? 0, TOXIC_TURNS);
@@ -131,8 +131,8 @@ export function mobConditions(ctx: Ctx, mob: Mob): boolean {
   }
   if ((mob.burning ?? 0) > 0) {
     mob.burning!--;
-    if (mob.kind === 'elemental') {
-      // Fire only feeds a fire elemental (Elemental.add).
+    if (mob.kind === 'elemental' || mob.kind === 'burningFist') {
+      // Fire only feeds a fire elemental (Elemental.add), and cannot hurt the burning fist.
       mob.burning = 0;
       if (mob.hp < mob.ht) mob.hp++;
     } else if (isWater(ctx.level.map[mob.pos]!)) {

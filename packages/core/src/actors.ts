@@ -70,6 +70,12 @@ export interface Hero {
   slowed: number;
   /** Turns left of weakness (a warlock's shadow bolt): two points of strength less. */
   weakened: number;
+  /** Turns left of being crippled (moving at half speed), of a torch's light, and of a succubus's charm. */
+  crippled: number;
+  light: number;
+  charmed: number;
+  /** Whom the hero is charmed by, and cannot bring themselves to attack. */
+  charmedBy: string | null;
   /** Hunger.level: 0 when fed, hungry from HUNGRY, starving at STARVING; and time towards its next step. */
   hunger: number;
   hungerTime: number;
@@ -116,6 +122,10 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     rooted: 0,
     slowed: 0,
     weakened: 0,
+    crippled: 0,
+    light: 0,
+    charmed: 0,
+    charmedBy: null,
     hunger: 0,
     hungerTime: 0,
     kills: 0,
@@ -171,7 +181,9 @@ export function heroRangedSkill(hero: Hero, item: Item, pointBlank: boolean): nu
 /** Heavy armour slows its wearer down (Hero.speed). */
 export function heroSpeed(hero: Hero): number {
   const encumbrance = armorStats(hero.armor).str - heroStr(hero);
-  return encumbrance > 0 ? 1.3 ** -encumbrance : 1;
+  // Char.speed: crippled, half as fast.
+  const crippled = hero.crippled > 0 ? 0.5 : 1;
+  return (encumbrance > 0 ? 1.3 ** -encumbrance : 1) * crippled;
 }
 
 export function heroDamageRoll(hero: Hero, rng: Rng): number {
@@ -207,7 +219,8 @@ export type MobKind =
   | 'rat' | 'gnoll' | 'crab' | 'goo' | 'ghost' | 'shopkeeper' | 'wandmaker'
   | 'skeleton' | 'thief' | 'swarm' | 'shaman' | 'bat' | 'brute' | 'tengu'
   | 'spinner' | 'dm300'
-  | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead';
+  | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead'
+  | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -254,6 +267,14 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   golem: { name: 'golem', ht: 85, attack: 28, defense: 18, damage: [20, 40], dr: 12, exp: 12, maxLvl: 22, speed: 1, attackDelay: 1.5 },
   king: { name: 'King of Dwarves', ht: 300, attack: 32, defense: 25, damage: [20, 38], dr: 14, exp: 40, maxLvl: 30, speed: 1 },
   undead: { name: 'undead dwarf', ht: 28, attack: 16, defense: 15, damage: [12, 16], dr: 5, exp: 0, maxLvl: 30, speed: 1 },
+  // The demon halls (depths 21-25).
+  succubus: { name: 'succubus', ht: 80, attack: 40, defense: 25, damage: [15, 25], dr: 10, exp: 12, maxLvl: 25, speed: 1 },
+  eye: { name: 'evil eye', ht: 100, attack: 30, defense: 20, damage: [14, 20], dr: 10, exp: 13, maxLvl: 25, speed: 1, attackDelay: 1.6, flying: true },
+  scorpio: { name: 'scorpio', ht: 95, attack: 36, defense: 24, damage: [20, 32], dr: 16, exp: 14, maxLvl: 25, speed: 1 },
+  yog: { name: 'Yog-Dzewa', ht: 300, attack: 0, defense: 0, damage: [0, 0], dr: 0, exp: 50, maxLvl: 30, speed: 1 },
+  rottingFist: { name: 'rotting fist', ht: 300, attack: 36, defense: 25, damage: [24, 36], dr: 15, exp: 0, maxLvl: 30, speed: 1 },
+  burningFist: { name: 'burning fist', ht: 200, attack: 36, defense: 25, damage: [20, 32], dr: 15, exp: 0, maxLvl: 30, speed: 1 },
+  larva: { name: "god's larva", ht: 25, attack: 30, defense: 20, damage: [15, 20], dr: 8, exp: 0, maxLvl: 30, speed: 1 },
 };
 
 /** The brute, enraged when badly hurt: much harder hits. */
@@ -330,6 +351,11 @@ const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]
   18: [['elemental', 1], ['monk', 2], ['golem', 1], ['warlock', 1]],
   19: [['elemental', 1], ['monk', 2], ['golem', 3], ['warlock', 1]],
   20: [['king', 1]],
+  21: [['succubus', 1], ['eye', 1]],
+  22: [['succubus', 1], ['eye', 1]],
+  23: [['succubus', 1], ['eye', 2], ['scorpio', 1]],
+  24: [['succubus', 1], ['eye', 2], ['scorpio', 3]],
+  25: [['yog', 1]],
 };
 
 export function rollMob(rng: Rng, depth: number): MobKind {

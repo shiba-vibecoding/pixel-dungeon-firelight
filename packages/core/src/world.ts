@@ -17,6 +17,7 @@ import { spawnWandmaker, talkToWandmaker, type WandQuest, wandFromWandmaker, wan
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
 import { adjacent, cellX, cellY, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
+import { breakStairsRoom } from './level/halls-boss';
 import { RoomType } from './level/room';
 import { discover, F, hasFlag, T } from './level/terrain';
 import { deriveSeed, Rng, seedRng, Stream } from './rng';
@@ -76,7 +77,7 @@ export interface World {
 }
 
 /** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
-export const DEEPEST_AVAILABLE = 20;
+export const DEEPEST_AVAILABLE = 26;
 const TIME_TO_REST = 1;
 const TIME_TO_SEARCH = 2;
 /** How far a deliberate search reaches; the original only checked adjacent cells. */
@@ -112,8 +113,11 @@ export function levelAt(world: World, depth: number): Level {
         mobs,
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
         now: 0,
-        respawn: isBossDepth(d) ? -1 : TIME_TO_RESPAWN,
-        heaps: createItems(world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), isBossDepth(d), world.heroes.length),
+        // Boss levels and the Amulet's hall never fill up again, and hold only what their layout asks for.
+        respawn: isBossDepth(d) || d >= 26 ? -1 : TIME_TO_RESPAWN,
+        heaps: createItems(
+          world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), isBossDepth(d) || d >= 26, world.heroes.length,
+        ),
       };
     }
   }
@@ -189,6 +193,8 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
     case 'attack': {
       const mob = mobById(world, hero.depth, action.target);
       if (!mob) return 'no such enemy';
+      // Charmed, the hero cannot bring themselves to strike the charmer.
+      if (hero.charmed > 0 && hero.charmedBy === mob.id) return 'you are charmed';
       return adjacent(hero.pos, mob.pos) ? null : 'too far away';
     }
     case 'reward':
@@ -346,6 +352,10 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   hero.rooted = Math.max(0, hero.rooted - time);
   hero.slowed = Math.max(0, hero.slowed - time);
   hero.weakened = Math.max(0, hero.weakened - time);
+  hero.crippled = Math.max(0, hero.crippled - time);
+  hero.light = Math.max(0, hero.light - time);
+  hero.charmed = Math.max(0, hero.charmed - time);
+  if (hero.charmed <= 0) hero.charmedBy = null;
 
   // Wands recharge with time.
   for (const item of hero.items) {
@@ -444,6 +454,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       if (level.arenaDoor !== undefined) {
         if (hero.depth === 15) enterLair(ctx, hero);
         else if (hero.depth === 20) enterThroneHall(ctx, hero);
+        else if (hero.depth === 25) awakenYog(ctx, hero);
         else enterArena(ctx, hero);
       }
       search(ctx, hero, false);
@@ -594,6 +605,43 @@ function enterThroneHall(ctx: Ctx, hero: Hero): void {
   }
 }
 
+/**
+ * HallsBossLevel.press: the first step off the stairs breaks the walls of
+ * their room, and the stairs with them; Yog-Dzewa awakens somewhere in the
+ * dark, its two fists beside it.
+ */
+function awakenYog(ctx: Ctx, hero: Hero): void {
+  const { level, floor, world, depth, rng } = ctx;
+  if (floor.arenaEntered || hero.pos === level.entrance) return;
+  floor.arenaEntered = true;
+  const broken = breakStairsRoom(level.map);
+  level.map[level.entrance] = T.EMPTY_SP;
+  for (const cell of [...broken, level.entrance]) ctx.effects.push({ type: 'burnt', depth, pos: cell });
+  for (const h of heroesOn(world, depth)) observe(world, h);
+  const seen = heroView(world, hero);
+  let pos = -1;
+  for (let attempt = 0; attempt < 1000 && pos === -1; attempt++) {
+    const cell = rng.int(LENGTH);
+    if (isPassable(level, cell) && !seen[cell] && !charAt(world, depth, cell)) pos = cell;
+  }
+  if (pos === -1) return;
+  const yog = createMob(`#${++world.nextId}`, 'yog', pos, 'hunting', floor.now);
+  Object.assign(yog, { enemy: hero.id, target: hero.pos });
+  floor.mobs.push(yog);
+  enterCell(level, pos);
+  // Yog.spawnFists: the rotting fist and the burning fist, right next to it.
+  const around = NEIGHBOURS8.map((n) => pos + n).filter((c) => isPassable(level, c) && !charAt(world, depth, c));
+  for (const kind of ['rottingFist', 'burningFist'] as const) {
+    if (around.length === 0) break;
+    const cell = around.splice(rng.index(around.length), 1)[0]!;
+    const fist = createMob(`#${++world.nextId}`, kind, cell, 'wandering', floor.now + 1);
+    fist.target = hero.pos;
+    floor.mobs.push(fist);
+    enterCell(level, cell);
+  }
+  ctx.effects.push({ type: 'yell', depth, mob: yog.id, kind: 'yog', line: 'notice', hero: hero.id });
+}
+
 /** HighGrass.trample: walked through, tall grass is flattened and sometimes sheds a dewdrop. */
 function trample(ctx: Ctx, pos: number): void {
   ctx.level.map[pos] = T.GRASS;
@@ -623,6 +671,7 @@ function drinkFromWell(ctx: Ctx, hero: Hero): void {
     hero.ooze = -1;
     hero.hunger = 0;
     hero.weakened = 0;
+    hero.crippled = 0;
   } else {
     for (const item of hero.items) {
       const category = itemDef(item.kind).category;
@@ -688,7 +737,8 @@ function reviveFallen(world: World, depth: number, effects: Effect[]): void {
     // Back on their feet, rid of whatever ailed them.
     Object.assign(fallen, {
       hp: Math.max(1, Math.floor(fallen.ht / 2)), depth, intent: null, regen: 0, ooze: -1,
-      poison: 0, burning: 0, paralysed: 0, rooted: 0, slowed: 0, hunger: 0, weakened: 0,
+      poison: 0, burning: 0, paralysed: 0, rooted: 0, slowed: 0, hunger: 0, weakened: 0, crippled: 0, charmed: 0,
+      charmedBy: null,
     });
     place(world, fallen, level, level.entrance);
     effects.push({ type: 'revived', hero: fallen.id });

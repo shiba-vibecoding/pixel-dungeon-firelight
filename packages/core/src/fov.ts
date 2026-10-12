@@ -58,8 +58,19 @@ class Obstacles {
 }
 
 /** Cells visible from `pos`, given which cells block line of sight. */
-/** Level.viewDistance: the caves (depths 11-15) are dark, and everyone sees less far there. */
-export const viewDistance = (depth: number): number => (depth >= 11 && depth <= 15 ? 6 : MAX_VIEW_DISTANCE);
+/**
+ * Level.viewDistance: the caves (depths 11-15) are dark, and the demon halls
+ * darker the deeper they go (HallsLevel), down to a single cell.
+ */
+export function viewDistance(depth: number): number {
+  if (depth >= 11 && depth <= 15) return 6;
+  if (depth >= 21 && depth <= 24) return Math.max(25 - depth, 1);
+  if (depth === 25) return 3;
+  return MAX_VIEW_DISTANCE;
+}
+
+/** Light.DISTANCE: how far a torch lets one see, and the demons of the halls see anyway. */
+export const LIGHT_DISTANCE = 4;
 
 export function castShadow(pos: number, losBlocking: (cell: number) => boolean, distance = MAX_VIEW_DISTANCE): boolean[] {
   const fov = new Array<boolean>(LENGTH).fill(false);

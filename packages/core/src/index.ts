@@ -12,5 +12,5 @@ export { type InventoryAction, isInventoryAction, shopkeeperBeside } from './inv
 export { trapAt, type TrapKind } from './traps';
 export { charAt, type Effect, type Floor, heroesOn, isWater } from './floor';
 export * from './world';
-export { castShadow, MAX_VIEW_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
+export { castShadow, LIGHT_DISTANCE, MAX_VIEW_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 export * from './protocol';

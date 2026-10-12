@@ -66,6 +66,24 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     if (attacker.kind === 'elemental' && ctx.rng.int(2) === 0 && !isWater(ctx.level.map[defender.pos]!)) {
       defender.burning = Math.max(defender.burning ?? 0, ELEMENTAL_BURNING);
     }
+    if (isHero(defender)) {
+      // Succubus.attackProc: one kiss in three charms her victim.
+      if (attacker.kind === 'succubus' && ctx.rng.int(3) === 0) {
+        defender.charmed = Math.max(defender.charmed, ctx.rng.intRange(3, 7));
+        defender.charmedBy = attacker.id;
+        ctx.effects.push({ type: 'charmed', hero: defender.id });
+      }
+      // Scorpio.attackProc: half its stings cripple.
+      if (attacker.kind === 'scorpio' && ctx.rng.int(2) === 0) {
+        if (defender.crippled <= 0) ctx.effects.push({ type: 'crippled', hero: defender.id });
+        defender.crippled = Math.max(defender.crippled, CRIPPLE_TURNS);
+      }
+      // RottingFist.attackProc: one blow in three leaves caustic ooze.
+      if (attacker.kind === 'rottingFist' && ctx.rng.int(3) === 0) {
+        if (defender.ooze < 0) ctx.effects.push({ type: 'oozed', hero: defender.id });
+        defender.ooze = 0;
+      }
+    }
     // Undead.attackProc: now and then a blow stuns.
     if (attacker.kind === 'undead' && ctx.rng.int(5) === 0) defender.paralysed = Math.max(defender.paralysed ?? 0, 1);
     // Spinner.attackProc: half its bites are venomous, and then it backs off.
@@ -76,6 +94,8 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     }
   }
   if (!isHero(defender) && defender.kind === 'swarm') split(ctx, defender, damage);
+  // Yog.defenseProc: struck, Yog-Dzewa spawns a larva next to it.
+  if (!isHero(defender) && defender.kind === 'yog') spawnLarva(ctx, defender);
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
   hurt(ctx, defender, damage, attacker);
   return true;
@@ -88,6 +108,21 @@ function shopkeeperFlees(ctx: Ctx, keeper: Mob): void {
   leaveCell(ctx.world, ctx.level, ctx.depth, keeper.pos);
   ctx.effects.push({ type: 'shopkeeperFled', depth: ctx.depth, mob: keeper.id, pos: keeper.pos });
 }
+
+/** Cripple.DURATION. */
+const CRIPPLE_TURNS = 10;
+
+function spawnLarva(ctx: Ctx, yog: Mob): void {
+  const { world, depth, level, rng, floor } = ctx;
+  const cells = NEIGHBOURS8.map((n) => yog.pos + n).filter((c) => isPassable(level, c) && !charAt(world, depth, c));
+  if (cells.length === 0) return;
+  const larva = createMob(`#${++world.nextId}`, 'larva', rng.element(cells)!, 'hunting', floor.now + 1);
+  Object.assign(larva, { enemy: yog.enemy, target: yog.target });
+  floor.mobs.push(larva);
+  enterCell(level, larva.pos);
+}
+
+const isFist = (mob: Mob): boolean => mob.kind === 'rottingFist' || mob.kind === 'burningFist';
 
 /** Thief.steal: a whole stack from the pack (never a key or a quest item), then off it runs. */
 function steal(ctx: Ctx, thief: Mob, hero: Hero): void {
@@ -133,6 +168,15 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
     victim.alerted = true;
     // In a party, a monster turns on whoever hurt it.
     if (by && isHero(by)) victim.enemy = by.id;
+  }
+  if (!isHero(victim) && victim.kind === 'yog') {
+    // Yog.damage: each living fist halves the harm, and they all come to defend it.
+    const fists = ctx.floor.mobs.filter(isFist);
+    damage >>= fists.length;
+    for (const fist of fists) {
+      if (fist.state !== 'hunting') fist.state = 'wandering';
+      fist.target = victim.pos;
+    }
   }
   victim.hp -= damage;
   // Brute.damage: below a quarter of its health, the brute flies into a rage.
@@ -184,7 +228,15 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 
   if (mob.kind === 'skeleton') explode(ctx, mob);
 
-  if (mob.kind === 'goo' || mob.kind === 'tengu' || mob.kind === 'dm300' || mob.kind === 'king') {
+  if (mob.kind === 'yog') {
+    // Its fists die with it.
+    for (const fist of ctx.floor.mobs.filter(isFist)) {
+      ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: fist.id, damage: fist.hp });
+      fist.hp = 0;
+      mobDied(ctx, fist);
+    }
+  }
+  if (mob.kind === 'goo' || mob.kind === 'tengu' || mob.kind === 'dm300' || mob.kind === 'king' || mob.kind === 'yog') {
     const { level } = ctx;
     // Goo's lair dries out behind the heroes; Tengu's arena opens; the rock
     // in DM-300's way back crumbles.
@@ -234,6 +286,13 @@ function dropLoot(ctx: Ctx, mob: Mob): Item | null {
       return rng.float() < 0.083 ? createItem('food.ration') : null;
     case 'warlock':
       return rng.float() < 0.83 ? generator().of('potion') : null;
+    case 'succubus':
+      return rng.float() < 0.05 ? createItem('scroll.lullaby') : null;
+    case 'eye':
+      return rng.float() < 0.5 ? createItem('dew') : null;
+    case 'scorpio':
+      if (rng.int(8) === 0) return createItem('potion.healing');
+      return rng.int(6) === 0 ? createItem('food.meat') : null;
     default:
       return null;
   }

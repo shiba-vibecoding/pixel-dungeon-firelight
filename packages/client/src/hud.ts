@@ -40,7 +40,7 @@ export interface HudState {
 /** Buff icons in buffs.png (BuffIndicator). */
 export const BUFF_ICONS = {
   mindVision: 0, fire: 2, poison: 3, paralysis: 4, hunger: 5, starvation: 6, slow: 7, ooze: 8, roots: 11, invisible: 12,
-  weakness: 14,
+  weakness: 14, charm: 21, light: 22, cripple: 23,
 } as const;
 export type BuffName = keyof typeof BUFF_ICONS;
 
@@ -57,6 +57,9 @@ export function heroBuffs(me: Hero): Array<{ name: BuffName; turns?: number }> {
     ...(me.rooted > 0 ? [{ name: 'roots' as const, turns: turns(me.rooted) }] : []),
     ...(me.slowed > 0 ? [{ name: 'slow' as const, turns: turns(me.slowed) }] : []),
     ...(me.weakened > 0 ? [{ name: 'weakness' as const, turns: turns(me.weakened) }] : []),
+    ...(me.crippled > 0 ? [{ name: 'cripple' as const, turns: turns(me.crippled) }] : []),
+    ...(me.charmed > 0 ? [{ name: 'charm' as const, turns: turns(me.charmed) }] : []),
+    ...(me.light > 0 ? [{ name: 'light' as const, turns: turns(me.light) }] : []),
     ...(isStarving(me) ? [{ name: 'starvation' as const }] : isHungry(me) ? [{ name: 'hunger' as const }] : []),
   ];
 }

@@ -475,13 +475,14 @@ function paintShop(level: LevelBuilder, room: Room): void {
 
   // Each shop's weapon and armour (ShopPainter.range): depths 6, 11 and 16.
   const pick = <K>(a: K, b: K): K => (rng.int(2) === 0 ? a : b);
-  const [weapon, armor] =
+  // The last one, on depth 21, has a single piece of the best gear and torches for the dark halls.
+  const gear: ItemKind[] =
     level.depth < 11 ? [pick('weapon.quarterstaff', 'weapon.spear'), 'armor.leather']
     : level.depth < 16 ? [pick('weapon.sword', 'weapon.mace'), 'armor.mail']
-    : [pick('weapon.longsword', 'weapon.battleAxe'), 'armor.scale'];
+    : level.depth < 21 ? [pick('weapon.longsword', 'weapon.battleAxe'), 'armor.scale']
+    : [rng.oneOf(['weapon.glaive', 'weapon.warHammer', 'armor.plate'] as ItemKind[]), 'torch', 'torch'];
   const wares: ItemSpec[] = [
-    { roll: 'kind', kind: weapon as ItemKind },
-    { roll: 'kind', kind: armor as ItemKind },
+    ...gear.map((kind): ItemSpec => ({ roll: 'kind', kind })),
     { roll: 'kind', kind: 'potion.healing' },
     { roll: 'category', categories: ['potion'], tries: 1 },
     { roll: 'category', categories: ['potion'], tries: 1 },
