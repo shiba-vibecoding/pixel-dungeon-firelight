@@ -6,13 +6,13 @@ import {
 } from '@pd/core';
 import * as core from '@pd/core';
 import { audio } from './audio';
-import { BUFF_ICONS, Hud } from './hud';
+import { BUFF_ICONS, heroBuffs, Hud } from './hud';
 import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showGhost, showHelp, showMenu, showRunEnd, showSign, showTitle,
-  toast,
+  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showGhost, showHelp, showHero, showMenu, showRunEnd, showSign,
+  showTitle, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -481,6 +481,15 @@ function tapCell(cell: number): void {
   else if (cell === level.entrance && me.depth > 1) walk.stairs = 'ascend';
 }
 
+function openHero(): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  walk.reset();
+  aim = null;
+  showHero({ hero: me, buffs: heroBuffs(me), onClose: hideOverlay });
+}
+
 function openBackpack(): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
@@ -513,6 +522,7 @@ canvas.addEventListener('pointerdown', (event) => {
   else if (button === 'help') showHelp(hideOverlay);
   else if (button === 'backpack') openBackpack();
   else if (button === 'menu') openMenu();
+  else if (button === 'hero') openHero();
   if (button || hud.covers(px, py)) return;
 
   const x = Math.floor((camera.x + px / camera.zoom) / TILE);
@@ -762,17 +772,7 @@ function tick(now: number): void {
       waitingFor,
       status,
       log: view.log,
-      buffs: [
-        ...(me.mindVision > 0 ? [BUFF_ICONS.mindVision] : []),
-        ...(me.invisible > 0 ? [BUFF_ICONS.invisible] : []),
-        ...(me.ooze >= 0 ? [BUFF_ICONS.ooze] : []),
-        ...(me.poison > 0 ? [BUFF_ICONS.poison] : []),
-        ...(me.burning > 0 ? [BUFF_ICONS.fire] : []),
-        ...(me.paralysed > 0 ? [BUFF_ICONS.paralysis] : []),
-        ...(me.rooted > 0 ? [BUFF_ICONS.roots] : []),
-        ...(me.slowed > 0 ? [BUFF_ICONS.slow] : []),
-        ...(isStarving(me) ? [BUFF_ICONS.starvation] : isHungry(me) ? [BUFF_ICONS.hunger] : []),
-      ],
+      buffs: heroBuffs(me).map((buff) => BUFF_ICONS[buff.name]),
       keys: me.items.filter((i) => i.kind === 'key.iron' && i.depth === me.depth).length,
       quick: quickItem
         ? {

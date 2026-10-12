@@ -18,6 +18,9 @@ export const STEP_MS = 110;
 
 /** Potions whose shattering does something; the rest splash harmlessly. */
 const HARMFUL: ReadonlySet<ItemKind> = new Set(['potion.toxicGas', 'potion.paralyticGas', 'potion.liquidFlame']);
+
+/** Tints of the clouds: green poison, yellow paralysis, orange flames. */
+const BURST_COLORS = { toxic: '90, 200, 60', paralytic: '230, 220, 70', fire: '255, 120, 30' } as const;
 export const TILE = 16;
 
 export interface Puppet {
@@ -77,7 +80,8 @@ export const COLORS = {
 export class View {
   readonly puppets = new Map<string, Puppet>();
   floaters: Floater[] = [];
-  flashes: Array<{ cell: number; start: number }> = [];
+  /** Cells lit up for a moment: discoveries and traps, or tinted clouds of gas and flame. */
+  flashes: Array<{ cell: number; start: number; color?: string; duration?: number }> = [];
   log: LogLine[] = [];
   depth = 0;
   /** When the "boss slain" banner appeared, or 0. */
@@ -181,7 +185,7 @@ export class View {
       }
     }
     this.floaters = this.floaters.filter((floater) => now - floater.start < 1200);
-    this.flashes = this.flashes.filter((flash) => now - flash.start < 600);
+    this.flashes = this.flashes.filter((flash) => now - flash.start < (flash.duration ?? 600));
     this.projectiles = this.projectiles.filter((p) => now - p.start < p.duration);
   }
 
@@ -395,7 +399,7 @@ export class View {
             for (let x = -effect.radius; x <= effect.radius; x++) {
               const cell = effect.pos + x + y * WIDTH;
               if (cellX(effect.pos) + x >= 0 && cellX(effect.pos) + x < WIDTH && cell >= 0 && cell < LENGTH) {
-                this.flashes.push({ cell, start: now });
+                this.flashes.push({ cell, start: now, color: BURST_COLORS[effect.kind], duration: 1400 });
               }
             }
           }

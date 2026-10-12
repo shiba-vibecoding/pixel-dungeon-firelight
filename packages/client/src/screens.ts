@@ -1,7 +1,8 @@
 import {
-  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, wandMaxCharges, type World,
+  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, maxExp, wandMaxCharges, type World,
 } from '@pd/core';
 import { audio } from './audio';
+import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
 import { isKnown, itemInfo, itemName, spriteOffset } from './itemtext';
 import type { DailyBoard } from './leaderboard';
@@ -153,6 +154,40 @@ export function showMenu(options: MenuOptions): void {
       button(t.help, options.onHelp),
       sound,
       button(t.toMenu, options.onExit),
+    ),
+  );
+}
+
+export interface HeroOptions {
+  hero: Hero;
+  buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
+  onClose(): void;
+}
+
+/** WndHero: the hero's numbers and what currently ails or helps them. */
+export function showHero(options: HeroOptions): void {
+  const { hero } = options;
+  const row = (label: string, value: string): HTMLElement =>
+    el('div', { className: 'pd-row pd-stat' }, el('span', { textContent: label }), el('span', { textContent: value }));
+  const buffs = options.buffs.map((buff) => {
+    const icon = el('span', { className: 'pd-buff' });
+    icon.style.backgroundPosition = `calc(${-(BUFF_ICONS[buff.name] % 18) * 7}px * var(--s)) calc(${-Math.floor(BUFF_ICONS[buff.name] / 18) * 7}px * var(--s))`;
+    const text = buff.turns ? `${t.buffs[buff.name]} (${t.turnsLeft(buff.turns)})` : t.buffs[buff.name];
+    return el('div', { className: 'pd-row' }, icon, el('span', { textContent: text }));
+  });
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('p', { className: 'pd-heading', textContent: t.heroTitle(t.classes[hero.heroClass], hero.lvl) }),
+      row(t.strength, String(hero.str)),
+      row(t.health, `${Math.max(0, hero.hp)}/${hero.ht}`),
+      row(t.experience, `${hero.exp}/${maxExp(hero)}`),
+      row(t.goldLabel, String(hero.gold)),
+      row(t.slain, String(hero.kills)),
+      el('p', { className: 'pd-heading', textContent: t.conditions }),
+      ...(buffs.length > 0 ? buffs : [el('p', { className: 'pd-info', textContent: t.noConditions })]),
+      button(t.close, options.onClose),
     ),
   );
 }

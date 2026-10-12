@@ -258,6 +258,17 @@
       }
       .pd-offer .pd-note { text-align: left; margin: 0; }
       .pd-row > .pd-slot { width: 22%; flex: none; }
+      .pd-stat { justify-content: space-between; font-size: 0.95em; }
+      .pd-stat span:last-child { color: #ffeba4; }
+      .pd-buff {
+        --s: calc(var(--px) * 2);
+        flex: none;
+        width: calc(7px * var(--s));
+        height: calc(7px * var(--s));
+        background-image: url(assets/buffs.png);
+        background-size: calc(128px * var(--s)) calc(16px * var(--s));
+        image-rendering: pixelated;
+      }
       .pd-board {
         margin: 0;
         padding-left: 1.6em;

@@ -1,4 +1,4 @@
-import { type Hero, isAlive, itemDef, maxExp } from '@pd/core';
+import { type Hero, isAlive, isHungry, isStarving, itemDef, maxExp } from '@pd/core';
 import { t } from './i18n';
 import { FONT } from './render';
 import { type Assets, ICONS } from './sprites';
@@ -10,7 +10,7 @@ import { COLORS, type LogLine } from './view';
  * the toolbar at the bottom (Toolbar: wait, search, help).
  */
 
-export type HudButton = 'wait' | 'search' | 'help' | 'backpack' | 'quick' | 'menu';
+export type HudButton = 'wait' | 'search' | 'help' | 'backpack' | 'quick' | 'menu' | 'hero';
 
 interface Area {
   id: HudButton;
@@ -41,6 +41,23 @@ export interface HudState {
 export const BUFF_ICONS = {
   mindVision: 0, fire: 2, poison: 3, paralysis: 4, hunger: 5, starvation: 6, slow: 7, ooze: 8, roots: 11, invisible: 12,
 } as const;
+export type BuffName = keyof typeof BUFF_ICONS;
+
+/** What ails or helps a hero, with the turns it has left where that is known (BuffIndicator). */
+export function heroBuffs(me: Hero): Array<{ name: BuffName; turns?: number }> {
+  const turns = (left: number): number => Math.ceil(left);
+  return [
+    ...(me.mindVision > 0 ? [{ name: 'mindVision' as const, turns: turns(me.mindVision) }] : []),
+    ...(me.invisible > 0 ? [{ name: 'invisible' as const, turns: turns(me.invisible) }] : []),
+    ...(me.ooze >= 0 ? [{ name: 'ooze' as const }] : []),
+    ...(me.poison > 0 ? [{ name: 'poison' as const, turns: turns(me.poison) }] : []),
+    ...(me.burning > 0 ? [{ name: 'fire' as const, turns: turns(me.burning) }] : []),
+    ...(me.paralysed > 0 ? [{ name: 'paralysis' as const, turns: turns(me.paralysed) }] : []),
+    ...(me.rooted > 0 ? [{ name: 'roots' as const, turns: turns(me.rooted) }] : []),
+    ...(me.slowed > 0 ? [{ name: 'slow' as const, turns: turns(me.slowed) }] : []),
+    ...(isStarving(me) ? [{ name: 'starvation' as const }] : isHungry(me) ? [{ name: 'hunger' as const }] : []),
+  ];
+}
 
 const TOOLS: ReadonlyArray<{ id: HudButton; sx: number; w: number }> = [
   { id: 'wait', sx: 0, w: 20 },
@@ -81,6 +98,8 @@ export class Hud {
     this.areas.push({ id: BACKPACK.id, x: this.width - BACKPACK.w, y, w: BACKPACK.w, h: 25 });
     this.areas.push({ id: QUICKSLOT.id, x: this.width - BACKPACK.w - QUICKSLOT.w, y, w: QUICKSLOT.w, h: 25 });
     this.areas.push({ id: 'menu', x: this.width - 20, y: this.top, w: 20, h: 20 });
+    // The portrait opens the hero's details.
+    this.areas.push({ id: 'hero', x: 0, y: this.top, w: 30, h: 30 });
   }
 
   /** The button under a point in device pixels, if any. */

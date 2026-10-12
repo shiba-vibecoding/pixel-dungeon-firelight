@@ -1,4 +1,5 @@
 import type { HeroClass, ItemKind, MobKind, TrapKind } from '@pd/core';
+import type { BuffName } from './hud';
 
 /* Interface text in Russian and English; the language follows Telegram or the browser. */
 
@@ -228,6 +229,19 @@ const en = {
   wandDamage: (min: number, max: number) => `Damage ${min}–${max}.`,
   noCharges: 'Your wand fizzles: it is out of charges for now.',
   resting: 'You rest until healed…',
+  heroTitle: (heroClass: string, lvl: number) => `${heroClass}, level ${lvl}`,
+  strength: 'Strength',
+  health: 'Health',
+  experience: 'Experience',
+  goldLabel: 'Gold',
+  slain: 'Foes slain',
+  conditions: 'Conditions',
+  noConditions: 'Nothing out of the ordinary.',
+  turnsLeft: (n: number) => `${n} turns`,
+  buffs: {
+    mindVision: 'Mind vision', invisible: 'Invisible', ooze: 'Caustic ooze', poison: 'Poisoned', fire: 'Burning',
+    paralysis: 'Paralysed', roots: 'Rooted', slow: 'Slowed', hunger: 'Hungry', starvation: 'Starving',
+  } as Record<BuffName, string>,
   causes: {
     poison: 'poison', burning: 'fire', ooze: 'caustic ooze', lightning: 'lightning', gripping: 'a gripping trap', hunger: 'starvation',
   } as Record<string, string>,
@@ -474,6 +488,19 @@ const ru: Strings = {
   wandDamage: (min, max) => `Урон ${min}–${max}.`,
   noCharges: 'Палочка потрескивает: заряды кончились.',
   resting: 'Вы отдыхаете, пока не восстановитесь…',
+  heroTitle: (heroClass, lvl) => `${heroClass}, уровень ${lvl}`,
+  strength: 'Сила',
+  health: 'Здоровье',
+  experience: 'Опыт',
+  goldLabel: 'Золото',
+  slain: 'Побеждено врагов',
+  conditions: 'Состояние',
+  noConditions: 'Ничего необычного.',
+  turnsLeft: (n) => `ходов: ${n}`,
+  buffs: {
+    mindVision: 'Ясновидение', invisible: 'Невидимость', ooze: 'Едкая слизь', poison: 'Отравление', fire: 'Горение',
+    paralysis: 'Паралич', roots: 'Опутан корнями', slow: 'Замедление', hunger: 'Голод', starvation: 'Истощение',
+  },
   causes: { poison: 'яд', burning: 'огонь', ooze: 'едкая слизь', lightning: 'молния', gripping: 'капкан', hunger: 'голод' },
   killedBy: (cause) => `Причина гибели: ${cause}.`,
   runStats: (lvl, gold, kills) => `Уровень ${lvl} · золото ${gold} · побеждено врагов: ${kills}`,

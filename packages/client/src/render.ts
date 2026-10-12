@@ -141,7 +141,8 @@ export function render(
 
   // Freshly discovered secrets glow for a moment.
   for (const flash of view.flashes) {
-    ctx.fillStyle = `rgba(255, 255, 200, ${0.6 * (1 - (now - flash.start) / 600)})`;
+    const fade = 1 - (now - flash.start) / (flash.duration ?? 600);
+    ctx.fillStyle = `rgba(${flash.color ?? '255, 255, 200'}, ${0.6 * fade})`;
     ctx.fillRect((flash.cell % WIDTH) * TILE, Math.trunc(flash.cell / WIDTH) * TILE, TILE, TILE);
   }
 
