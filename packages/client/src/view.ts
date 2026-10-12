@@ -358,6 +358,17 @@ export class View {
         case 'scroll':
           this.say(effect.kind === 'challenge' ? t.challenge : t.lullaby, COLORS.warning, now);
           break;
+        case 'trap':
+          if (effect.depth === this.depth) this.flashes.push({ cell: effect.pos, start: now });
+          audio.play(effect.kind === 'lightning' ? 'lightning' : effect.kind === 'fire' ? 'burning' : 'trap');
+          if (effect.hero === myId) {
+            this.say(t.plateClicks, COLORS.warning, now);
+            this.say(t.traps[effect.kind], COLORS.negative, now);
+            haptic('hurt');
+          } else if (effect.depth === this.depth) {
+            this.say(t.companionTrap(this.name(world, effect.hero)), COLORS.warning, now);
+          }
+          break;
         case 'interrupted':
         case 'victory':
           break;

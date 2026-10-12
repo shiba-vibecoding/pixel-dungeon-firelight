@@ -7,4 +7,9 @@ export default defineConfig({
     target: 'es2022',
     assetsInlineLimit: 0,
   },
+  server: {
+    // Native file events on Windows sometimes miss quick successive saves,
+    // leaving stale modules in the dev server; polling catches every change.
+    watch: { usePolling: true, interval: 150 },
+  },
 });

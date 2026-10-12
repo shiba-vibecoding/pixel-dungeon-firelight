@@ -7,6 +7,7 @@ import type { Level, RoomInfo } from './level/generate';
 import { adjacent, cellX, cellY, distance, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { RoomType } from './level/room';
 import { F, hasFlag, T } from './level/terrain';
+import { mobConditions } from './traps';
 import type { Rng } from './rng';
 import type { World } from './world';
 
@@ -48,6 +49,11 @@ function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
 }
 
 export function mobAct(ctx: Ctx, mob: Mob): void {
+  // Poisoned or paralysed by a trap's gas.
+  if (mobConditions(ctx, mob)) {
+    spend(mob, TICK);
+    return;
+  }
   // Goo mends itself in the murky water of its lair.
   if (mob.kind === 'goo' && isWater(ctx.level.map[mob.pos]!) && mob.hp < mob.ht) mob.hp++;
 

@@ -1,6 +1,7 @@
 import { type Hero, isAlive, type Mob } from './actors';
 import { castShadow, terrainBlocksSight } from './fov';
 import type { Heap, HeapKind, Item, ItemKind } from './items';
+import type { TrapKind } from './traps';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
@@ -70,6 +71,7 @@ export type Effect =
   | { type: 'teleported'; hero: string }
   | { type: 'mapped'; hero: string }
   | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby'; count: number }
+  | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };
 

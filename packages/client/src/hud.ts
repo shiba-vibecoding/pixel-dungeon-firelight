@@ -34,7 +34,7 @@ export interface HudState {
 }
 
 /** Buff icons in buffs.png (BuffIndicator). */
-export const BUFF_ICONS = { mindVision: 0, ooze: 8, invisible: 12 } as const;
+export const BUFF_ICONS = { mindVision: 0, fire: 2, poison: 3, paralysis: 4, ooze: 8, invisible: 12 } as const;
 
 const TOOLS: ReadonlyArray<{ id: HudButton; sx: number; w: number }> = [
   { id: 'wait', sx: 0, w: 20 },

@@ -1,4 +1,4 @@
-import type { HeroClass, ItemKind, MobKind } from '@pd/core';
+import type { HeroClass, ItemKind, MobKind, TrapKind } from '@pd/core';
 
 /* Interface text in Russian and English; the language follows Telegram or the browser. */
 
@@ -153,6 +153,18 @@ const en = {
   shareResult: 'Share the result',
   shareText: (score: number, depth: number) => `Daily dungeon: ${score} points, depth ${depth}. Can you beat it?`,
   depthShort: (n: number) => `d${n}`,
+  plateClicks: 'A hidden pressure plate clicks!',
+  traps: {
+    toxic: 'A cloud of toxic gas bursts from the trap!',
+    fire: 'You catch fire!',
+    paralytic: 'You are paralyzed!',
+    poison: 'You are poisoned!',
+    alarm: 'The trap emits a piercing sound that echoes throughout the dungeon!',
+    lightning: 'You are struck by lightning!',
+    gripping: 'A gripping trap snaps shut on your leg!',
+    summoning: 'The trap summons monsters!',
+  } as Record<TrapKind, string>,
+  companionTrap: (name: string) => `${name} sets off a trap!`,
 };
 
 type Strings = typeof en;
@@ -310,6 +322,18 @@ const ru: Strings = {
   shareResult: 'Поделиться результатом',
   shareText: (score, depth) => `Подземелье дня: ${score} очков, глубина ${depth}. Сможешь лучше?`,
   depthShort: (n) => `гл. ${n}`,
+  plateClicks: 'Прижимная плита щёлкнула!',
+  traps: {
+    toxic: 'Из ловушки вырывается облако ядовитого газа!',
+    fire: 'Вас охватил огонь!',
+    paralytic: 'Вас парализовало!',
+    poison: 'Вы отравлены!',
+    alarm: 'Ловушка издаёт пронзительный звук, разносящийся по подземелью!',
+    lightning: 'Вас ударило молнией!',
+    gripping: 'Капкан впивается вам в ногу!',
+    summoning: 'Ловушка призывает монстров!',
+  },
+  companionTrap: (name) => `${name} попадает в ловушку!`,
 };
 
 function capitalize(text: string): string {

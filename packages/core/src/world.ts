@@ -9,6 +9,7 @@ import {
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
 import { createItems, type ItemKind } from './items';
+import { trapAt, triggerTrap } from './traps';
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
 import { adjacent, cellX, cellY, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
@@ -267,6 +268,11 @@ function advance(world: World, depth: number, effects: Effect[]): void {
 
     const hero = turn.hero;
     floor.now = Math.max(floor.now, hero.time);
+    if (hero.paralysed > 0) {
+      // Paralysed: the turn passes; whatever the player chose waits.
+      spend(ctx, hero, TIME_TO_REST);
+      continue;
+    }
     if (hero.intent) {
       const action = hero.intent;
       hero.intent = null;
@@ -305,6 +311,30 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   }
   hero.mindVision = Math.max(0, hero.mindVision - time);
   hero.invisible = Math.max(0, hero.invisible - time);
+  hero.paralysed = Math.max(0, hero.paralysed - time);
+
+  // Poison and fire hurt once for every whole turn that passes.
+  const ticks = (left: number): number => Math.floor(left) - Math.floor(Math.max(0, left - time));
+  if (hero.poison > 0) {
+    const damage = ticks(hero.poison);
+    hero.poison = Math.max(0, hero.poison - time);
+    if (damage > 0 && isAlive(hero)) {
+      ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage });
+      hurt(ctx, hero, damage, null);
+    }
+  }
+  if (hero.burning > 0) {
+    if (isWater(ctx.level.map[hero.pos]!)) {
+      hero.burning = 0;
+    } else {
+      for (let i = ticks(hero.burning); i > 0 && isAlive(hero); i--) {
+        const damage = ctx.rng.intRange(1, 3 + Math.trunc(hero.depth / 4));
+        ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage });
+        hurt(ctx, hero, damage, null);
+      }
+      hero.burning = Math.max(0, hero.burning - time);
+    }
+  }
 }
 
 function perform(ctx: Ctx, hero: Hero, action: Action): void {
@@ -333,6 +363,8 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       leaveCell(world, level, hero.depth, from);
       enterCell(level, hero.pos);
       spend(ctx, hero, 1 / heroSpeed(hero));
+      // The step is done, then the trap goes off.
+      if (trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
       search(ctx, hero, false);
       break;
     }
@@ -440,6 +472,8 @@ export function findPath(
       const next = cell + n;
       if (next < 0 || next >= LENGTH || previous.has(next) || !adjacent(cell, next)) continue;
       if (!canEnter(level, next) || (blocked.has(next) && next !== to)) continue;
+      // Walk around visible traps, unless one is where the player wants to go.
+      if (next !== to && hasFlag(level.map[next]!, F.AVOID)) continue;
       if (known && !known[next]) continue;
       previous.set(next, cell);
       if (next === to) {

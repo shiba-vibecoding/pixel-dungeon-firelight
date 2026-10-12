@@ -138,6 +138,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
       const amount = hero.ht - hero.hp;
       hero.hp = hero.ht;
       hero.ooze = -1;
+      hero.poison = 0;
       ctx.effects.push({ type: 'healed', hero: hero.id, amount });
       break;
     }

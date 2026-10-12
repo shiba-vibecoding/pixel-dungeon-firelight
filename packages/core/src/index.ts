@@ -9,6 +9,7 @@ export { discoverable, passable } from './level/flags';
 export * from './actors';
 export * from './items';
 export { type InventoryAction, isInventoryAction } from './inventory';
+export { trapAt, type TrapKind } from './traps';
 export { charAt, type Effect, type Floor, heroesOn, isWater } from './floor';
 export * from './world';
 export { castShadow, MAX_VIEW_DISTANCE } from './fov';

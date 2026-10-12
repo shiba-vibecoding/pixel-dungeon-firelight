@@ -63,6 +63,10 @@ export interface Hero {
   /** Turns left of sensing every monster on the level / of being unseen. */
   mindVision: number;
   invisible: number;
+  /** Turns left of poison (1 damage a turn), burning (washed off by water) and paralysis. */
+  poison: number;
+  burning: number;
+  paralysed: number;
 }
 
 export interface PlayerInfo {
@@ -96,6 +100,9 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     gold: 0,
     mindVision: 0,
     invisible: 0,
+    poison: 0,
+    burning: 0,
+    paralysed: 0,
   };
 }
 
@@ -196,6 +203,9 @@ export interface Mob {
   time: number;
   /** Goo only: pumped up for a big attack. */
   pumped?: boolean;
+  /** Turns left of poison and paralysis from trap gas. */
+  poison?: number;
+  paralysed?: number;
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {
