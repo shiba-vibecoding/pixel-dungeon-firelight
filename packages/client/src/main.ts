@@ -1120,7 +1120,8 @@ function openBackpack(): void {
 /** Zoom levels in device pixels per art pixel: whole numbers keep the art crisp; the view glides between them. */
 const zoom = { base: 2, min: 1, max: 4, target: 2, delta: 0 };
 try {
-  zoom.delta = Number(localStorage.getItem('pd-zoom')) || 0;
+  // A new key since the zoom's base comes from the screen: a step taken from the old base meant another size.
+  zoom.delta = Number(localStorage.getItem('pd-zoom-screen')) || 0;
 } catch {
   // The default zoom, then.
 }
@@ -1141,7 +1142,7 @@ function zoomTo(level: number, anchor: { x: number; y: number } | null): void {
   zoomAnchor = anchor;
   zoom.delta = next - zoom.base;
   try {
-    localStorage.setItem('pd-zoom', String(zoom.delta));
+    localStorage.setItem('pd-zoom-screen', String(zoom.delta));
   } catch {
     // Not remembered.
   }

@@ -111,6 +111,20 @@ canvas#game {
 .pd-mapbtn.attack .pd-portrait canvas { max-width: 36px; max-height: 36px; }
 /* The backpack (design system v10) drawn again over itself does not come in again. */
 #overlay.open > .pd-window.still { animation: none; }
+
+/*
+ * A wide screen (a computer, Telegram over the whole monitor): the HUD keeps a phone's proportions
+ * at the top left instead of a bar across the whole screen, the menu button stays in the corner,
+ * and the toolbar splits as the original's did — wait, search and look on the left, the quick slot
+ * and the backpack on the right — with buttons of a sensible size.
+ */
+@media (min-width: 900px) {
+  .pd-hud-bars { flex: 0 1 520px; }
+  .pd-hud-main > .pd-menu { margin-left: auto; }
+  .pd-toolbar { grid-template-columns: repeat(3, 104px) 1fr repeat(2, 104px); background: linear-gradient(to top, rgba(11, 11, 9, 0.85), rgba(11, 11, 9, 0.6)); }
+  .pd-toolbar > :nth-child(4) { grid-column: 5; }
+  .pd-toolbar > :nth-child(5) { grid-column: 6; }
+}
 .pd-coach {
   position: absolute; z-index: var(--z-hud, 10); transform: translate(-50%, calc(-100% - 10px)); pointer-events: none;
   padding: 4px 10px; background: var(--stone-900, #1f1d1d); border: 2px solid var(--gold-deep, #ffcc66); color: var(--gold, #ffeba4);
