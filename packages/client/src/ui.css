@@ -50,6 +50,10 @@
   --patron: var(--gold-deep);
   --season: #bfe3ff;
   --silhouette: var(--stone-300);
+  --rarity-common: var(--stone-200);
+  --rarity-rare: #7cc4ff;
+  --rarity-legend: var(--gold-deep);
+  --ready: var(--good);
   --font-ui: "Galmuri11", "Galmuri9", monospace;
   --font-small: "Galmuri9", "Galmuri11", monospace;
   --text-display: 400 36px/40px var(--font-ui);
@@ -154,6 +158,9 @@
   --spr-book: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA0klEQVR4nGP8//8/AwMDAwMjI2MaAwng9evXsxgYGBhYkDUXi4vPlGBlxavxxe/fDL0vX6bD+EwwRqywMEHNDAwMDOhqWNAVlKyC0L+vfWdgYGBgYNXihPNZtTgZesJQ1WMYgFDAiSaDzsdhALJLYLb+vvadYWIDiQZAXALThF0zAwNSIJILKDYAqxde/P6NVTG2aMZqADHpAQZQvIDLZnxqUFwQvnkZQQMe7zvM0FvRgN0ABgYGBmNjA4IGYHXB4rdv08V8o2YeJCIzIQNGSrMzAClJQbojJzyXAAAAAElFTkSuQmCC");
   --atlas-gestures: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABgCAYAAABbjPFwAAAEKElEQVR4nO1avWvbQBR/F7yY05rd4C7eQsnUUoy7de3QBpJAM9hD/qAM7pCAHUg7lC4lW00oDR5MKGTwkBhCpoDXmIzXoT1xOt1J774kK+gHgeis372Pe/f03kkE1hBsOWaqcbK5R1JjwZSYDRJKkO0hShZXXlZWNx4EbDZgogHytZa3HDOd9zG/e4NKWawBpvdsZN1MaZNR2gxvsYN8rQGUNtliPoHFfAK2Rrg4ACs/cwVcYOuAvD0gj6ENMPGmKuNgslBWhqG0yaJWP3VPA6PQYj6J/293egwAYLV6Mkpn3Pg8HtncI2w5ZlGrj5Kfmkz0skgUMb2+gd0Pg0xleAjJaHd6kGWIqfxECIlxa4u8UFvMJ3D6dajcFzbytXvAxggfDjCVnzBgtXoifImLUsBVfmoF8ibJin8fDjCVrwwh3SSYzeviABv5mSlNtdGw6VOVhTDK+5JfGeRaw6tIbD3vi2/bT2gnw5TDvvi2/YRXJWz5uvu8GRGan3WP6regDU0R/GANTVF8o4YGfbKgiWFUT7A9JCb8whqaqDtCr4QJv5CGJiQ/tQIu9XwZfK8NTRl8rw1NGXyvDU0ZfK8NTRl87w3NOvCfH1zLW2e+dKxufMxue1zuja9QtpD3BDXA0zuKskKI0iZ7uJ+yh/tpyggeQuhqVN6EeYJTAg34efOK8e89n4rnQe1Ozypns9mARd0RAKhLCnHeYG9oOGximPcDKuWn1zeJ69gAH5tF5vPKEttW2oTWBhfs+kKPC8d4TccXOzFVOaEqJZQdGfZ1kAiyPSQuK6hqI/8bweSxBI8LzdssWMiHuqELsAaA/bKrgPGaT6CaelMUWe5uYDfLuqIQBcXN7dspmZOx5Zi5fp9DaZN93H0fX385/ebVCO2TmM0GzsqLePP2tRNf95DTHmzxWsSXwF8/fzvxdeeqicFQyx1yDyhDyHW5ZaxWT4T/uc4lr4zSANPlLhK5R/R8D7gWdbaw5lfhdZKIxKlEVu+JFV4kX1wlVDl9fHbEAAAOdg7j+FONheJzb/OvuKLuKB5rqLoojnanx/gksqCDnUNyfHaU8lgoftTqg5jio1YfHu8+/8tCeeW0ykvieGi+WBGIKZ5s7pHgTb1vKFO8uIke7qfs+49RYml5vMrg46H5PN7lFM+WY9YAwHVRx2dHTLUJi+LLlXF9uCviWXijLCNyv54V4fKtWyi+8inI8/L55RW8e/Uy/g1zTkRpkz1e7AMAwMntlhXfRL7yTb0OeUePovK2fFP5lXuQyUgVc+eXV5nXeTi53XLim8pPGSDGnAzMcWPR/MqHUG1A2UB/buP65XoofuWfxDVqVBWV7iF8Kl/5LBSkHxD5n178iX+LuqP17wey+I8X+3U/IMN7PyDfL/cHANnv3up+oGqoDSgbdT+wjvwaReIvO6dI4W3+UWIAAAAASUVORK5CYII=");
   --spr-pointer: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAiklEQVR4nGNgoBAwYhPk5ub8j03869fvGOpZcJn85cFsFD6PQipWdUz4nMfw8BAE4wH4DSACDLwB8EDEFfLIAFkNLEYYkSXRQx5XAPLYL8Y0AMUQPCGPrJmBAS0Mvn79zsijkMrAIG9HlGYMA/AZgk0zXsDNzfn//+sl//+fSftPTADjNIRszXQDAP90O/EYveguAAAAAElFTkSuQmCC");
+  --spr-check: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAICAYAAAArzdW1AAAATklEQVR4nH2PMQ6AMAwDr9mq8CHE2q8jPkTFGKaiyEBvPjsOTHCvAWAzYT033GtYTqgwsJxQ4Vh2er/Kc26IKgCUr/osvIa2aKH7fl9WbvTuKFw/d5jFAAAAAElFTkSuQmCC");
+  --spr-arena: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABE0lEQVR4nJWSoW4CQRCGv2uC2MwDYBAkDUlrTlTWVWJ4gD4AoqaiSUWDqW0KSc1KsLwBsgmiQZCKMxWkCSEIgr8gEFPT3S7hjr2Om+x8//zzZwEQMbpZzXQ0tipilJISMToaW92sZsdzMZGTcEykElwmEoOTMpHvr3cmH58AtK+vOL+8Ic93hfNHcJntSvZ13j2wHZ7j3iqJuM0ukzL4rEikP5hS3w59X98O6Q+m0fMRMfp6e+E367zrN4dvhaCI0afnBxUxansdtb2OB8PezTihRMTo/eMdAI39gjRtnnSZZUvWtRYAby/2L4MqMECaNmnsF74vDPE/5QXWtRZZtowC4Qnw+5VdIGEWRRXeDpDnu+QHDeTTb5r9qUYAAAAASUVORK5CYII=");
+  --atlas-arena: url("data:image/png;base64,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");
   --spr-resume: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAS0lEQVR4nGNgoBv4/3rJf2LEmUjVxIRPEps4hgZCmrBq4FFIxSbMwKOQimkDj0Iqw9ev3xkJiv9/veQ/NzcnhlNwiTNgFcQjTjsAAFaVMA2T6ca3AAAAAElFTkSuQmCC");
 }
 
@@ -1359,3 +1366,76 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 .pd-spot { box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 0 4px var(--void) !important; animation: pd-spot 1s steps(1) infinite; }
 @keyframes pd-spot { 50% { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void) !important; } }
 @media (prefers-reduced-motion: reduce) { .pd-spot { animation: none; } }
+
+/* ---------- Арена волн ---------- */
+/* вход на титуле: широкая кнопка с иконкой режима и рекордом, под «Играть с друзьями» */
+.pd-mode-btn { justify-content: flex-start; gap: var(--space-3); text-align: left; padding-left: var(--space-2); min-height: 56px; white-space: normal; }
+.pd-mode-ico { flex: none; width: 32px; height: 32px; background: var(--spr-arena) center / contain no-repeat; image-rendering: pixelated; }
+.pd-mode-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.pd-mode-text small { font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); }
+.pd-mode-text small b { font-weight: 400; color: var(--gold); }
+/* окно выбора: одному или с друзьями */
+.pd-arena-pick { display: flex; flex-direction: column; gap: var(--space-3); }
+.pd-arena-pick .pd-arena-art { display: flex; justify-content: center; gap: 4px; padding: var(--space-2) 0; background: var(--stone-800); clip-path: var(--notch); }
+.pd-arena-pick .pd-arena-art i { width: 32px; height: 32px; background: var(--atlas-arena) no-repeat; background-size: 192px 160px; image-rendering: pixelated; }
+.pd-arena-rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+.pd-arena-rules li::before { content: "· "; color: var(--gold-deep); }
+.pd-record { display: inline-flex; align-items: center; gap: 6px; align-self: center; padding: 2px 10px; font: var(--text-label, 400 18px/22px var(--font-ui)); color: var(--gold); background: var(--stone-800); clip-path: var(--notch); }
+.pd-record::before { content: ""; width: 16px; height: 16px; background: var(--spr-arena) center / contain no-repeat; image-rendering: pixelated; }
+.pd-record.new { color: var(--void); background: var(--gold-deep); }
+.pd-record.new::before { filter: brightness(0); opacity: .7; }
+
+/* табло арены: вместо глубины — «Волна 7 · осталось 5» и ступенчатая полоска волны */
+.pd-waveboard { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 10px 4px 6px; background: rgba(11, 11, 9, 0.78); clip-path: var(--notch); box-shadow: inset 0 0 0 var(--u) var(--stone-500); }
+.pd-waveboard::before { content: ""; flex: none; width: 24px; height: 24px; background: var(--spr-arena) center / contain no-repeat; image-rendering: pixelated; }
+.pd-wave-n { flex: none; font: var(--text-hud, 400 20px/20px var(--font-small)); color: var(--gold); white-space: nowrap; }
+.pd-wave-left { flex: none; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); white-space: nowrap; }
+.pd-wave-left b { font-weight: 400; color: var(--bad); }
+.pd-waveboard .pd-bar { flex: 1; min-width: 40px; height: 8px; border-width: 1px; box-shadow: none; }
+.pd-waveboard .pd-bar::before { background: var(--bad); }
+.pd-waveboard.rest .pd-wave-n { color: var(--good); }
+.pd-waveboard.rest .pd-bar { display: none; }
+.pd-wave-ready { margin-left: auto; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ready, var(--good)); white-space: nowrap; }
+.pd-waveboard.champions { box-shadow: inset 0 0 0 var(--u) var(--fx-boss); }
+.pd-waveboard.champions .pd-wave-n::after { content: " ★"; color: var(--fx-boss); }
+
+/* «К бою!» — большая главная кнопка в передышке, над логом (на мониторе — над островами) */
+.pd-fight { position: absolute; z-index: var(--z-hud, 10); left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + var(--tool-h, 56px) + var(--space-2) * 2 + var(--log-h, 120px) + 12px); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pd-fight .pd-button.primary { min-width: 220px; min-height: 56px; font: var(--text-title, 400 24px/28px var(--font-ui)); }
+.pd-fight .pd-button.primary.waiting { --b-bg: var(--stone-600); --b-hi: var(--stone-300); --b-lo: var(--stone-500); --b-ink: var(--ink); }
+.pd-fight-note { padding: 0 8px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); text-shadow: var(--text-outline); }
+.pd-fight-note b { font-weight: 400; color: var(--ally); }
+.pd-wide .pd-fight { bottom: calc(var(--gap, 12px) + var(--tool-h, 56px) + 8px + 20px); }
+.pd-ui .pd-waveboard.top { position: absolute; left: 50%; top: var(--gap, 12px); transform: translateX(-50%); }
+
+/* готовность в отряде: зелёная галочка в углу карточки */
+:is(.pd-mate, .pd-pcard).ready { position: relative; border-color: var(--ready, var(--good)); }
+:is(.pd-mate, .pd-pcard).ready::after { content: ""; position: absolute; right: 3px; top: 3px; width: 18px; height: 16px; background: var(--spr-check) center / contain no-repeat; image-rendering: pixelated; }
+.pd-pcard.ready .pd-pstate { color: var(--ready, var(--good)); }
+.pd-pcard.ready .pd-mate-depth { visibility: hidden; }
+
+/* награда за волну: три карточки, выбрать одну */
+.pd-loot3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.pd-loot { --rar: var(--rarity-common, var(--stone-200)); position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px 8px; min-height: 150px; background: var(--stone-800); clip-path: var(--notch); box-shadow: inset 0 calc(3 * var(--u)) 0 var(--rar), inset 0 0 0 var(--u) var(--stone-600); text-align: center; }
+.pd-loot.rare { --rar: var(--rarity-rare, #7cc4ff); }
+.pd-loot.legend { --rar: var(--rarity-legend, var(--gold-deep)); }
+.pd-loot .pd-slot { --slot: 56px; }
+.pd-loot .pd-slot .pd-item { --u: 3px; }
+.pd-loot-name { font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink); overflow-wrap: break-word; }
+.pd-rarity { font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--rar); }
+.pd-loot.legend::before { content: ""; position: absolute; left: 8px; top: 12px; width: 4px; height: 4px; background: var(--gold); box-shadow: 44px 6px 0 var(--gold-deep), 10px 30px 0 var(--gold); animation: pd-blink 1.2s steps(2) infinite; }
+.pd-loot[aria-checked="true"] { background: var(--stone-700); box-shadow: inset 0 calc(3 * var(--u)) 0 var(--rar), inset 0 0 0 2px var(--gold), inset 0 0 0 4px var(--void); }
+.pd-loot:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus), inset 0 0 0 4px var(--void); }
+@media (prefers-reduced-motion: reduce) { .pd-loot.legend::before { animation: none; } }
+.pd-loot-note { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); text-align: center; }
+
+/* итоги арены: как конец забега, плюс рекорд и строки отряда */
+.pd-runend.arena .pd-display { color: var(--gold); }
+.pd-arena-party { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.pd-arena-party div { display: grid; grid-template-columns: 24px 1fr auto auto; gap: 8px; align-items: center; min-height: 32px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); border-bottom: var(--u) solid var(--stone-600); }
+.pd-arena-party i { width: 24px; height: 30px; background: var(--atlas-heroes) no-repeat; background-size: 96px 30px; background-position: calc(var(--av, 0) * -24px) 0; image-rendering: pixelated; transform: scale(.8); }
+.pd-arena-party span:nth-child(2) { color: var(--ally); }
+.pd-arena-party .me span:nth-child(2) { color: var(--gold); }
+.pd-arena-party .head { min-height: 20px; color: var(--ink-muted); border-bottom: 0; }
+.pd-arena-party .head span { color: var(--ink-muted) !important; }
+.pd-arena-party div > span:nth-child(n+3) { text-align: right; min-width: 44px; }

@@ -4,7 +4,7 @@ import {
   type ServerMessage, type World,
 } from '@pd/core';
 import { botAction, pacify } from '../../core/test/helpers';
-import { type Delivery, IDLE_TIMEOUT, RoomLogic, SEAT_TIMEOUT, STATE_FORMAT, TURN_TIMEOUT } from '../src/room-logic';
+import { ARENA_READY_TIMEOUT, type Delivery, IDLE_TIMEOUT, RoomLogic, SEAT_TIMEOUT, STATE_FORMAT, TURN_TIMEOUT } from '../src/room-logic';
 
 const alice = { id: 'alice', name: 'Alice', heroClass: 'warrior' as const };
 const bob = { id: 'bob', name: 'Bob', heroClass: 'mage' as const };
@@ -311,5 +311,56 @@ describe('co-op turns on the server', () => {
     restored.restoreOnline(['a', 'b', 'c', 'd']);
     expect(restored.seatFor('e', SEAT_TIMEOUT)).toBe('a');
     expect(restored.seatFor('f', SEAT_TIMEOUT)).toBeNull();
+  });
+});
+
+describe('the arena of waves in a room', () => {
+  it('is made by the link of whoever creates it, and whoever joins plays the arena', () => {
+    const room = RoomLogic.restore(undefined, 77, 'arena');
+    const replicas = { alice: new Replica(), bob: new Replica() };
+    route(room.connect(alice, 0), replicas);
+    route(room.connect(bob, 0), replicas);
+    expect(replicas.bob.world!.mode).toBe('arena');
+    expect(replicas.bob.world!.heroes.map((h) => h.depth)).toEqual([1, 1]);
+    // A saved arena room stays one whatever a later link asks.
+    expect(RoomLogic.restore(room.state(), 1, 'dungeon').state().world.mode).toBe('arena');
+    // A dungeon room is not turned into an arena by a later link.
+    expect(RoomLogic.restore(RoomLogic.create(5).state(), 1, 'arena').state().world.mode).toBeUndefined();
+    // A new run in the room is an arena again.
+    room.state().world.over = true;
+    route(room.receive('alice', { type: 'restart' }, 10), replicas);
+    expect(replicas.alice.world!.mode).toBe('arena');
+    expect(JSON.stringify(replicas.alice.world)).toBe(JSON.stringify(room.state().world));
+  });
+
+  it('starts the wave once everyone is ready, readying a player who is away at once', () => {
+    const room = RoomLogic.restore(undefined, 78, 'arena');
+    const replicas = { alice: new Replica(), bob: new Replica() };
+    route(room.connect(alice, 0), replicas);
+    route(room.connect(bob, 0), replicas);
+    route(room.disconnect('bob', 100), replicas);
+    route(room.receive('alice', { type: 'act', action: { type: 'arenaReady' } }, 200), replicas);
+    expect(room.state().world.arena).toMatchObject({ phase: 'fight', wave: 1 });
+    expect(JSON.stringify(replicas.alice.world)).toBe(JSON.stringify(room.state().world));
+  });
+
+  it('readies a player who is here but has looked away, after a while, and not one who plays', () => {
+    const room = RoomLogic.restore(undefined, 79, 'arena');
+    const replicas = { alice: new Replica(), bob: new Replica() };
+    route(room.connect(alice, 0), replicas);
+    route(room.connect(bob, 0), replicas);
+    route(room.receive('alice', { type: 'act', action: { type: 'arenaReady' } }, 1000), replicas);
+    expect(room.state().world.arena!.phase).toBe('rest');
+    expect(room.deadline()).toBe(1000 + ARENA_READY_TIMEOUT);
+    // Bob walks about the dais picking a reward: still deciding.
+    route(room.receive('bob', { type: 'act', action: { type: 'arenaPick', choice: 0 } }, 20_000), replicas);
+    route(room.tick(1000 + ARENA_READY_TIMEOUT), replicas);
+    expect(room.state().world.arena!.phase).toBe('rest');
+    expect(room.deadline()).toBe(20_000 + ARENA_READY_TIMEOUT);
+    // Then nothing more from him: the wave starts without his word.
+    route(room.tick(20_000 + ARENA_READY_TIMEOUT), replicas);
+    expect(room.state().world.arena).toMatchObject({ phase: 'fight', wave: 1 });
+    expect(room.state().readySince).toBeUndefined();
+    expect(JSON.stringify(replicas.bob.world)).toBe(JSON.stringify(room.state().world));
   });
 });

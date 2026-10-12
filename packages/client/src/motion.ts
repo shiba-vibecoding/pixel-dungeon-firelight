@@ -2,7 +2,7 @@ import { type Effect, HEAP_SPRITES, heroById, type Level, LENGTH, T, WIDTH, type
 import { audio } from './audio';
 import { fx } from './fx';
 import { quality } from './quality';
-import { type Assets, regionOf } from './sprites';
+import { type Assets, levelRegion } from './sprites';
 import { TILE, type View } from './view';
 import { drawFrame, type Frame, frameAt, length, lookIndex, sheet, type SheetName } from './worldsheets';
 
@@ -238,7 +238,7 @@ export class Motion {
       if (was === is) continue;
       map[cell] = is;
       if (!visible[cell]) continue;
-      const r = lookIndex(level.depth);
+      const r = levelRegion(level);
       if (was === T.DOOR && is === T.OPEN_DOOR) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'open', ms: this.animMs(`doors${r}`, 'door', DOOR_OPEN_MS) });
         // The original's own door sound, nothing laid over it.
@@ -465,10 +465,10 @@ export class Motion {
 
   /** Under the heaps, over the floor: animated tiles, grass in the wind, rings on water, heaps on their way out. */
   draw(ctx: CanvasRenderingContext2D, level: Level, visible: readonly boolean[], explored: readonly boolean[], now: number): void {
-    const region = lookIndex(level.depth);
+    const region = levelRegion(level);
     const grass = sheet(`grass${region}`);
     const doors = sheet(`doors${region}`);
-    const tiles = this.assets.tiles[regionOf(level.depth)]!;
+    const tiles = this.assets.tiles[levelRegion(level)]!;
     const columns = tiles.width / TILE;
     const tile = (terrain: number, cell: number): void => {
       ctx.drawImage(tiles, (terrain % columns) * TILE, Math.trunc(terrain / columns) * TILE, TILE, TILE, 0, 0, TILE, TILE);

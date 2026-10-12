@@ -26,6 +26,8 @@ export interface Sheet {
 /** The sheets there are: those with a region number come in five, as tiles0..4 do. */
 export type SheetName =
   | `doors${0 | 1 | 2 | 3 | 4}` | `grass${0 | 1 | 2 | 3 | 4}` | `ambient${0 | 1 | 2 | 3 | 4}` | `fog${0 | 1 | 2 | 3 | 4}`
+  /** The arena of waves' dressing, per tier (design system v14): gates, braziers, banners, sand, crowd. */
+  | `arena${0 | 1 | 2 | 3 | 4}`
   | 'chests' | 'feedback' | 'glint' | 'coop' | 'splash' | 'light' | 'ui-map';
 
 const BASE = `${import.meta.env.BASE_URL}assets/world/`;

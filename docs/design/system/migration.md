@@ -1004,3 +1004,110 @@ arrow.remove(); target.classList.remove('pd-spot');
 | `.pd-gesture.tap/.hold/.drag/.throw/.click/.rclick` | схема жеста 16×16, 3 кадра |
 | `.pd-keycap` | колпачок клавиши |
 | `.pd-pointer(.up/.left/.right)`, `.pd-spot` | стрелка на кнопку и рамка цели |
+
+## Арена волн
+
+### Вход на титуле
+
+```html
+<!-- в .pd-actions титула, под «Играть с друзьями» -->
+<button class="pd-button pd-mode-btn"><i class="pd-mode-ico"></i>
+  <span class="pd-mode-text">Арена волн<small>Яма Йендора · рекорд: <b>волна 12</b></small></span></button>
+```
+
+Если рекорда нет, вместо него пишите «новый режим». Кнопка открывает окно выбора:
+
+```html
+<section class="pd-window narrow" role="dialog" aria-labelledby="ar">
+  <div class="pd-window-head"><span class="pd-mode-ico" style="width:32px;height:32px"></span>
+    <div class="pd-titles"><h2 class="pd-heading" id="ar">Арена волн</h2><span class="pd-sub">Яма Йендора</span></div><button class="pd-close" aria-label="Закрыть"></button></div>
+  <div class="pd-arena-pick">
+    <div class="pd-arena-art"><i style="background-position:0 0"></i><i style="background-position:-32px -32px"></i><i style="background-position:0 -64px"></i>…</div>  <!-- кадры arena1.png ×2 -->
+    <ul class="pd-arena-rules"><li>Отряд из 1–4 героев держит волны монстров.</li><li>После волны — передышка и награда на выбор.</li><li>Каждые 5 волн арена уходит глубже…</li></ul>
+    <span class="pd-record">Рекорд: волна 12</span>
+    <div class="pd-actions">
+      <button class="pd-button stacked">Одному<span class="pd-btn-sub">один герой</span></button>
+      <button class="pd-button ally stacked">С друзьями<span class="pd-btn-sub">2–4 героя · ссылка в Telegram</span></button>
+    </div>
+  </div>
+</section>
+```
+
+### Табло, «К бою!» и готовность
+
+```html
+<!-- телефон: сразу после .pd-hud-main внутри .pd-hud; монитор: в .pd-ui с классом .top -->
+<div class="pd-waveboard" role="status"><span class="pd-wave-n">Волна 7</span><span class="pd-wave-left">осталось <b>5</b></span><div class="pd-bar" style="--v:.6"></div></div>
+<!-- --v — доля убитых в волне -->
+<div class="pd-waveboard rest" role="status"><span class="pd-wave-n">Передышка</span><span class="pd-wave-left">Волна 8</span><span class="pd-wave-ready">Готовы 2/3</span></div>
+
+<div class="pd-fight"><button class="pd-button primary">К бою!</button><span class="pd-fight-note">Готовы 2/3 · ждём: <b>Ёжик</b></span></div>
+```
+
+- **Глубина.** В арене уберите `.pd-stat` глубины из HUD (на мониторе — из `.pd-dhud`) и глубину с карточек отряда.
+- **Чемпионы.** Волне с чемпионами табло ставит `.champions`: красная рамка и ★ у номера.
+- **Нажал «К бою!»** — кнопка получает `.waiting` (серая, остаётся нажимаемой: второе нажатие отменяет готовность). Товарищу, который готов, ставится `.ready` на `.pd-mate` (телефон) или `.pd-pcard` (монитор); на мониторе `.pd-pstate` пишет «готов», у остальных — «выбирает награду» или «в передышке».
+- **Соло:** «Готовы» и подписи не нужны, кнопка сразу начинает волну.
+- **Ход и ожидание.** В передышке ходы не ждут товарищей. Строка «Ждём: …» (`.pd-status.waiting`) возвращается, когда волна началась.
+
+### Баннеры
+
+```js
+PD.fx.wave(ctx, t.waveTitle(5), 'Чемпионы!', 'champions', cy, width, now - start);   // kind: '' | 'champions' | 'boss'
+PD.fx.depth(ctx, t.regionNames[1], 'Арена погружается глубже', emblems, 1, cy, width, now - start);
+```
+
+`cy` — верхняя треть свободной зоны, над героем, как у карточек региона и босса. Длительности и сетка — в `canvas-fx.md`. Если регион и волна начинаются в один ход, сначала покажите погружение (2,4 с), потом баннер.
+
+### Награда и итоги
+
+```html
+<section class="pd-window" role="dialog" aria-labelledby="rw">
+  <div class="pd-window-head"><div class="pd-titles"><h2 class="pd-heading" id="rw">Награда</h2><span class="pd-sub">за волну 5</span></div></div>
+  <div class="pd-loot3" role="radiogroup">
+    <button class="pd-loot" role="radio" aria-checked="false"><span class="pd-slot"><i class="pd-item" data-i="61"></i></span><span class="pd-loot-name">Зелье Опыта</span><span class="pd-rarity">обычное</span></button>
+    <button class="pd-loot rare" role="radio" aria-checked="false">…<span class="pd-rarity">редкое</span></button>
+    <button class="pd-loot legend" role="radio" aria-checked="true">…<span class="pd-rarity">легендарное</span></button>
+  </div>
+  <p class="pd-loot-note">Каждый в отряде выбирает себе сам.</p>
+  <div class="pd-actions"><button class="pd-button primary">Взять</button></div>   <!-- disabled, пока ничего не выбрано -->
+</section>
+```
+
+Касание карточки выбирает её, второе касание — то же, что «Взять». Окно без крестика: награду нужно взять. Удержание на карточке открывает окно предмета с описанием.
+
+```html
+<section class="pd-window pd-runend arena" role="dialog" aria-labelledby="ae">
+  <h2 class="pd-display" id="ae">Отряд пал</h2><p class="pd-cause">на волне 12 · Пещеры</p>
+  <span class="pd-record new">Новый рекорд!</span>              <!-- или <span class="pd-record">Рекорд: волна 14</span> -->
+  <dl class="pd-stats"><div><dt>Волн</dt><dd>12</dd></div><div><dt>Убито</dt><dd>87</dd></div><div><dt>Очки</dt><dd class="gold">4 320</dd></div></dl>
+  <div class="pd-arena-party">                                    <!-- только в кооперативе -->
+    <div class="head"><span></span><span></span><span>Убито</span><span>Очки</span></div>
+    <div class="me"><i style="--av:0"></i><span>QA</span><span>34</span><span>1820</span></div>
+  </div>
+  <div class="pd-actions"><button class="pd-button primary">Ещё раз</button><button class="pd-button">Поделиться</button><button class="pd-button quiet">Главное меню</button></div>
+</section>
+```
+
+### Атлас арены
+
+Атласы `arena0..4.png/.json` лежат рядом с `assets/world`, номер — регион (0 — канализация … 4 — залы), формат тот же. Предлагаемая сборка уровня:
+
+- **Пол.** Внутри круга вместо EMPTY кладите `sand`: вариант 0–2 по хэшу клетки, 3 (кровь) и 4 (царапины) — примерно раз на 25 клеток.
+- **Стена.** Кольцо стены — обычный WALL региона. Знамя (`banner`) — на каждой пятой клетке стены, обращённой к арене. Четверо ворот (`gate`) — по сторонам света.
+- **Ворота.** В передышке закрыты (кадр 0). С началом волны поднимаются кадрами 0→3, монстры выходят из ворот. Под конец волны опускаются 3→0.
+- **Жаровни** (`brazier`) — четыре по диагоналям внутри круга, со светом `light.png` в цвет огня.
+- **Трибуны** (`crowd`) — 2–3 кольца клеток снаружи стены. После волны 2 секунды ликуют (1,2,1,2), соседние клетки идут в противофазе. В передышке изредка вспыхивает кадр 1.
+- **Значки «Волна 5 / 10 / 20»** — `badges-arena.png`. Допишите их в лист значков отдельной строкой или держите отдельным листом с тем же 16×16.
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-mode-btn`, `.pd-mode-ico`, `.pd-mode-text` | кнопка режима на титуле |
+| `.pd-arena-pick`, `.pd-arena-art`, `.pd-arena-rules`, `.pd-record(.new)` | окно выбора и рекорд |
+| `.pd-waveboard(.rest/.champions/.top)`, `.pd-wave-n`, `.pd-wave-left`, `.pd-wave-ready` | табло |
+| `.pd-fight`, `.pd-fight-note`, `.pd-button.primary.waiting` | «К бою!» |
+| `.pd-mate.ready`, `.pd-pcard.ready`, `--spr-check` | готовность в отряде |
+| `.pd-loot3`, `.pd-loot(.rare/.legend)`, `.pd-loot-name`, `.pd-rarity`, `.pd-loot-note` | награда |
+| `.pd-runend.arena`, `.pd-arena-party` | итоги |
+
+Все строки на двух языках — `docs/design/tasks/arena-strings.ts`.

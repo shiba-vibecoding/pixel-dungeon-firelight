@@ -503,7 +503,7 @@ export function itemSprite(item: Item, labels: Labels): number {
 /* Generator */
 
 /** Categories the generator picks from; thrown weapons come with the weapons. */
-type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand' | 'ring' | 'seed' | 'misc';
+export type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand' | 'ring' | 'seed' | 'misc';
 
 const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
   ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['wand', 4], ['ring', 2], ['seed', 5], ['gold', 50], ['misc', 5],

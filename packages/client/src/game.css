@@ -49,6 +49,9 @@ canvas#game {
 }
 #ui[hidden], #toast[hidden], .pd-log[hidden], .pd-mates[hidden] { display: none; }
 #ui .pd-toolbar { pointer-events: auto; }
+/* The arena's «To battle!» takes taps; its note lets them through. The board on a monitor is only words. */
+#ui .pd-fight .pd-button { pointer-events: auto; }
+#ui .pd-fight[hidden], #ui .pd-waveboard[hidden] { display: none; }
 
 /* The log lets taps through to the map; only «History» is a button. */
 .pd-log { pointer-events: none; }
@@ -171,3 +174,8 @@ body:has(#ui.pd-wide) #game { cursor: var(--spr-cursor) 0 0, default; }
 .pd-window { filter: none; box-shadow: 0 8px 0 rgba(0, 0, 0, 0.45); }
 /* The windows float on a layer of their own, so the map moving beneath never repaints them. */
 #overlay.open { will-change: transform; }
+
+/* The arena of waves' badges (Волна 5 / 10 / 20): a sheet of their own, one row of three (badges.ts ARENA_BADGES). */
+.pd-badge.arena { background-image: url("/assets/meta/badges-arena.png"); background-size: calc(48 * var(--u)) calc(16 * var(--u)); }
+.pd-badge.big.arena { background-size: calc(72 * var(--u)) calc(24 * var(--u)); }
+.pd-slot .pd-badge.arena { background-image: url("/assets/meta/badges-arena.png"); }

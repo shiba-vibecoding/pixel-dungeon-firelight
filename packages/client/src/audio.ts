@@ -32,7 +32,7 @@ export type Sample =
 /** Sounds made here rather than loaded. */
 export type Synth =
   | 'creak' | 'thud' | 'rustle' | 'coin' | 'pop' | 'whoosh' | 'tick' | 'sizzle' | 'clank' | 'drip' | 'pebble' | 'sparkle'
-  | 'stepWood' | 'stepGrass' | 'knock';
+  | 'stepWood' | 'stepGrass' | 'knock' | 'crowd';
 
 export type Sound = Sample | Synth;
 
@@ -189,6 +189,23 @@ function makeSynth(ctx: BaseAudioContext, name: Synth): AudioBuffer {
     }
     case 'tick':
       return render(ctx, 0.035, (t) => Math.sin(TAU * 1900 * t) * Math.exp(-t * 170) * 0.5);
+    case 'crowd': {
+      // The arena's stands after a wave: a roar of many voices swelling and falling away, and claps in it.
+      const voices = bandpass(rate, 300, 2200);
+      const air = bandpass(rate, 1800, 5000);
+      const claps = Array.from({ length: 26 }, (_, i) => 0.15 + ((i * 0.6180339) % 1) * 1.6);
+      return render(ctx, 2.1, (t) => {
+        const swell = Math.min(1, t / 0.35) * Math.exp(-Math.max(0, t - 0.6) * 1.6);
+        // Voices: noise through the voice band, wavering as a crowd's shout does.
+        const waver = 0.75 + 0.25 * Math.sin(TAU * 5.3 * t) * Math.sin(TAU * 2.1 * t + 1);
+        let s = voices(noise()) * 1.5 * waver * swell + air(noise()) * 0.25 * swell;
+        for (const at of claps) {
+          const u = t - at;
+          if (u > 0 && u < 0.03) s += noise() * 0.35 * Math.exp(-u * 160);
+        }
+        return s * 0.55;
+      });
+    }
     case 'sizzle': {
       // Embers and torches: a hiss with crackles in it.
       const hiss = bandpass(rate, 2500, 9000);
@@ -243,7 +260,9 @@ function makeSynth(ctx: BaseAudioContext, name: Synth): AudioBuffer {
 
 const SYNTHS: readonly Synth[] = [
   'creak', 'thud', 'rustle', 'coin', 'pop', 'whoosh', 'tick', 'sizzle', 'clank', 'drip', 'pebble', 'sparkle', 'stepWood', 'stepGrass', 'knock',
+  'crowd',
 ];
+
 
 /* The regions' air: a bed of filtered noise, a drone, and sounds now and then. */
 

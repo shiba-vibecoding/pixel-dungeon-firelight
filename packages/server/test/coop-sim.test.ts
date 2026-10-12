@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type Action, applyEvent, distance, findPath, heroById, isAlive, levelAt, RULES_VERSION, type ServerMessage, type World } from '@pd/core';
 import { step } from '../../core/test/runner';
+import { arenaBot } from '../../core/test/arena-bot';
 
 /*
  * A co-op party played by bots against a running server, as real players on
@@ -11,6 +12,7 @@ import { step } from '../../core/test/runner';
  *
  * Off by default. Run against `wrangler dev` (no BOT_TOKEN, so ids are trusted):
  *   PD_SIM=ws://127.0.0.1:8787 PD_SIM_BOTS=4 PD_SIM_SECONDS=90 PD_SIM_LATENCY=150 npx vitest run packages/server/test/coop-sim.test.ts
+ * PD_SIM_MODE=arena plays the arena of waves instead: the first bot's link makes the room an arena.
  */
 
 const SERVER = process.env.PD_SIM;
@@ -27,6 +29,8 @@ const THINK_MS: readonly [number, number] = [120, 450];
 const CLASSES = ['warrior', 'mage', 'rogue', 'huntress'] as const;
 /** The party keeps together, as friends do: the others follow the first bot (PD_SIM_TOGETHER=0 lets each roam). */
 const TOGETHER = process.env.PD_SIM_TOGETHER !== '0';
+/** The kind of room the first bot makes: the dungeon, or the arena of waves. */
+const ARENA = process.env.PD_SIM_MODE === 'arena';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const between = ([a, b]: readonly [number, number]): number => a + Math.random() * (b - a);
@@ -60,7 +64,7 @@ class Bot {
   }
 
   connect(): Promise<void> {
-    const url = `${SERVER}/room/${this.room}?hero=${this.heroClass}&v=${RULES_VERSION}&id=${this.id}&name=${this.id}&gs=${this.id}-sim-secret-0000`;
+    const url = `${SERVER}/room/${this.room}?hero=${this.heroClass}&v=${RULES_VERSION}&id=${this.id}&name=${this.id}&gs=${this.id}-sim-secret-0000${ARENA ? '&mode=arena' : ''}`;
     this.socket = new WebSocket(url);
     return new Promise((resolve, reject) => {
       this.socket.onopen = () => {
@@ -152,7 +156,7 @@ class Bot {
       }
       let action: Action;
       try {
-        action = this.follow(world) ?? step(world, this.hero);
+        action = world.arena ? arenaBot(world, this.hero) : this.follow(world) ?? step(world, this.hero);
       } catch {
         action = { type: 'wait' };
       }
@@ -224,7 +228,8 @@ describe.skipIf(!SERVER)('co-op party against a live server', () => {
       const s = bot.stats;
       const slow = s.rtt.filter((t) => t > 1000).length;
       const me = bot.world && heroById(bot.world, bot.hero);
-      return `${bot.id}: acts ${s.acts}, rtt p50 ${quantile(s.rtt, 0.5)} p90 ${quantile(s.rtt, 0.9)} p99 ${quantile(s.rtt, 0.99)} max ${quantile(s.rtt, 1)} ms, `
+      const arena = bot.world?.arena ? `wave ${bot.world.arena.wave} ${bot.world.arena.phase}, kills ${bot.world.arena.kills}, ` : '';
+      return `${bot.id}: ${arena}acts ${s.acts}, rtt p50 ${quantile(s.rtt, 0.5)} p90 ${quantile(s.rtt, 0.9)} p99 ${quantile(s.rtt, 0.99)} max ${quantile(s.rtt, 1)} ms, `
         + `>1s ${slow} (${Math.round((100 * slow) / Math.max(1, s.rtt.length))}%), idle ${Math.round(s.idleMs / 1000)} s, depth ${me?.depth}, `
         + `deaths ${s.deaths}, desyncs ${s.desyncs}, rejected ${JSON.stringify(s.rejected)}${bot.firstDiff ? `
    first difference ${bot.firstDiff}` : ''}`;
