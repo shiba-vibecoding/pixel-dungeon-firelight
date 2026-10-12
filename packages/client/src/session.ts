@@ -295,9 +295,28 @@ export function onlineSession(options: OnlineOptions): Session {
         return;
       }
       if (event.code === 4002) {
-        // The room runs newer rules than this page: load the new build, straight back into the room.
+        // The room runs other rules than this page: load the current build, straight back into the room,
+        // past any cached copy of the page. Just reloaded and still out of step (the new build or the
+        // server is still on its way out): wait and ask again rather than reload over and over.
         session.status = options.text.updating;
-        setTimeout(() => location.reload(), 900);
+        let last = 0;
+        try {
+          last = Number(sessionStorage.getItem('pd-reloaded')) || 0;
+        } catch {
+          // Then reload.
+        }
+        if (Date.now() - last < 60_000) {
+          setTimeout(connect, 15_000);
+          return;
+        }
+        try {
+          sessionStorage.setItem('pd-reloaded', String(Date.now()));
+        } catch {
+          // Reloads anyway.
+        }
+        const fresh = new URL(location.href);
+        fresh.searchParams.set('fresh', String(Date.now()));
+        setTimeout(() => location.replace(fresh.toString()), 900);
         return;
       }
       session.status = options.text.reconnecting;
