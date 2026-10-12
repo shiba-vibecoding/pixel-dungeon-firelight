@@ -33,6 +33,7 @@ import { mart } from './mart';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
 import { type Launch, Motion } from './motion';
+import { preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
@@ -1451,6 +1452,7 @@ function tick(now: number): void {
   // game, or the hero fallen, muffles the music.
   audio.listen(at.x + TILE / 2, at.y + TILE / 2);
   audio.ambience(Math.min(4, Math.floor((me.depth - 1) / 5)));
+  preloadSheets(regionIndex(me.depth));
   audio.muffle(overlayOpen() || !isAlive(me));
   const kick = fx.shakeOffset(vnow);
   // The hero stands in the middle of the band the HUD and the toolbar leave free, not of the screen.
@@ -1510,6 +1512,9 @@ function tick(now: number): void {
   const heaps = (world.floors[me.depth]?.heaps ?? []).filter((heap) => heap.kind !== 'hidden').map((heap) => ({
     pos: heap.pos,
     sprite: heap.kind === 'heap' || heap.kind === 'forSale' ? itemSprite(heap.items[0]!, world.run.labels) : HEAP_SPRITES[heap.kind],
+    // Rings and wands lying about glow, gold and blue.
+    ...(heap.kind === 'heap' && heap.items[0]!.kind.startsWith('ring.') ? { aura: '#ffd27a' }
+      : heap.kind === 'heap' && heap.items[0]!.kind.startsWith('wand.') ? { aura: '#8fc4ff' } : {}),
   }));
   motion.update(level, heaps, visible, view, session.myId, `${session.generation}:${me.depth}`, vnow);
   for (const launch of motion.takeLaunches()) if (!launch.gold) launches.push(launch);
@@ -1525,13 +1530,15 @@ function tick(now: number): void {
     ...(clouds.toxic ?? []).map(([pos, volume]) => ({ pos, volume, color: '80, 200, 60' })),
     ...(clouds.paralytic ?? []).map(([pos, volume]) => ({ pos, volume, color: '230, 220, 70' })),
   ];
+  const explored = exploredCells(world, me.depth);
   const scene = {
-    level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, plants, gas, seeAll: me.mindVision > 0,
+    level, baked: baked!, visible, explored, heaps, plants, gas, seeAll: me.mindVision > 0,
       ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
     focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
     lights: lightsFor(level, visible, view, vnow),
     heapLook: (pos: number, at: number) => motion.heapLook(pos, at),
-    under: (c: CanvasRenderingContext2D) => motion.draw(c, level, visible, vnow),
+    under: (c: CanvasRenderingContext2D) => motion.draw(c, level, visible, explored, vnow),
+    over: (c: CanvasRenderingContext2D) => motion.drawOver(c, vnow),
     mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
     middle,
   };

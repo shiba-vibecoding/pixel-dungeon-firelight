@@ -3,7 +3,8 @@ import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
 import { bossCard, floatNumber, levelCard, nameplate, slainCard } from './cards';
 import { fx } from './fx';
-import type { HeapLook } from './motion';
+import { CHEST_ANIMS, type HeapLook } from './motion';
+import { drawFrame, frameAt as sheetFrame, regionIndex, sheet, tintedImage } from './worldsheets';
 import { quality } from './quality';
 import { t } from './i18n';
 
@@ -169,8 +170,8 @@ export interface Scene {
   baked: HTMLCanvasElement;
   visible: readonly boolean[];
   explored: readonly boolean[];
-  /** Items lying around, with their sprite index in items.png. */
-  heaps: ReadonlyArray<{ pos: number; sprite: number }>;
+  /** Items lying around, with their sprite index in items.png, and the colour of their glow, if magic. */
+  heaps: ReadonlyArray<{ pos: number; sprite: number; aura?: string }>;
   /** Plants growing here, with their index in plants.png. */
   plants?: ReadonlyArray<{ pos: number; index: number }>;
   /** Clouds of gas: how much is in each cell, and its colour. */
@@ -191,6 +192,8 @@ export interface Scene {
   heapLook?: (pos: number, now: number) => HeapLook;
   /** Drawn over the floor, under what lies on it: doors swinging, grass swaying, rings on water (motion.ts). */
   under?: (ctx: CanvasRenderingContext2D) => void;
+  /** Drawn over what lies on the floor, under the characters: glints, coins in the air (motion.ts). */
+  over?: (ctx: CanvasRenderingContext2D) => void;
 }
 
 export function render(
@@ -244,15 +247,32 @@ export function render(
     ctx.beginPath();
     ctx.ellipse(x + TILE / 2, y + TILE - 2.5, 4.5 - Math.min(2, lift * 0.2), 1.3, 0, 0, Math.PI * 2);
     ctx.fill();
+    // Magic lying about (rings, wands) glows softly from below, in its colour.
+    const glints = sheet('glint');
+    if (heap.aura && glints?.anims.aura && visible[heap.pos]) {
+      const frame = sheetFrame(glints.anims.aura, quality.reducedMotion ? 0 : now + heap.pos * 97, true);
+      ctx.globalAlpha = 0.8;
+      ctx.drawImage(tintedImage(glints, heap.aura), frame.x, frame.y, frame.w, frame.h, x, y - 1, 16, 16);
+      ctx.globalAlpha = 1;
+    }
     ctx.save();
     ctx.translate(snap(x + TILE / 2 + (look?.dx ?? 0)), snap(y + TILE - 1 - lift));
     if (look) ctx.scale(look.scaleX, look.scaleY);
-    ctx.drawImage(assets.items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, -8, -16, 16, 16);
+    // A closed chest, tomb or remains is drawn from the sheet its opening plays from, so the two match.
+    const chests = sheet('chests');
+    const closed = CHEST_ANIMS.get(heap.sprite);
+    const first = closed ? chests?.anims[closed]?.[0] : undefined;
+    if (chests && first) ctx.drawImage(chests.image, first.x, first.y, 16, 16, -8, -16, 16, 16);
+    else ctx.drawImage(assets.items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, -8, -16, 16, 16);
     ctx.restore();
   }
+  scene.over?.(ctx);
 
   // The sacrificial fire: a flickering blue flame on its pedestal (SacrificialParticle).
-  if (scene.altar !== undefined && explored[scene.altar]) {
+  const ambient = sheet(`ambient${regionIndex(level.depth)}`);
+  if (scene.altar !== undefined && explored[scene.altar] && ambient?.anims.altar) {
+    drawFrame(ctx, ambient, sheetFrame(ambient.anims.altar, now, true), (scene.altar % WIDTH) * TILE, Math.trunc(scene.altar / WIDTH) * TILE - 4);
+  } else if (scene.altar !== undefined && explored[scene.altar]) {
     const x = (scene.altar % WIDTH) * TILE + TILE / 2;
     const y = Math.trunc(scene.altar / WIDTH) * TILE + TILE / 2;
     const flicker = 0.75 + 0.25 * Math.sin(now / 90) * Math.sin(now / 37);

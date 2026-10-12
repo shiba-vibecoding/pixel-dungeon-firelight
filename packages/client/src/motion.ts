@@ -1,12 +1,14 @@
-import { type Effect, heroById, type Level, LENGTH, T, WIDTH, type World } from '@pd/core';
+import { type Effect, HEAP_SPRITES, heroById, type Level, LENGTH, T, WIDTH, type World } from '@pd/core';
 import { audio } from './audio';
 import { fx } from './fx';
 import { quality } from './quality';
 import { type Assets, regionOf } from './sprites';
 import { TILE, type View } from './view';
+import { drawFrame, type Frame, frameAt, length, regionIndex, sheet, type SheetName } from './worldsheets';
 
 /*
- * The world answering touch. Everything here comes from comparing what the
+ * The world answering touch, drawn with Claude Design's world sheets
+ * (worldsheets.ts) where they have loaded, and with transformed tiles until then. Everything here comes from comparing what the
  * world is with what it was a frame ago, so it plays whoever caused it: a door
  * swings open under any foot and shuts behind it, tall grass is pressed flat
  * and sways as someone brushes past, water rings around a step, things that
@@ -26,7 +28,7 @@ const CHEST_MS = 380;
 const SWAY_MS = 1100;
 const RIPPLE_MS = 700;
 
-type TileKind = 'open' | 'close' | 'trample' | 'fade';
+type TileKind = 'open' | 'close' | 'locked' | 'barricade' | 'trample' | 'fade';
 
 interface TileAnim {
   cell: number;
@@ -34,7 +36,45 @@ interface TileAnim {
   to: number;
   start: number;
   kind: TileKind;
+  /** How long it plays: the sheet's frames, or the transformed tile's time. */
+  ms: number;
 }
+
+/** A sprite animation played once somewhere (a splash, a footprint, a glint), world pixels top-left. */
+interface Flash {
+  sheet: SheetName;
+  key: string;
+  /** Which frame of the animation, for a still one (a footprint). */
+  frame?: number;
+  x: number;
+  y: number;
+  start: number;
+  /** How long it stays, fading out over the last `fade` ms. */
+  life: number;
+  fade?: number;
+}
+
+/** A coin flying off a pile of gold that was picked up. */
+interface Coin {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  start: number;
+}
+
+/** Which chest animation (chests.png) plays for a heap's sprite. */
+export const CHEST_ANIMS = new Map<number, string>(
+  ([['chest', 'chest'], ['lockedChest', 'locked_chest'], ['crystalChest', 'crystal_chest'], ['tomb', 'tomb'], ['mimic', 'mimic'], ['skeleton', 'bones']] as const)
+    .map(([kind, key]) => [HEAP_SPRITES[kind], key]),
+);
+
+/** The wind's round of tall grass frames, and a pass's (bent away from whoever passes). */
+const WIND = [2, 1, 0, 1, 2, 3, 4, 3] as const;
+const PASS_RIGHT = [2, 3, 4, 3, 2] as const;
+const PASS_LEFT = [2, 1, 0, 1, 2] as const;
+const PASS_MS = 80;
+const COIN_MS = 650;
 
 /** A heap that has just come to lie somewhere: it falls in (from a hand, a corpse, a throw) and bounces. */
 interface Arrival {
@@ -52,6 +92,8 @@ interface Ghost {
   kind: 'lift' | 'chest' | 'fade';
   /** Where it flies to (a companion who took it), world pixels. */
   toward?: { x: number; y: number };
+  /** How long it is drawn. */
+  life: number;
 }
 
 /** What I picked up: main.ts flies it into the backpack from here. */
@@ -103,6 +145,14 @@ export class Motion {
   private ghosts: Ghost[] = [];
   private sway = new Map<number, { start: number; dir: number }>();
   private ripples: Array<{ x: number; y: number; start: number; size: number }> = [];
+  private flashes: Flash[] = [];
+  private coins: Coin[] = [];
+  /** Steps each walker still leaves wet prints for, after coming out of water. */
+  private wet = new Map<string, number>();
+  /** When something lying about next glints. */
+  private nextGlint = 0;
+  /** Where gold was taken this frame. */
+  private gold: number[] = [];
   /** Each walker's last step, to notice new ones. */
   private steps = new Map<string, number>();
   /** This frame's events: who picked up where, chests opened, mimics sprung, throws landing. */
@@ -123,6 +173,9 @@ export class Motion {
     this.ghosts = [];
     this.sway.clear();
     this.ripples = [];
+    this.flashes = [];
+    this.coins = [];
+    this.wet.clear();
     this.steps.clear();
     this.launches = [];
   }
@@ -135,6 +188,7 @@ export class Motion {
         if (!hero || hero.depth !== depth) continue;
         this.pickedAt.set(hero.pos, effect.hero);
         this.picked.push({ hero: effect.hero, sprite: itemSprite(effect), gold: effect.item.kind === 'gold' });
+        if (effect.item.kind === 'gold') this.gold.push(hero.pos);
       } else if (effect.type === 'opened' && effect.depth === depth) {
         this.opened.add(effect.pos);
       } else if (effect.type === 'mimic' && effect.depth === depth) {
@@ -177,16 +231,17 @@ export class Motion {
       if (was === is) continue;
       map[cell] = is;
       if (!visible[cell]) continue;
+      const r = regionIndex(level.depth);
       if (was === T.DOOR && is === T.OPEN_DOOR) {
-        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'open' });
+        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'open', ms: this.animMs(`doors${r}`, 'door', DOOR_OPEN_MS) });
         audio.play('door_open', 0.95, 0.4, centre(cell));
         audio.play('creak', 1, 0.3, centre(cell));
       } else if (was === T.OPEN_DOOR && is === T.DOOR) {
-        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'close' });
+        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'close', ms: this.animMs(`doors${r}`, 'door', DOOR_CLOSE_MS, true) });
         audio.play('creak', 0.85, 0.18, centre(cell));
         audio.later(DOOR_CLOSE_MS * 0.8, 'thud', 1, 0.45, centre(cell));
       } else if (was === T.HIGH_GRASS && is === T.GRASS) {
-        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'trample' });
+        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'trample', ms: this.animMs(`grass${r}`, 'trample', TRAMPLE_MS) });
         const x = (cell % WIDTH) * TILE + TILE / 2;
         const y = Math.trunc(cell / WIDTH) * TILE + TILE - 3;
         audio.play('rustle', 1, 0.45, centre(cell));
@@ -194,8 +249,13 @@ export class Motion {
           count: 9, colors: ['#6aa84f', '#93c47d', '#38761d', '#b6d7a8'], speed: [14, 34], life: [380, 700], gravity: 150, drag: 0.25,
           angle: -Math.PI / 2, cone: 2.6, size: [1, 1], spread: 5,
         });
+      } else if (was === T.LOCKED_DOOR) {
+        // The key turns: the lock clicks and the door stands open.
+        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'locked', ms: this.animMs(`doors${r}`, 'locked', FADE_MS) });
+      } else if (was === T.BARRICADE) {
+        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'barricade', ms: this.animMs(`doors${r}`, 'barricade', FADE_MS) });
       } else {
-        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'fade' });
+        this.tiles.push({ cell, from: was, to: is, start: now, kind: 'fade', ms: FADE_MS });
       }
     }
 
@@ -207,18 +267,18 @@ export class Motion {
       if (still === sprite) continue;
       const chest = this.opened.has(pos) || this.sprung.has(pos);
       if (this.sprung.has(pos)) {
-        this.ghosts.push({ pos, sprite, start: now, kind: 'chest' });
+        this.ghosts.push({ pos, sprite, start: now, kind: 'chest', life: this.chestLife(sprite) });
       } else if (chest) {
-        this.ghosts.push({ pos, sprite, start: now, kind: 'chest' });
+        this.ghosts.push({ pos, sprite, start: now, kind: 'chest', life: this.chestLife(sprite) });
         this.chestBurst(pos, now + CHEST_SHAKE_MS);
       } else if (still === undefined) {
         const taker = this.pickedAt.get(pos);
         const puppet = taker ? view.puppets.get(taker) : undefined;
         if (taker && taker !== myId && puppet) {
           const at = view.position(puppet, now);
-          this.ghosts.push({ pos, sprite, start: now, kind: 'lift', toward: { x: at.x + TILE / 2, y: at.y + 4 } });
+          this.ghosts.push({ pos, sprite, start: now, kind: 'lift', toward: { x: at.x + TILE / 2, y: at.y + 4 }, life: 280 });
         } else {
-          this.ghosts.push({ pos, sprite, start: now, kind: taker ? 'lift' : 'fade' });
+          this.ghosts.push({ pos, sprite, start: now, kind: taker ? 'lift' : 'fade', life: taker ? 280 : FADE_MS });
         }
       }
       // What I took sets off for the backpack: from the floor, or out of the opened chest.
@@ -263,8 +323,23 @@ export class Motion {
       if (!visible[pos] && !puppet.isHero) continue;
       // Companions are heard walking, softly, from where they are.
       if (puppet.isHero && puppet.id !== myId) audio.play(isWater(level.map[pos]!) ? 'water' : 'step', 1.05, 0.22, centre(pos));
+      const feetX = (pos % WIDTH) * TILE + TILE / 2;
+      const feetY = Math.trunc(pos / WIDTH) * TILE + TILE - 2;
       if (isWater(level.map[pos]!)) {
-        this.ripples.push({ x: (pos % WIDTH) * TILE + TILE / 2, y: Math.trunc(pos / WIDTH) * TILE + TILE - 4, start: now + 60, size: 1 });
+        // A splash at the feet, rings spreading out, and wet feet for a few steps after.
+        this.flashes.push({ sheet: 'splash', key: 'splash', x: feetX - 8, y: feetY - 15, start: now + 40, life: 240 });
+        if (sheet('splash')) this.flashes.push({ sheet: 'splash', key: 'rings', x: feetX - 8, y: feetY - 6, start: now + 60, life: 440, fade: 120 });
+        else this.ripples.push({ x: feetX, y: feetY - 2, start: now + 60, size: 1 });
+        this.wet.set(puppet.id, 4);
+      } else if (level.map[pos] !== T.GRASS && level.map[pos] !== T.HIGH_GRASS && level.map[pos] !== T.EMBERS) {
+        const wet = this.wet.get(puppet.id) ?? 0;
+        if (wet > 0) {
+          // Footprints, left and right, drying away.
+          this.wet.set(puppet.id, wet - 1);
+          this.flashes.push({ sheet: 'splash', key: 'wet-steps', frame: wet % 2, x: feetX - 4 + (wet % 2 ? -2 : 2), y: feetY - 6, start: now + 50, life: 1500, fade: 1100 });
+        } else if (puppet.isHero && Math.random() < 0.5) {
+          this.flashes.push({ sheet: 'splash', key: 'dust', x: feetX - 4 + (puppet.flip ? 3 : -3), y: feetY - 7, start: now + 30, life: 240 });
+        }
       }
       for (const d of [-WIDTH - 1, -WIDTH, -WIDTH + 1, -1, 1, WIDTH - 1, WIDTH, WIDTH + 1]) {
         const cell = pos + d;
@@ -294,8 +369,31 @@ export class Motion {
       if (visible[pos]) audio.play('knock', 1.4, 0.35, centre(pos));
     }
 
-    this.tiles = this.tiles.filter((a) => now - a.start < this.tileMs(a.kind));
-    this.ghosts = this.ghosts.filter((g) => now - g.start < (g.kind === 'chest' ? CHEST_MS : g.kind === 'lift' ? 280 : FADE_MS));
+    // Gold taken: coins spin up off the pile and fall away.
+    for (const pos of this.gold) {
+      if (!visible[pos] || quality.reducedMotion) continue;
+      const { x, y } = centre(pos);
+      for (let i = 0; i < 5; i++) {
+        this.coins.push({ x: x - 3, y: y - 2, vx: (Math.random() - 0.5) * 70, vy: -60 - Math.random() * 45, start: now + i * 25 });
+      }
+    }
+    // Now and then something lying in sight catches the light.
+    if (now >= this.nextGlint) {
+      this.nextGlint = now + 2000 + Math.random() * 2000;
+      const lying = [...present.entries()].filter(([pos, sprite]) => visible[pos] && !CHEST_ANIMS.has(sprite));
+      const pick = lying[Math.floor(Math.random() * lying.length)];
+      if (pick && !quality.reducedMotion) {
+        const [pos] = pick;
+        const x = (pos % WIDTH) * TILE + 2 + Math.random() * 6;
+        const y = Math.trunc(pos / WIDTH) * TILE + 1 + Math.random() * 6;
+        this.flashes.push({ sheet: 'glint', key: 'glint', x, y, start: now, life: 330 });
+      }
+    }
+
+    this.tiles = this.tiles.filter((a) => now - a.start < a.ms);
+    this.ghosts = this.ghosts.filter((g) => now - g.start < g.life);
+    this.flashes = this.flashes.filter((f) => now - f.start < f.life);
+    this.coins = this.coins.filter((c) => now - c.start < COIN_MS);
     for (const [pos, arrival] of this.arrivals) if (now - arrival.start > DROP_MS) this.arrivals.delete(pos);
     for (const [cell, s] of this.sway) if (now - s.start > SWAY_MS || level.map[cell] !== T.HIGH_GRASS) this.sway.delete(cell);
     this.ripples = this.ripples.filter((r) => now - r.start < RIPPLE_MS);
@@ -307,10 +405,25 @@ export class Motion {
     this.picked = [];
     this.opened.clear();
     this.sprung.clear();
+    this.gold = [];
   }
 
-  private tileMs(kind: TileKind): number {
-    return kind === 'open' ? DOOR_OPEN_MS : kind === 'close' ? DOOR_CLOSE_MS : kind === 'trample' ? TRAMPLE_MS : FADE_MS;
+  /**
+   * How long a sheet's animation plays once through (its frames up to the one it stops on);
+   * `fallback` while the sheet has not loaded. Backwards (a door shutting) it ends on the first frame.
+   */
+  private animMs(name: SheetName, key: string, fallback: number, backwards = false): number {
+    const frames = sheet(name)?.anims[key];
+    if (!frames) return fallback;
+    const each = frames.map((f) => f.ms || frames[0]!.ms || 80);
+    return (backwards ? each.slice(1).reduce((a, b) => a + b, 0) : length(frames)) + 40;
+  }
+
+  /** How long an opened chest is drawn: its frames, then a moment empty, fading. */
+  private chestLife(sprite: number): number {
+    const key = CHEST_ANIMS.get(sprite);
+    const frames = key ? sheet('chests')?.anims[key] : undefined;
+    return frames ? CHEST_SHAKE_MS + length(frames) + 520 : CHEST_MS;
   }
 
   /** The lid flies up: dust and a glint of what is inside. */
@@ -344,7 +457,10 @@ export class Motion {
   }
 
   /** Under the heaps, over the floor: animated tiles, grass in the wind, rings on water, heaps on their way out. */
-  draw(ctx: CanvasRenderingContext2D, level: Level, visible: readonly boolean[], now: number): void {
+  draw(ctx: CanvasRenderingContext2D, level: Level, visible: readonly boolean[], explored: readonly boolean[], now: number): void {
+    const region = regionIndex(level.depth);
+    const grass = sheet(`grass${region}`);
+    const doors = sheet(`doors${region}`);
     const tiles = this.assets.tiles[regionOf(level.depth)]!;
     const columns = tiles.width / TILE;
     const tile = (terrain: number, cell: number): void => {
@@ -355,7 +471,25 @@ export class Motion {
 
     // Tall grass: always a breath of draught, and bent by whoever passes.
     const wind = !quality.light && !quality.reducedMotion;
-    if (wind || this.sway.size > 0) {
+    if (grass) {
+      // Drawn blade by blade over the floor wherever it grows, so it looks the same in sight and out.
+      const sway = grass.anims.sway!;
+      for (let cell = 0; cell < LENGTH; cell++) {
+        if (level.map[cell] !== T.HIGH_GRASS || !explored[cell]) continue;
+        let frame: Frame = sway[2]!;
+        if (visible[cell] && wind) {
+          const s = this.sway.get(cell);
+          if (s && now - s.start < PASS_MS * 5) frame = frameAt(sway, now - s.start, false, s.dir > 0 ? PASS_RIGHT : PASS_LEFT, PASS_MS);
+          else frame = frameAt(sway, now + ((cell * 397) % 1760), true, WIND);
+        }
+        const { x, y } = at(cell);
+        ctx.save();
+        ctx.translate(x, y);
+        tile(T.EMPTY, cell);
+        ctx.restore();
+        drawFrame(ctx, grass, frame, x, y);
+      }
+    } else if (wind || this.sway.size > 0) {
       for (let cell = 0; cell < LENGTH; cell++) {
         if (level.map[cell] !== T.HIGH_GRASS || !visible[cell]) continue;
         const { x, y } = at(cell);
@@ -377,8 +511,25 @@ export class Motion {
     }
 
     for (const a of this.tiles) {
-      const k = Math.min(1, (now - a.start) / this.tileMs(a.kind));
+      const t = now - a.start;
+      const k = Math.min(1, t / a.ms);
       const { x, y } = at(a.cell);
+      // Drawn frames, where the sheets have them.
+      const owner = a.kind === 'trample' ? grass : a.kind === 'fade' ? null : doors;
+      const key = a.kind === 'open' || a.kind === 'close' ? 'door' : a.kind;
+      const frames = owner?.anims[key];
+      if (owner && frames) {
+        if (a.kind === 'trample') {
+          ctx.save();
+          ctx.translate(x, y);
+          tile(T.EMPTY, a.cell);
+          ctx.restore();
+        }
+        // A door shuts by its opening frames backwards.
+        const order = a.kind === 'close' ? frames.map((_, i) => frames.length - 1 - i) : undefined;
+        drawFrame(ctx, owner, frameAt(frames, t, false, order, a.kind === 'close' ? frames[0]!.ms : undefined), x, y);
+        continue;
+      }
       ctx.save();
       ctx.translate(x, y);
       if (a.kind === 'open') {
@@ -419,6 +570,9 @@ export class Motion {
     }
     ctx.restore();
 
+    // Splashes, rings, wet footprints and dust (glints go over the heaps: drawOver).
+    this.drawFlashes(ctx, now, false);
+
     // Heaps on their way out.
     for (const g of this.ghosts) {
       const t = now - g.start;
@@ -426,6 +580,18 @@ export class Motion {
       const sx = (g.sprite % 8) * 16;
       const sy = Math.floor(g.sprite / 8) * 16;
       ctx.save();
+      const chestKey = g.kind === 'chest' ? CHEST_ANIMS.get(g.sprite) : undefined;
+      const chests = chestKey ? sheet('chests') : null;
+      const chestFrames = chestKey ? chests?.anims[chestKey] : undefined;
+      if (chests && chestFrames) {
+        // It shakes, opens frame by frame, shows itself empty a moment and fades away.
+        const shake = t < CHEST_SHAKE_MS ? (Math.floor(t / 30) % 2 ? 1 : -1) * 0.75 : 0;
+        const frame = t < CHEST_SHAKE_MS ? chestFrames[0]! : frameAt(chestFrames, t - CHEST_SHAKE_MS);
+        ctx.globalAlpha = Math.max(0, Math.min(1, (g.life - t) / 300));
+        drawFrame(ctx, chests, frame, x + shake, y - 1);
+        ctx.restore();
+        continue;
+      }
       if (g.kind === 'chest') {
         if (t < CHEST_SHAKE_MS) {
           // It shakes...
@@ -465,5 +631,38 @@ export class Motion {
       ctx.drawImage(this.assets.items, sx, sy, 16, 16, 0, 0, 16, 16);
       ctx.restore();
     }
+  }
+
+  /** Over the heaps, under the characters: glints on what lies about, coins in the air. */
+  drawOver(ctx: CanvasRenderingContext2D, now: number): void {
+    this.drawFlashes(ctx, now, true);
+    const glint = sheet('glint');
+    const coin = glint?.anims.coin;
+    if (!glint || !coin) return;
+    for (const c of this.coins) {
+      const t = (now - c.start) / 1000;
+      if (t < 0) continue;
+      const x = c.x + c.vx * t;
+      const y = c.y + c.vy * t + 160 * t * t;
+      ctx.globalAlpha = Math.max(0, Math.min(1, (COIN_MS / 1000 - t) / 0.2));
+      drawFrame(ctx, glint, frameAt(coin, now - c.start + Math.abs(c.vx) * 3, true), Math.round(x), Math.round(y));
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawFlashes(ctx: CanvasRenderingContext2D, now: number, over: boolean): void {
+    for (const f of this.flashes) {
+      if ((f.sheet === 'glint') !== over) continue;
+      const t = now - f.start;
+      if (t < 0) continue;
+      const s = sheet(f.sheet);
+      const frames = s?.anims[f.key];
+      if (!s || !frames) continue;
+      const frame = f.frame !== undefined ? frames[f.frame]! : frameAt(frames, t);
+      const fade = f.fade ?? 0;
+      ctx.globalAlpha = fade > 0 ? Math.max(0, Math.min(1, (f.life - t) / fade)) : 1;
+      drawFrame(ctx, s, frame, Math.round(f.x), Math.round(f.y));
+    }
+    ctx.globalAlpha = 1;
   }
 }
