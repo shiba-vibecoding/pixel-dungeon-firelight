@@ -1,4 +1,4 @@
-import { baseKind, type HeroClass, type MobKind } from '@pd/core';
+import { baseKind, type HeroClass, LAST_SHOP_DEPTH, type MobKind } from '@pd/core';
 
 /* Sprite sheets and animations of the original (HeroSprite, RatSprite, …). */
 
@@ -297,8 +297,12 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
   },
 };
 
-/** 0 for the sewers (depths 1-5), 1 for the prison (6-10), 2 for the caves (11-15), 3 for the city (16-20), 4 for the halls. */
-export const regionOf = (depth: number): number => Math.min(4, Math.max(0, Math.floor((depth - 1) / 5)));
+/**
+ * The tiles and water of a depth: 0 for the sewers (depths 1-5), 1 for the prison (6-10), 2 for the caves (11-15),
+ * 3 for the city (16-20) and the last shop (21, LastShopLevel.tilesTex), 4 for the halls.
+ */
+export const regionOf = (depth: number): number =>
+  depth === LAST_SHOP_DEPTH ? 3 : Math.min(4, Math.max(0, Math.floor((depth - 1) / 5)));
 
 /** Frame of an animation `elapsed` ms after it started; non-looping ones hold the last frame. */
 export function frameAt(animation: Animation, elapsed: number): number {

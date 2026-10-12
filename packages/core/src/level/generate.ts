@@ -1,7 +1,7 @@
 import type { PlantInfo } from '../plants';
 import { deriveSeed, Rng, Stream } from '../rng';
 import { type RunState, useSpecial } from '../run';
-import { Feeling, isBossDepth, type ItemSpawn, type ItemSpec, LevelBuilder, type WellWater } from './builder';
+import { Feeling, isBossDepth, type ItemSpawn, type ItemSpec, LAST_SHOP_DEPTH, LevelBuilder, type WellWater } from './builder';
 import { stitchTerrain } from './flags';
 import { SOLO_SPAN } from './geometry';
 import { PAINTERS } from './painters';
@@ -9,6 +9,7 @@ import { RoomType } from './room';
 import { CAVES_STYLE } from './caves';
 import { CITY_STYLE } from './city';
 import { HALLS_STYLE } from './halls';
+import { buildLastShopLevel, LAST_SHOP_STYLE } from './last-shop';
 import { buildHallsBossLevel, buildLastLevel, HALLS_BOSS_STYLE, LAST_STYLE } from './halls-boss';
 import { buildCityBossLevel, CITY_BOSS_STYLE } from './city-boss';
 import { buildCavesBossLevel, CAVES_BOSS_STYLE } from './caves-boss';
@@ -58,12 +59,13 @@ export interface Level {
   plants?: PlantInfo[];
 }
 
-/** How each depth is laid out: the sewers, Goo's lair, the prison, Tengu's prison, the caves, DM-300's caves. */
+/** How each depth is laid out (Dungeon.newLevel): each region's levels and its boss's, the last shop, the Amulet's hall. */
 function layoutFor(depth: number): { style: RegionStyle; build: (level: LevelBuilder) => boolean } {
   if (depth === 5) return { style: SEWER_BOSS_STYLE, build: buildSewerBossLevel };
   if (depth === 10) return { style: PRISON_BOSS_STYLE, build: buildPrisonBossLevel };
   if (depth === 15) return { style: CAVES_BOSS_STYLE, build: buildCavesBossLevel };
   if (depth === 20) return { style: CITY_BOSS_STYLE, build: buildCityBossLevel };
+  if (depth === LAST_SHOP_DEPTH) return { style: LAST_SHOP_STYLE, build: buildLastShopLevel };
   if (depth === 25) return { style: HALLS_BOSS_STYLE, build: buildHallsBossLevel };
   if (depth === 26) return { style: LAST_STYLE, build: buildLastLevel };
   const style = depth < 5 ? SEWER_STYLE : depth < 10 ? PRISON_STYLE : depth < 15 ? CAVES_STYLE : depth < 20 ? CITY_STYLE : HALLS_STYLE;
@@ -95,8 +97,13 @@ function rollFeeling(rng: Rng, depth: number): Feeling {
  * Generates the layout of `depth` for a run. Levels must be generated in
  * order of depth, because a weak floor on one level puts a pit room on the
  * next and special rooms rotate through the run.
+ *
+ * `impQuestDone` (Imp.Quest.isCompleted) is the one piece of the world
+ * beyond the run that shapes a layout: the last shop's level (depth 21) only
+ * has its shop once the imp's errand is done. It is read when the depth is
+ * first made, from the world every client and the room share.
  */
-export function generateLevel(run: RunState, depth: number, span = SOLO_SPAN): Level {
+export function generateLevel(run: RunState, depth: number, span = SOLO_SPAN, impQuestDone = false): Level {
   if (depth < 1 || depth > DEEPEST_LEVEL) {
     throw new Error(`Depth ${depth} is not generated yet; the port covers the sewers and the prison (1-${DEEPEST_LEVEL})`);
   }
@@ -116,6 +123,7 @@ export function generateLevel(run: RunState, depth: number, span = SOLO_SPAN): L
     const level = new LevelBuilder(rng, depth, feeling, specials, boss ? SOLO_SPAN : span);
     level.pitRoomNeeded = pitNeeded && !boss;
     level.blacksmithWanted = !run.blacksmithSpawned;
+    level.impQuestDone = impQuestDone;
     const { style, build } = layoutFor(depth);
     if (!build(level)) {
       continue;

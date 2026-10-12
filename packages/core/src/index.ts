@@ -3,7 +3,7 @@ export * from './run';
 export * from './level/terrain';
 export * from './level/geometry';
 export { RoomType, DoorType } from './level/room';
-export { Feeling, HeapType, type ItemSpawn, type ItemSpec, isBossDepth } from './level/builder';
+export { Feeling, HeapType, type ItemSpawn, type ItemSpec, isBossDepth, LAST_SHOP_DEPTH } from './level/builder';
 export { generateLevel, type Level, type RoomInfo } from './level/generate';
 export { discoverable, passable } from './level/flags';
 export * from './actors';

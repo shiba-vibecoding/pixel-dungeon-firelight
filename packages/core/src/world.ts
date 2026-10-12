@@ -23,7 +23,7 @@ import { altarMarksHero } from './altar';
 import { type ImpQuest, impRewardProblem, ringFromImp, spawnImp, talkToImp } from './imp';
 import { type ItemRef, reforge, reforgeProblem, type SmithQuest, spawnBlacksmith, talkToSmith } from './smith';
 import { spawnWandmaker, talkToWandmaker, type WandQuest, wandFromWandmaker, wandRewardProblem } from './wandmaker';
-import { isBossDepth } from './level/builder';
+import { isBossDepth, LAST_SHOP_DEPTH } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
 import { adjacent, cellX, cellY, distance, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { breakStairsRoom } from './level/halls-boss';
@@ -148,7 +148,8 @@ export function levelAt(world: World, depth: number): Level {
   for (let d = 1; d <= depth; d++) {
     if (!world.levels[d]) {
       // A party's depths spread wider, with more rooms (party.ts); boss levels keep their layout.
-      const level = generateLevel(world.run, d, levelSpan(partySize(world)));
+      // The last shop opens only once the imp's errand is done (LastShopLevel.build).
+      const level = generateLevel(world.run, d, levelSpan(partySize(world)), world.impQuest?.done === true);
       world.levels[d] = level;
       const mobs = populate(world, level, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d)));
       // What the depth gives every hero, so that a hero who joins later gets theirs (party.ts).
@@ -163,10 +164,11 @@ export function levelAt(world: World, depth: number): Level {
         now: 0,
         plants: [...(level.plants ?? [])],
         ...(level.altar ? { altar: { ...level.altar } } : {}),
-        // Boss levels and the Amulet's hall never fill up again, and hold only what their layout asks for.
-        respawn: isBossDepth(d) || d >= 26 ? -1 : TIME_TO_RESPAWN,
+        // Boss levels, the last shop's (LastShopLevel.respawner and createItems) and the Amulet's hall
+        // never fill up again, and hold only what their layout asks for.
+        respawn: quietDepth(d) ? -1 : TIME_TO_RESPAWN,
         heaps: createItems(
-          world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), isBossDepth(d) || d >= 26, world.heroes.length,
+          world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), quietDepth(d), world.heroes.length,
           (item) => underChallenges(world, item),
         ),
       };
@@ -179,6 +181,16 @@ export function levelAt(world: World, depth: number): Level {
   }
   return world.levels[depth]!;
 }
+
+/**
+ * Depths that hold nothing but their layout and never fill up with monsters
+ * again: the bosses' levels, the last shop's (LastShopLevel: no mobs, no
+ * respawner, only bones, which this port does not have) and the Amulet's hall.
+ * The original still rolled the last shop's potion of strength and scroll of
+ * upgrade, counted them and never dropped them; here they are not rolled
+ * there, so the depths below make up for them.
+ */
+const quietDepth = (d: number): boolean => isBossDepth(d) || d === LAST_SHOP_DEPTH || d >= 26;
 
 export function floorAt(world: World, depth: number): Floor {
   levelAt(world, depth);
@@ -196,7 +208,7 @@ function welcome(world: World): void {
     const d = Number(key);
     const level = world.levels[d]!;
     const floor = world.floors[d]!;
-    if (!isBossDepth(d) && d < 26) {
+    if (!quietDepth(d)) {
       shareOfDepth(
         level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d, JOIN_STREAM + party)), floor.perHero ?? [], party, floor.heaps,
         (item) => underChallenges(world, item),

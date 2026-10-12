@@ -7,7 +7,7 @@ import { canEnter, charAt, type Ctx, enterCell, type Floor, heroesOn, heroSight,
 import { isChallenged, SWARM_INTELLIGENCE } from './challenges';
 import { altarCallsMob } from './altar';
 import { type Item, itemDef, ItemGenerator, randomEnchantment } from './items';
-import { isBossDepth } from './level/builder';
+import { isBossDepth, LAST_SHOP_DEPTH } from './level/builder';
 import { KING_PEDESTALS } from './level/city-boss';
 import type { Level, RoomInfo } from './level/generate';
 import { adjacent, cellX, cellY, distance, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
@@ -819,8 +819,13 @@ function randomCell(rng: Rng, ok: (cell: number) => boolean): number {
   return result;
 }
 
-/** RegularLevel.randomRespawnCell: a free cell in a standard room, out of sight. */
+/**
+ * RegularLevel.randomRespawnCell: a free cell in a standard room, out of sight.
+ * None on the last shop's level (LastShopLevel.randomRespawnCell): nothing
+ * teleports there, as under the original's "strong magic aura".
+ */
 export function randomRespawnCell(rng: Rng, world: World, level: Level, hidden: (cell: number) => boolean): number {
+  if (level.depth === LAST_SHOP_DEPTH) return -1;
   const free = (cell: number): boolean =>
     cell >= 0 && cell < LENGTH && hidden(cell) && isPassable(level, cell) && !charAt(world, level.depth, cell);
   for (let count = 0; count < 10; count++) {
@@ -854,8 +859,11 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
   }
   const mobs: Mob[] = [];
   if (level.shopkeeper !== undefined) {
-    mobs.push(createMob(nextMobId(world), level.depth >= 21 ? 'impShopkeeper' : 'shopkeeper', level.shopkeeper, 'passive', 0));
+    // ShopPainter.placeShopkeeper: the last shop is the ambitious imp's.
+    mobs.push(createMob(nextMobId(world), level.depth === LAST_SHOP_DEPTH ? 'impShopkeeper' : 'shopkeeper', level.shopkeeper, 'passive', 0));
   }
+  // LastShopLevel.createMobs: no monsters, only the shopkeeper if there is a shop.
+  if (level.depth === LAST_SHOP_DEPTH) return mobs;
   if (level.statue !== undefined) mobs.push(animatedStatue(world, level, rng));
   for (const pos of level.piranhas ?? []) {
     const piranha = createMob(nextMobId(world), 'piranha', pos, 'sleeping', 0);
@@ -896,7 +904,7 @@ function animatedStatue(world: World, level: Level, rng: Rng): Mob {
  * monsters a party that size calls for (party.ts), asleep, out of sight.
  */
 export function reinforce(world: World, level: Level, floor: Floor, rng: Rng, party: number): void {
-  if (level.depth >= 26 || isBossDepth(level.depth)) return;
+  if (level.depth >= 26 || level.depth === LAST_SHOP_DEPTH || isBossDepth(level.depth)) return;
   const base = nMobs(rng, level.depth);
   const extra = mobCount(base, party) - mobCount(base, party - 1);
   const seen = heroesOn(world, level.depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map), heroSight(world, level.depth)));

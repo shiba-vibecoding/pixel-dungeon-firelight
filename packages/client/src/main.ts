@@ -40,7 +40,7 @@ import { Scenery } from './scenery';
 import { Feedback } from './feedback';
 import { Finds, MapControls } from './mapui';
 import { type HintId, hints } from './hints';
-import { preloadSheets, regionIndex } from './worldsheets';
+import { lookIndex, preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession, staleSolo } from './session';
@@ -2021,9 +2021,10 @@ function tick(now: number): void {
   // The world is heard from where the hero stands; each region has its air; a window over the
   // game, or the hero fallen, muffles the music.
   audio.listen(at.x + TILE / 2, at.y + TILE / 2);
-  const region = Math.min(4, Math.floor((me.depth - 1) / 5));
-  audio.ambience(region);
-  preloadSheets(regionIndex(me.depth));
+  // The last shop (depth 21) sounds and looks like the city it was built in, though the halls' tune plays there.
+  const region = regionIndex(me.depth);
+  audio.ambience(lookIndex(me.depth));
+  preloadSheets(lookIndex(me.depth));
   // Each region has its tune, and a boss fight its own while it lasts.
   if (bossFight && (bossFight.session !== session || bossFight.generation !== session.generation || bossFight.depth !== me.depth)) bossFight = null;
   audio.playMusic(bossFight ? 'boss' : REGION_MUSIC[region]!);

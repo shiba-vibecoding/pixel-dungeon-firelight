@@ -19,20 +19,22 @@ Yendor on depth 26:
 
 - Seeded random stream, bit-compatible with the Java version.
 - The sewers (depths 1–4), the prison (6–9), the caves (11–14, darker:
-  everyone sees less far), the dwarven city (16–19) and the demon halls (21–24,
-  darker the deeper, where torches help): level generation with the
-  original rooms, water and grass, hidden doors, searching, traps (poison,
-  fire, toxic and paralytic gas, lightning, gripping, alarm, summoning), tall
-  grass that is trampled and sheds healing dew and seeds, burnable doors and
-  barricades.
+  everyone sees less far), the dwarven city (16–19), the last shop (21: one
+  quiet way through passages, laid in the city's tiles, with no monsters ever)
+  and the demon halls (22–24, darker the deeper, where torches help): level
+  generation with the original rooms, water and grass, hidden doors,
+  searching, traps (poison, fire, toxic and paralytic gas, lightning,
+  gripping, alarm, summoning), tall grass that is trampled and sheds healing
+  dew and seeds, burnable doors and barricades.
 - Special rooms: treasury, armory, library and crypt behind locked doors with
   their iron keys, magic wells (of health, awareness and transmutation, which
   turns what is dropped into it into something else), trap rooms, storage rooms behind barricades,
   gardens, laboratories with an alchemy pot (three seeds brew a potion),
   statue rooms where one statue comes alive with an enchanted weapon, flooded
   pools guarded by piranhas, vaults with locked and crystal chests opened by
-  golden keys, and the shops on depths 6, 11, 16 and 21 (which also sell an
-  ankh, to come back once from death).
+  golden keys, and the shops on depths 6, 11 and 16 and, once the imp's
+  errand is done, his on depth 21 (they also sell an ankh, to come back once
+  from death).
 - Chasms you can jump into, landing hurt and crippled on the depth below
   (with whatever was thrown in before you); a weak floor drops you into the
   locked pit room beneath it, where an earlier victim's remains hold its key.
@@ -157,7 +159,9 @@ Where this port differs on purpose: co-op throughout; Lloyd's beacon is not
 blocked by companions standing next to its bearer; heroes swap places with
 the sad ghost, magic sheep and quest givers rather than being walled in by
 them (as later versions do); a tap past a known trap that bars the only way
-walks up to it and says so.
+walks up to it and says so; the last shop's depth does not swallow the potion
+of strength or scroll of upgrade the original rolled for it and never
+dropped (the depths below make up for them).
 
 ## How co-op works
 

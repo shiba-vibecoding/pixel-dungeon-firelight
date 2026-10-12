@@ -4,7 +4,7 @@ import { type Puppet, TILE, type View } from './view';
 import { bossCard, depthCard, floatNumber, levelCard, nameplate, slainCard } from './cards';
 import { fx } from './fx';
 import { CHEST_ANIMS, type HeapLook } from './motion';
-import { drawFrame, frameAt as sheetFrame, regionIndex, sheet, tintedImage } from './worldsheets';
+import { drawFrame, frameAt as sheetFrame, lookIndex, regionIndex, sheet, tintedImage } from './worldsheets';
 import { quality } from './quality';
 import { t } from './i18n';
 
@@ -321,7 +321,7 @@ export function render(
   scene.over?.(ctx);
 
   // The sacrificial fire: a flickering blue flame on its pedestal (SacrificialParticle).
-  const ambient = sheet(`ambient${regionIndex(level.depth)}`);
+  const ambient = sheet(`ambient${lookIndex(level.depth)}`);
   if (scene.altar !== undefined && explored[scene.altar] && ambient?.anims.altar) {
     drawFrame(ctx, ambient, sheetFrame(ambient.anims.altar, now, true), (scene.altar % WIDTH) * TILE, Math.trunc(scene.altar / WIDTH) * TILE - 4);
   } else if (scene.altar !== undefined && explored[scene.altar]) {
@@ -366,7 +366,7 @@ export function render(
   }
 
   // The region's mist, drifting slowly over what can be seen (the dark of the fog covers the rest).
-  const mist = sheet(`fog${regionIndex(level.depth)}`);
+  const mist = sheet(`fog${lookIndex(level.depth)}`);
   if (mist && !quality.light) {
     const pattern = ctx.createPattern(mist.image, 'repeat');
     if (pattern) {

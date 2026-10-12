@@ -3,6 +3,7 @@ import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
 import { duration } from './sprites';
+import { lookIndex } from './worldsheets';
 
 /*
  * What the dungeon's events look like beyond the sprites: blood and sparks on
@@ -506,7 +507,8 @@ export interface Light {
   strength: number;
 }
 
-const region = (depth: number): number => Math.min(4, Math.floor((depth - 1) / 5));
+/** Whose life a depth shows: the last shop's (depth 21) is the city's (LastShopLevel.addVisuals). */
+const region = (depth: number): number => lookIndex(depth);
 
 /**
  * The regions' own life (SewerLevel.Sink, PrisonLevel.Torch, CavesLevel.Vein,

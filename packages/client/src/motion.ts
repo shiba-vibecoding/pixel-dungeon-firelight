@@ -4,7 +4,7 @@ import { fx } from './fx';
 import { quality } from './quality';
 import { type Assets, regionOf } from './sprites';
 import { TILE, type View } from './view';
-import { drawFrame, type Frame, frameAt, length, regionIndex, sheet, type SheetName } from './worldsheets';
+import { drawFrame, type Frame, frameAt, length, lookIndex, sheet, type SheetName } from './worldsheets';
 
 /*
  * The world answering touch, drawn with Claude Design's world sheets
@@ -238,7 +238,7 @@ export class Motion {
       if (was === is) continue;
       map[cell] = is;
       if (!visible[cell]) continue;
-      const r = regionIndex(level.depth);
+      const r = lookIndex(level.depth);
       if (was === T.DOOR && is === T.OPEN_DOOR) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'open', ms: this.animMs(`doors${r}`, 'door', DOOR_OPEN_MS) });
         // The original's own door sound, nothing laid over it.
@@ -465,7 +465,7 @@ export class Motion {
 
   /** Under the heaps, over the floor: animated tiles, grass in the wind, rings on water, heaps on their way out. */
   draw(ctx: CanvasRenderingContext2D, level: Level, visible: readonly boolean[], explored: readonly boolean[], now: number): void {
-    const region = regionIndex(level.depth);
+    const region = lookIndex(level.depth);
     const grass = sheet(`grass${region}`);
     const doors = sheet(`doors${region}`);
     const tiles = this.assets.tiles[regionOf(level.depth)]!;

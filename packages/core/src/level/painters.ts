@@ -1,6 +1,6 @@
 import type { ItemKind } from '../items';
-import { Feeling, HeapType, isBossDepth, type ItemSpawn, type ItemSpec, type LevelBuilder } from './builder';
-import { cell, NEIGHBOURS8, type Point, WIDTH } from './geometry';
+import { Feeling, HeapType, isBossDepth, type ItemSpawn, type ItemSpec, LAST_SHOP_DEPTH, type LevelBuilder } from './builder';
+import { cell, NEIGHBOURS8, NEIGHBOURS9, type Point, WIDTH } from './geometry';
 import { type Door, DoorType, type Room, RoomType } from './room';
 import { T } from './terrain';
 
@@ -474,7 +474,7 @@ function paintShop(level: LevelBuilder, room: Room): void {
 
   // Each shop's weapon and armour (ShopPainter.range): depths 6, 11 and 16.
   const pick = <K>(a: K, b: K): K => (rng.int(2) === 0 ? a : b);
-  // The last one, on depth 21, has a single piece of the best gear and torches for the dark halls.
+  // The last one, the imp's on depth 21 (LastShopLevel), has a single piece of the best gear and torches for the dark halls.
   const gear: ItemKind[] =
     level.depth < 11 ? [pick('weapon.quarterstaff', 'weapon.spear'), 'armor.leather']
     : level.depth < 16 ? [pick('weapon.sword', 'weapon.mace'), 'armor.mail']
@@ -515,6 +515,10 @@ function paintShop(level: LevelBuilder, room: Room): void {
     keeper = room.random(rng);
   } while (taken.has(keeper));
   level.shopkeeper = keeper;
+  // ShopPainter.placeShopkeeper: on the last shop's level the imp stands in a puddle of its water.
+  if (level.depth === LAST_SHOP_DEPTH) {
+    for (const n of NEIGHBOURS9) if (level.map[keeper + n] === T.EMPTY_SP) level.map[keeper + n] = T.WATER;
+  }
   for (const d of room.doors()) d.set(DoorType.REGULAR);
 }
 

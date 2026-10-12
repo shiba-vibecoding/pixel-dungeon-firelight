@@ -57,7 +57,10 @@ export interface ItemSpawn {
 }
 
 export const isBossDepth = (depth: number): boolean => depth % 5 === 0 && depth > 0 && depth <= 25;
-export const isShopDepth = (depth: number): boolean => depth === 6 || depth === 11 || depth === 16 || depth === 21;
+/** The shops of the regular levels (Dungeon.shopOnLevel); the last one, on depth 21, has a level of its own (LastShopLevel). */
+export const isShopDepth = (depth: number): boolean => depth === 6 || depth === 11 || depth === 16;
+/** Dungeon.newLevel: depth 21 is the last shop's level (LastShopLevel), between the city and the halls. */
+export const LAST_SHOP_DEPTH = 21;
 
 /** Mutable state of one level while it is being generated. */
 export class LevelBuilder {
@@ -88,6 +91,8 @@ export class LevelBuilder {
   readonly plants: Array<{ pos: number; kind: 'sungrass' }> = [];
   pitRoomNeeded = false;
   weakFloorCreated = false;
+  /** Imp.Quest.isCompleted: the last shop's level only has its shop once the imp got his tokens. */
+  impQuestDone = false;
   /** Special rooms placed on this level, in placement order. */
   readonly usedSpecials: RoomType[] = [];
   readonly items: ItemSpawn[] = [];
