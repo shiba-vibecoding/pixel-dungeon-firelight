@@ -63,11 +63,11 @@ Yendor on depth 26:
   nine armour glyphs of the original; darts and the boomerang; wands of
   magic missile, firebolt, lightning, poison, slowness, teleportation, blink,
   disintegration, avalanche, amok, reach, flock (magic sheep) and regrowth,
-  known by their wood until used; rings of
-  mending, detection, shadows, power, accuracy, evasion, satiety, haste,
-  elements, thorns, haggler and herbalism, two worn at once, known by their gem until worn
-  a while; seeds of firebloom, icecap, sorrowmoss, dreamweed, sungrass,
-  earthroot and fadeleaf (and the wandmaker's rotberry), which grow where they\n  are thrown.
+  known by their wood until used; rings of mending, detection, shadows,
+  power, accuracy, evasion, satiety, haste, elements, thorns, haggler and
+  herbalism, two worn at once, known by their gem until worn a while; seeds of
+  firebloom, icecap, sorrowmoss, dreamweed, sungrass, earthroot and fadeleaf
+  (and the wandmaker's rotberry), which grow where they are thrown.
 - Four hero classes with their original starting kits and perks, and their
   subclasses: Tengu leaves a Tome of Mastery for each hero, to become a
   gladiator or berserker, battlemage or warlock, freerunner or assassin, sniper
