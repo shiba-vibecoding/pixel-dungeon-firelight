@@ -7,7 +7,8 @@ and the web, built for **co-op multiplayer** from the start.
   no rendering, no platform APIs. The world state is plain JSON, so the same code
   runs in the browser and on the authoritative co-op server, and games can be
   saved, sent over the network and replayed.
-- `packages/client` — the Mini App: canvas renderer and HUD using the original art.
+- `packages/client` — the Mini App: the map on a canvas with the original art; windows, HUD, log and
+  toolbar in HTML after the «Pixel Dungeon UI» design system (`docs/design/system`).
 - `packages/server` — the co-op server: a Cloudflare Worker with one Durable
   Object per party, WebSockets with hibernation, Telegram login.
 
@@ -88,7 +89,8 @@ Yendor on depth 26:
   health: the warrior's heroic leap, the mage's molten earth, the rogue's
   smoke bomb, the huntress's spectral blades.
 - Solo runs saved on the device; a daily dungeon with a global leaderboard and
-  shareable results; the original's badges (59 of them), kept on the device.
+  shareable results; the original's rankings (the eleven best runs on the
+  device) and badges (59 of them).
 - Co-op: invite friends by a Telegram link; everyone plays in the same dungeon.
   Time flows freely while the party explores; in a fight the dungeon waits for
   each hero in turn (with a timeout, and never for someone who left). A fallen
@@ -103,7 +105,14 @@ Yendor on depth 26:
   healing and level-ups have particles; each region has its ambience (dripping
   pipes, torches with warm light, glinting veins, smoke, rising embers); the
   view is lit around the hero; bosses arrive with a title card; a fallen hero's
-  world drains of colour.
+  world drains of colour. Weaker phones get lighter effects by themselves (or
+  from the menu).
+- The interface: the Galmuri pixel font (SIL OFL, with honest Cyrillic); one red
+  main action per window; a HUD with health, experience and satiety bars, buff
+  icons and companions; a log of the last lines with a history window; a status
+  line for aiming, examining and waiting; a backpack with the equipment row and
+  wear bars; tabbed help. `packages/client/scripts/build-ui-css.mjs` regenerates
+  `src/ui.css` from the design system's tokens and components.
 
 Fire burns scrolls, lying about or in a burning hero's pack.
 

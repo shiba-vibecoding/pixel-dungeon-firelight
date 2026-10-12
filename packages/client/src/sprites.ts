@@ -29,16 +29,9 @@ export interface Assets {
   heroes: Record<HeroClass, CharSprite>;
   mobs: Record<MobKind, CharSprite>;
   icons: HTMLImageElement;
-  bossBanner: HTMLImageElement;
   items: HTMLImageElement;
   /** 16x16 plants, in the order of PLANT_KINDS. */
   plants: HTMLImageElement;
-  /** 7x7 buff icons (BuffIndicator). */
-  buffs: HTMLImageElement;
-  status: HTMLImageElement;
-  toolbar: HTMLImageElement;
-  hpBar: HTMLImageElement;
-  expBar: HTMLImageElement;
 }
 
 const anim = (fps: number, frames: number[], loop = false): Animation => ({ fps, frames, loop });
@@ -336,7 +329,7 @@ export async function loadAssets(base: string, onProgress?: (done: number) => vo
     'elemental', 'monk', 'warlock', 'golem', 'king', 'undead', 'tiles4', 'water4',
     'succubus', 'eye', 'scorpio', 'yog', 'rottingFist', 'burningFist', 'larva', 'mimic', 'statue', 'piranha', 'imp', 'sheep', 'blacksmith', 'wraith', 'ratKing', 'bee', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
     'skeleton', 'thief', 'swarm', 'shaman', 'bat', 'brute', 'tengu', 'shopkeeper', 'wandmaker',
-    'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs', 'plants',
+    'icons', 'items', 'plants',
   ] as const;
   let loaded = 0;
   const images = Object.fromEntries(
@@ -367,14 +360,8 @@ export async function loadAssets(base: string, onProgress?: (done: number) => vo
     },
     mobs: Object.fromEntries((Object.keys(MOB_SPRITES) as MobKind[]).map((kind) => [kind, mob(kind)])) as Record<MobKind, CharSprite>,
     icons: images.icons,
-    bossBanner: images['banner-boss'],
     items: images.items,
     plants: images.plants,
-    buffs: images.buffs,
-    status: images.status_pane,
-    toolbar: images.toolbar,
-    hpBar: images.hp_bar,
-    expBar: images.exp_bar,
   };
 }
 
