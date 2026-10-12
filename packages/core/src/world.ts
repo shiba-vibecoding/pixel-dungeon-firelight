@@ -1,7 +1,7 @@
 import { wear } from './wear';
 import { mobAct, populate, reinforce, respawn, TIME_TO_RESPAWN } from './ai';
 import {
-  awareness, createHero, createMob, type Hero, heroAttackDelay, heroSpeed, hungerGrowth, hungerStep, HUNGRY, isAlive,
+  awareness, createHero, createMob, type Hero, heroAttackDelay, type HeroClass, heroSpeed, hungerGrowth, hungerStep, HUNGRY, isAlive,
   isShopkeeper, isStarving, type Mob, type PlayerInfo, ringBonus, STARVING,
 } from './actors';
 import { attack, CRIPPLE_TURNS, hurt } from './combat';
@@ -31,6 +31,7 @@ import { RoomType } from './level/room';
 import { discover, F, hasFlag, T } from './level/terrain';
 import { deriveSeed, Rng, seedRng, Stream } from './rng';
 import { createRun, type RunState } from './run';
+import { isChallenged, NO_HERBALISM, underChallenges } from './challenges';
 
 /*
  * The shared game world. Every change goes through act(), so a server can run
@@ -85,8 +86,10 @@ export interface World {
   nextId: number;
   /** The run has ended: every hero has fallen, or the party won. */
   over: boolean;
-  /** Goo is slain and a hero took the stairs out of its lair. */
+  /** A hero took up the Amulet of Yendor: the party has won. */
   victory: boolean;
+  /** The run's challenges (Challenges.java masks, see challenges.ts); worlds saved before them have none. */
+  challenges: number;
   /** Potion and scroll kinds the party has identified; knowledge is shared. */
   known: ItemKind[];
   /** The sad ghost's quest, once the ghost has appeared. */
@@ -99,7 +102,7 @@ export interface World {
   smithQuest?: SmithQuest | null;
 }
 
-/** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
+/** The Amulet's hall (LastLevel), the bottom of the dungeon: no chasm opens onto it, and nothing lies below. */
 export const DEEPEST_AVAILABLE = 26;
 const TIME_TO_REST = 1;
 /** Blacksmith.upgrade: the hero waits while the troll works. */
@@ -118,17 +121,18 @@ const BLACKSMITH_STREAM = 4;
 /** Sub-streams of a depth's streams for a hero joining the party, by party size. */
 const JOIN_STREAM = 100;
 
-export function createWorld(seed: number): World {
+/** A new run; `challenges` is a bitmask of CHALLENGES (Dungeon.challenges), 0 for none. */
+export function createWorld(seed: number, challenges = 0): World {
   return {
     run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
-    known: [], quest: null, wandQuest: null, impQuest: null, smithQuest: null,
+    challenges, known: [], quest: null, wandQuest: null, impQuest: null, smithQuest: null,
   };
 }
 
-/** Starts a new run in place for the same party. */
+/** Starts a new run in place for the same party, under the same challenges. */
 export function restartWorld(world: World, seed: number): void {
   const party = world.heroes.map(({ id, name, heroClass }) => ({ id, name, heroClass }));
-  Object.assign(world, createWorld(seed));
+  Object.assign(world, createWorld(seed, world.challenges ?? 0));
   for (const player of party) addHero(world, player);
 }
 
@@ -155,6 +159,7 @@ export function levelAt(world: World, depth: number): Level {
         respawn: isBossDepth(d) || d >= 26 ? -1 : TIME_TO_RESPAWN,
         heaps: createItems(
           world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), isBossDepth(d) || d >= 26, world.heroes.length,
+          (item) => underChallenges(world, item),
         ),
       };
       const perHero: ItemKind[] = [
@@ -184,7 +189,10 @@ function welcome(world: World): void {
     const level = world.levels[d]!;
     const floor = world.floors[d]!;
     if (!isBossDepth(d) && d < 26) {
-      shareOfDepth(level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d, JOIN_STREAM + party)), floor.perHero ?? [], party, floor.heaps);
+      shareOfDepth(
+        level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d, JOIN_STREAM + party)), floor.perHero ?? [], party, floor.heaps,
+        (item) => underChallenges(world, item),
+      );
     }
     reinforce(world, level, floor, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, JOIN_STREAM + party)), party);
     for (const mob of floor.mobs) regrowBoss(world, mob);
@@ -196,13 +204,21 @@ export function addHero(world: World, player: PlayerInfo): Hero {
   const hero = createHero(player, 1, freeCellNear(world, level, 1, level.entrance), floorAt(world, 1).now);
   world.heroes.push(hero);
   if (world.heroes.length > 1) welcome(world);
-  // Heroes know what they set out with.
-  for (const item of [...hero.items, ...hero.rings]) {
-    if (!world.known.includes(item.kind)) world.known.push(item.kind);
+  // Heroes know what they set out with, and each class one kind more (HeroClass.initHero).
+  for (const kind of [...hero.items, ...hero.rings].map((item) => item.kind).concat(CLASS_KNOWLEDGE[hero.heroClass])) {
+    if (!world.known.includes(kind)) world.known.push(kind);
   }
   observe(world, hero);
   return hero;
 }
+
+/** HeroClass.initWarrior/initMage/initRogue: the kind each class knows from the start (the huntress none). */
+const CLASS_KNOWLEDGE: Readonly<Record<HeroClass, readonly ItemKind[]>> = {
+  warrior: ['potion.strength'],
+  mage: ['scroll.identify'],
+  rogue: ['scroll.mapping'],
+  huntress: [],
+};
 
 /** Adds a hero once; joining again (e.g. after a reconnect) keeps the existing one. */
 export function joinHero(world: World, player: PlayerInfo): Hero {
@@ -682,7 +698,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
 
     case 'descend':
       if (hero.depth >= DEEPEST_AVAILABLE) {
-        // Out of Goo's lair: the sewers are conquered.
+        // Nothing lies below the Amulet's hall: should a way on ever open there, it leads out, and the run is won.
         world.victory = true;
         world.over = true;
         for (const other of world.heroes) other.intent = null;
@@ -877,7 +893,8 @@ function trample(ctx: Ctx, pos: number, hero?: Hero): void {
   if (hero?.subclass === 'warden') hero.barkskin = Math.max(hero.barkskin, Math.trunc(hero.ht / 3));
   // A ring of herbalism makes both more likely (HighGrass.trample).
   const herbalism = hero ? ringBonus(hero, 'ring.herbalism') : 0;
-  if (herbalism < 0) return;
+  // Barren land: the grass sheds nothing at all.
+  if (herbalism < 0 || isChallenged(ctx.world, NO_HERBALISM)) return;
   if (ctx.rng.int(18) <= ctx.rng.int(herbalism + 1)) dropItem(ctx.floor, pos, new ItemGenerator(ctx.rng, ctx.depth).of('seed'));
   if (ctx.rng.int(6) <= ctx.rng.int(herbalism + 1)) dropItem(ctx.floor, pos, createItem('dew'));
 }

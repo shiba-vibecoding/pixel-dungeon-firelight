@@ -7,6 +7,8 @@ import type { Level } from './level/generate';
 import { adjacent } from './level/geometry';
 import type { Rng } from './rng';
 import type { World } from './world';
+import { isChallenged, NO_ARMOR, underChallenges } from './challenges';
+
 
 /*
  * The sad ghost of the sewers (Ghost): once per run a ghost haunts one of
@@ -57,8 +59,9 @@ export function spawnGhost(world: World, level: Level, mobs: Mob[], rng: Rng): v
     while (itemDef(another.kind).category !== 'weapon') another = generator.of('weapon');
     if (!weapon || another.level > weapon.level) weapon = another;
   }
-  let armor = generator.of('armor');
-  for (let i = 0; i < 3; i++) {
+  // Faith is my armor: only worn-out cloth armour (new ClothArmor().degrade()).
+  let armor = isChallenged(world, NO_ARMOR) ? createItem('armor.cloth', 1, -1) : generator.of('armor');
+  for (let i = 0; i < 3 && !isChallenged(world, NO_ARMOR); i++) {
     const another = generator.of('armor');
     if (another.level > armor.level) armor = another;
   }
@@ -153,7 +156,8 @@ export function rewardFromGhost(ctx: Ctx, hero: Hero, choice: 'weapon' | 'armor'
   const quest = ctx.world.quest!;
   if (errandOf(quest) !== 'curse') hero.items.splice(tokenOf(quest, hero), 1);
   const item = quest[choice];
-  if (!collect(hero, item)) dropItem(ctx.floor, hero.pos, item);
+  // WndSadGhost: what will not go into the pack is dropped where the hero stands (Level.drop).
+  if (!collect(hero, item)) dropItem(ctx.floor, hero.pos, underChallenges(ctx.world, item));
   ctx.effects.push({ type: 'pickedUp', hero: hero.id, item });
   quest.done = true;
   ctx.floor.mobs = ctx.floor.mobs.filter((mob) => mob.kind !== 'ghost');

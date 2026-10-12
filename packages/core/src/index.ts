@@ -11,13 +11,20 @@ export * from './items';
 export { type InventoryAction, isInventoryAction, shopkeeperBeside } from './inventory';
 export { trapAt, type TrapKind } from './traps';
 export { PLANT_KINDS, type PlantInfo, type PlantKind, SEED_PLANTS } from './plants';
-export { charAt, type Effect, type Floor, heroesOn, isWater, swapsWithHero } from './floor';
-export { type ItemRef, ORE_WANTED, type SmithLine, type SmithQuest } from './smith';
+export { charAt, type Effect, type Floor, heroesOn, heroSight, isWater, swapsWithHero } from './floor';
+
+export { ORE_WANTED, type SmithLine, type SmithQuest } from './smith';
+export {
+  canTarget, isEnchantable, isItemRef, isUnidentified, isUpgradable, itemAt, type ItemRef, scrollTargets, type TargetedScroll,
+} from './scrolls';
 export { type ImpQuest, TOKENS_WANTED } from './imp';
 export { CLASS_ARMOR, CLASS_ARMOR_OF } from './classArmor';
 export { BAGS, hasRoom, inBag, slotsUsed } from './bags';
 export * from './world';
-export { castShadow, LIGHT_DISTANCE, MAX_VIEW_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
+export { castShadow, DARKNESS_VIEW_DISTANCE, LIGHT_DISTANCE, MAX_VIEW_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
+export {
+  type ChallengeId, CHALLENGES, DARKNESS, isChallenged, NO_ARMOR, NO_FOOD, NO_HEALING, NO_HERBALISM, NO_SCROLLS, SWARM_INTELLIGENCE,
+} from './challenges';
 export * from './protocol';
 export * from './version';
 export { durabilityOf, effectiveLevel, isBroken, maxDurability } from './wear';

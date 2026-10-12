@@ -1,9 +1,10 @@
 import {
-  baseKind, createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, isAlive, isShopkeeper, type Mob, type MobState, MOBS, mobStats, rollMob,
+  baseKind, beckon, createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, isAlive, isShopkeeper, type Mob, type MobState, MOBS, mobStats, rollMob,
 } from './actors';
 import { attack, hurt } from './combat';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
-import { canEnter, charAt, type Ctx, enterCell, type Floor, heroesOn, heroView, isPassable, isWater, leaveCell } from './floor';
+import { canEnter, charAt, type Ctx, enterCell, type Floor, heroesOn, heroSight, heroView, isPassable, isWater, leaveCell } from './floor';
+import { isChallenged, SWARM_INTELLIGENCE } from './challenges';
 import { altarCallsMob } from './altar';
 import { type Item, itemDef, ItemGenerator, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
@@ -30,7 +31,11 @@ const TICK = 1;
 const TIME_TO_WAKE_UP = 1;
 export const TIME_TO_RESPAWN = 50;
 
-/** How far a monster sees: the level's distance, but the demons of the halls see as if by torchlight. */
+/**
+ * How far a monster sees: the level's distance, but the demons of the halls see as if by torchlight.
+ * Never the DARKNESS challenge's: in the original only the hero's sight follows the level's.
+ */
+
 function mobSight(mob: Mob, depth: number): number {
   const demon = mob.kind === 'succubus' || mob.kind === 'eye' || baseKind(mob.kind) === 'scorpio';
   return demon ? Math.max(viewDistance(depth), LIGHT_DISTANCE) : viewDistance(depth);
@@ -173,6 +178,10 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
       }
       if (enemyInFov && ctx.rng.int(distance(mob.pos, enemy.pos) + heroStealth(enemy)) === 0) {
         notice(ctx, mob, enemy, 'hunting');
+        // Swarm intelligence: waking, it calls every other monster on the level to where it saw the hero.
+        if (isChallenged(ctx.world, SWARM_INTELLIGENCE)) {
+          for (const other of ctx.floor.mobs) if (other !== mob) beckon(other, mob.target);
+        }
         spend(mob, TIME_TO_WAKE_UP);
       } else {
         mob.enemySeen = false;
@@ -828,7 +837,7 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
     // Goo sleeps in its lair; Tengu and DM-300 only appear when someone enters their arena.
     if (level.depth !== 5) return [];
     const arena = level.rooms.find((room) => room.type === RoomType.BOSS_EXIT)!;
-    const goo = scaleMob(world, createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0));
+    const goo = scaleMob(world, createMob(nextMobId(world), rollMob(rng, level.depth, false), randomCellIn(rng, arena), 'sleeping', 0));
     // The Rat King, in his hidden treasury next door.
     return level.ratKing === undefined ? [goo] : [goo, createMob(nextMobId(world), 'ratKing', level.ratKing, 'passive', 0)];
   }
@@ -847,7 +856,8 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
   // Not yet registered in world.floors, so placement checks this list itself.
   const hidden = (cell: number): boolean => !mobs.some((mob) => mob.pos === cell);
   for (let i = 0; i < count; i++) {
-    const kind = rollMob(rng, level.depth);
+    // RegularLevel.createMobs: Bestiary.mob, never a rare variant; those only come later, with the respawns.
+    const kind = rollMob(rng, level.depth, false);
     const pos = randomRespawnCell(rng, world, level, hidden);
     if (pos === -1) break;
     mobs.push(scaleMob(world, createMob(nextMobId(world), kind, pos, 'sleeping', 0)));
@@ -878,9 +888,9 @@ export function reinforce(world: World, level: Level, floor: Floor, rng: Rng, pa
   if (level.depth >= 26 || isBossDepth(level.depth)) return;
   const base = nMobs(rng, level.depth);
   const extra = mobCount(base, party) - mobCount(base, party - 1);
-  const seen = heroesOn(world, level.depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map), viewDistance(level.depth)));
+  const seen = heroesOn(world, level.depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map), heroSight(world, level.depth)));
   for (let i = 0; i < extra; i++) {
-    const kind = rollMob(rng, level.depth);
+    const kind = rollMob(rng, level.depth, false);
     const pos = randomRespawnCell(rng, world, level, (cell) => !seen.some((fov) => fov[cell]));
     if (pos === -1) break;
     floor.mobs.push(scaleMob(world, createMob(nextMobId(world), kind, pos, 'sleeping', floor.now)));
@@ -891,8 +901,10 @@ export function reinforce(world: World, level: Level, floor: Floor, rng: Rng, pa
 export function respawn(ctx: Ctx): void {
   const { world, depth, level, floor, rng } = ctx;
   if (floor.mobs.length < mobCount(nMobs(rng, depth), partySize(world))) {
+    // Bestiary.mutable: now and then a rare variant.
     const kind = rollMob(rng, depth);
-    const seen = heroesOn(world, depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map), viewDistance(depth)));
+
+    const seen = heroesOn(world, depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map), heroSight(world, depth)));
     const pos = randomRespawnCell(rng, world, level, (cell) => !seen.some((fov) => fov[cell]));
     if (pos !== -1) {
       floor.mobs.push(scaleMob(world, createMob(nextMobId(world), kind, pos, 'wandering', floor.now)));

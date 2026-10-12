@@ -34,10 +34,11 @@ function freeNeighbour(world: World, depth: number, pos: number): number {
 
 describe('monsters', () => {
   it('populate sewer levels as the bestiary says, asleep in standard rooms', () => {
-    // Now and then an albino rat instead of a rat.
+    // Bestiary.mob: never a rare variant at first; now and then a visitor from the prison below.
     const allowed: Record<number, string[]> = {
-      1: ['rat', 'albino'], 2: ['rat', 'albino', 'gnoll'], 3: ['rat', 'albino', 'gnoll', 'crab'], 4: ['rat', 'albino', 'gnoll', 'crab'],
+      1: ['rat'], 2: ['rat', 'gnoll'], 3: ['rat', 'gnoll', 'crab', 'swarm'], 4: ['rat', 'gnoll', 'crab', 'swarm', 'skeleton', 'thief'],
     };
+
     for (let seed = 1; seed <= 25; seed++) {
       const world = createWorld(seed);
       for (let depth = 1; depth <= 4; depth++) {

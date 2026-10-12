@@ -19,6 +19,7 @@ import { looseItems } from './bags';
 import { sacrifice } from './altar';
 import { T } from './level/terrain';
 import { isBossDepth } from './level/builder';
+import { underChallenges } from './challenges';
 
 /*
  * Melee combat as in Char.attack: an accuracy roll against an evasion roll,
@@ -50,6 +51,8 @@ function damageRoll(ctx: Ctx, char: Char, range?: readonly [number, number]): nu
 export interface AttackOverride {
   attack?: number;
   damage?: readonly [number, number];
+  /** A hero's thrown weapon, whose enchantment the shot carries (Hero.attackProc: rangedWeapon). */
+  weapon?: Item;
 }
 
 /** One blow or shot; returns whether it hit. */
@@ -131,11 +134,12 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     }
   }
   // Hero.attackProc and defenseProc: an enchanted weapon's blow, an inscribed armour's answer.
-  if (isHero(attacker) && !isHero(defender) && !thrown) {
-    weaponProc(ctx, attacker, defender, damage);
-    // Weapon.proc: every blow that lands wears the weapon a little.
-    if (attacker.weapon) wear(ctx, attacker, attacker.weapon);
+  if (isHero(attacker) && !isHero(defender)) {
+    weaponProc(ctx, attacker, defender, damage, thrown ? override.weapon ?? null : attacker.weapon);
+    // Weapon.proc: every blow that lands wears the weapon a little (a thrown boomerang wears as it comes back).
+    if (!thrown && attacker.weapon) wear(ctx, attacker, attacker.weapon);
   }
+
   if (isHero(defender) && !isHero(attacker)) {
     const mark = ctx.effects.length;
     damage = armorProc(ctx, attacker, defender, damage);
@@ -360,17 +364,18 @@ function mobDied(ctx: Ctx, mob: Mob, by?: string): void {
   questKill(ctx, mob);
   impQuestKill(ctx, mob);
 
-  // A thief's stolen goods fall where it dies, and a mimic's treasure.
-  if (mob.item) dropItem(ctx.floor, mob.pos, mob.item);
+  // A thief's stolen goods fall where it dies, and a mimic's treasure (Level.drop: as the challenges allow).
+  if (mob.item) dropItem(ctx.floor, mob.pos, underChallenges(ctx.world, mob.item));
   // FetidRat.die: its skull, for the sad ghost.
   if (mob.kind === 'fetidRat') dropItem(ctx.floor, mob.pos, createItem('quest.skull'));
-  for (const item of mob.loot ?? []) dropItem(ctx.floor, mob.pos, item);
+  for (const item of mob.loot ?? []) dropItem(ctx.floor, mob.pos, underChallenges(ctx.world, item));
 
   // Mob.dropLoot, unless the party has outgrown the monster.
   if (heroes.some((h) => h.lvl <= stats.maxLvl + 2)) {
     const loot = dropLoot(ctx, mob);
-    if (loot) dropItem(ctx.floor, mob.pos, loot);
+    if (loot) dropItem(ctx.floor, mob.pos, underChallenges(ctx.world, loot));
   }
+
 
   if (mob.kind === 'skeleton') explode(ctx, mob);
 

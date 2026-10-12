@@ -1,4 +1,4 @@
-import { isBroken, mend, wear } from './wear';
+import { mend, wear } from './wear';
 import {
   BACKPACK_SIZE, beckon, createMob, isShopkeeper, statsOf, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
   SUBCLASSES,
@@ -12,7 +12,7 @@ import {
 } from './floor';
 import {
   buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
-  magicMissileDamage, missileStats, randomEnchantment, randomGlyph, wandMaxCharges,
+  magicMissileDamage, missileStats, wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
 import { adjacent, LENGTH, NEIGHBOURS4, NEIGHBOURS8, NEIGHBOURS9 } from './level/geometry';
@@ -28,6 +28,10 @@ import { wipeOut } from './altar';
 import { applyArmorKit, CLASS_ARMOR, CLASS_ARMOR_OF, classSpecial, specialProblem, TIME_TO_APPLY_KIT } from './classArmor';
 import type { World } from './world';
 import { scaleMob } from './party';
+import { underChallenges } from './challenges';
+import {
+  canTarget, defaultTarget, enchantItem, isItemRef, isTargetedScroll, itemAt, type ItemRef, TARGET_PROBLEMS, type TargetedScroll, upgradeItem,
+} from './scrolls';
 
 /*
  * Picking things up, drinking, reading, equipping and dropping. Dropping is
@@ -36,8 +40,12 @@ import { scaleMob } from './party';
 
 export type InventoryAction =
   | { type: 'pickup' }
-  /** Drink a potion, read a scroll or eat; a scroll of upgrade improves the weapon or the armour. */
-  | { type: 'use'; item: number; target?: 'weapon' | 'armor' }
+  /**
+   * Drink a potion, read a scroll or eat. Scrolls of upgrade, enchantment and
+   * identify act on the item chosen `on` (see scrolls.ts); `target` is how older
+   * clients chose between the weapon and the armour worn.
+   */
+  | { type: 'use'; item: number; on?: ItemRef; target?: 'weapon' | 'armor' }
   | { type: 'equip'; item: number }
   | { type: 'drop'; item: number }
   /** Throw a dart, the boomerang or a potion at a cell; it flies until it hits someone or something. */
@@ -134,12 +142,8 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if (category === 'vial' && !item.volume) return 'your dew vial is empty';
       if (category === 'wipeout' && (hero.blind ?? 0) > 0) return 'you cannot read while blinded';
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
-      // The blacksmith's pickaxe is a tool: no scroll improves it.
-      if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
-        hero.weapon?.kind === 'weapon.pickaxe' && world.known.includes(item.kind)) return 'the pickaxe cannot be improved';
-      if ((item.kind === 'scroll.upgrade' || item.kind === 'scroll.enchantment') && (action.target ?? 'weapon') === 'weapon' &&
-        !hero.weapon && world.known.includes(item.kind)) return 'you hold no weapon';
-      return null;
+      if (action.on !== undefined && !isItemRef(action.on)) return 'bad target';
+      return isTargetedScroll(item.kind) ? scrollTargetProblem(world, hero, item.kind, action) : null;
     case 'equip': {
       if (category !== 'weapon' && category !== 'armor' && category !== 'ring') return 'that cannot be equipped';
       // A cursed item, once worn, will not come off (EquipableItem.doUnequip).
@@ -241,7 +245,7 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         ctx.effects.push({ type: 'lit', hero: hero.id });
         return TIME_TO_USE;
       }
-      use(ctx, hero, action.item, action.target ?? 'weapon');
+      use(ctx, hero, action.item, scrollTarget(ctx.world, hero, hero.items[action.item]!.kind, action));
       return TIME_TO_USE;
     case 'master':
       // TomeOfMastery.choose: the tome is used up, and the hero takes a new way.
@@ -277,7 +281,8 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       return TIME_TO_EQUIP;
     }
     case 'drop': {
-      const item = hero.items.splice(action.item, 1)[0]!;
+      // Level.drop: what the challenges forbid on the floor turns to gold as it leaves the hand, before any well sees it.
+      const item = underChallenges(ctx.world, hero.items.splice(action.item, 1)[0]!);
       // Into a well of transmutation, it comes out as something else, and the well runs dry.
       const well = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'transmutation');
       const changed = well >= 0 && ctx.level.map[hero.pos] === T.WELL ? transmute(item, ctx.rng, ctx.depth) : null;
@@ -401,7 +406,9 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     hit = attack(ctx, hero, victim, {
       attack: heroRangedSkill(hero, thrown, adjacent(hero.pos, end)),
       damage: [stats.min, stats.max],
+      weapon: thrown,
     });
+
     if (hit && isAlive(victim)) missileProc(ctx, thrown, victim);
     // The boomerang wears with every hit, as a melee weapon does.
     if (hit && boomerang) wear(ctx, hero, item);
@@ -649,8 +656,10 @@ function brew(ctx: Ctx, pos: number, hero: Hero): void {
     const kind = ALCHEMY[seed.kind];
     potion = kind ? createItem(kind) : new ItemGenerator(rng, ctx.depth).of('potion');
   }
-  heap.items = [potion];
+  // Alchemy: the brew comes out through Level.drop, so the challenges may make it gold.
+  heap.items = [underChallenges(ctx.world, potion)];
   statsOf(hero).brewed++;
+
   ctx.effects.push({ type: 'brewed', depth: ctx.depth, pos, hero: hero.id });
 }
 
@@ -762,7 +771,37 @@ function identify(world: World, kind: ItemKind): boolean {
   return true;
 }
 
-function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): void {
+/**
+ * InventoryScroll: the item a scroll of upgrade, enchantment or identify was
+ * read on, found before the scroll leaves the pack (which moves the slots
+ * after it). A choice the scroll cannot act on counts as none: that only
+ * happens with a scroll the party did not know (see scrollTargetProblem).
+ */
+function scrollTarget(world: World, hero: Hero, kind: ItemKind, action: { on?: ItemRef; target?: 'weapon' | 'armor' }): Item | undefined {
+  if (!isTargetedScroll(kind)) return undefined;
+  const ref = action.on ?? action.target;
+  const chosen = ref === undefined ? undefined : itemAt(hero, ref);
+  return chosen && canTarget(world, kind, chosen) ? chosen : defaultTarget(world, hero, kind);
+}
+
+/**
+ * Why a known scroll cannot be read on what was chosen, or on anything at
+ * all; checked before the scroll is used up. An unknown scroll is read
+ * whatever was chosen (the reader could not know what it would want).
+ */
+function scrollTargetProblem(world: World, hero: Hero, kind: TargetedScroll, action: { on?: ItemRef; target?: 'weapon' | 'armor' }): string | null {
+  if (!world.known.includes(kind)) return null;
+  const ref = action.on ?? action.target;
+  if (ref === undefined) {
+    // Identify with nothing to learn is simply read in vain, as an unknown one would be.
+    return kind === 'scroll.identify' || defaultTarget(world, hero, kind) ? null : TARGET_PROBLEMS[kind];
+  }
+  const chosen = itemAt(hero, ref);
+  if (!chosen) return 'no such item';
+  return canTarget(world, kind, chosen) ? null : TARGET_PROBLEMS[kind];
+}
+
+function use(ctx: Ctx, hero: Hero, index: number, target: Item | undefined): void {
   const { world } = ctx;
   const item = hero.items[index]!;
   const kind = item.kind;
@@ -820,10 +859,9 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     }
 
     case 'scroll.identify': {
-      // The original lets you pick the item; here it is the first unknown one you carry.
-      const unknown = hero.items.find((i) => !world.known.includes(i.kind) && isStackable(i.kind) && i.kind !== 'gold');
-      if (unknown && identify(world, unknown.kind)) {
-        ctx.effects.push({ type: 'identified', hero: hero.id, kind: unknown.kind });
+      // ScrollOfIdentify.onItemSelected: the chosen item (or the first unknown potion or scroll) is known for what it is.
+      if (target && identify(world, target.kind)) {
+        ctx.effects.push({ type: 'identified', hero: hero.id, kind: target.kind });
       }
       break;
     }
@@ -877,41 +915,13 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
       ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'recharging', count });
       break;
     }
-    case 'scroll.upgrade': {
-      const upgraded = hero[target];
-      if (!upgraded) break;
-      // ScrollOfUpgrade: a broken item is only mended (and its curse lifted), not upgraded.
-      if (isBroken(upgraded)) {
-        mend(upgraded);
-        delete upgraded.cursed;
-        ctx.effects.push({ type: 'mended', hero: hero.id, item: upgraded });
-        break;
-      }
-      // Weapon.upgrade(false): the clash of magics may drive an enchantment out of a well-upgraded item.
-      if ((upgraded.enchant || upgraded.glyph) && upgraded.level > 0 && ctx.rng.int(upgraded.level) > 0) {
-        delete upgraded.enchant;
-        delete upgraded.glyph;
-        ctx.effects.push({ type: 'disenchanted', hero: hero.id, item: upgraded });
-      }
-      upgraded.level++;
-      mend(upgraded);
-      // Item.upgrade: an upgrade lifts any curse.
-      delete upgraded.cursed;
-      ctx.effects.push({ type: 'upgraded', hero: hero.id, item: upgraded });
+    case 'scroll.upgrade':
+      if (target) upgradeItem(ctx, hero, target);
       break;
-    }
-    case 'scroll.enchantment': {
-      // ScrollOfEnchantment: a new enchantment for the weapon, or a new glyph for the armour.
-      const imbued = hero[target];
-      if (!imbued) break;
-      delete imbued.cursed;
-      // ScrollOfEnchantment: the item comes out mended.
-      mend(imbued);
-      if (target === 'weapon') imbued.enchant = randomEnchantment(ctx.rng, imbued.enchant);
-      else imbued.glyph = randomGlyph(ctx.rng, imbued.glyph);
-      ctx.effects.push({ type: 'imbued', hero: hero.id, item: imbued });
+    case 'scroll.enchantment':
+      if (target) enchantItem(ctx, hero, target);
       break;
-    }
+
     case 'scroll.removeCurse': {
       // ScrollOfRemoveCurse: every curse on what the reader wears or carries is lifted, and weakness with them.
       let count = 0;

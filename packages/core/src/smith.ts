@@ -8,6 +8,7 @@ import { adjacent, NEIGHBOURS8 } from './level/geometry';
 import { T } from './level/terrain';
 import type { Rng } from './rng';
 import type { World } from './world';
+import { isUpgradable, itemAt, type ItemRef } from './scrolls';
 
 /*
  * The troll blacksmith of the caves (Blacksmith): once per run, on one of
@@ -32,12 +33,7 @@ export type SmithLine = 'intro' | 'noPickaxe' | 'noGold' | 'noBlood' | 'complete
 export const ORE_WANTED = 15;
 export const TIME_TO_MINE = 2;
 
-/** An item the hero has: one in the pack, or the weapon or armour worn. */
-export type ItemRef = number | 'weapon' | 'armor';
-
-export function itemAt(hero: Hero, ref: ItemRef): Item | undefined {
-  return ref === 'weapon' ? hero.weapon ?? undefined : ref === 'armor' ? hero.armor : Number.isInteger(ref) ? hero.items[ref] : undefined;
-}
+export type { ItemRef };
 
 /** Blacksmith.Quest: whoever stands at the forge the layout put him at. */
 export function spawnBlacksmith(world: World, level: Level, mobs: Mob[], rng: Rng): void {
@@ -128,9 +124,9 @@ export function reforgeProblem(world: World, hero: Hero, first: ItemRef, second:
   if (a.kind !== b.kind) return 'choose two items of the same kind';
   if (a.cursed || b.cursed) return 'I do not work with cursed items';
   if (a.level < 0 || b.level < 0) return 'it is junk, the quality is too poor';
-  const category = itemDef(a.kind).category;
-  const upgradable = category === 'weapon' || category === 'armor' || category === 'wand' || category === 'ring';
-  return upgradable && a.kind !== 'weapon.pickaxe' ? null : 'these cannot be reforged';
+  // Blacksmith.verify: only what a scroll of upgrade could improve.
+  return isUpgradable(a) ? null : 'these cannot be reforged';
+
 }
 
 /** Blacksmith.upgrade: the better of the two comes out a level higher; the other is used up. */
@@ -152,7 +148,9 @@ export function reforge(ctx: Ctx, hero: Hero, first: ItemRef, second: ItemRef): 
   } else {
     // The worse one was worn: the better one, from the pack, takes its place.
     hero.items.splice(betterRef as number, 1);
-    hero[worseRef] = better;
+    if (worseRef === 'ring0' || worseRef === 'ring1') hero.rings[worseRef === 'ring0' ? 0 : 1] = better;
+    else hero[worseRef] = better;
+
   }
   ctx.world.smithQuest!.reforged = true;
   ctx.effects.push({ type: 'upgraded', hero: hero.id, item: better });
