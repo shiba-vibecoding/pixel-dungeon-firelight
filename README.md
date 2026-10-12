@@ -14,16 +14,29 @@ and the web, built for **co-op multiplayer** from the start.
 ## What works
 
 - Seeded random stream, bit-compatible with the Java version.
-- The sewers (depths 1–4): level generation, hidden doors and searching.
+- The sewers, depths 1–4: level generation, hidden doors, searching, traps
+  (poison, fire, toxic and paralytic gas, lightning, gripping, alarm,
+  summoning).
 - Rats, gnoll scouts and sewer crabs with the original stats and behaviour;
-  melee combat, experience and levels, regeneration, respawning monsters.
-- Four hero classes with their starting weapons.
-- Solo runs saved on the device, a daily dungeon shared by everyone.
+  melee and ranged combat, experience and levels, regeneration, respawns.
+- Depth 5: Goo's lair and the boss fight; leaving the lair wins the run.
+- Items: gold; potions and scrolls, unknown until used and shared knowledge in a
+  party; all melee weapons and armour with upgrades and strength requirements;
+  darts, the boomerang and the wand of magic missile.
+- Four hero classes with their original starting kits.
+- Solo runs saved on the device; a daily dungeon with a global leaderboard and
+  shareable results.
 - Co-op: invite friends by a Telegram link; everyone plays in the same dungeon.
   Time flows freely while the party explores; in a fight the dungeon waits for
   each hero in turn (with a timeout, and never for someone who left). A fallen
-  hero gets back up when a companion goes deeper.
-- Russian and English.
+  hero gets back up when a companion goes deeper; items are handed over by
+  dropping them.
+- The original art, sounds and music; Russian (names from the original's Russian
+  localisation) and English.
+
+Not ported yet: depths 6+ (prison and beyond), hunger and food, rings, most
+wands, seeds and plants, special rooms, NPC quests, and gas clouds (gas traps
+act at once instead).
 
 ## How co-op works
 
