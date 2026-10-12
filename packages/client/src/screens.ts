@@ -9,6 +9,7 @@ import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
 import { isKnown, itemInfo, itemName, wearShare } from './itemtext';
 import type { DailyBoard } from './leaderboard';
+import { quality } from './quality';
 import type { RunRecord } from './rankings';
 import type { Assets } from './sprites';
 import type { LogLine } from './view';
@@ -429,6 +430,8 @@ export interface MenuOptions {
   onInvite(): void;
   onHelp(): void;
   onBadges(): void;
+  /** Full effects or light ones (quality.ts). */
+  onEffects(full: boolean): void;
   onExit(): void;
 }
 
@@ -448,6 +451,22 @@ export function showMenu(options: MenuOptions): void {
   );
   sound.setAttribute('role', 'switch');
   sound.setAttribute('aria-checked', String(audio.enabled));
+  const effects = el(
+    'button',
+    {
+      className: 'pd-switch',
+      onclick: () => {
+        const full = effects.getAttribute('aria-checked') !== 'true';
+        audio.play('click');
+        effects.setAttribute('aria-checked', String(full));
+        options.onEffects(full);
+      },
+    },
+    el('span', { className: 'pd-info', textContent: t.effects }),
+    el('span', { className: 'pd-switch-box' }),
+  );
+  effects.setAttribute('role', 'switch');
+  effects.setAttribute('aria-checked', String(!quality.light));
   show(
     windowOf(
       { title: t.menu, sub: options.room ? t.room(options.room) : undefined, onClose: options.onResume, narrow: true },
@@ -459,6 +478,7 @@ export function showMenu(options: MenuOptions): void {
         button(t.help, options.onHelp),
         button(t.badges, options.onBadges),
         sound,
+        effects,
         button(t.toMenu, options.onExit, 'quiet'),
       ),
     ),

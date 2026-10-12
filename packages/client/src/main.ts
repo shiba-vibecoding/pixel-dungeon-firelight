@@ -29,6 +29,7 @@ import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
   showHistory, showMenu, showRankings, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
+import { quality } from './quality';
 import { rankings, recordRun, runScore } from './rankings';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -343,6 +344,10 @@ function openMenu(): void {
     },
     onHelp: () => showHelp(hideOverlay),
     onBadges: () => showBadges(hideOverlay),
+    onEffects: (full) => {
+      quality.setMode(full ? 'full' : 'light');
+      resize();
+    },
     onExit: toTitle,
   });
 }
@@ -917,7 +922,8 @@ addEventListener('keydown', (event) => {
 /* Layout */
 
 function resize(): void {
-  const dpr = Math.min(devicePixelRatio || 1, 3);
+  // Light effects draw a coarser canvas: pixel art stays crisp, there are just fewer pixels to fill.
+  const dpr = Math.min(devicePixelRatio || 1, quality.light ? 1.5 : 3);
   canvas.width = Math.round(canvas.clientWidth * dpr);
   canvas.height = Math.round(canvas.clientHeight * dpr);
   // About 12 tiles across the narrow side, at an integer zoom for crisp pixels.
@@ -954,6 +960,9 @@ const backdrop = (() => {
   const all = new Array<boolean>(level.map.length).fill(true);
   return { level, baked: bakeLevel(level, assets), all, view: new View(assets) };
 })();
+
+/** When the last game frame was drawn, for telling a phone that struggles. */
+let lastFrame = 0;
 
 /** The middle of the free band, in device pixels, eased from frame to frame; -1 until known. */
 let freeMiddle = -1;
@@ -1002,6 +1011,12 @@ function tick(now: number): void {
     return;
   }
 
+  // A phone that cannot keep up gets light effects («auto» in quality.ts).
+  if (quality.frame(now - lastFrame)) {
+    resize();
+    toast(t.effectsLightened);
+  }
+  lastFrame = now;
   // The visual clock: real time, slowed for a moment by a heavy blow's hit-stop.
   const vnow = fx.time(now);
   if (isAlive(me)) fallenAt = 0;

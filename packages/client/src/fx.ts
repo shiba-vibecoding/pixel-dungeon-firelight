@@ -5,6 +5,8 @@
  * which hit-stop slows down for a moment after a heavy blow.
  */
 
+import { quality } from './quality';
+
 export interface Particle {
   x: number;
   y: number;
@@ -90,6 +92,8 @@ class Fx {
   }
 
   shake(power: number, ms: number, now: number): void {
+    // Reduced motion (the system setting): the view never shakes.
+    if (quality.reducedMotion) return;
     // A stronger or longer shake takes over; a weaker one does not cut a strong one short.
     const left = Math.max(0, this.shakeUntil - now);
     if (power >= this.shakePower * (left / Math.max(1, this.shakeUntil - this.shakeStart)) || now >= this.shakeUntil) {
@@ -112,8 +116,9 @@ class Fx {
   }
 
   burst(x: number, y: number, now: number, o: BurstOptions): void {
-    const room = MAX_PARTICLES - this.particles.length;
-    const count = Math.min(o.count, Math.max(0, room));
+    // Light effects: a third of the particles, and fewer at once.
+    const room = (quality.light ? MAX_PARTICLES / 4 : MAX_PARTICLES) - this.particles.length;
+    const count = Math.min(quality.light ? Math.ceil(o.count / 3) : o.count, Math.max(0, room));
     for (let i = 0; i < count; i++) {
       const angle = o.angle === undefined ? Math.random() * Math.PI * 2 : o.angle + (Math.random() - 0.5) * (o.cone ?? Math.PI / 2);
       const speed = o.speed[0] + Math.random() * (o.speed[1] - o.speed[0]);

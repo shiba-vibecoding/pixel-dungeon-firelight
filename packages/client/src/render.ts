@@ -3,6 +3,7 @@ import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
 import { bossCard, floatNumber, fxText, levelCard, slainCard } from './cards';
 import { fx } from './fx';
+import { quality } from './quality';
 import { t } from './i18n';
 
 /* Canvas renderer for the world, using the original 16px tiles and sprites. */
@@ -197,7 +198,8 @@ export function render(
 
   // Pools of warm light, added onto what is lit (the dark then covers what is not in sight).
   ctx.globalCompositeOperation = 'lighter';
-  for (const light of scene.lights ?? []) {
+  // Light effects (quality.ts): no glowing pools, which cost a gradient each.
+  for (const light of quality.light ? [] : scene.lights ?? []) {
     const glow = ctx.createRadialGradient(light.x, light.y, 0, light.x, light.y, light.radius);
     glow.addColorStop(0, `rgba(${light.color}, ${light.strength})`);
     glow.addColorStop(1, `rgba(${light.color}, 0)`);
@@ -288,8 +290,8 @@ export function render(
   }
   ctx.globalAlpha = 1;
 
-  // The hero's light: the edges of the view sink into the dark.
-  if (scene.focus) {
+  // The hero's light: the edges of the view sink into the dark (not in light effects: a full-screen gradient).
+  if (scene.focus && !quality.light) {
     const fx0 = (scene.focus.x - camera.x) * camera.zoom;
     const fy0 = (scene.focus.y - camera.y) * camera.zoom;
     const inner = TILE * camera.zoom * 3;

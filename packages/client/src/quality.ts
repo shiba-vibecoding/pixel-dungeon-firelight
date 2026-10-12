@@ -1,0 +1,60 @@
+/*
+ * How much the effects cost: full, or light for weaker phones (fewer
+ * particles, no vignette or lights, a coarser canvas). «auto» starts full
+ * and turns light by itself if frames come too slowly. The choice is kept
+ * on this device. Reduced motion (the system setting) never shakes the view.
+ */
+
+export type FxMode = 'auto' | 'full' | 'light';
+
+const KEY = 'pd-fx';
+/** A frame slower than this, on average, is a phone struggling (about 33 frames a second). */
+const SLOW_FRAME_MS = 30;
+/** Frames are watched this long before «auto» decides anything. */
+const SETTLE_MS = 4000;
+
+function load(): FxMode {
+  try {
+    const value = localStorage.getItem(KEY);
+    return value === 'full' || value === 'light' ? value : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+class Quality {
+  mode: FxMode = load();
+  /** «auto» found the phone too slow. */
+  private demoted = false;
+  private average = 16;
+  private watched = 0;
+  readonly reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  get light(): boolean {
+    return this.mode === 'light' || (this.mode === 'auto' && this.demoted);
+  }
+
+  setMode(mode: FxMode): void {
+    this.mode = mode;
+    try {
+      localStorage.setItem(KEY, mode);
+    } catch {
+      // Kept for this session only.
+    }
+  }
+
+  /**
+   * Notes a frame's length; true when «auto» has just turned light. Long
+   * gaps (a hidden tab, a window open) are not counted.
+   */
+  frame(dt: number): boolean {
+    if (this.mode !== 'auto' || this.demoted || dt <= 0 || dt > 250) return false;
+    this.average += (dt - this.average) * 0.05;
+    this.watched += dt;
+    if (this.watched < SETTLE_MS || this.average < SLOW_FRAME_MS) return false;
+    this.demoted = true;
+    return true;
+  }
+}
+
+export const quality = new Quality();
