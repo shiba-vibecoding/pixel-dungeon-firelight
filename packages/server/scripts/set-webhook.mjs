@@ -111,6 +111,19 @@ for (const [language, commands] of [
     ...(language ? { language_code: language } : {}),
   });
 }
+// What the bot says about itself: the profile's text, the line in the share card and the chat list,
+// and the button beside the message field that opens the game.
+for (const [language, description, short] of [
+  ['', 'Pixel Dungeon: the classic roguelike, in Telegram. Go down 26 depths for the Amulet of Yendor, alone or with friends in co-op, or hold the Arena of waves together. Tap «Play».', 'The classic roguelike in Telegram: alone or with friends.'],
+  ['ru', 'Pixel Dungeon — классический рогалик прямо в Telegram. Спуститесь на 26 глубин за Амулетом Йендора в одиночку или с друзьями в кооперативе, или держите вместе Арену волн. Нажмите «Играть».', 'Классический рогалик в Telegram: в одиночку или с друзьями.'],
+]) {
+  const lang = language ? { language_code: language } : {};
+  await call('setMyDescription', { description, ...lang });
+  await call('setMyShortDescription', { short_description: short, ...lang });
+}
+if (process.env.PD_APP_URL) {
+  await call('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Играть', web_app: { url: process.env.PD_APP_URL } } });
+}
 const info = await call('getWebhookInfo', {});
 console.log(`Webhook: ${info.url}`);
 console.log('Commands set: /start, /paysupport, /terms.');
