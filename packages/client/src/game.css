@@ -130,7 +130,6 @@ body:has(#ui.pd-wide) #game { cursor: var(--spr-cursor) 0 0, default; }
 .pd-drag-ghost .pd-slot { --slot: 64px; }
 .pd-drag-ghost .pd-slot .pd-item { --u: 3px; }
 
-}
 .pd-coach {
   position: absolute; z-index: var(--z-hud, 10); transform: translate(-50%, calc(-100% - 10px)); pointer-events: none;
   padding: 4px 10px; background: var(--stone-900, #1f1d1d); border: 2px solid var(--gold-deep, #ffcc66); color: var(--gold, #ffeba4);
