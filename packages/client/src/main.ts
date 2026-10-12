@@ -702,7 +702,13 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
   // An arrow held down walks on, a step as soon as the last is done: the keyboard's own repeat
   // (a step, a pause, then a stream) is not waited for.
   if (held.code && walk.queue.length === 0 && !walk.chase && !walk.resting && !walk.stairs && !walk.pickup) {
-    tapCell(me.pos + held.dx + held.dy * WIDTH, true);
+    // Held down, a key walks; it does not fight. A monster (or anyone not of the party) in the way
+    // stops the walk there, and each blow takes a press of its own, as each tap does (the ghost and the
+    // sheep, who step aside, do not stop it).
+    const next = me.pos + held.dx + held.dy * WIDTH;
+    const there = visible[next] ? charAt(world, me.depth, next) : undefined;
+    if (there && 'kind' in there && !swapsWithHero(there)) held.code = '';
+    else tapCell(next, true);
   }
 
   if (walk.chase) {
