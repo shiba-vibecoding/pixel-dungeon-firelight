@@ -47,7 +47,7 @@ const en = {
     elemental: 'fire elemental', monk: 'dwarf monk', warlock: 'dwarf warlock', golem: 'golem', king: 'King of Dwarves',
     undead: 'undead dwarf', succubus: 'succubus', eye: 'evil eye', scorpio: 'scorpio', yog: 'Yog-Dzewa',
     rottingFist: 'rotting fist', burningFist: 'burning fist', larva: "god's larva", mimic: 'mimic',
-    statue: 'animated statue', piranha: 'giant piranha',
+    statue: 'animated statue', piranha: 'giant piranha', imp: 'ambitious imp',
   } as Record<MobKind, string>,
   isMimic: 'This is a mimic!',
   yogNotice: 'Hope is an illusion...',
@@ -218,6 +218,7 @@ const en = {
     ankh: 'Ankh',
     'quest.rose': 'dried rose',
     'quest.dust': 'corpse dust',
+    'quest.token': 'dwarf token',
     torch: 'torch',
     'quest.amulet': 'Amulet of Yendor',
     'ring.mending': 'Ring of Mending',
@@ -281,6 +282,7 @@ const en = {
     'wand.avalanche': 'Brings down rocks on the area it strikes, bruising and stunning everyone there.',
     'quest.rose': 'The rose has dried long ago, but it has kept all its petals somehow.',
     'quest.dust': "The ball of corpse dust doesn't differ outwardly from a regular dust ball. However, you know somehow that it's better to get rid of it as soon as possible.",
+    'quest.token': 'Many dwarves and some of their larger creations carry these small pieces of metal of unknown purpose. Maybe they are jewelry, or maybe some kind of ID. The ambitious imp wants them.',
     torch: "It's an indispensable item in the Demon Halls, which are notorious for their poor ambient lighting.",
     'ring.mending': 'Wounds close faster while you wear it.',
     'ring.detection': 'You search further for hidden doors and traps.',
@@ -321,6 +323,21 @@ const en = {
     remind: 'Any luck with corpse dust? Bone piles are the most obvious places to look.',
     reward: 'Oh, I see you have succeeded! I do hope it has not troubled you too much. As I promised, you can choose one of my high quality wands.',
     farewell: 'Good luck in your quest!',
+  },
+  imp: {
+    intro: {
+      golem:
+        'Are you an adventurer? I love adventurers! You can always rely on them if something needs to be killed. Am I right? For a bounty, of course ;) In my case this is golems who need to be killed. You see, I am going to start a little business here, but these stupid golems are bad for business! It is very hard to negotiate with wandering lumps of granite, damn them! So please, kill... let us say 6 of them, bring me their tokens, and a reward is yours.',
+      monk:
+        'Are you an adventurer? I love adventurers! You can always rely on them if something needs to be killed. Am I right? For a bounty, of course ;) In my case this is monks who need to be killed. You see, I am going to start a little business here, but these lunatics do not buy anything themselves and will scare away other customers. So please, kill... let us say 8 of them, bring me their tokens, and a reward is yours.',
+    },
+    remind: {
+      golem: 'How is your golem safari going? Six tokens, remember.',
+      monk: 'Oh, you are still alive! I knew that your kung-fu is stronger ;) Just do not forget to grab these monks\' tokens: eight of them.',
+    },
+    reward:
+      'Oh yes! You are my hero! Regarding your reward, I do not have cash with me right now, but I have something better for you. This is my family heirloom ring: my granddad took it off a dead paladin\'s finger.',
+    farewell: (heroClass: string) => `See you, ${heroClass}!`,
   },
   keyInfo: (depth: number) => `Opens the locked room on depth ${depth}. Walk into its door.`,
   goldenKeyInfo: (depth: number) => `Opens a locked or crystal chest on depth ${depth}.`,
@@ -554,7 +571,7 @@ const ru: Strings = {
     elemental: 'огненный элементаль', monk: 'гном-монах', warlock: 'гном-чернокнижник', golem: 'голем', king: 'Король гномов',
     undead: 'мёртвый гном', succubus: 'суккуб', eye: 'злобный глаз', scorpio: 'скорпион', yog: 'Йог-Дзева',
     rottingFist: 'гниющий кулак', burningFist: 'горящий кулак', larva: 'личинка бога', mimic: 'мимик',
-    statue: 'ожившая статуя', piranha: 'гигантская пиранья',
+    statue: 'ожившая статуя', piranha: 'гигантская пиранья', imp: 'амбициозный бес',
   },
   isMimic: 'Это мимик!',
   yogNotice: 'Надежда — это иллюзия...',
@@ -722,6 +739,7 @@ const ru: Strings = {
     ankh: 'Анкх',
     'quest.rose': 'сухая роза',
     'quest.dust': 'трупная пыль',
+    'quest.token': 'жетон гнома',
     torch: 'факел',
     'quest.amulet': 'Амулет Йендора',
     'ring.mending': 'Кольцо Восстановления',
@@ -785,6 +803,7 @@ const ru: Strings = {
     'wand.avalanche': 'Обрушивает камни туда, куда ударит, раня и оглушая всех вокруг.',
     'quest.rose': 'Эта роза иссохла много лет тому назад, но, не смотря на это, сохранила каждый лепесток.',
     'quest.dust': 'С виду этот комок трупной пыли ничем не отличается от обычной пыли. Но почему-то вы чувствуете, что от него лучше избавиться как можно скорее.',
+    'quest.token': 'Многие гномы и некоторые их творения покрупнее носят эти кусочки металла неизвестного назначения. Может, это украшения, а может, что-то вроде удостоверений. Они нужны амбициозному бесу.',
     torch: 'Незаменимая вещь в Демонических Чертогах, печально известных своим скудным освещением.',
     'ring.mending': 'Пока вы его носите, раны затягиваются быстрее.',
     'ring.detection': 'Вы ищете потайные двери и ловушки дальше.',
@@ -825,6 +844,21 @@ const ru: Strings = {
     remind: 'Есть успехи с трупной пылью? Груды костей — самое очевидное место для поисков.',
     reward: 'О, я вижу, у вас получилось! Надеюсь, это не доставило вам много хлопот. Как я и обещал, выберите одну из моих превосходных палочек.',
     farewell: 'Удачи в ваших поисках!',
+  },
+  imp: {
+    intro: {
+      golem:
+        'Вы искатель приключений? Обожаю искателей приключений! На них всегда можно положиться, если кого-то нужно убить. Ведь так? За вознаграждение, конечно ;) В моём случае убить нужно големов. Видите ли, я собираюсь открыть здесь небольшое дело, а эти тупые големы вредят торговле! С бродячими глыбами гранита очень трудно договориться, будь они неладны! Так что, пожалуйста, убейте... скажем, шестерых, принесите мне их жетоны — и награда ваша.',
+      monk:
+        'Вы искатель приключений? Обожаю искателей приключений! На них всегда можно положиться, если кого-то нужно убить. Ведь так? За вознаграждение, конечно ;) В моём случае убить нужно монахов. Видите ли, я собираюсь открыть здесь небольшое дело, а эти безумцы сами ничего не покупают и распугивают других покупателей. Так что, пожалуйста, убейте... скажем, восьмерых, принесите мне их жетоны — и награда ваша.',
+    },
+    remind: {
+      golem: 'Как продвигается сафари на големов? Помните: шесть жетонов.',
+      monk: 'О, вы ещё живы! Я знал, что ваше кунг-фу сильнее ;) Только не забывайте подбирать жетоны монахов: их нужно восемь.',
+    },
+    reward:
+      'О да! Вы мой герой! Что касается награды — наличных у меня сейчас нет, но у меня есть кое-что получше. Это наша фамильная реликвия, кольцо: мой дед снял его с пальца мёртвого паладина.',
+    farewell: (heroClass) => `Ещё увидимся, ${heroClass}!`,
   },
   keyInfo: (depth) => `Открывает запертую комнату на глубине ${depth}. Просто войдите в её дверь.`,
   goldenKeyInfo: (depth) => `Открывает запертый или хрустальный сундук на глубине ${depth}.`,

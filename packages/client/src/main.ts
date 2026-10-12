@@ -450,6 +450,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
   for (const effect of effects) {
     if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line);
     if (effect.type === 'wandmaker' && effect.hero === myId) talkWithWandmaker(effect.line);
+    if (effect.type === 'imp' && effect.hero === myId) talkWithImp(effect.line);
     if (effect.type === 'shop' && effect.hero === myId) openShop();
     if (effect.type === 'fell' && effect.hero === myId) justFell = true;
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
@@ -496,6 +497,28 @@ function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): vo
     text: t.wandmaker[line],
     offers: line === 'reward' && quest ? [quest.battle, quest.utility] : [],
     onChoose: (index) => send({ type: 'wandReward', choice: index === 0 ? 'battle' : 'utility' }, performance.now()),
+    onClose: hideOverlay,
+  });
+}
+
+function talkWithImp(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  const quest = world?.impQuest;
+  if (!world || !me || !quest) return;
+  walk.reset();
+  const text =
+    line === 'intro' ? t.imp.intro[quest.prey]
+    : line === 'remind' ? t.imp.remind[quest.prey]
+    : line === 'reward' ? t.imp.reward
+    : t.imp.farewell(t.classes[me.heroClass]);
+  showQuest({
+    world,
+    hero: me,
+    who: 'imp',
+    text,
+    offers: line === 'reward' ? [quest.reward] : [],
+    onChoose: () => send({ type: 'impReward' }, performance.now()),
     onClose: hideOverlay,
   });
 }

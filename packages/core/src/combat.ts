@@ -9,6 +9,7 @@ import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold, wa
 import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
 import { armorProc, TERROR_TURNS, weaponProc } from './enchant';
 import { earthrootAbsorbs } from './plants';
+import { impQuestKill } from './imp';
 import { questKill } from './quest';
 import { T } from './level/terrain';
 
@@ -288,6 +289,7 @@ function mobDied(ctx: Ctx, mob: Mob): void {
   }
 
   questKill(ctx, mob);
+  impQuestKill(ctx, mob);
 
   // A thief's stolen goods fall where it dies, and a mimic's treasure.
   if (mob.item) dropItem(ctx.floor, mob.pos, mob.item);

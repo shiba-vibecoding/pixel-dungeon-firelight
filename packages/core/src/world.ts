@@ -14,6 +14,7 @@ import { staggerTarget, stepOnPlant, sungrassHeals } from './plants';
 import { discoverable } from './level/flags';
 import { type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
+import { type ImpQuest, impRewardProblem, ringFromImp, spawnImp, talkToImp } from './imp';
 import { spawnWandmaker, talkToWandmaker, type WandQuest, wandFromWandmaker, wandRewardProblem } from './wandmaker';
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
@@ -48,6 +49,8 @@ export type Action =
   | { type: 'search' }
   /** The sad ghost's reward, for its rose. */
   | { type: 'reward'; choice: 'weapon' | 'armor' }
+  /** The ambitious imp's reward, for the tokens. */
+  | { type: 'impReward' }
   /** The old wandmaker's reward: a battle wand or a useful one. */
   | { type: 'wandReward'; choice: 'battle' | 'utility' }
   | InventoryAction;
@@ -77,6 +80,8 @@ export interface World {
   quest: GhostQuest | null;
   /** The old wandmaker's errand, once he has appeared. */
   wandQuest: WandQuest | null;
+  /** The ambitious imp's errand, once he has appeared (absent in older saves). */
+  impQuest?: ImpQuest | null;
 }
 
 /** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
@@ -89,11 +94,12 @@ const REGENERATION_DELAY = 10;
 /** Sub-stream of a depth's monster stream for the sad ghost. */
 const GHOST_STREAM = 1;
 const WANDMAKER_STREAM = 2;
+const IMP_STREAM = 3;
 
 export function createWorld(seed: number): World {
   return {
     run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
-    known: [], quest: null, wandQuest: null,
+    known: [], quest: null, wandQuest: null, impQuest: null,
   };
 }
 
@@ -112,6 +118,7 @@ export function levelAt(world: World, depth: number): Level {
       const mobs = populate(world, level, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d)));
       spawnGhost(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, GHOST_STREAM)));
       spawnWandmaker(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, WANDMAKER_STREAM)));
+      spawnImp(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, IMP_STREAM)));
       world.floors[d] = {
         mobs,
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
@@ -205,6 +212,8 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       return rewardProblem(world, hero, action.choice);
     case 'wandReward':
       return wandRewardProblem(world, hero, action.choice);
+    case 'impReward':
+      return impRewardProblem(world, hero);
     case 'descend':
       return hero.pos === level.exit ? null : 'not on the stairs';
     case 'jump':
@@ -526,6 +535,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         // shopkeeper; it takes no time.
         if (mob.kind === 'shopkeeper') ctx.effects.push({ type: 'shop', hero: hero.id });
         else if (mob.kind === 'wandmaker') talkToWandmaker(ctx, hero);
+        else if (mob.kind === 'imp') talkToImp(ctx, hero);
         else talkToGhost(ctx, hero);
         break;
       }
@@ -546,6 +556,10 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
 
     case 'wandReward':
       wandFromWandmaker(ctx, hero, action.choice);
+      break;
+
+    case 'impReward':
+      ringFromImp(ctx, hero);
       break;
 
     case 'descend':

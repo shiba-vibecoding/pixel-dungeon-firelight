@@ -129,6 +129,8 @@ export const ITEMS = {
   'key.golden': { category: 'key', sprite: 10 },
   /** The sad ghost's dried rose. */
   'quest.rose': { category: 'quest', sprite: 100 },
+  /** Left by the monks or golems the ambitious imp wants gone. */
+  'quest.token': { category: 'quest', sprite: 122 },
   /** What the old wandmaker is after. */
   'quest.dust': { category: 'quest', sprite: 121 },
   /** Tengu's legacy: reading it, a hero masters one of two ways. */
@@ -202,7 +204,7 @@ export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
   return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || category === 'torch' ||
-    category === 'seed' || kind === 'missile.dart';
+    category === 'seed' || kind === 'missile.dart' || kind === 'quest.token';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {

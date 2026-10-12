@@ -45,8 +45,9 @@ Yendor on depth 26:
   depth 15, leaking gas and repairing itself; the King of Dwarves on depth 20,
   raising his undead court; Yog-Dzewa on depth 25 with its fists and larvae.
   Picking up the Amulet of Yendor below wins the run.
-- The sad ghost's quest (the dried rose) on depths 2–4, and the old
-  wandmaker's (corpse dust, for a choice of two wands) on depths 7–9.
+- The sad ghost's quest (the dried rose) on depths 2–4, the old wandmaker's
+  (corpse dust, for a choice of two wands) on depths 7–9, and the ambitious
+  imp's on depths 17–19 (tokens from slain monks or golems, for a ring).
 - Hunger and food (rations, pasties, mystery meat), regeneration, experience
   and levels, melee and ranged combat.
 - Items: gold, which buys from the shop; potions (including toxic gas,
@@ -80,8 +81,8 @@ Yendor on depth 26:
 Not ported yet: cursed items and the scroll of remove curse; the scroll of
 mirror image and the glyph of multiplicity (there are no allies yet); the
 potion of might; the wands of amok, reach, flock and regrowth; the rotberry
-and the ring of herbalism; the blacksmith's and the imp's quests and the
-wandmaker's rotberry errand; dwarf monks disarming; the rare monster variants
+and the ring of herbalism; the blacksmith's quest and the wandmaker's
+rotberry errand; dwarf monks disarming; the rare monster variants
 (albino rats, bandits, fetid rats); and gas clouds (gas acts at once on
 everyone within reach instead).
 
