@@ -1,7 +1,7 @@
 import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
 import {
-  awareness, createHero, createMob, type Hero, heroAttackDelay, heroSpeed, HUNGER_STEP, hungerStep, HUNGRY, isAlive,
-  isStarving, type Mob, type PlayerInfo, STARVING,
+  awareness, createHero, createMob, type Hero, heroAttackDelay, heroSpeed, hungerGrowth, hungerStep, HUNGRY, isAlive,
+  isStarving, type Mob, type PlayerInfo, ringBonus, STARVING,
 } from './actors';
 import { attack, hurt } from './combat';
 import {
@@ -134,7 +134,7 @@ export function addHero(world: World, player: PlayerInfo): Hero {
   const hero = createHero(player, 1, freeCellNear(world, level, 1, level.entrance), floorAt(world, 1).now);
   world.heroes.push(hero);
   // Heroes know what they set out with.
-  for (const item of hero.items) {
+  for (const item of [...hero.items, ...hero.rings]) {
     if (!world.known.includes(item.kind)) world.known.push(item.kind);
   }
   observe(world, hero);
@@ -326,16 +326,21 @@ function advance(world: World, depth: number, effects: Effect[]): void {
 }
 
 function spend(ctx: Ctx, hero: Hero, time: number): void {
-  // Slowed, everything takes twice as long (Char.spend).
+  // Slowed, everything takes twice as long (Char.spend); a ring of haste speeds it all up.
   if (hero.slowed > 0) time *= 2;
+  const haste = ringBonus(hero, 'ring.haste');
+  if (haste !== 0) time *= 1.1 ** -haste;
   hero.time += time;
   hero.regen += time;
-  while (hero.regen >= REGENERATION_DELAY) {
-    hero.regen -= REGENERATION_DELAY;
+  // Regeneration: a ring of mending makes wounds close faster.
+  const regenDelay = REGENERATION_DELAY / 1.2 ** ringBonus(hero, 'ring.mending');
+  while (hero.regen >= regenDelay) {
+    hero.regen -= regenDelay;
     // A starving body does not heal (Regeneration).
     if (isAlive(hero) && hero.hp < hero.ht && !isStarving(hero)) hero.hp++;
   }
   starve(ctx, hero, time);
+  wearRings(ctx, hero, time);
   // Caustic ooze burns every turn until washed off in water.
   if (hero.ooze >= 0) {
     hero.ooze += time;
@@ -409,11 +414,25 @@ function starve(ctx: Ctx, hero: Hero, time: number): void {
       continue;
     }
     const before = hero.hunger;
-    hero.hunger = Math.min(before + HUNGER_STEP, STARVING);
+    hero.hunger = Math.min(Math.max(0, before + hungerGrowth(hero)), STARVING);
     if (hero.hunger >= STARVING) ctx.effects.push({ type: 'hunger', hero: hero.id, state: 'starving' });
     else if (hero.hunger >= HUNGRY && before < HUNGRY) ctx.effects.push({ type: 'hunger', hero: hero.id, state: 'hungry' });
   }
 }
+
+/** Ring.Ticker: a ring worn long enough tells the party what it is. */
+function wearRings(ctx: Ctx, hero: Hero, time: number): void {
+  for (const ring of hero.rings) {
+    if (ctx.world.known.includes(ring.kind)) continue;
+    ring.worn = (ring.worn ?? 0) + time;
+    if (ring.worn >= RING_TICKS_TO_KNOW) {
+      ctx.world.known.push(ring.kind);
+      ctx.effects.push({ type: 'identified', hero: hero.id, kind: ring.kind });
+    }
+  }
+}
+
+const RING_TICKS_TO_KNOW = 200;
 
 function perform(ctx: Ctx, hero: Hero, action: Action): void {
   const { world, level } = ctx;
@@ -692,7 +711,8 @@ function drinkFromWell(ctx: Ctx, hero: Hero): void {
  * passing after every step, and are always found by a deliberate search.
  */
 function search(ctx: Ctx, hero: Hero, intentional: boolean): boolean {
-  const radius = intentional ? SEARCH_RADIUS : 1;
+  // A ring of detection widens the search.
+  const radius = Math.max(0, (intentional ? SEARCH_RADIUS : 1) + ringBonus(hero, 'ring.detection'));
   const fov = heroView(ctx.world, hero);
   const chance = awareness(hero);
   const cx = cellX(hero.pos);

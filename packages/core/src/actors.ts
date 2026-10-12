@@ -18,14 +18,16 @@ interface ClassKit {
   weapon: ItemKind;
   /** Extra starting items and how many. */
   items: ReadonlyArray<readonly [ItemKind, number]>;
+  /** A ring worn from the start, and its level. */
+  ring?: readonly [ItemKind, number];
   stealth: number;
 }
 
 export const HERO_CLASSES: Readonly<Record<HeroClass, ClassKit>> = {
   warrior: { ht: 20, str: 11, weapon: 'weapon.shortSword', items: [['missile.dart', 8]], stealth: 0 },
   mage: { ht: 20, str: 10, weapon: 'weapon.knuckles', items: [['wand.magicMissile', 1]], stealth: 0 },
-  // The rogue's starting ring of shadows +1.
-  rogue: { ht: 20, str: 10, weapon: 'weapon.dagger', items: [['missile.dart', 8]], stealth: 1 },
+  // The rogue sets out wearing a ring of shadows +1.
+  rogue: { ht: 20, str: 10, weapon: 'weapon.dagger', items: [['missile.dart', 8]], ring: ['ring.shadows', 1], stealth: 0 },
   huntress: { ht: 15, str: 10, weapon: 'weapon.dagger', items: [['missile.boomerang', 1]], stealth: 0 },
 };
 
@@ -56,6 +58,8 @@ export interface Hero {
   ooze: number;
   weapon: Item;
   armor: Item;
+  /** Rings worn, two at most. */
+  rings: Item[];
   items: Item[];
   gold: number;
   /** Turns left of sensing every monster on the level / of being unseen. */
@@ -111,6 +115,7 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     ooze: -1,
     weapon: createItem(kit.weapon),
     armor: createItem('armor.cloth'),
+    rings: kit.ring ? [createItem(kit.ring[0], 1, kit.ring[1])] : [],
     // Everyone sets out with a ration of food (HeroClass.initCommon).
     items: [...kit.items.map(([kind, qty]) => createItem(kind, qty)), createItem('food.ration')],
     gold: 0,
@@ -135,6 +140,10 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
 
 export const isAlive = (char: { hp: number }): boolean => char.hp > 0;
 
+/** The levels of every worn ring of a kind, added up (several buffs of a kind stack in the original). */
+export const ringBonus = (hero: Hero, kind: ItemKind): number =>
+  (hero.rings ?? []).reduce((sum, ring) => (ring.kind === kind ? sum + ring.level : sum), 0);
+
 /** Hero.STR: weakness takes two points of strength away while it lasts. */
 export const heroStr = (hero: Hero): number => hero.str - (hero.weakened > 0 ? 2 : 0);
 
@@ -145,6 +154,8 @@ export const STARVING = 360;
 /** Hunger grows by this much every this many turns; rogues go longer without food. */
 export const HUNGER_STEP = 10;
 export const hungerStep = (hero: Hero): number => (hero.heroClass === 'rogue' ? HUNGER_STEP * 1.2 : HUNGER_STEP);
+/** Hunger.act: how much hunger a step adds; a ring of satiety takes some away (or adds, if negative). */
+export const hungerGrowth = (hero: Hero): number => HUNGER_STEP - ringBonus(hero, 'ring.satiety');
 export const isStarving = (hero: Hero): boolean => hero.hunger >= STARVING;
 export const isHungry = (hero: Hero): boolean => hero.hunger >= HUNGRY;
 
@@ -152,16 +163,22 @@ export function heroAttackSkill(hero: Hero): number {
   const weapon = weaponStats(hero.weapon);
   const encumbrance = weapon.str - heroStr(hero);
   const factor = encumbrance > 0 ? f32(weapon.accuracy / 1.5 ** encumbrance) : f32(weapon.accuracy);
-  return Math.trunc(f32(hero.attackSkill * factor));
+  // RingOfAccuracy: 1.4 times as accurate a level.
+  const bonus = ringBonus(hero, 'ring.accuracy');
+  const accuracy = bonus === 0 ? 1 : f32(1.4 ** bonus);
+  return Math.trunc(f32(f32(hero.attackSkill * accuracy) * factor));
 }
 
 export function heroDefenseSkill(hero: Hero): number {
+  // RingOfEvasion: 1.2 times as evasive a level.
+  const bonus = ringBonus(hero, 'ring.evasion');
+  const defense = Math.trunc(f32(hero.defenseSkill * (bonus === 0 ? 1 : f32(1.2 ** bonus))));
   const encumbrance = armorStats(hero.armor).str - heroStr(hero);
   if (encumbrance > 0) {
-    return Math.trunc(hero.defenseSkill / 1.5 ** encumbrance);
+    return Math.trunc(defense / 1.5 ** encumbrance);
   }
   // Rogues turn spare strength into evasion.
-  return hero.heroClass === 'rogue' ? hero.defenseSkill - encumbrance : hero.defenseSkill;
+  return hero.heroClass === 'rogue' ? defense - encumbrance : defense;
 }
 
 /**
@@ -210,7 +227,7 @@ export function awareness(hero: Hero): number {
 }
 
 export const heroArmor = (hero: Hero): number => armorStats(hero.armor).dr;
-export const heroStealth = (hero: Hero): number => HERO_CLASSES[hero.heroClass].stealth;
+export const heroStealth = (hero: Hero): number => HERO_CLASSES[hero.heroClass].stealth + ringBonus(hero, 'ring.shadows');
 export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 
 /* Monsters */

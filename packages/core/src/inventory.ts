@@ -31,9 +31,11 @@ export type InventoryAction =
   /** Buy the shop's ware the hero stands on. */
   | { type: 'buy' }
   /** Sell an item from the pack to the shopkeeper next to the hero. */
-  | { type: 'sell'; item: number };
+  | { type: 'sell'; item: number }
+  /** Take off a worn ring, back into the pack. */
+  | { type: 'remove'; ring: number };
 
-const INVENTORY_ACTIONS: ReadonlySet<string> = new Set(['pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell']);
+const INVENTORY_ACTIONS: ReadonlySet<string> = new Set(['pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove']);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
   return INVENTORY_ACTIONS.has(action.type);
@@ -62,11 +64,15 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     if (!heap) return 'nothing here';
     return heap.kind === 'forSale' ? 'that is for sale' : null;
   }
+  if (action.type === 'remove') {
+    if (!Number.isInteger(action.ring) || !hero.rings[action.ring]) return 'no such ring';
+    return hero.items.length < BACKPACK_SIZE ? null : 'your pack is full';
+  }
   if (action.type === 'buy') {
     const heap = heapAt(world, hero);
     const ware = heap?.kind === 'forSale' ? heap.items[0] : undefined;
     if (!ware) return 'nothing for sale here';
-    if (hero.gold < buyPrice(ware, hero.depth, world.known.includes(ware.kind))) return 'not enough gold';
+    if (hero.gold < buyPrice(ware, hero.depth, world.known.includes(ware.kind), haggles(hero))) return 'not enough gold';
     return isStackable(ware.kind) && hero.items.some((i) => i.kind === ware.kind) || hero.items.length < BACKPACK_SIZE
       ? null
       : 'your pack is full';
@@ -80,7 +86,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
       return null;
     case 'equip':
-      return category === 'weapon' || category === 'armor' ? null : 'that cannot be equipped';
+      return category === 'weapon' || category === 'armor' || category === 'ring' ? null : 'that cannot be equipped';
     case 'drop':
       return null;
     case 'sell':
@@ -119,8 +125,22 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       }
       use(ctx, hero, action.item, action.target ?? 'weapon');
       return TIME_TO_USE;
+    case 'remove': {
+      const ring = hero.rings.splice(action.ring, 1)[0]!;
+      hero.items.push(ring);
+      ctx.effects.push({ type: 'dropped', hero: hero.id, item: ring });
+      return TIME_TO_EQUIP;
+    }
     case 'equip': {
       const item = hero.items[action.item]!;
+      if (itemDef(item.kind).category === 'ring') {
+        // Two rings at most: a third takes the place of the first.
+        hero.items.splice(action.item, 1);
+        if (hero.rings.length >= 2) hero.items.push(hero.rings.shift()!);
+        hero.rings.push(item);
+        ctx.effects.push({ type: 'equipped', hero: hero.id, item });
+        return TIME_TO_EQUIP;
+      }
       const slot = itemDef(item.kind).category as 'weapon' | 'armor';
       hero.items[action.item] = hero[slot];
       hero[slot] = item;
@@ -143,7 +163,7 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       // WndTradeItem.buy: the gold goes, the ware comes into the pack.
       const heap = heapAt(ctx.world, hero)!;
       const item = heap.items.shift()!;
-      const price = buyPrice(item, hero.depth, ctx.world.known.includes(item.kind));
+      const price = buyPrice(item, hero.depth, ctx.world.known.includes(item.kind), haggles(hero));
       hero.gold -= price;
       collect(hero, item);
       if (heap.items.length === 0) ctx.floor.heaps.splice(ctx.floor.heaps.indexOf(heap), 1);
@@ -160,6 +180,9 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
     }
   }
 }
+
+/** Wearing a ring of haggler, shops ask half. */
+const haggles = (hero: Hero): boolean => hero.rings.some((ring) => ring.kind === 'ring.haggler');
 
 /** A shopkeeper standing next to the hero, ready to trade. */
 export function shopkeeperBeside(world: World, hero: Hero): boolean {

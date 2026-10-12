@@ -45,7 +45,10 @@ Yendor on depth 26:
   until used, and shared knowledge in a party; all melee weapons and armour
   with upgrades and strength requirements; darts and the boomerang; wands of
   magic missile, firebolt, lightning, poison, slowness, teleportation, blink,
-  disintegration and avalanche, known by their wood until used.
+  disintegration and avalanche, known by their wood until used; rings of
+  mending, detection, shadows, power, accuracy, evasion, satiety, haste,
+  elements, thorns and haggler, two worn at once, known by their gem until worn
+  a while.
 - Four hero classes with their original starting kits and perks.
 - Solo runs saved on the device; a daily dungeon with a global leaderboard and
   shareable results.
@@ -57,7 +60,7 @@ Yendor on depth 26:
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 
-Not ported yet: rings; seeds and plants; the wands of amok, reach, flock and
+Not ported yet: seeds and plants (and the ring of herbalism); the wands of amok, reach, flock and
 regrowth; hero subclasses (the Tome of Mastery); the ankh; the blacksmith's
 and the imp's quests and the wandmaker's rotberry errand; the remaining special
 rooms (garden, pool, statue, laboratory, vault, weak floor) and chasms you can

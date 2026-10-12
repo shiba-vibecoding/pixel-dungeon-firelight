@@ -381,7 +381,8 @@ function takeHere(world: World, me: Hero, now: number): void {
 function openTrade(world: World, me: Hero, item: Item): void {
   walk.reset();
   showTrade({
-    world, hero: me, item, price: buyPrice(item, me.depth, world.known.includes(item.kind)),
+    world, hero: me, item,
+    price: buyPrice(item, me.depth, world.known.includes(item.kind), me.rings.some((ring) => ring.kind === 'ring.haggler')),
     onBuy: () => send({ type: 'buy' }, performance.now()),
     onClose: hideOverlay,
   });

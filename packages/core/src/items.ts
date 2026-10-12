@@ -15,7 +15,7 @@ import type { RunState } from './run';
  */
 
 export type ItemCategory =
-  | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'food' | 'dew' | 'torch' | 'key' | 'quest';
+  | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'food' | 'dew' | 'torch' | 'key' | 'quest';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -88,6 +88,18 @@ export const ITEMS = {
   'wand.blink': { category: 'wand' },
   'wand.disintegration': { category: 'wand' },
   'wand.avalanche': { category: 'wand' },
+  // Rings, two of which can be worn at once; they go by their gem until worn a while.
+  'ring.mending': { category: 'ring' },
+  'ring.detection': { category: 'ring' },
+  'ring.shadows': { category: 'ring' },
+  'ring.power': { category: 'ring' },
+  'ring.accuracy': { category: 'ring' },
+  'ring.evasion': { category: 'ring' },
+  'ring.satiety': { category: 'ring' },
+  'ring.haste': { category: 'ring' },
+  'ring.elements': { category: 'ring' },
+  'ring.thorns': { category: 'ring' },
+  'ring.haggler': { category: 'ring' },
   // Food (Food, Pasty, MysteryMeat): a ration staves off hunger for a while,
   // a pasty completely; mystery meat from crabs is a gamble.
   'food.ration': { category: 'food', sprite: 4, energy: 260 },
@@ -120,6 +132,8 @@ export interface Item {
   recharge?: number;
   /** Keys: the depth whose door they open. */
   depth?: number;
+  /** Rings: turns worn so far; after a while one knows what they are. */
+  worn?: number;
 }
 
 export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
@@ -173,6 +187,8 @@ export function itemPrice(item: Item, known: boolean): number {
       return levelled(50);
     case 'torch':
       return 10 * item.qty;
+    case 'ring':
+      return levelled(80);
     default:
       return 0;
   }
@@ -183,8 +199,11 @@ export function itemPrice(item: Item, known: boolean): number {
  * they are. Unknown potions and scrolls go for a plain price, so the price
  * gives nothing away.
  */
-export const buyPrice = (item: Item, depth: number, known: boolean): number =>
-  itemPrice(item, known) * 5 * (Math.trunc(depth / 5) + 1);
+export const buyPrice = (item: Item, depth: number, known: boolean, haggling = false): number => {
+  const price = itemPrice(item, known) * 5 * (Math.trunc(depth / 5) + 1);
+  // RingOfHaggler: half price, for whoever wears one.
+  return haggling && price >= 2 ? Math.trunc(price / 2) : price;
+};
 
 /* Thrown weapons (MissileWeapon) and the wand of magic missile */
 
@@ -246,6 +265,8 @@ const POTION_SPRITE = 56;
 const SCROLL_SPRITES = [40, 41, 42, 43, 44, 45, 46, 47, 76, 77, 78, 79];
 /** Holly, yew, ebony, cherry, teak, rowan, willow, mahogany, bamboo, purpleheart, oak, birch. */
 const WAND_SPRITES = [48, 49, 50, 51, 52, 53, 54, 55, 68, 69, 70, 71];
+/** Diamond, opal, garnet, ruby, amethyst, topaz, onyx, tourmaline, emerald, sapphire, quartz, agate. */
+const RING_SPRITES = [32, 33, 34, 35, 36, 37, 38, 39, 72, 73, 74, 75];
 
 /** Kind → index into POTION_COLORS or SCROLL_RUNES, fixed for a run. */
 export type Labels = Partial<Record<ItemKind, number>>;
@@ -253,7 +274,7 @@ export type Labels = Partial<Record<ItemKind, number>>;
 export function rollLabels(seed: number): Labels {
   const rng = Rng.seeded(deriveSeed(seed, LABEL_STREAM));
   const labels: Labels = {};
-  for (const category of ['potion', 'scroll', 'wand'] as const) {
+  for (const category of ['potion', 'scroll', 'wand', 'ring'] as const) {
     const kinds = (Object.keys(ITEMS) as ItemKind[]).filter(
       (kind) => itemDef(kind).category === category && itemDef(kind).sprite === undefined,
     );
@@ -273,16 +294,17 @@ export function itemSprite(item: Item, labels: Labels): number {
   if (def.sprite !== undefined) return def.sprite;
   const label = labels[item.kind] ?? 0;
   if (def.category === 'wand') return WAND_SPRITES[label]!;
+  if (def.category === 'ring') return RING_SPRITES[label]!;
   return def.category === 'potion' ? POTION_SPRITE + label : SCROLL_SPRITES[label]!;
 }
 
 /* Generator */
 
 /** Categories the generator picks from; thrown weapons come with the weapons. */
-type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand';
+type GeneratedCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'food' | 'wand' | 'ring';
 
 const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
-  ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['wand', 4], ['gold', 50],
+  ['weapon', 15], ['armor', 10], ['potion', 50], ['scroll', 40], ['wand', 4], ['ring', 2], ['gold', 50],
 ];
 
 const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
@@ -304,6 +326,11 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
     ['missile.dart', 1],
   ],
   armor: [['armor.cloth', 1], ['armor.leather', 1], ['armor.mail', 1], ['armor.scale', 1], ['armor.plate', 1]],
+  // The original also has herbalism; thorns and haggler are only dropped by DM-300 and thieves.
+  ring: [
+    ['ring.mending', 1], ['ring.detection', 1], ['ring.shadows', 1], ['ring.power', 1], ['ring.accuracy', 1],
+    ['ring.evasion', 1], ['ring.satiety', 1], ['ring.haste', 1], ['ring.elements', 1],
+  ],
   // The original also has amok, reach, flock and regrowth.
   wand: [
     ['wand.teleportation', 10], ['wand.slowness', 10], ['wand.firebolt', 15], ['wand.poison', 10], ['wand.blink', 11],
@@ -314,6 +341,12 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
 /** Gold.random: a pile's worth for a depth. */
 export function rollGold(rng: Rng, depth: number): Item {
   return createItem('gold', rng.intBetween(20 + depth * 10, 40 + depth * 20));
+}
+
+/** Ring.random: one or two levels, and three rings in ten the wrong way. */
+export function randomRing(rng: Rng, kind: ItemKind): Item {
+  const level = rng.intBetween(1, 3);
+  return createItem(kind, 1, rng.float() < 0.3 ? -level : level);
 }
 
 /** Generator.Category.FOOD: four rations to every pasty. */
@@ -351,6 +384,7 @@ export class ItemGenerator {
     const kind = table[this.rng.chances(table.map(([, chance]) => chance))]![0];
     // Dart.random: a handful of them.
     if (kind === 'missile.dart') return createItem(kind, this.rng.intBetween(5, 15));
+    if (category === 'ring') return randomRing(this.rng, kind);
     if (category === 'wand') {
       // Wand.random: half of them a level better, a few two.
       let level = 0;

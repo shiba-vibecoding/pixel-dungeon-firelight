@@ -447,7 +447,7 @@ export interface BackpackOptions {
 
 export function showBackpack(options: BackpackOptions): void {
   const { world, hero } = options;
-  const open = (item: Item, index: number | null): void => showItem({ ...options, item, index });
+  const open = (item: Item, index: number | null, ring?: number): void => showItem({ ...options, item, index, ring });
   const grid = el('div', { className: 'pd-grid' });
   for (let i = 0; i < BACKPACK_SIZE; i++) {
     const item = hero.items[i];
@@ -468,6 +468,10 @@ export function showBackpack(options: BackpackOptions): void {
         { className: 'pd-row equipped' },
         slot(world, hero.weapon, () => open(hero.weapon, null), t.equippedLabel),
         slot(world, hero.armor, () => open(hero.armor, null), t.equippedLabel),
+        ...[0, 1].map((i) => {
+          const ring = hero.rings[i];
+          return slot(world, ring, ring && (() => open(ring, null, i)), ring && t.equippedLabel);
+        }),
         el('span', { className: 'pd-stats', textContent: `${t.strShort} ${hero.str}` }),
       ),
       grid,
@@ -480,6 +484,8 @@ interface ItemOptions extends BackpackOptions {
   item: Item;
   /** Backpack slot, or null for equipped items. */
   index: number | null;
+  /** For a worn ring: which of the two it is. */
+  ring?: number;
 }
 
 function showItem(options: ItemOptions): void {
@@ -510,8 +516,8 @@ function showItem(options: ItemOptions): void {
         actions.push(button(t.read, () => act({ type: 'use', item: index }), 'primary'));
       }
     }
-    if (category === 'weapon' || category === 'armor') {
-      actions.push(button(t.equip, () => act({ type: 'equip', item: index }), 'primary'));
+    if (category === 'weapon' || category === 'armor' || category === 'ring') {
+      actions.push(button(category === 'ring' ? t.putOn : t.equip, () => act({ type: 'equip', item: index }), 'primary'));
     }
     if (category === 'missile' || category === 'wand') {
       const kind = category === 'missile' ? 'throw' : 'zap';
@@ -523,6 +529,9 @@ function showItem(options: ItemOptions): void {
       );
     }
     actions.push(button(t.dropItem, () => act({ type: 'drop', item: index })));
+  } else if (options.ring !== undefined) {
+    const ring = options.ring;
+    actions.push(button(t.takeOff, () => act({ type: 'remove', ring }), 'primary'));
   }
   show(
     el(

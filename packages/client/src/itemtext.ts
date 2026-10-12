@@ -8,7 +8,8 @@ import { t } from './i18n';
 
 export function isKnown(world: World, item: Item): boolean {
   const category = itemDef(item.kind).category;
-  return (category !== 'potion' && category !== 'scroll' && category !== 'wand') || world.known.includes(item.kind);
+  return (category !== 'potion' && category !== 'scroll' && category !== 'wand' && category !== 'ring') ||
+    world.known.includes(item.kind);
 }
 
 export function itemName(world: World, item: Item): string {
@@ -17,10 +18,11 @@ export function itemName(world: World, item: Item): string {
   if (!isKnown(world, item)) {
     const label = world.run.labels[item.kind] ?? 0;
     if (category === 'wand') return t.unknownWand(t.woods[label]!);
+    if (category === 'ring') return t.unknownRing(t.gems[label]!);
     return category === 'potion' ? t.unknownPotion(t.colors[label]!) : t.unknownScroll(SCROLL_RUNES[label]!);
   }
   const name = t.items[item.kind];
-  if (category === 'weapon' || category === 'armor' || category === 'wand') {
+  if (category === 'weapon' || category === 'armor' || category === 'wand' || category === 'ring') {
     return item.level === 0 ? name : `${name} ${item.level > 0 ? '+' : ''}${item.level}`;
   }
   return name;
@@ -46,6 +48,10 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
     if (item.kind !== 'wand.magicMissile') return [t.itemInfo[item.kind] ?? '', charges];
     const [min, max] = magicMissileDamage(item);
     return [t.itemInfo[item.kind] ?? '', t.wandDamage(min, max), charges];
+  }
+  if (category === 'ring') {
+    if (!isKnown(world, item)) return [t.unknownRingInfo];
+    return [t.itemInfo[item.kind] ?? '', ...(item.level < 0 ? [t.ringNegative] : [])];
   }
   if (category === 'key') return [t.keyInfo(item.depth ?? 0)];
   if (category === 'gold') return [];

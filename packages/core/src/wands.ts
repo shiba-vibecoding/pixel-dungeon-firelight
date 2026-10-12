@@ -1,4 +1,4 @@
-import { type Hero, isAlive, type Mob, MOBS } from './actors';
+import { type Hero, isAlive, type Mob, MOBS, ringBonus } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
 import { hurt } from './combat';
 import { charAt, type Ctx, enterCell, isHero, isWater, leaveCell } from './floor';
@@ -24,7 +24,8 @@ function mobAt(ctx: Ctx, cell: number): Mob | undefined {
 
 export function zapWand(ctx: Ctx, hero: Hero, wand: Item, target: number): void {
   const { world, depth, level, rng } = ctx;
-  const power = wand.level;
+  // A ring of power makes every wand stronger (Wand.power).
+  const power = Math.max(0, wand.level + ringBonus(hero, 'ring.power'));
   const fx = (to: number, bolt: Bolt, from = hero.pos): void => {
     ctx.effects.push({ type: 'zapped', depth, from, to, bolt });
   };

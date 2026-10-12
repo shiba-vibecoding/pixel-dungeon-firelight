@@ -1,9 +1,9 @@
 import {
   BRUTE_ENRAGED_DAMAGE, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
-  maxExp, type Mob, MOBS,
+  maxExp, type Mob, MOBS, ringBonus,
 } from './actors';
 import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, isWater, leaveCell } from './floor';
-import { createItem, type Item, itemDef, ItemGenerator, rollGold } from './items';
+import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold } from './items';
 import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
 import { questKill } from './quest';
 import { T } from './level/terrain';
@@ -98,8 +98,19 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   if (!isHero(defender) && defender.kind === 'yog') spawnLarva(ctx, defender);
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
   hurt(ctx, defender, damage, attacker);
+  // Hero.defenseProc: a ring of thorns turns some of the blow back on the attacker.
+  if (isHero(defender) && !isHero(attacker) && isAlive(attacker) && defender.rings.some((r) => r.kind === 'ring.thorns')) {
+    const back = ctx.rng.intRange(0, damage);
+    if (back > 0) {
+      ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: attacker.id, damage: back });
+      hurt(ctx, attacker, back, defender);
+    }
+  }
   return true;
 }
+
+/** What a ring of elements can shield a hero from (RingOfElements.Resistance.FULL). */
+const ELEMENTAL: ReadonlySet<string> = new Set(['poison', 'burning', 'lightning', 'gas', 'shaman', 'warlock', 'eye', 'burningFist']);
 
 /** Shopkeeper.flee: attacked, he vanishes, and his wares with him. */
 function shopkeeperFlees(ctx: Ctx, keeper: Mob): void {
@@ -168,6 +179,12 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
     victim.alerted = true;
     // In a party, a monster turns on whoever hurt it.
     if (by && isHero(by)) victim.enemy = by.id;
+  }
+  // A ring of elements: now and then, elemental harm is much reduced (Char.damage with a resistance).
+  if (isHero(victim)) {
+    const elements = ringBonus(victim, 'ring.elements');
+    const what = typeof source === 'string' ? source : isHero(source) ? '' : source.kind;
+    if (elements > 0 && ELEMENTAL.has(what) && ctx.rng.int(elements + 3) >= 3) damage = ctx.rng.intRange(0, damage);
   }
   if (!isHero(victim) && victim.kind === 'yog') {
     // Yog.damage: each living fist halves the harm, and they all come to defend it.
@@ -278,6 +295,10 @@ function dropLoot(ctx: Ctx, mob: Mob): Item | null {
       return rng.float() < 0.125 ? createItem('potion.healing') : null;
     case 'brute':
       return rng.float() < 0.5 ? rollGold(rng, ctx.depth) : null;
+    case 'thief':
+      return rng.float() < 0.01 ? randomRing(rng, 'ring.haggler') : null;
+    case 'dm300':
+      return rng.float() < 0.333 ? randomRing(rng, 'ring.thorns') : null;
     case 'spinner':
       return rng.float() < 0.125 ? createItem('food.meat') : null;
     case 'elemental':
