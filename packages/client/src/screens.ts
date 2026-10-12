@@ -753,6 +753,35 @@ export function showQuest(options: QuestOptions): void {
   show(box, answers.length > 0 ? null : options.onClose);
 }
 
+/* The Amulet of Yendor */
+
+/**
+ * AmuletScene: the Amulet in hand, «Let's call it a day» ends the run as won; «I'm not done yet»
+ * goes on (up to the surface, for the happy end). With its words the first time it is taken;
+ * from the backpack («End the game») only the question.
+ */
+export function showAmulet(world: World, hero: Hero, withText: boolean, onEnd: () => void, onStay: () => void): void {
+  const amulet = hero.items.find((item) => item.kind === 'quest.amulet');
+  const box = windowOf(
+    { title: t.items['quest.amulet'], icon: slot(world, amulet, { hero }) },
+    withText && info(t.amuletText, 'pd-speech'),
+    info(t.amuletWayUp, 'pd-note'),
+    el(
+      'div',
+      { className: 'pd-confirm-actions' },
+      button(t.amuletEnd, () => {
+        hideOverlay();
+        onEnd();
+      }, 'primary'),
+      button(t.amuletStay, () => {
+        hideOverlay();
+        onStay();
+      }, 'quiet'),
+    ),
+  );
+  show(box, null);
+}
+
 /* Examine */
 
 export interface InfoExtras {
@@ -1537,6 +1566,12 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'torch') use(t.light, () => act({ type: 'use', item: index }));
     if (category === 'tome') use(t.readTome, () => showWays(options, index, act));
     if (item.kind === 'weapon.pickaxe') use(t.mine, () => act({ type: 'mine' }));
+    if (item.kind === 'quest.amulet') {
+      use(t.amuletEndGame, () => {
+        openBag = null;
+        showAmulet(world, hero, false, () => options.onAction({ type: 'endGame' }), options.onClose);
+      });
+    }
     if (category === 'kit') use(t.applyKit, () => act({ type: 'use', item: index, target: 'armor' }));
     if (category === 'seed') use(t.plantSeed, () => aimWith('throw', index));
     if (category === 'scroll') {

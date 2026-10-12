@@ -127,7 +127,9 @@ export type Effect =
   | { type: 'charmed'; hero: string }
   | { type: 'crippled'; hero: string }
   | { type: 'bossSlain'; depth: number; kind: MobKind }
-  | { type: 'victory'; hero: string }
+  | { type: 'victory'; hero: string; ending: 'amulet' | 'surface' }
+  /** The Amulet of Yendor taken up: its bearer is asked whether to end the run here (once a run). */
+  | { type: 'amulet'; hero: string; first: boolean }
   | { type: 'opened'; depth: number; pos: number; heap: HeapKind }
   | { type: 'pickedUp'; hero: string; item: Item }
   /** Item.use: an upgraded item is about to break, or broke, from use (see wear.ts). */

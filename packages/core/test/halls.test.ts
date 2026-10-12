@@ -111,6 +111,7 @@ describe("Yog-Dzewa and the Amulet", () => {
         const floor = floorAt(world, hero.depth);
         const lvl = levelAt(world, hero.depth);
         if (hero.depth === 26) {
+          if (hero.items.some((i) => i.kind === 'quest.amulet')) return { type: 'endGame' };
           const amulet = floor.heaps.find((h) => h.items.some((i) => i.kind === 'quest.amulet'))!;
           if (hero.pos === amulet.pos) return { type: 'pickup' };
           const path = findPath(lvl, hero.pos, amulet.pos);

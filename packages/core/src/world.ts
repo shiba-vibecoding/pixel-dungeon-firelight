@@ -65,6 +65,8 @@ export type Action =
   | { type: 'wandReward'; choice: 'battle' | 'utility' }
   /** Agree to free the sad ghost of its curse, and face it. */
   | { type: 'faceCurse' }
+  /** The Amulet of Yendor's «Let's call it a day»: the party wins here. */
+  | { type: 'endGame' }
   /** Lloyd's beacon: set it where the hero stands, or return to where it was set. */
   | { type: 'beacon'; item: number; mode: 'set' | 'return' }
   | InventoryAction;
@@ -88,8 +90,12 @@ export interface World {
   nextId: number;
   /** The run has ended: every hero has fallen, or the party won. */
   over: boolean;
-  /** A hero took up the Amulet of Yendor: the party has won. */
+  /** The party has won: a hero with the Amulet of Yendor called it a day, or carried it out to the surface. */
   victory: boolean;
+  /** How the run was won: the Amulet's own end, or the way out to the surface (the original's «Happy end»). */
+  ending?: 'amulet' | 'surface';
+  /** The Amulet of Yendor has been taken up (Statistics.amuletObtained): its question is asked once. */
+  amuletTaken?: boolean;
   /** The run's challenges (Challenges.java masks, see challenges.ts); worlds saved before them have none. */
   challenges: number;
   /** Potion and scroll kinds the party has identified; knowledge is shared. */
@@ -332,7 +338,10 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
     case 'ascend':
       if (hero.pos !== level.entrance) return 'not on the stairs';
       if (level.map[hero.pos] !== T.ENTRANCE) return 'the way up is flooded';
-      return hero.depth <= 1 ? 'the way up is sealed' : null;
+      // Hero.actAscend: only the Amulet opens the way out of the dungeon.
+      return hero.depth <= 1 && !hasAmulet(hero) ? 'the way up is sealed' : null;
+    case 'endGame':
+      return hasAmulet(hero) ? null : 'no amulet';
     default:
       return 'unknown action';
   }
@@ -741,10 +750,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
     case 'descend':
       if (hero.depth >= DEEPEST_AVAILABLE) {
         // Nothing lies below the Amulet's hall: should a way on ever open there, it leads out, and the run is won.
-        world.victory = true;
-        world.over = true;
-        for (const other of world.heroes) other.intent = null;
-        ctx.effects.push({ type: 'victory', hero: hero.id });
+        win(ctx, hero, 'amulet');
         return;
       }
       changeDepth(world, hero, hero.depth + 1, 'entrance');
@@ -756,8 +762,17 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       return;
 
     case 'ascend':
+      if (hero.depth <= 1) {
+        // Out of the dungeon with the Amulet: SurfaceScene, the happy end.
+        win(ctx, hero, 'surface');
+        return;
+      }
       changeDepth(world, hero, hero.depth - 1, 'exit');
       break;
+
+    case 'endGame':
+      win(ctx, hero, 'amulet');
+      return;
 
     case 'beacon': {
       const beacon = hero.items[action.item]!;
@@ -780,6 +795,21 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
     }
   }
   if (isAlive(hero)) observe(world, hero);
+}
+
+/** Whether a hero carries the Amulet of Yendor. */
+export function hasAmulet(hero: Hero): boolean {
+  return hero.items.some((item) => item.kind === 'quest.amulet');
+}
+
+/** Dungeon.win: the run is over and won, for the whole party. */
+function win(ctx: Ctx, hero: Hero, ending: 'amulet' | 'surface'): void {
+  const { world } = ctx;
+  world.victory = true;
+  world.over = true;
+  world.ending = ending;
+  for (const other of world.heroes) other.intent = null;
+  ctx.effects.push({ type: 'victory', hero: hero.id, ending });
 }
 
 /**

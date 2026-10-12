@@ -592,11 +592,10 @@ function pickUp(ctx: Ctx, hero: Hero): void {
       ctx.effects.push({ type: 'pickedUp', hero: hero.id, item });
       if (item.kind === 'seed.rotberry') rotberryRoar(ctx, hero);
       if (item.kind === 'quest.amulet') {
-        // The Amulet of Yendor: the end of the journey, and the run is won.
-        ctx.world.victory = true;
-        ctx.world.over = true;
-        for (const other of ctx.world.heroes) other.intent = null;
-        ctx.effects.push({ type: 'victory', hero: hero.id });
+        // Amulet.doPickUp: the journey's goal. Its bearer may end the run here («Let's call it a day»)
+        // or carry it on, up to the surface; the question comes once, as AmuletScene with its text.
+        ctx.effects.push({ type: 'amulet', hero: hero.id, first: !ctx.world.amuletTaken });
+        ctx.world.amuletTaken = true;
       }
     } else {
       left.push(item);

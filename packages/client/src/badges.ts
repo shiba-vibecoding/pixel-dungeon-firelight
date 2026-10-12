@@ -13,7 +13,7 @@ export type BadgeId =
   | 'potions' | 'scrolls' | 'rings' | 'wands' | 'allItems' | 'bags' | 'deathFire' | 'deathPoison' | 'deathGas' | 'deathHunger'
   | 'deathGlyph' | 'deathFalling' | 'yasd' | 'boss1' | 'boss2' | 'boss3' | 'boss4' | 'boss1AllClasses' | 'boss3AllSubclasses'
   | 'haggler' | 'thorns' | 'str1' | 'str2' | 'str3' | 'str4' | 'food1' | 'food2' | 'food3' | 'food4' | 'item1' | 'item2' | 'item3'
-  | 'item4' | 'rare' | 'victory' | 'victoryAllClasses' | 'combo' | 'cooked1' | 'cooked2' | 'cooked3' | 'cooked4' | 'grim' | 'piranhas'
+  | 'item4' | 'rare' | 'victory' | 'victoryAllClasses' | 'happyEnd' | 'combo' | 'cooked1' | 'cooked2' | 'cooked3' | 'cooked4' | 'grim' | 'piranhas'
   | 'games1' | 'games2' | 'games3' | 'games4' | 'champion';
 
 /** Each badge's icon in badges.png, and its words. */
@@ -54,6 +54,7 @@ export const BADGES: ReadonlyArray<{ id: BadgeId; image: number; en: string; ru:
   { id: 'allItems', image: 35, en: 'All potions, scrolls, rings & wands identified', ru: 'Опознаны все зелья, свитки, кольца и палочки' },
   { id: 'victoryAllClasses', image: 36, en: 'Amulet of Yendor obtained by Warrior, Mage, Rogue & Huntress', ru: 'Амулет добыт воином, магом, разбойником и охотницей' },
   { id: 'rare', image: 37, en: 'All rare monsters slain', ru: 'Убиты все редкие чудища' },
+  { id: 'happyEnd', image: 38, en: 'Happy end', ru: 'Счастливый конец' },
   { id: 'str1', image: 40, en: '13 points of Strength attained', ru: 'Сила достигла 13' },
   { id: 'str2', image: 41, en: '15 points of Strength attained', ru: 'Сила достигла 15' },
   { id: 'str3', image: 42, en: '17 points of Strength attained', ru: 'Сила достигла 17' },
@@ -225,8 +226,12 @@ export function checkBadges(world: World, me: Hero, effects: readonly Effect[]):
       if (effect.kind === 'goo') remember(store.boss1, me.heroClass);
       if (effect.kind === 'dm300' && me.subclass) remember(store.boss3, me.subclass);
     }
-    if (effect.type === 'victory' && effect.hero === me.id) {
+    // Badges.validateVictory: the Amulet in hand; and a party's win is everyone's.
+    if (effect.type === 'amulet' && effect.hero === me.id) earn('victory');
+    if (effect.type === 'victory') {
       earn('victory');
+      // Badges.validateHappyEnd: out on the surface with it.
+      earn('happyEnd', effect.ending === 'surface');
       // Badges.validateChampion: the Amulet taken with a challenge on.
       earn('champion', (world.challenges ?? 0) > 0);
       remember(store.victories, me.heroClass);

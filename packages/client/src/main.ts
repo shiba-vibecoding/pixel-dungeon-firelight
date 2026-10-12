@@ -2,7 +2,7 @@ import {
   adjacent, blockers, distance, type Mob, trapAt, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
   HEAP_SPRITES,
   type Hero, type Item, type Level,
-  heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
+  hasAmulet, heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, PLANT_KINDS, type SmithLine, T,
   visibleCells, wandMaxCharges, WIDTH,
   type World, charAt, swapsWithHero,
@@ -27,7 +27,7 @@ import { bakeLevel, type Camera, patchLevel, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
-  refreshBackpack, showHistory, showMenu, showRankings, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
+  refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
 import { mart } from './mart';
 import { eraseDevice, showChallenges, showJournal, showSettings } from './meta';
@@ -800,7 +800,7 @@ function useStairs(world: World, stairs: 'descend' | 'ascend', now: number): voi
   const level = levelAt(world, me.depth);
   if (stairs === 'descend' && me.pos === level.exit) {
     send({ type: 'descend' }, now);
-  } else if (stairs === 'ascend' && me.pos === level.entrance && me.depth > 1) {
+  } else if (stairs === 'ascend' && me.pos === level.entrance && (me.depth > 1 || hasAmulet(me))) {
     send({ type: 'ascend' }, now);
   }
 }
@@ -849,6 +849,15 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'imp' && effect.hero === myId) talkWithImp(effect.line);
     if (effect.type === 'smith' && effect.hero === myId) talkWithSmith(effect.line);
     if (effect.type === 'shop' && effect.hero === myId) openShop();
+    // The Amulet of Yendor: its question for whoever takes it (once a run); the party hears of it.
+    if (effect.type === 'amulet' && world && me) {
+      if (effect.hero === myId) {
+        walk.reset();
+        if (effect.first) showAmulet(world, me, true, () => send({ type: 'endGame' }, performance.now()), hideOverlay);
+      } else if (effect.first) {
+        toast(t.amuletTaken(heroById(world, effect.hero)?.name ?? ''), { tone: 'ally' });
+      }
+    }
     if (effect.type === 'fell' && effect.hero === myId) justFell = true;
     // Hero.interrupt: an item breaking stops whatever the hero was doing.
     if (effect.type === 'worn' && effect.hero === myId && effect.state === 'broken') walk.reset();
@@ -1016,7 +1025,11 @@ function tapCell(cell: number, quiet = false): void {
   if (cell === me.pos) {
     if (heapAt(world, me.depth, me.pos)) takeHere(world, me, performance.now());
     else if (me.pos === level.exit) useStairs(world, 'descend', performance.now());
-    else if (me.pos === level.entrance && me.depth > 1) useStairs(world, 'ascend', performance.now());
+    else if (me.pos === level.entrance && (me.depth > 1 || hasAmulet(me))) useStairs(world, 'ascend', performance.now());
+    else if (me.pos === level.entrance && heapAt(world, me.depth, me.pos) === undefined && me.depth === 1 && level.map[me.pos] === T.ENTRANCE) {
+      // Hero.actAscend without the Amulet: the way out stays shut.
+      toast(t.wayUpSealed);
+    }
     else act('search');
     return;
   }
@@ -1094,7 +1107,7 @@ function tapCell(cell: number, quiet = false): void {
   if (!quiet) walk.goal = cell;
   walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';
-  else if (cell === level.entrance && me.depth > 1) walk.stairs = 'ascend';
+  else if (cell === level.entrance && (me.depth > 1 || hasAmulet(me))) walk.stairs = 'ascend';
 }
 
 function openHero(): void {
@@ -2254,8 +2267,8 @@ function tick(now: number): void {
       showRunEnd({
         place,
         victory,
-        title: victory ? t.victory : solo ? t.youDied : t.partyFell,
-        cause: victory ? t.victoryText : [t.soloFell(me.depth), cause ? t.killedBy(cause) : ''].filter(Boolean).join(' '),
+        title: victory ? (world.ending === 'surface' ? t.happyEnd : t.victory) : solo ? t.youDied : t.partyFell,
+        cause: victory ? (world.ending === 'surface' ? t.happyEndText : t.victoryText) : [t.soloFell(me.depth), cause ? t.killedBy(cause) : ''].filter(Boolean).join(' '),
         hero: { name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, lvl: me.lvl, depth: me.depth, gold: me.gold, kills: me.kills },
         restartLabel: victory ? t.newRun : solo ? t.tryAgain : t.restartRun,
         onRestart: () => {

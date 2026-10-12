@@ -299,8 +299,9 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     case 'bossSlain':
       fx.shake(6, 1200, now);
       return;
+    case 'amulet':
     case 'victory': {
-      // The Amulet of Yendor: a shower of gold over everything in sight.
+      // The Amulet of Yendor taken, and the run won: a shower of gold over everything in sight.
       const at = centreOf(view, effect.hero, now);
       if (!at) return;
       for (let i = 0; i < 6; i++) {

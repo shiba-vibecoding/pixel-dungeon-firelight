@@ -40,6 +40,7 @@ export function sanitizeAction(raw: unknown): Action | null {
     case 'search':
     case 'impReward':
     case 'faceCurse':
+    case 'endGame':
     case 'pickup':
     case 'buy':
     case 'mine':

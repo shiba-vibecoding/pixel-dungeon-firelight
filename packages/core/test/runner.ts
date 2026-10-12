@@ -30,6 +30,8 @@ function plan(world: World, id: string): Action {
   const floor = floorAt(world, hero.depth);
   const level = levelAt(world, hero.depth);
   if (hero.depth === 26) {
+    // With the Amulet in hand, the party calls it a day.
+    if (hero.items.some((i) => i.kind === 'quest.amulet')) return { type: 'endGame' };
     const amulet = floor.heaps.find((h) => h.items.some((i) => i.kind === 'quest.amulet'));
     if (amulet) {
       if (hero.pos === amulet.pos) return { type: 'pickup' };
