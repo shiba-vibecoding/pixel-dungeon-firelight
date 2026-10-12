@@ -9,11 +9,11 @@ import type { RunState } from './run';
 import { lootCount } from './party';
 
 /*
- * Items, as data. A port of the original's item families that matter in the
- * sewers: gold, potions and scrolls (unknown until used or identified, with
- * colours and runes shuffled for every run), melee weapons and armour with
- * upgrade levels, thrown weapons, the wand of magic missile and food. Rings,
- * seeds and the other wands come later.
+ * Items, as data: every item family of the original вЂ” gold, potions,
+ * scrolls, wands and rings (unknown until used or identified, with colours,
+ * runes, woods and gems shuffled for every run), melee weapons and armour with
+ * upgrade levels, thrown weapons, seeds, food, bags, keys and quest items вЂ”
+ * with their prices and how the Generator rolls them.
  */
 
 export type ItemCategory =
@@ -523,7 +523,7 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food' |
   ],
   wand: [
     ['wand.teleportation', 10], ['wand.slowness', 10], ['wand.firebolt', 15], ['wand.regrowth', 6], ['wand.poison', 10],
-    ['wand.blink', 11], ['wand.lightning', 15], ['wand.amok', 6], ['wand.reach', 5], ['wand.flock', 5], ['wand.disintegration', 5],
+    ['wand.blink', 11], ['wand.lightning', 15], ['wand.amok', 10], ['wand.reach', 6], ['wand.flock', 10], ['wand.disintegration', 5],
     ['wand.avalanche', 5],
   ],
 };
@@ -710,15 +710,18 @@ function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: num
 /**
  * RegularLevel.createItems, plus the drops the layout asked for (special
  * rooms, graves). Every level has some food, one helping for each hero in
- * the party.
+ * the party. Everything goes down through `land` (Level.drop), which the
+ * world's challenges may turn into gold.
  */
-export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean, party = 1): Heap[] {
+export function createItems(
+  run: RunState, level: Level, rng: Rng, boss: boolean, party = 1, land: (item: Item) => Item = (item) => item,
+): Heap[] {
   const heaps: Heap[] = [];
   const drop = (pos: number, kind: HeapKind, item: Item): void => {
     if (pos < 0) return;
     const heap = heaps.find((h) => h.pos === pos);
-    if (heap) heap.items.push(item);
-    else heaps.push({ pos, kind, items: [item] });
+    if (heap) heap.items.push(land(item));
+    else heaps.push({ pos, kind, items: [land(item)] });
   };
   const generator = new ItemGenerator(rng, level.depth);
   if (boss) {
@@ -764,15 +767,18 @@ export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean
  * A hero who joins the party after a depth was made: their share of it, as if
  * they had been there from the start (party.ts) — the things that make a hero
  * stronger that the depth gave each hero (`perHero`), a helping of food, and
- * more lying about. Laid into `heaps`.
+ * more lying about. Laid into `heaps`, through `land` as createItems does.
  */
-export function shareOfDepth(level: Level, rng: Rng, perHero: readonly ItemKind[], party: number, heaps: Heap[]): void {
+export function shareOfDepth(
+  level: Level, rng: Rng, perHero: readonly ItemKind[], party: number, heaps: Heap[], land: (item: Item) => Item = (item) => item,
+): void {
   const drop = (pos: number, kind: HeapKind, item: Item): void => {
     if (pos < 0) return;
     const heap = heaps.find((h) => h.pos === pos);
-    if (heap) heap.items.push(item);
-    else heaps.push({ pos, kind, items: [item] });
+    if (heap) heap.items.push(land(item));
+    else heaps.push({ pos, kind, items: [land(item)] });
   };
+
   const generator = new ItemGenerator(rng, level.depth);
   const extra = lootCount(3, party) - lootCount(3, party - 1);
   for (let i = 0; i < extra; i++) {

@@ -3,7 +3,7 @@ import { baseKind, type Hero, heroDamageRoll, isAlive, isStarving, type Mob, typ
 import { conjureImages } from './allies';
 import { hurt } from './combat';
 import { charAt, type Ctx, enterCell, heroView, isPassable, isWater, leaveCell, observe } from './floor';
-import { type Glyph, itemDef, randomEnchantment } from './items';
+import { type Glyph, type Item, itemDef, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
 import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
 import { stepOnPlant } from './plants';
@@ -36,14 +36,17 @@ function poisonTurns(duration: number): number {
   return total;
 }
 
-/** Weapon.proc: what the hero's enchanted weapon does as a blow lands, before its damage. */
-export function weaponProc(ctx: Ctx, hero: Hero, mob: Mob, damage: number): void {
-  let enchant = hero.weapon?.enchant;
-  if (!hero.weapon || !enchant || !isAlive(mob)) return;
+/**
+ * Weapon.proc: what the hero's enchanted weapon does as a blow lands, before its damage вЂ”
+ * the weapon in hand, or the thrown one (Hero.attackProc: rangedWeapon), e.g. an enchanted boomerang.
+ */
+export function weaponProc(ctx: Ctx, hero: Hero, mob: Mob, damage: number, weapon: Item | null = hero.weapon): void {
+  let enchant = weapon?.enchant;
+  if (!weapon || !enchant || !isAlive(mob)) return;
   const { rng, depth, level: map } = ctx;
   // Instability: every blow, some other enchantment.
   if (enchant === 'instability') enchant = randomEnchantment(rng, 'instability');
-  const level = Math.max(0, effectiveLevel(hero.weapon));
+  const level = Math.max(0, effectiveLevel(weapon));
   const shown = (): void => {
     ctx.effects.push({ type: 'enchanted', depth, pos: mob.pos, enchant: enchant! });
   };
@@ -129,7 +132,8 @@ export function weaponProc(ctx: Ctx, hero: Hero, mob: Mob, damage: number): void
     }
     case 'tempering':
       // Tempering: every blow mends what the blow wears; the weapon never wears out.
-      polish(hero.weapon);
+      polish(weapon);
+
       return;
   }
 }

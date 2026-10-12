@@ -1,5 +1,8 @@
 import { type Hero, isAlive, type Mob, type MobKind, type SubClass } from './actors';
+import { DARKNESS, isChallenged, underChallenges } from './challenges';
+
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
+
 import type { Enchantment, Glyph, Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
@@ -48,13 +51,18 @@ export interface Floor {
   perHero?: ItemKind[];
 }
 
-/** Level.drop: an item that comes down on a chasm falls through it, to land on the depth below. */
+/**
+ * Level.drop: what the challenges forbid on the floor comes down as gold
+ * instead; an item that comes down on a chasm falls through it, to land on
+ * the depth below.
+ */
 export function landItem(ctx: Ctx, pos: number, item: Item): void {
-  if (hasFlag(ctx.level.map[pos]!, F.PIT)) (ctx.floor.falling ??= []).push(item);
-  else dropItem(ctx.floor, pos, item);
+  const landed = underChallenges(ctx.world, item);
+  if (hasFlag(ctx.level.map[pos]!, F.PIT)) (ctx.floor.falling ??= []).push(landed);
+  else dropItem(ctx.floor, pos, landed);
 }
 
-/** Puts an item on a cell, adding to whatever lies there already. */
+/** Puts an item on a cell, adding to whatever lies there already (Heap.drop: as it is, unlike landItem). */
 export function dropItem(floor: Floor, pos: number, item: Item): void {
   const heap = floor.heaps.find((h) => h.pos === pos);
   if (!heap) {
@@ -264,11 +272,14 @@ export function swapsWithHero(char: Char | undefined): boolean {
   return char !== undefined && 'kind' in char && char.state === 'passive' && SWAPPERS.has(char.kind);
 }
 
-/** Field of view of one hero. */
+/** Level.viewDistance for heroes on a depth: shorter under the DARKNESS challenge. */
+export const heroSight = (world: World, depth: number): number => viewDistance(depth, isChallenged(world, DARKNESS));
+
+/** Field of view of one hero (Dungeon.switchLevel and Light: a torch lights up to Light.DISTANCE). */
 export function heroView(world: World, hero: Hero): boolean[] {
   // Blinded, a hero sees no further than arm's reach.
   const distance = (hero.blind ?? 0) > 0 ? 1
-    : hero.light > 0 ? Math.max(viewDistance(hero.depth), LIGHT_DISTANCE) : viewDistance(hero.depth);
+    : hero.light > 0 ? Math.max(heroSight(world, hero.depth), LIGHT_DISTANCE) : heroSight(world, hero.depth);
   return castShadow(hero.pos, terrainBlocksSight(world.levels[hero.depth]!.map), distance);
 }
 

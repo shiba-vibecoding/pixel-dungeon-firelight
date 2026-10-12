@@ -1,0 +1,175 @@
+import type { Hero } from './actors';
+import { CLASS_ARMOR } from './classArmor';
+import type { Ctx } from './floor';
+import { type Item, itemDef, type ItemKind, randomEnchantment, randomGlyph, wandMaxCharges } from './items';
+import { isBroken, mend } from './wear';
+import type { World } from './world';
+
+/*
+ * Scrolls read on an item of the reader's choosing (InventoryScroll): upgrade,
+ * enchantment and identify. The original opens the backpack (WndBag) on what
+ * the scroll can act on, the equipped items included; here the client picks
+ * the item before reading and sends it along with the action.
+ */
+
+/** An item the hero has: one in the pack, the weapon or armour worn, or one of the two rings worn. */
+export type ItemRef = number | 'weapon' | 'armor' | 'ring0' | 'ring1';
+
+const WORN_REFS: ReadonlySet<unknown> = new Set(['weapon', 'armor', 'ring0', 'ring1']);
+
+/** An ItemRef as it may come from a client: checked, not trusted. */
+export const isItemRef = (value: unknown): value is ItemRef => Number.isInteger(value) || WORN_REFS.has(value);
+
+export function itemAt(hero: Hero, ref: ItemRef): Item | undefined {
+  switch (ref) {
+    case 'weapon':
+      return hero.weapon ?? undefined;
+    case 'armor':
+      return hero.armor;
+    case 'ring0':
+      return hero.rings[0];
+    case 'ring1':
+      return hero.rings[1];
+    default:
+      return Number.isInteger(ref) ? hero.items[ref] : undefined;
+  }
+}
+
+/** Everything the hero has, worn first (as WndBag lists the equipped items above the pack). */
+export function heldRefs(hero: Hero): ItemRef[] {
+  const worn: ItemRef[] = [
+    ...(hero.weapon ? ['weapon' as const] : []), 'armor', ...hero.rings.map((_, i) => (i === 0 ? 'ring0' as const : 'ring1' as const)),
+  ];
+  return [...worn, ...hero.items.map((_, i) => i)];
+}
+
+/**
+ * Item.isUpgradable: melee weapons, armour, wands, rings and the boomerang —
+ * but not other thrown weapons (MissileWeapon), the blacksmith's pickaxe,
+ * class armour, or the rings of haggler and thorns.
+ */
+export function isUpgradable(item: Item): boolean {
+  switch (itemDef(item.kind).category) {
+    case 'weapon':
+      return item.kind !== 'weapon.pickaxe';
+    case 'armor':
+      return !CLASS_ARMOR.includes(item.kind);
+    case 'wand':
+      return true;
+    case 'ring':
+      return item.kind !== 'ring.haggler' && item.kind !== 'ring.thorns';
+    case 'missile':
+      return item.kind === 'missile.boomerang';
+    default:
+      return false;
+  }
+}
+
+/** WndBag.Mode.ENCHANTABLE: a melee weapon, the boomerang or any armour (class armour too). */
+export function isEnchantable(item: Item): boolean {
+  const category = itemDef(item.kind).category;
+  return (category === 'weapon' && item.kind !== 'weapon.pickaxe') || category === 'armor' || item.kind === 'missile.boomerang';
+}
+
+/**
+ * WndBag.Mode.UNIDENTIFED: what the party does not know yet. In this port only
+ * potions, scrolls, wands and rings hide what they are; the levels of weapons
+ * and armour are always seen. The scroll read is known once read, so it is no
+ * choice of its own.
+ */
+export function isUnidentified(world: World, item: Item, reading?: ItemKind): boolean {
+  const category = itemDef(item.kind).category;
+  const hides = category === 'potion' || category === 'scroll' || category === 'wand' || category === 'ring';
+  return hides && item.kind !== reading && !world.known.includes(item.kind);
+}
+
+/** The scrolls that are read on a chosen item. */
+export type TargetedScroll = 'scroll.upgrade' | 'scroll.enchantment' | 'scroll.identify';
+
+export const isTargetedScroll = (kind: ItemKind): kind is TargetedScroll =>
+  kind === 'scroll.upgrade' || kind === 'scroll.enchantment' || kind === 'scroll.identify';
+
+/** Whether a scroll of `kind` can be read on `item`. */
+export function canTarget(world: World, kind: TargetedScroll, item: Item): boolean {
+  switch (kind) {
+    case 'scroll.upgrade':
+      return isUpgradable(item);
+    case 'scroll.enchantment':
+      return isEnchantable(item);
+    case 'scroll.identify':
+      return isUnidentified(world, item, kind);
+  }
+}
+
+/** What the hero could read a scroll of `kind` on, for the client's picker; empty for other scrolls. */
+export function scrollTargets(world: World, hero: Hero, kind: ItemKind): ItemRef[] {
+  if (!isTargetedScroll(kind)) return [];
+  return heldRefs(hero).filter((ref) => canTarget(world, kind, itemAt(hero, ref)!));
+}
+
+/** Why a scroll of `kind` cannot be read on that item. */
+export const TARGET_PROBLEMS: Readonly<Record<TargetedScroll, string>> = {
+  'scroll.upgrade': 'that cannot be upgraded',
+  'scroll.enchantment': 'that cannot be enchanted',
+  'scroll.identify': 'there is nothing to learn about that',
+};
+
+/**
+ * When no item was chosen (an unknown scroll, whose kind the client could not
+ * know to ask about, or an old client): the weapon in hand, else the armour,
+ * if the scroll can act on them; for identify, the first unknown potion or
+ * scroll in the pack. Undefined if there is none: the scroll is wasted.
+ */
+export function defaultTarget(world: World, hero: Hero, kind: TargetedScroll): Item | undefined {
+  if (kind === 'scroll.identify') {
+    return hero.items.find((item) => {
+      const category = itemDef(item.kind).category;
+      return (category === 'potion' || category === 'scroll') && isUnidentified(world, item, kind);
+    });
+  }
+  return [hero.weapon, hero.armor].find((item): item is Item => !!item && canTarget(world, kind, item));
+}
+
+/** ScrollOfRemoveCurse.uncurse on the one item. */
+const uncurse = (item: Item): void => {
+  delete item.cursed;
+};
+
+/**
+ * ScrollOfUpgrade.onItemSelected: the curse is lifted; a broken item is only
+ * mended (Item.fix), anything else upgraded: Weapon.upgrade and Armor.upgrade
+ * may lose their enchantment or glyph to the clash of magics, a wand gains a
+ * charge as well as a level (Wand.upgrade), and every upgrade mends (Item.upgrade).
+ */
+export function upgradeItem(ctx: Ctx, hero: Hero, item: Item): void {
+  uncurse(item);
+  if (isBroken(item)) {
+    mend(item);
+    ctx.effects.push({ type: 'mended', hero: hero.id, item });
+    return;
+  }
+  // Weapon.upgrade(false) / Armor.upgrade(false): Random.Int(level()) > 0 drives the magic out.
+  if ((item.enchant || item.glyph) && item.level > 0 && ctx.rng.int(item.level) > 0) {
+    delete item.enchant;
+    delete item.glyph;
+    ctx.effects.push({ type: 'disenchanted', hero: hero.id, item });
+  }
+  item.level++;
+  mend(item);
+  // Wand.upgrade: one more charge, up to the new maximum.
+  if (item.charges !== undefined) item.charges = Math.min(item.charges + 1, wandMaxCharges(item));
+  ctx.effects.push({ type: 'upgraded', hero: hero.id, item });
+}
+
+/**
+ * ScrollOfEnchantment.onItemSelected: the curse is lifted, a weapon (or the
+ * boomerang) gets a new enchantment and armour a new glyph, never the one it
+ * had (Weapon.enchant, Armor.inscribe), and the item comes out mended.
+ */
+export function enchantItem(ctx: Ctx, hero: Hero, item: Item): void {
+  uncurse(item);
+  if (itemDef(item.kind).category === 'armor') item.glyph = randomGlyph(ctx.rng, item.glyph);
+  else item.enchant = randomEnchantment(ctx.rng, item.enchant);
+  mend(item);
+  ctx.effects.push({ type: 'imbued', hero: hero.id, item });
+}

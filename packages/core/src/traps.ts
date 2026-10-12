@@ -140,7 +140,7 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
       const cells = NEIGHBOURS8.map((n) => pos + n).filter((c) => isPassable(level, c) && !charAt(ctx.world, depth, c));
       for (let i = 0; i < count && cells.length > 0; i++) {
         const cell = cells.splice(rng.index(cells.length), 1)[0]!;
-        const mob: Mob = scaleMob(ctx.world, createMob(`#${++ctx.world.nextId}`, rollMob(rng, depth), cell, 'wandering', ctx.floor.now + 1));
+        const mob: Mob = scaleMob(ctx.world, createMob(`#${++ctx.world.nextId}`, rollMob(rng, depth, false), cell, 'wandering', ctx.floor.now + 1));
         mob.target = pos;
         ctx.floor.mobs.push(mob);
       }

@@ -1,0 +1,218 @@
+import { describe, expect, it } from 'vitest';
+import {
+  act, addHero, canEnter, CHALLENGES, createMob, createWorld, DARKNESS, floorAt, heroById, heroView, isChallenged,
+  type Item, ItemGenerator, itemDef, levelAt, NEIGHBOURS8, NO_ARMOR, NO_FOOD, NO_HEALING, NO_HERBALISM, NO_SCROLLS, restartWorld,
+  Rng, rollMob, SWARM_INTELLIGENCE, T, viewDistance, WIDTH, type World,
+} from '../src/index';
+import { pacify } from './helpers';
+
+/** Everything lying about (shops' wares and closed containers included) on depths 1..deepest of a few runs. */
+function floorItems(challenges: number, deepest: number, seeds = 6): Item[] {
+  const items: Item[] = [];
+  for (let seed = 1; seed <= seeds; seed++) {
+    const world = createWorld(seed, challenges);
+    for (let depth = 1; depth <= deepest; depth++) {
+      items.push(...floorAt(world, depth).heaps.flatMap((heap) => heap.items));
+      // Monsters carry nothing yet, but a mimic holds its chest's treasure.
+      items.push(...floorAt(world, depth).mobs.flatMap((mob) => mob.loot ?? []));
+    }
+  }
+  return items;
+}
+
+const category = (item: Item): string => itemDef(item.kind).category;
+
+function solo(challenges: number, heroClass: 'warrior' | 'mage' | 'rogue' | 'huntress' = 'warrior'): World {
+  const world = pacify(createWorld(5, challenges));
+  addHero(world, { id: 'p', name: 'P', heroClass });
+  return world;
+}
+
+const distance = (a: number, b: number): number =>
+  Math.max(Math.abs((a % WIDTH) - (b % WIDTH)), Math.abs(Math.trunc(a / WIDTH) - Math.trunc(b / WIDTH)));
+
+describe('challenges', () => {
+  it('are the original seven, with its masks, kept by the world and through a restart', () => {
+    expect(CHALLENGES.map((c) => [c.id, c.mask])).toEqual([
+      ['noFood', 1], ['noArmor', 2], ['noHealing', 4], ['noHerbalism', 8], ['swarm', 16], ['darkness', 32], ['noScrolls', 64],
+    ]);
+    const world = createWorld(1, NO_FOOD | DARKNESS);
+    expect(isChallenged(world, NO_FOOD)).toBe(true);
+    expect(isChallenged(world, NO_ARMOR)).toBe(false);
+    addHero(world, { id: 'p', name: 'P', heroClass: 'mage' });
+    restartWorld(world, 2);
+    expect(world.challenges).toBe(NO_FOOD | DARKNESS);
+    expect(world.heroes).toHaveLength(1);
+    expect(createWorld(1).challenges).toBe(0);
+    // A world saved before challenges existed has none.
+    const old = JSON.parse(JSON.stringify(createWorld(3))) as World;
+    delete (old as Partial<World>).challenges;
+    expect(isChallenged(old, NO_FOOD)).toBe(false);
+  });
+
+  it('on diet: no food lies about or is sold, only its worth in gold; the hero still sets out with a ration', () => {
+    const items = floorItems(NO_FOOD, 7);
+    expect(items.some((item) => category(item) === 'food')).toBe(false);
+    expect(floorItems(0, 7).some((item) => category(item) === 'food')).toBe(true);
+    const world = solo(NO_FOOD);
+    const hero = heroById(world, 'p')!;
+    const ration = hero.items.findIndex((item) => item.kind === 'food.ration');
+    expect(ration).toBeGreaterThanOrEqual(0);
+    // Dropped, it comes down as gold (Level.drop: new Gold(item.price())).
+    act(world, 'p', { type: 'drop', item: ration });
+    const heap = floorAt(world, 1).heaps.find((h) => h.pos === hero.pos)!;
+    expect(heap.items[0]).toMatchObject({ kind: 'gold', qty: 10 });
+  });
+
+  it('faith is my armor: no armour anywhere, and the ghost offers only worn cloth', () => {
+    expect(floorItems(NO_ARMOR, 7).some((item) => category(item) === 'armor')).toBe(false);
+    expect(floorItems(0, 7).some((item) => category(item) === 'armor')).toBe(true);
+    let ghosts = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const world = createWorld(seed, NO_ARMOR);
+      levelAt(world, 4);
+      if (!world.quest) continue;
+      ghosts++;
+      expect(world.quest.armor).toMatchObject({ kind: 'armor.cloth', level: -1 });
+    }
+    expect(ghosts).toBeGreaterThan(0);
+    expect(heroById(solo(NO_ARMOR), 'p')!.armor.kind).toBe('armor.cloth');
+  });
+
+  it('pharmacophobia: no potion of healing on the floor or in the shops; other potions still', () => {
+    const items = floorItems(NO_HEALING, 7);
+    expect(items.some((item) => item.kind === 'potion.healing')).toBe(false);
+    expect(items.some((item) => category(item) === 'potion')).toBe(true);
+    // The shop of depth 6 always has one for sale: here gold lies in its place.
+    const world = createWorld(1, NO_HEALING);
+    const wares = floorAt(world, 6).heaps.filter((heap) => heap.kind === 'forSale').flatMap((heap) => heap.items);
+    expect(wares.length).toBeGreaterThan(0);
+    expect(wares.some((item) => item.kind === 'gold')).toBe(true);
+  });
+
+  it('barren land: tall grass sheds neither seeds nor dew, and no seed pouch is sold', () => {
+    const items = floorItems(NO_HERBALISM, 7);
+    expect(items.some((item) => item.kind === 'bag.seeds')).toBe(false);
+    expect(floorItems(0, 7).some((item) => item.kind === 'bag.seeds')).toBe(true);
+    const world = solo(NO_HERBALISM);
+    const hero = heroById(world, 'p')!;
+    const level = levelAt(world, 1);
+    const home = hero.pos;
+    const grass = NEIGHBOURS8.map((n) => home + n).find((c) => canEnter(level, c) && level.map[c] !== T.DOOR)!;
+    for (let i = 0; i < 60; i++) {
+      level.map[grass] = T.HIGH_GRASS;
+      act(world, 'p', { type: 'move', to: grass });
+      expect(level.map[grass]).toBe(T.GRASS);
+      act(world, 'p', { type: 'move', to: home });
+    }
+    expect(floorAt(world, 1).heaps.some((heap) => heap.pos === grass)).toBe(false);
+  });
+
+  it('forbidden runes: of all scrolls only upgrade can be found; no scroll holder either', () => {
+    const items = floorItems(NO_SCROLLS, 12);
+    const scrolls = items.filter((item) => category(item) === 'scroll');
+    expect(scrolls.length).toBeGreaterThan(0);
+    expect(scrolls.every((item) => item.kind === 'scroll.upgrade')).toBe(true);
+    expect(items.some((item) => item.kind === 'bag.scrolls')).toBe(false);
+    expect(floorItems(0, 12).some((item) => category(item) === 'scroll' && item.kind !== 'scroll.upgrade')).toBe(true);
+  });
+
+  it('swarm intelligence: a monster that wakes to a hero calls every other on the level to them', () => {
+    for (const challenges of [0, SWARM_INTELLIGENCE]) {
+      const world = solo(challenges);
+      const hero = heroById(world, 'p')!;
+      const level = levelAt(world, 1);
+      const floor = floorAt(world, 1);
+      const seen = heroView(world, hero);
+      const beside = NEIGHBOURS8.map((n) => hero.pos + n).find((c) => canEnter(level, c))!;
+      const far = level.map.map((_, c) => c).filter((c) => canEnter(level, c) && !seen[c] && distance(c, hero.pos) > 10).slice(0, 2);
+      // The warrior has no stealth: right next to a sleeping rat, it is sure to wake.
+      floor.mobs = [
+        createMob('#near', 'rat', beside, 'sleeping', floor.now),
+        ...far.map((pos, i) => createMob(`#far${i}`, 'rat', pos, 'sleeping', floor.now)),
+      ];
+      act(world, 'p', { type: 'wait' });
+      expect(floor.mobs[0]!.state).toBe('hunting');
+      for (const mob of floor.mobs.slice(1)) {
+        if (challenges) expect(mob).toMatchObject({ state: 'wandering', target: hero.pos });
+        else expect(mob.state).toBe('sleeping');
+      }
+    }
+  });
+
+  it('into darkness: heroes see three cells (four by torchlight) where the level is not darker anyway', () => {
+    expect(viewDistance(1, true)).toBe(3);
+    expect(viewDistance(20, true)).toBe(3);
+    // The caves and the halls set their own distance after the challenge's default (CavesLevel, HallsLevel).
+    expect(viewDistance(12, true)).toBe(6);
+    expect(viewDistance(24, true)).toBe(1);
+    for (let seed = 1; seed <= 10; seed++) {
+      const dark = createWorld(seed, DARKNESS);
+      const lit = createWorld(seed);
+      const hero = addHero(dark, { id: 'p', name: 'P', heroClass: 'warrior' });
+      addHero(lit, { id: 'p', name: 'P', heroClass: 'warrior' });
+      const cells = (world: World): number[] =>
+        heroView(world, heroById(world, 'p')!).flatMap((seen, c) => (seen ? [c] : []));
+      expect(Math.max(...cells(dark).map((c) => distance(c, hero.pos)))).toBeLessThanOrEqual(3);
+      expect(cells(dark).length).toBeLessThanOrEqual(cells(lit).length);
+      hero.light = 10;
+      expect(Math.max(...cells(dark).map((c) => distance(c, hero.pos)))).toBeLessThanOrEqual(4);
+    }
+    // Somewhere on these runs the darkness hides what plain sight would show.
+    const shown = (challenges: number): number => {
+      let total = 0;
+      for (let seed = 1; seed <= 10; seed++) {
+        const world = createWorld(seed, challenges);
+        total += heroView(world, addHero(world, { id: 'p', name: 'P', heroClass: 'warrior' })).filter(Boolean).length;
+      }
+      return total;
+    };
+    expect(shown(DARKNESS)).toBeLessThan(shown(0));
+
+  });
+
+});
+
+
+describe('what each class knows from the start (HeroClass.initHero)', () => {
+  it('warrior strength, mage identify, rogue magic mapping, huntress nothing more', () => {
+    const knows = (heroClass: 'warrior' | 'mage' | 'rogue' | 'huntress'): string[] => solo(0, heroClass).known;
+    expect(knows('warrior')).toContain('potion.strength');
+    expect(knows('mage')).toContain('scroll.identify');
+    expect(knows('rogue')).toContain('scroll.mapping');
+    const huntress = knows('huntress');
+    for (const kind of ['potion.strength', 'scroll.identify', 'scroll.mapping']) expect(huntress).not.toContain(kind);
+  });
+});
+
+describe('Generator and Bestiary odds, as in the original', () => {
+  it('wands of amok, reach and flock come up 10, 6 and 10 times in 113', () => {
+    const generator = new ItemGenerator(Rng.seeded(9), 5);
+    const counts: Record<string, number> = {};
+    const n = 30000;
+    for (let i = 0; i < n; i++) {
+      const kind = generator.of('wand').kind;
+      counts[kind] = (counts[kind] ?? 0) + 1;
+    }
+    expect(counts['wand.magicMissile']).toBeUndefined();
+    for (const [kind, weight] of [['wand.amok', 10], ['wand.reach', 6], ['wand.flock', 10], ['wand.firebolt', 15]] as const) {
+      expect(Math.abs(counts[kind]! / n - weight / 113)).toBeLessThan(0.01);
+    }
+  });
+
+  it('now and then a visitor from the region below; rare variants only among the respawns', () => {
+    const seen = (depth: number, mutable: boolean): Set<string> => {
+      const rng = Rng.seeded(depth);
+      const kinds = new Set<string>();
+      for (let i = 0; i < 20000; i++) kinds.add(rollMob(rng, depth, mutable));
+      return kinds;
+    };
+    expect([...seen(3, false)].sort()).toEqual(['crab', 'gnoll', 'rat', 'swarm']);
+    expect([...seen(4, false)].sort()).toEqual(['crab', 'gnoll', 'rat', 'skeleton', 'swarm', 'thief']);
+    expect([...seen(13, false)].sort()).toEqual(['bat', 'brute', 'elemental', 'shaman', 'spinner']);
+    expect([...seen(14, false)].sort()).toEqual(['bat', 'brute', 'elemental', 'monk', 'shaman', 'spinner']);
+    expect(seen(19, false).has('succubus')).toBe(true);
+    expect(seen(1, true).has('albino')).toBe(true);
+    expect(seen(1, false).has('albino')).toBe(false);
+  });
+});

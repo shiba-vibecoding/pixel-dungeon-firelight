@@ -510,31 +510,32 @@ export function createMob(id: string, kind: MobKind, pos: number, state: MobStat
 }
 
 /*
- * Who lives where (Bestiary). The original's rare swarm of flies, skeleton
- * and thief of depths 3-4 are left out of the sewers.
+ * Who lives where (Bestiary.mobClass), with the original's rare visitors from
+ * the region below: a swarm of flies, a skeleton or a thief in the sewers,
+ * fire elementals and dwarf monks in the caves, a succubus in the city.
+ * Depth 21 (the original's last shop, with no monsters of its own) is a
+ * level of the halls in this port, and has theirs.
  */
 const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]>>> = {
   1: [['rat', 1]],
   2: [['rat', 1], ['gnoll', 1]],
-  3: [['rat', 1], ['gnoll', 2], ['crab', 1]],
-  4: [['rat', 1], ['gnoll', 2], ['crab', 3]],
+  3: [['rat', 1], ['gnoll', 2], ['crab', 1], ['swarm', 0.02]],
+  4: [['rat', 1], ['gnoll', 2], ['crab', 3], ['swarm', 0.02], ['skeleton', 0.01], ['thief', 0.01]],
   5: [['goo', 1]],
   6: [['skeleton', 4], ['thief', 2], ['swarm', 1], ['shaman', 0.2]],
   7: [['skeleton', 3], ['shaman', 1], ['thief', 1], ['swarm', 1]],
   8: [['skeleton', 3], ['shaman', 2], ['gnoll', 1], ['thief', 1], ['swarm', 1], ['bat', 0.02]],
   9: [['skeleton', 3], ['shaman', 3], ['thief', 1], ['swarm', 1], ['bat', 0.02], ['brute', 0.01]],
   10: [['tengu', 1]],
-  // The original's rare fire elementals and dwarf monks of depths 13-14 belong to the city below.
   11: [['bat', 1], ['brute', 0.2]],
   12: [['bat', 1], ['brute', 1], ['spinner', 0.2]],
-  13: [['bat', 1], ['brute', 3], ['shaman', 1], ['spinner', 1]],
-  14: [['bat', 1], ['brute', 3], ['shaman', 1], ['spinner', 4]],
+  13: [['bat', 1], ['brute', 3], ['shaman', 1], ['spinner', 1], ['elemental', 0.02]],
+  14: [['bat', 1], ['brute', 3], ['shaman', 1], ['spinner', 4], ['elemental', 0.02], ['monk', 0.01]],
   15: [['dm300', 1]],
-  // The original's rare succubus of depth 19 belongs to the halls below.
   16: [['elemental', 1], ['warlock', 1], ['monk', 0.2]],
   17: [['elemental', 1], ['monk', 1], ['warlock', 1]],
   18: [['elemental', 1], ['monk', 2], ['golem', 1], ['warlock', 1]],
-  19: [['elemental', 1], ['monk', 2], ['golem', 3], ['warlock', 1]],
+  19: [['elemental', 1], ['monk', 2], ['golem', 3], ['warlock', 1], ['succubus', 0.02]],
   20: [['king', 1]],
   21: [['succubus', 1], ['eye', 1]],
   22: [['succubus', 1], ['eye', 1]],
@@ -543,12 +544,21 @@ const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]
   25: [['yog', 1]],
 };
 
-export function rollMob(rng: Rng, depth: number): MobKind {
-  const table = BESTIARY[depth] ?? BESTIARY[4]!;
+/**
+ * Bestiary.mutable (Bestiary.mob when not `mutable`): a monster for the depth,
+ * now and then (one in thirty) the rare variant of its kind. Beyond the
+ * table, the original's default: an evil eye.
+ */
+export function rollMob(rng: Rng, depth: number, mutable = true): MobKind {
+  const table = BESTIARY[depth] ?? [['eye', 1] as const];
   const kind = table[rng.chances(table.map(([, chance]) => chance))]![0];
+  if (!mutable) return kind;
+  // Random.Int(30) is drawn whatever the kind, as in the original.
+  const rare = rng.int(30) === 0;
   const variant = VARIANTS[kind];
-  return variant && rng.int(30) === 0 ? variant : kind;
+  return variant && rare ? variant : kind;
 }
+
 
 /** Bestiary.mutable: the rare variant of a kind, which behaves like it in most respects. */
 const VARIANTS: Partial<Record<MobKind, MobKind>> = { rat: 'albino', thief: 'bandit', brute: 'shielded', monk: 'senior', scorpio: 'acidic' };

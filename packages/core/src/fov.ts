@@ -57,22 +57,32 @@ class Obstacles {
   }
 }
 
-/** Cells visible from `pos`, given which cells block line of sight. */
 /**
  * Level.viewDistance: the caves (depths 11-15) are dark, and the demon halls
  * darker the deeper they go (HallsLevel), down to a single cell.
+ *
+ * `darkness` (the DARKNESS challenge, "Into darkness") only changes the
+ * default the field starts with (3 instead of 8): the caves and the halls set
+ * their own distance in their constructors, after it, so they stay as they are
+ * вЂ” in the caves one even sees further than elsewhere under the challenge.
+ * Only heroes see by this; monsters keep their own sight (see ai.ts).
  */
-export function viewDistance(depth: number): number {
+export function viewDistance(depth: number, darkness = false): number {
   if (depth >= 11 && depth <= 15) return 6;
   if (depth >= 21 && depth <= 24) return Math.max(25 - depth, 1);
   if (depth === 25) return 3;
-  return MAX_VIEW_DISTANCE;
+  return darkness ? DARKNESS_VIEW_DISTANCE : MAX_VIEW_DISTANCE;
 }
+
+/** Level.viewDistance under the DARKNESS challenge. */
+export const DARKNESS_VIEW_DISTANCE = 3;
 
 /** Light.DISTANCE: how far a torch lets one see, and the demons of the halls see anyway. */
 export const LIGHT_DISTANCE = 4;
 
-export function castShadow(pos: number, losBlocking: (cell: number) => boolean, distance = MAX_VIEW_DISTANCE): boolean[] {
+/** Cells visible from `pos`, given which cells block line of sight. */
+export function castShadow(
+pos: number, losBlocking: (cell: number) => boolean, distance = MAX_VIEW_DISTANCE): boolean[] {
   const fov = new Array<boolean>(LENGTH).fill(false);
   const cx = pos % WIDTH;
   const cy = Math.trunc(pos / WIDTH);
