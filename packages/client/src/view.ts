@@ -502,6 +502,12 @@ export class View {
         case 'weakened':
           if (effect.hero === myId) this.say(t.weakened, COLORS.negative, now);
           break;
+        case 'mimic':
+          if (effect.depth !== this.depth) break;
+          this.say(t.isMimic, COLORS.negative, now);
+          audio.play('alert');
+          if (effect.hero === myId) haptic('hurt');
+          break;
         case 'charmed':
           if (effect.hero === myId) this.say(t.charmed, COLORS.negative, now);
           break;

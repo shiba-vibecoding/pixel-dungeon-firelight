@@ -31,7 +31,8 @@ Yendor on depth 26:
   that split, gnoll shamans with lightning, vampire bats, gnoll brutes, cave
   spinners with their venom; fire elementals, dwarf monks, dwarf warlocks whose
   shadow bolts weaken, and golems; succubi that charm and blink, evil eyes whose
-  gaze pierces, and scorpios that sting from afar and cripple.
+  gaze pierces, and scorpios that sting from afar and cripple; and mimics,
+  chests that bite.
 - Bosses: Goo on depth 5; Tengu in its locked arena on depth 10; DM-300 on
   depth 15, leaking gas and repairing itself; the King of Dwarves on depth 20,
   raising his undead court; Yog-Dzewa on depth 25 with its fists and larvae.

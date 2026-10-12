@@ -402,7 +402,7 @@ export class ItemGenerator {
 /* What lies around on a new level */
 
 /** `forSale`: a shop's wares, bought rather than picked up. */
-export type HeapKind = 'heap' | 'chest' | 'skeleton' | 'tomb' | 'forSale';
+export type HeapKind = 'heap' | 'chest' | 'skeleton' | 'tomb' | 'forSale' | 'mimic';
 
 export interface Heap {
   pos: number;
@@ -411,7 +411,8 @@ export interface Heap {
 }
 
 /** Sprites of closed containers in items.png. */
-export const HEAP_SPRITES: Readonly<Record<Exclude<HeapKind, 'heap' | 'forSale'>, number>> = { chest: 11, skeleton: 0, tomb: 13 };
+/** A mimic looks just like a chest. */
+export const HEAP_SPRITES: Readonly<Record<Exclude<HeapKind, 'heap' | 'forSale'>, number>> = { chest: 11, skeleton: 0, tomb: 13, mimic: 11 };
 
 /** Dungeon.posNeeded / souNeeded: guaranteed strength and upgrades, spread over the floors. */
 function quotaReached(rng: Rng, depth: number, quota: readonly number[], found: number): boolean {
@@ -499,7 +500,8 @@ export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean
   while (rng.float() < 0.4) count++;
   for (let i = 0; i < count; i++) {
     const roll = rng.int(20);
-    const kind: HeapKind = roll === 0 ? 'skeleton' : roll <= 5 ? 'chest' : 'heap';
+    // RegularLevel.createItems: one chest in five below the first depth is a mimic.
+    const kind: HeapKind = roll === 0 ? 'skeleton' : roll === 5 && level.depth > 1 ? 'mimic' : roll <= 5 ? 'chest' : 'heap';
     drop(randomDropCell(rng, level), kind, generator.random());
   }
 

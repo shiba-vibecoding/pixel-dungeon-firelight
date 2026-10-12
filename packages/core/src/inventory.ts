@@ -1,13 +1,13 @@
-import { BACKPACK_SIZE, type Hero, heroRangedSkill, maxExp, STARVING } from './actors';
+import { BACKPACK_SIZE, createMob, type Hero, heroRangedSkill, maxExp, mobStats, STARVING } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
-import { charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, leaveCell } from './floor';
+import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, leaveCell } from './floor';
 import {
   buyPrice, type Heap, isStackable, type Item, itemDef, type ItemKind, itemPrice, magicMissileDamage, missileStats,
   wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
-import { adjacent, LENGTH } from './level/geometry';
+import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
 import { discover, F, hasFlag } from './level/terrain';
 import { type Burst, burst } from './traps';
 import { zapWand } from './wands';
@@ -272,6 +272,7 @@ export function collect(hero: Hero, item: Item): boolean {
 /** Opens a chest or remains if need be, and takes everything there is room for. */
 function pickUp(ctx: Ctx, hero: Hero): void {
   const heap = ctx.floor.heaps.find((h) => h.pos === hero.pos)!;
+  if (heap.kind === 'mimic' && springMimic(ctx, hero, heap)) return;
   if (heap.kind !== 'heap') {
     ctx.effects.push({ type: 'opened', depth: ctx.depth, pos: heap.pos, heap: heap.kind });
     heap.kind = 'heap';
@@ -337,6 +338,33 @@ function eat(ctx: Ctx, hero: Hero, index: number): void {
 const MEAT_BURNING_TURNS = 8;
 const ROOTED_TURNS = 10;
 const SLOWED_TURNS = 10;
+
+/**
+ * Mimic.spawnAt: the "chest" was a mimic. The hero is pushed aside and the
+ * mimic, holding the treasure, attacks. False if there is no room to move.
+ */
+function springMimic(ctx: Ctx, hero: Hero, heap: Heap): boolean {
+  const { world, depth, level, rng, floor } = ctx;
+  const cells = NEIGHBOURS8.map((n) => hero.pos + n).filter((c) => canEnter(level, c) && !charAt(world, depth, c));
+  if (cells.length === 0) {
+    heap.kind = 'chest';
+    return false;
+  }
+  const pos = heap.pos;
+  const to = rng.element(cells)!;
+  hero.pos = to;
+  leaveCell(world, level, depth, pos);
+  enterCell(level, to);
+  floor.heaps.splice(floor.heaps.indexOf(heap), 1);
+  const mimic = createMob(`#${++world.nextId}`, 'mimic', pos, 'hunting', floor.now + 1);
+  mimic.level = depth;
+  mimic.ht = mimic.hp = mobStats(mimic).ht;
+  Object.assign(mimic, { enemy: hero.id, target: hero.pos, enemySeen: true, loot: heap.items });
+  floor.mobs.push(mimic);
+  enterCell(level, pos);
+  ctx.effects.push({ type: 'mimic', depth, mob: mimic.id, hero: hero.id });
+  return true;
+}
 
 /** Dewdrop.doPickUp: a little health, more for the huntress; wasted on the unhurt. */
 function drinkDew(ctx: Ctx, hero: Hero, dew: Item): void {

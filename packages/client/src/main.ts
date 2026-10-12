@@ -123,6 +123,11 @@ function enterGame(next: Session, roomId: string | null): void {
   view.log = [];
   view.say(t.welcome);
   hideOverlay();
+  // The very first game opens with how to play.
+  if (!stored('pd-seen-help')) {
+    store('pd-seen-help', '1');
+    showHelp(hideOverlay);
+  }
 }
 
 /** The current run is the daily dungeon, whose results go to the leaderboard. */

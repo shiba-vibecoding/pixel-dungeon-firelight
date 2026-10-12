@@ -1,6 +1,6 @@
 import {
   BRUTE_ENRAGED_DAMAGE, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
-  maxExp, type Mob, MOBS, ringBonus,
+  maxExp, type Mob, MOBS, mobStats, ringBonus,
 } from './actors';
 import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, isWater, leaveCell } from './floor';
 import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold } from './items';
@@ -14,23 +14,23 @@ import { T } from './level/terrain';
  */
 
 function attackSkill(char: Char): number {
-  return isHero(char) ? heroAttackSkill(char) : MOBS[char.kind].attack;
+  return isHero(char) ? heroAttackSkill(char) : mobStats(char).attack;
 }
 
 function defenseSkill(char: Char): number {
   if (isHero(char)) return heroDefenseSkill(char);
   // A monster that has not spotted its enemy is caught off guard.
-  return char.enemySeen ? MOBS[char.kind].defense : 0;
+  return char.enemySeen ? mobStats(char).defense : 0;
 }
 
 function armor(char: Char): number {
-  return isHero(char) ? heroArmor(char) : MOBS[char.kind].dr;
+  return isHero(char) ? heroArmor(char) : mobStats(char).dr;
 }
 
 function damageRoll(ctx: Ctx, char: Char, range?: readonly [number, number]): number {
   if (range) return ctx.rng.normalIntRange(range[0], range[1]);
   if (isHero(char)) return heroDamageRoll(char, ctx.rng);
-  const [min, max] = char.kind === 'brute' && char.enraged ? BRUTE_ENRAGED_DAMAGE : MOBS[char.kind].damage;
+  const [min, max] = char.kind === 'brute' && char.enraged ? BRUTE_ENRAGED_DAMAGE : mobStats(char).damage;
   return ctx.rng.normalIntRange(min, max);
 }
 
@@ -82,6 +82,14 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
       if (attacker.kind === 'rottingFist' && ctx.rng.int(3) === 0) {
         if (defender.ooze < 0) ctx.effects.push({ type: 'oozed', hero: defender.id });
         defender.ooze = 0;
+      }
+    }
+    // Mimic.attackProc: one bite in three knocks some gold out of the hero's purse.
+    if (attacker.kind === 'mimic' && isHero(defender) && ctx.rng.int(3) === 0) {
+      const lost = ctx.rng.intBetween(Math.trunc(defender.gold / 10), Math.trunc(defender.gold / 2));
+      if (lost > 0) {
+        defender.gold -= lost;
+        dropItem(ctx.floor, defender.pos, createItem('gold', lost));
       }
     }
     // Undead.attackProc: now and then a blow stuns.
@@ -226,7 +234,7 @@ function mobDied(ctx: Ctx, mob: Mob): void {
   ctx.effects.push({ type: 'died', depth: ctx.depth, who: mob.id, pos: mob.pos });
 
   // Everyone fighting on the depth learns from the kill, not just the killer.
-  const stats = MOBS[mob.kind];
+  const stats = mobStats(mob);
   const heroes = heroesOn(ctx.world, ctx.depth);
   for (const hero of heroes) {
     if (hero.lvl <= stats.maxLvl) earnExp(ctx, hero, stats.exp);
@@ -234,8 +242,9 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 
   questKill(ctx, mob);
 
-  // A thief's stolen goods fall where it dies.
+  // A thief's stolen goods fall where it dies, and a mimic's treasure.
   if (mob.item) dropItem(ctx.floor, mob.pos, mob.item);
+  for (const item of mob.loot ?? []) dropItem(ctx.floor, mob.pos, item);
 
   // Mob.dropLoot, unless the party has outgrown the monster.
   if (heroes.some((h) => h.lvl <= stats.maxLvl + 2)) {

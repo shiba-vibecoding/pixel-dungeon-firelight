@@ -12,6 +12,37 @@ function solo(heroClass: 'warrior' | 'rogue' = 'warrior'): World {
   return world;
 }
 
+describe('mimics', () => {
+  it('lurk among the chests below the first depth, and spring when opened', () => {
+    let mimics = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const world = createWorld(seed);
+      for (let d = 1; d <= 4; d++) levelAt(world, d);
+      expect(floorAt(world, 1).heaps.some((h) => h.kind === 'mimic')).toBe(false);
+      for (let d = 2; d <= 4; d++) mimics += floorAt(world, d).heaps.filter((h) => h.kind === 'mimic').length;
+    }
+    expect(mimics).toBeGreaterThan(3);
+
+    const world = solo();
+    const hero = heroById(world, 'p')!;
+    hero.gold = 100;
+    const level = levelAt(world, 1);
+    const pos = NEIGHBOURS8.map((n) => hero.pos + n).find((c) => canEnter(level, c) && !charAt(world, 1, c))!;
+    floorAt(world, 1).heaps.push({ pos, kind: 'mimic', items: [createItem('potion.healing')] });
+    act(world, 'p', { type: 'move', to: pos });
+    const result = act(world, 'p', { type: 'pickup' });
+    expect(result.ok && result.effects.some((e) => e.type === 'mimic')).toBe(true);
+    const mimic = floorAt(world, 1).mobs.find((m) => m.kind === 'mimic')!;
+    expect(mimic.pos).toBe(pos);
+    expect(hero.pos).not.toBe(pos);
+    expect(mimic.ht).toBe(16);
+    // Slain, it gives the treasure back.
+    hero.attackSkill = 1000;
+    for (let i = 0; i < 30 && floorAt(world, 1).mobs.includes(mimic); i++) act(world, 'p', { type: 'attack', target: mimic.id });
+    expect(floorAt(world, 1).heaps.some((h) => h.items.some((i) => i.kind === 'potion.healing'))).toBe(true);
+  });
+});
+
 describe('rings', () => {
   it('go by their gem until known; the rogue sets out wearing a ring of shadows', () => {
     const rings = (Object.keys(ITEMS) as ItemKind[]).filter((k) => itemDef(k).category === 'ring');

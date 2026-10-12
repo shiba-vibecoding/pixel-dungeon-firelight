@@ -237,7 +237,7 @@ export type MobKind =
   | 'skeleton' | 'thief' | 'swarm' | 'shaman' | 'bat' | 'brute' | 'tengu'
   | 'spinner' | 'dm300'
   | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead'
-  | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva';
+  | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva' | 'mimic';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -292,7 +292,21 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   rottingFist: { name: 'rotting fist', ht: 300, attack: 36, defense: 25, damage: [24, 36], dr: 15, exp: 0, maxLvl: 30, speed: 1 },
   burningFist: { name: 'burning fist', ht: 200, attack: 36, defense: 25, damage: [20, 32], dr: 15, exp: 0, maxLvl: 30, speed: 1 },
   larva: { name: "god's larva", ht: 25, attack: 30, defense: 20, damage: [15, 20], dr: 8, exp: 0, maxLvl: 30, speed: 1 },
+  // A chest that bites; its numbers grow with the depth (see mobStats).
+  mimic: { name: 'mimic', ht: 16, attack: 10, defense: 5, damage: [1, 4], dr: 0, exp: 2, maxLvl: 30, speed: 1 },
 };
+
+/** A monster's numbers: the table's, but a mimic is as strong as the depth it lurks on (Mimic.adjustStats). */
+export function mobStats(mob: Mob): MobStats {
+  if (mob.kind !== 'mimic') return MOBS[mob.kind];
+  const level = mob.level ?? 1;
+  const ht = (3 + level) * 4;
+  const attack = 9 + level;
+  return {
+    ...MOBS.mimic, ht, attack, defense: Math.trunc(attack / 2),
+    damage: [Math.trunc(ht / 10), Math.trunc(ht / 4)], exp: 2 + Math.trunc((2 * (level - 1)) / 5),
+  };
+}
 
 /** The brute, enraged when badly hurt: much harder hits. */
 export const BRUTE_ENRAGED_DAMAGE = [10, 40] as const;
@@ -334,6 +348,9 @@ export interface Mob {
   jumpIn?: number;
   /** The King of Dwarves: which pedestal he summons his undead from next. */
   rightPedestal?: boolean;
+  /** A mimic: the depth it lurks on, and the treasure it held. */
+  level?: number;
+  loot?: Item[];
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {

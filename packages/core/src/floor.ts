@@ -65,6 +65,8 @@ export type Effect =
   | { type: 'yell'; depth: number; mob: string; kind: MobKind; line: 'notice' | 'death' | 'summon'; hero?: string }
   /** A warlock's shadow bolt left the hero weakened. */
   | { type: 'weakened'; hero: string }
+  /** A chest that was a mimic springs at the hero. */
+  | { type: 'mimic'; depth: number; mob: string; hero: string }
   /** A torch lit; a succubus's charm; a scorpio's crippling sting. */
   | { type: 'lit'; hero: string }
   | { type: 'charmed'; hero: string }
