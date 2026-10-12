@@ -1,3 +1,5 @@
+import { MusicPlayer, type SongName, SONGS } from './music';
+
 /*
  * Sound effects, music and the dungeon's own air.
  *
@@ -12,6 +14,10 @@
  * region has its air: running water and drips in the sewers, the prison's hum
  * and chains, wind and falling pebbles in the caves, the dwarven city's distant
  * hammers, the demon halls' rumble and embers.
+ *
+ * The title and the sewers have the original's two tunes, from files; the regions
+ * below and the boss fights have tunes of their own, played by music.ts. Either kind
+ * crossfades into the other.
  *
  * Browsers (and Telegram on iOS) only allow audio after a user gesture, so it
  * all starts on the first tap; everything is suspended while the app is hidden.
@@ -30,7 +36,19 @@ export type Synth =
 
 export type Sound = Sample | Synth;
 
-type Track = 'theme' | 'game';
+/** The music: the original's tunes from files, or one played here. */
+export type Track = 'theme' | 'game' | SongName;
+
+const SONG_NAMES: ReadonlySet<string> = new Set<string>(SONGS);
+const isSong = (track: Track): track is SongName => SONG_NAMES.has(track);
+
+/** A tune playing, faded in and out through its own gain: from a file through an element, or played here. */
+interface Music {
+  track: Track;
+  element: HTMLAudioElement | null;
+  player: MusicPlayer | null;
+  gain: GainNode | null;
+}
 
 const SAMPLES: readonly Sample[] = [
   'hit', 'miss', 'step', 'water', 'death', 'levelup', 'descend', 'door_open', 'secret', 'alert',
@@ -318,8 +336,7 @@ class Audio {
   private musicBus: GainNode | null = null;
   private musicDuck: GainNode | null = null;
   private musicFilter: BiquadFilterNode | null = null;
-  /** The music: an element per track, faded in and out through its own gain. */
-  private music: { track: Track; element: HTMLAudioElement; gain: GainNode | null } | null = null;
+  private music: Music | null = null;
   private track: Track | null = null;
   private region: number | null = null;
   private playing: Playing | null = null;
@@ -349,7 +366,8 @@ class Audio {
     addEventListener('keydown', unlock, { capture: true });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        this.music?.element.pause();
+        // A tune played here needs nothing: its clock stops with the context's.
+        this.music?.element?.pause();
         void this.context?.suspend();
       } else {
         void this.context?.resume();
@@ -419,7 +437,7 @@ class Audio {
     this.air.gain.setTargetAtTime(on * this.soundVolume, at, 0.3);
     // The music's level is a gentle curve: half way sounds like half.
     this.musicBus.gain.setTargetAtTime(on * this.musicVolume * this.musicVolume * 0.75, at, 0.1);
-    if (this.music && !this.music.gain) this.music.element.volume = on * this.musicVolume * 0.6;
+    if (this.music?.element && !this.music.gain) this.music.element.volume = on * this.musicVolume * 0.6;
   }
 
   /** The hero's place, world pixels: what sounds from somewhere is heard from here. */
@@ -495,44 +513,66 @@ class Audio {
     this.startMusic();
   }
 
-  /** Fades a track out over a second and a half, then lets it go. */
-  private fadeOut(old: { element: HTMLAudioElement; gain: GainNode | null }): void {
+  /**
+   * Fades a track out over a second and a half (while the next comes in), then lets it go:
+   * the element paused, or the player's notes stopped and its nodes disconnected.
+   */
+  private fadeOut(old: Music): void {
     const ctx = this.context;
+    const stop = (): void => {
+      old.element?.pause();
+      old.player?.dispose();
+      old.gain?.disconnect();
+    };
     if (ctx && old.gain) {
+      // Its own fade-in may not have begun yet: that is dropped, and the fade-out starts from where it is.
+      old.gain.gain.cancelScheduledValues(ctx.currentTime);
       old.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
-      window.setTimeout(() => {
-        old.element.pause();
-        old.gain?.disconnect();
-      }, 1800);
+      window.setTimeout(stop, 1800);
     } else {
-      old.element.pause();
+      stop();
     }
+  }
+
+  /** A gain into the music's filter that brings a new track in rather than starting it at full. */
+  private fadeIn(ctx: AudioContext, filter: AudioNode): GainNode {
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(filter);
+    gain.gain.setTargetAtTime(1, ctx.currentTime + 0.05, 0.6);
+    return gain;
   }
 
   private startMusic(): void {
     if (!this.unlocked || !this.enabled || !this.track || document.hidden) return;
+    const ctx = this.context;
     if (!this.music) {
-      const element = new window.Audio(`${this.base}${this.track}.mp3`);
-      element.loop = true;
-      element.preload = 'auto';
-      let gain: GainNode | null = null;
-      const ctx = this.context;
-      if (ctx && this.musicFilter) {
-        try {
-          const source = ctx.createMediaElementSource(element);
-          gain = ctx.createGain();
-          gain.gain.value = 0;
-          source.connect(gain).connect(this.musicFilter);
-          // A new track comes in rather than starting at full.
-          gain.gain.setTargetAtTime(1, ctx.currentTime + 0.05, 0.6);
-        } catch {
-          gain = null;
+      const track = this.track;
+      if (isSong(track)) {
+        // A tune played here needs the audio graph; without one there is no such music.
+        if (!ctx || !this.musicFilter) return;
+        const gain = this.fadeIn(ctx, this.musicFilter);
+        this.music = { track, element: null, player: new MusicPlayer(ctx, track, gain), gain };
+      } else {
+        const element = new window.Audio(`${this.base}${track}.mp3`);
+        element.loop = true;
+        element.preload = 'auto';
+        let gain: GainNode | null = null;
+        if (ctx && this.musicFilter) {
+          try {
+            const source = ctx.createMediaElementSource(element);
+            gain = this.fadeIn(ctx, this.musicFilter);
+            source.connect(gain);
+          } catch {
+            gain = null;
+          }
         }
+        this.music = { track, element, player: null, gain };
       }
-      this.music = { track: this.track, element, gain };
       this.levels();
     }
-    void this.music.element.play().catch(() => undefined);
+    if (this.music.element) void this.music.element.play().catch(() => undefined);
+    this.music.player?.play();
   }
 
   /** The music dips for a moment under something that matters (a boss, a level gained, death). */
@@ -662,7 +702,10 @@ class Audio {
     store('pd-sound', enabled ? 'on' : 'off');
     this.levels();
     if (enabled) this.startMusic();
-    else this.music?.element.pause();
+    else {
+      this.music?.element?.pause();
+      this.music?.player?.pause();
+    }
   }
 
   setMusicVolume(volume: number): void {
