@@ -125,7 +125,8 @@ stands in it is marked, and marked creatures slain are offerings. Once it
 has had enough, it goes out and leaves a scroll of wipe out, which kills
 every monster on a level but its boss (and frees a shop's wares).
 
-Every item, monster, quest and room of the original is now in.
+Every item, monster, quest and room of the original is now in (the boss
+levels' skeleton keys aside: slaying the boss opens the way down directly).
 
 Where this port differs on purpose: co-op throughout; golden bees and mirror
 images are ignored by monsters rather than fought; Lloyd's beacon is not
