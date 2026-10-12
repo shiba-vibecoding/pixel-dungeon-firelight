@@ -28,6 +28,8 @@ if (!SERVER_URL) {
   console.error('Usage: node packages/server/scripts/set-webhook.mjs https://pd-coop.<subdomain>.workers.dev');
   process.exit(1);
 }
+if (process.env.BOT_TOKEN) console.log('Using BOT_TOKEN from the environment.');
+if (process.env.WEBHOOK_SECRET) console.log('Using WEBHOOK_SECRET from the environment.');
 const BOT_TOKEN = process.env.BOT_TOKEN || (await askHidden('Bot token (hidden): '));
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || (await askHidden('Webhook secret (hidden): '));
 if (!BOT_TOKEN || !WEBHOOK_SECRET) {
@@ -46,7 +48,14 @@ async function call(method, params) {
     body: JSON.stringify(params),
   });
   const body = await response.json();
-  if (!body.ok) throw new Error(`${method}: ${body.description}`);
+  if (!body.ok) {
+    console.error(`${method}: ${body.description}`);
+    if (response.status === 401) {
+      console.error('Telegram does not accept this bot token: it is mistyped or was revoked in @BotFather.');
+      if (process.env.BOT_TOKEN) console.error('It came from $env:BOT_TOKEN; clear it with: Remove-Item Env:BOT_TOKEN');
+    }
+    process.exit(1);
+  }
   return body.result;
 }
 
