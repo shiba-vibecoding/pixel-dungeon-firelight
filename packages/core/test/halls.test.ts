@@ -25,7 +25,8 @@ describe('the demon halls', () => {
   it('generate depths 21-26: the last shop, Yog-Dzewa, and the Amulet', () => {
     for (let seed = 1; seed <= 15; seed++) {
       const run = createRun(seed);
-      const levels = Array.from({ length: 26 }, (_, i) => generateLevel(run, i + 1));
+      // The imp's errand done: the last shop is open (see last-shop.test.ts).
+      const levels = Array.from({ length: 26 }, (_, i) => generateLevel(run, i + 1, undefined, true));
       for (const level of levels.slice(20, 24)) {
         expect(level.map[level.entrance], `seed ${seed} depth ${level.depth}`).toBe(T.ENTRANCE);
         expect(level.map[level.exit], `seed ${seed} depth ${level.depth}`).toBe(T.EXIT);

@@ -3,7 +3,7 @@ import { LENGTH, NEIGHBOURS8, WIDTH } from './geometry';
 import type { RegionStyle } from './regular';
 import { F, hasFlag, T } from './terrain';
 
-/* Depths 21–24: the demon halls (HallsLevel), their water a cold lava. */
+/* Depths 22–24: the demon halls (HallsLevel), their water a cold lava. Depth 21 is the last shop (last-shop.ts). */
 
 export const HALLS_STYLE: RegionStyle = {
   minRoomSize: 7,

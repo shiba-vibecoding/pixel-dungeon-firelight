@@ -1,3 +1,5 @@
+import { LAST_SHOP_DEPTH } from '@pd/core';
+
 /*
  * The world's sprite sheets (assets/world, Claude Design's «Живой мир»): doors,
  * chests, grass, splashes, glints, tap feedback, co-op markers, each region's
@@ -67,6 +69,13 @@ export function preloadSheets(region: number): void {
 
 /** The region's number of a depth, as the sheets with a number count them. */
 export const regionIndex = (depth: number): 0 | 1 | 2 | 3 | 4 => Math.max(0, Math.min(4, Math.floor((depth - 1) / 5))) as 0 | 1 | 2 | 3 | 4;
+
+/**
+ * Whose tiles, water and life a depth shows: its region's, but the last shop
+ * (depth 21, LastShopLevel) is laid in the city's tiles and water (TILES_CITY,
+ * WATER_CITY) with the city's visuals, though it opens the demon halls.
+ */
+export const lookIndex = (depth: number): 0 | 1 | 2 | 3 | 4 => (depth === LAST_SHOP_DEPTH ? 3 : regionIndex(depth));
 
 /** How long an animation lasts once through (a last frame of 0 ms is the end). */
 export function length(frames: readonly Frame[]): number {

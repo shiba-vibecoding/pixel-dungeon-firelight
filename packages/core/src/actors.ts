@@ -358,7 +358,7 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   golem: { name: 'golem', ht: 85, attack: 28, defense: 18, damage: [20, 40], dr: 12, exp: 12, maxLvl: 22, speed: 1, attackDelay: 1.5 },
   king: { name: 'King of Dwarves', ht: 300, attack: 32, defense: 25, damage: [20, 38], dr: 14, exp: 40, maxLvl: 30, speed: 1 },
   undead: { name: 'undead dwarf', ht: 28, attack: 16, defense: 15, damage: [12, 16], dr: 5, exp: 0, maxLvl: 30, speed: 1 },
-  // The demon halls (depths 21-25).
+  // The demon halls (depths 22-25).
   succubus: { name: 'succubus', ht: 80, attack: 40, defense: 25, damage: [15, 25], dr: 10, exp: 12, maxLvl: 25, speed: 1 },
   eye: { name: 'evil eye', ht: 100, attack: 30, defense: 20, damage: [14, 20], dr: 10, exp: 13, maxLvl: 25, speed: 1, attackDelay: 1.6, flying: true },
   scorpio: { name: 'scorpio', ht: 95, attack: 36, defense: 24, damage: [20, 32], dr: 16, exp: 14, maxLvl: 25, speed: 1 },
@@ -513,8 +513,8 @@ export function createMob(id: string, kind: MobKind, pos: number, state: MobStat
  * Who lives where (Bestiary.mobClass), with the original's rare visitors from
  * the region below: a swarm of flies, a skeleton or a thief in the sewers,
  * fire elementals and dwarf monks in the caves, a succubus in the city.
- * Depth 21 (the original's last shop, with no monsters of its own) is a
- * level of the halls in this port, and has theirs.
+ * Depth 21, the last shop (LastShopLevel), has no monsters and no row: like
+ * any depth beyond the table it would get the default.
  */
 const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]>>> = {
   1: [['rat', 1]],
@@ -537,7 +537,6 @@ const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]
   18: [['elemental', 1], ['monk', 2], ['golem', 1], ['warlock', 1]],
   19: [['elemental', 1], ['monk', 2], ['golem', 3], ['warlock', 1], ['succubus', 0.02]],
   20: [['king', 1]],
-  21: [['succubus', 1], ['eye', 1]],
   22: [['succubus', 1], ['eye', 1]],
   23: [['succubus', 1], ['eye', 2], ['scorpio', 1]],
   24: [['succubus', 1], ['eye', 2], ['scorpio', 3]],
