@@ -1,6 +1,7 @@
 import { type Effect, HEIGHT, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
 import { type BurstOptions, fx } from './fx';
 import { TILE, type View } from './view';
+import { audio } from './audio';
 
 /*
  * What the dungeon's events look like beyond the sprites: blood and sparks on
@@ -105,6 +106,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
         fx.shake(1 + share * 7, 160 + share * 200, now);
         if (share >= 0.2) fx.hitStop(70);
       } else if (mine && (share >= 0.25 || target.hp - effect.damage <= 0)) {
+        audio.play('hit', 0.55, 0.8);
         fx.shake(1.5 + share * 3, 160, now);
         fx.hitStop(55 + share * 50);
         // A heavy blow's number lands big.
@@ -150,6 +152,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     case 'yell':
       // A boss that notices the heroes: the ground trembles.
       if (here(effect.depth) && effect.line === 'notice' && BOSSES.has(effect.kind)) {
+        view.bossIntro = { kind: effect.kind, start: now };
         fx.shake(4, 700, now);
         fx.flash('120, 0, 0', 0.35, 700, now, true);
       }

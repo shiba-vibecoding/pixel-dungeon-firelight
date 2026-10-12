@@ -481,6 +481,10 @@ const en = {
   mobStates: { sleeping: 'It is asleep.', wandering: 'It is wandering about.', hunting: 'It is hunting.', fleeing: 'It is fleeing.' } as Record<string, string>,
   heapNames: { chest: 'chest', mimic: 'chest', lockedChest: 'locked chest', crystalChest: 'crystal chest', skeleton: 'skeletal remains', tomb: 'tomb' } as Record<string, string>,
   impGreeting: 'Hello, friend!',
+  bossEpithets: {
+    goo: 'master of the sewers', tengu: 'the assassin of the prison', dm300: 'the guardian machine', king: 'lord of the undead court',
+    yog: 'the Old God',
+  } as Record<string, string>,
   marked: 'marked',
   sacrifice: { worthy: '"Your sacrifice is worthy..."', unworthy: '"Your sacrifice is unworthy..."', reward: '"Your sacrifice is worthy and so you are!"' },
   wipedOut: 'The wrath of the dungeon spirits sweeps the level!',
@@ -1191,6 +1195,9 @@ const ru: Strings = {
   mobStates: { sleeping: 'Спит.', wandering: 'Бродит.', hunting: 'Охотится.', fleeing: 'Убегает.' },
   heapNames: { chest: 'сундук', mimic: 'сундук', lockedChest: 'запертый сундук', crystalChest: 'хрустальный сундук', skeleton: 'останки скелета', tomb: 'гробница' },
   impGreeting: 'Привет, друг!',
+  bossEpithets: {
+    goo: 'владыка сточных вод', tengu: 'убийца из тюрьмы', dm300: 'машина-страж', king: 'владыка мёртвого двора', yog: 'Древний бог',
+  },
   marked: 'метка',
   sacrifice: { worthy: '«Твоя жертва достойна...»', unworthy: '«Твоя жертва недостойна...»', reward: '«Твоя жертва достойна — как и ты сам!»' },
   wipedOut: 'Гнев духов подземелья проносится по уровню!',

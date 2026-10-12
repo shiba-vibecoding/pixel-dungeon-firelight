@@ -2,10 +2,13 @@ import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
 import { fx } from './fx';
+import { t } from './i18n';
 
 /* Canvas renderer for the world, using the original 16px tiles and sprites. */
 
 export const FONT = '"Pixelify Sans", ui-monospace, monospace';
+/** How long a boss's title card stays up. */
+const BOSS_CARD_MS = 3200;
 
 export interface Camera {
   /** World pixel shown at the canvas's top-left corner. */
@@ -113,6 +116,8 @@ export interface Scene {
   focus?: { x: number; y: number };
   /** Pools of light: torches and whatever burns. */
   lights?: ReadonlyArray<{ x: number; y: number; radius: number; color: string; strength: number }>;
+  /** The hero has fallen: how far the world has drained of colour, 0 to 1. */
+  mourning?: number;
 }
 
 export function render(
@@ -251,6 +256,15 @@ export function render(
 
   // Floating numbers and words, drawn at screen resolution so text stays crisp.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Fallen, the hero sees the world drain of colour.
+  if (scene.mourning) {
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = `rgba(128, 128, 128, ${scene.mourning})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = `rgba(0, 0, 0, ${scene.mourning * 0.3})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.font = `${Math.round(6 * camera.zoom)}px ${FONT}`;
@@ -299,6 +313,39 @@ export function render(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   fx.drawScreen(ctx, canvas.width, canvas.height, now);
+
+  // A boss's title card: its name and epithet, large, as it notices the party.
+  const intro = view.bossIntro;
+  if (intro && now - intro.start < BOSS_CARD_MS) {
+    const t0 = now - intro.start;
+    const alpha = Math.max(0, Math.min(1, t0 / 350, (BOSS_CARD_MS - t0) / 700));
+    const cx = canvas.width / 2;
+    const cy = canvas.height * 0.3;
+    const size = Math.round(Math.min(canvas.width / 9, 13 * camera.zoom));
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(0, cy - size * 1.3, canvas.width, size * 2.6);
+    ctx.font = `${size}px ${FONT}`;
+    ctx.lineWidth = Math.max(3, size / 6);
+    ctx.strokeStyle = '#000';
+    const name = t.mobs[intro.kind].toUpperCase();
+    // A slight swell as it appears.
+    const swell = 1 + Math.max(0, 1 - t0 / 300) * 0.25;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(swell, swell);
+    ctx.strokeText(name, 0, 0);
+    ctx.fillStyle = '#ffcf60';
+    ctx.fillText(name, 0, 0);
+    ctx.restore();
+    ctx.font = `${Math.round(size * 0.42)}px ${FONT}`;
+    ctx.lineWidth = Math.max(2, size / 10);
+    const epithet = t.bossEpithets[intro.kind] ?? '';
+    ctx.strokeText(epithet, cx, cy + size * 0.85);
+    ctx.fillStyle = '#e8e2c8';
+    ctx.fillText(epithet, cx, cy + size * 0.85);
+    ctx.globalAlpha = 1;
+  }
 
   // "Boss slain" banner, fading in and out.
   const age = now - view.bannerStart;

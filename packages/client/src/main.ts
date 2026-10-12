@@ -14,6 +14,8 @@ import { fx } from './fx';
 import { ambientFx, effectFx, lightsFor, regionFx } from './fx-events';
 /** The visual clock's last reading, for frame-to-frame particle steps. */
 let lastVisual = 0;
+/** When my hero fell, on the visual clock, or 0 while alive. */
+let fallenAt = 0;
 import { type BadgeId, badgeText, checkBadges, countGame } from './badges';
 import { audio } from './audio';
 import { BUFF_ICONS, heroBuffs, Hud } from './hud';
@@ -915,6 +917,7 @@ function tick(now: number): void {
 
   // The visual clock: real time, slowed for a moment by a heavy blow's hit-stop.
   const vnow = fx.time(now);
+  if (isAlive(me)) fallenAt = 0;
   const dt = lastVisual ? vnow - lastVisual : 0;
   lastVisual = vnow;
 
@@ -1014,6 +1017,7 @@ function tick(now: number): void {
       ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
     focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
     lights: lightsFor(level, visible, view, vnow),
+    mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
   };
   render(ctx, scene, view, session.myId, assets, camera, vnow);
 
