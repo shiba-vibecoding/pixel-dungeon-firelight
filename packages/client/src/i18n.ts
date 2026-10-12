@@ -187,6 +187,15 @@ const en = {
   wandDamage: (min: number, max: number) => `Damage ${min}–${max}.`,
   noCharges: 'Your wand fizzles: it is out of charges for now.',
   resting: 'You rest until healed…',
+  signTitle: 'A sign reads:',
+  // Sign.java; the fourth (about the shop on depth 6) gives way to a tip from deeper down.
+  signs: [
+    "Don't overestimate your strength, use weapons and armor you can handle.",
+    'Not all doors in the dungeon are visible at first sight. If you are stuck, search for hidden doors.',
+    'Remember, that raising your strength is not the only way to access better equipment. You can go the other way, lowering its strength requirement with Scrolls of Upgrade.',
+    'Surprise attack has a better chance to hit. For example, you can ambush your enemy behind a closed door when you know it is approaching.',
+    'Beware of Goo!',
+  ],
 };
 
 type Strings = typeof en;
@@ -378,6 +387,14 @@ const ru: Strings = {
   wandDamage: (min, max) => `Урон ${min}–${max}.`,
   noCharges: 'Палочка потрескивает: заряды кончились.',
   resting: 'Вы отдыхаете, пока не восстановитесь…',
+  signTitle: 'На табличке написано:',
+  signs: [
+    'Не будь самоуверенным, используй доступные тебе оружие и броню.',
+    'Не всякая дверь в подземелье заметна с первого взгляда. Если не знаешь куда идти, попробуй поискать тайные двери.',
+    'Помни, что повышение силы - не единственный способ использовать лучшее снаряжение, ты можешь пойти другим путём, понижая требования предмета с помощью Свитка Улучшения.',
+    'Неожиданная атака имеет больший шанс на попадание. Например, ты можешь подстеречь врага у закрытой двери, будучи уверенным, что он приближается.',
+    'Берегись Жижи!',
+  ],
 };
 
 function capitalize(text: string): string {

@@ -157,6 +157,19 @@ export function showMenu(options: MenuOptions): void {
   );
 }
 
+/** The tip on a level's sign (Sign.read). */
+export function showSign(text: string, onClose: () => void): void {
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('p', { className: 'pd-note', textContent: t.signTitle }),
+      el('p', { className: 'pd-info', textContent: text }),
+      button('OK', onClose, 'primary'),
+    ),
+  );
+}
+
 export function showHelp(onClose: () => void): void {
   show(
     el(

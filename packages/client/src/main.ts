@@ -10,7 +10,7 @@ import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showHelp, showMenu, showRunEnd, showTitle, toast,
+  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showHelp, showMenu, showRunEnd, showSign, showTitle, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -630,6 +630,12 @@ function tick(now: number): void {
       const terrain = level.map[me.pos]!;
       audio.play(terrain >= T.WATER_TILES && terrain <= T.WATER ? 'water' : 'step', 1, 0.5);
       if (terrain === T.OPEN_DOOR) audio.play('door_open', 1, 0.6);
+      // Stepping onto a sign reads it.
+      const tip = t.signs[me.depth - 1];
+      if (terrain === T.SIGN && tip) {
+        walk.reset();
+        showSign(tip, hideOverlay);
+      }
     }
   }
   lastPlace = { generation: session.generation, depth: me.depth, pos: me.pos };
