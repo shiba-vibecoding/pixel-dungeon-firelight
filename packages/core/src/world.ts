@@ -10,6 +10,7 @@ import {
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
 import { createItems, itemDef, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
 import { discoverable } from './level/flags';
+import { type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
 import { isBossDepth } from './level/builder';
 import { generateLevel, type Level } from './level/generate';
@@ -38,6 +39,8 @@ export type Action =
   | { type: 'ascend' }
   | { type: 'wait' }
   | { type: 'search' }
+  /** The sad ghost's reward, for its rose. */
+  | { type: 'reward'; choice: 'weapon' | 'armor' }
   | InventoryAction;
 
 export type ActionResult = { ok: true; effects: Effect[] } | { ok: false; reason: string };
@@ -61,6 +64,8 @@ export interface World {
   victory: boolean;
   /** Potion and scroll kinds the party has identified; knowledge is shared. */
   known: ItemKind[];
+  /** The sad ghost's quest, once the ghost has appeared. */
+  quest: GhostQuest | null;
 }
 
 /** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
@@ -70,11 +75,13 @@ const TIME_TO_SEARCH = 2;
 /** How far a deliberate search reaches; the original only checked adjacent cells. */
 const SEARCH_RADIUS = 2;
 const REGENERATION_DELAY = 10;
+/** Sub-stream of a depth's monster stream for the sad ghost. */
+const GHOST_STREAM = 1;
 
 export function createWorld(seed: number): World {
   return {
     run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
-    known: [],
+    known: [], quest: null,
   };
 }
 
@@ -90,8 +97,10 @@ export function levelAt(world: World, depth: number): Level {
     if (!world.levels[d]) {
       const level = generateLevel(world.run, d);
       world.levels[d] = level;
+      const mobs = populate(world, level, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d)));
+      spawnGhost(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, GHOST_STREAM)));
       world.floors[d] = {
-        mobs: populate(world, level, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d))),
+        mobs,
         rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
         now: 0,
         respawn: isBossDepth(d) ? -1 : TIME_TO_RESPAWN,
@@ -148,7 +157,7 @@ export function visibleCells(world: World, depth: number): boolean[] {
 /** True when no awake monster is in the hero's sight. */
 export function isSafe(world: World, hero: Hero): boolean {
   const fov = heroView(world, hero);
-  return !floorAt(world, hero.depth).mobs.some((mob) => mob.state !== 'sleeping' && fov[mob.pos]);
+  return !floorAt(world, hero.depth).mobs.some((mob) => mob.state !== 'sleeping' && mob.state !== 'passive' && fov[mob.pos]);
 }
 
 /** Why an action is impossible right now, or null if it is fine. */
@@ -172,6 +181,8 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       if (!mob) return 'no such enemy';
       return adjacent(hero.pos, mob.pos) ? null : 'too far away';
     }
+    case 'reward':
+      return rewardProblem(world, hero, action.choice);
     case 'descend':
       return hero.pos === level.exit ? null : 'not on the stairs';
     case 'ascend':
@@ -391,9 +402,20 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       break;
     }
 
-    case 'attack':
-      attack(ctx, hero, mobById(world, hero.depth, action.target)!);
+    case 'attack': {
+      const mob = mobById(world, hero.depth, action.target)!;
+      if (mob.state === 'passive') {
+        // Not a fight: a word with the sad ghost, which takes no time.
+        talkToGhost(ctx, hero);
+        break;
+      }
+      attack(ctx, hero, mob);
       spend(ctx, hero, heroAttackDelay(hero));
+      break;
+    }
+
+    case 'reward':
+      rewardFromGhost(ctx, hero, action.choice);
       break;
 
     case 'descend':

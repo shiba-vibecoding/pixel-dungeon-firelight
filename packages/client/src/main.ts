@@ -11,7 +11,8 @@ import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showHelp, showMenu, showRunEnd, showSign, showTitle, toast,
+  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showGhost, showHelp, showMenu, showRunEnd, showSign, showTitle,
+  toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -382,6 +383,7 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
 
 function handleMyEffects(effects: readonly Effect[], myId: string): void {
   for (const effect of effects) {
+    if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line);
     const hurt = (effect.type === 'attack' && effect.target === myId) || (effect.type === 'hurt' && effect.who === myId);
     if ((effect.type === 'interrupted' && effect.hero === myId) || hurt) {
       walk.queue = [];
@@ -389,6 +391,29 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
       walk.resting = false;
     }
   }
+}
+
+function talkWithGhost(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  audio.play('ghost');
+  walk.reset();
+  const quest = world.quest;
+  showGhost({
+    world,
+    hero: me,
+    text: t.ghost[line],
+    reward:
+      line === 'reward' && quest
+        ? {
+            weapon: quest.weapon,
+            armor: quest.armor,
+            onChoose: (choice) => send({ type: 'reward', choice }, performance.now()),
+          }
+        : undefined,
+    onClose: hideOverlay,
+  });
 }
 
 /* Input */
@@ -661,7 +686,9 @@ function tick(now: number): void {
 
     // A newly spotted awake monster stops a walk, as in the original.
     const inSight = new Set(
-      (world.floors[me.depth]?.mobs ?? []).filter((m) => m.state !== 'sleeping' && visible[m.pos]).map((m) => m.id),
+      (world.floors[me.depth]?.mobs ?? [])
+        .filter((m) => m.state !== 'sleeping' && m.state !== 'passive' && visible[m.pos])
+        .map((m) => m.id),
     );
     if ([...inSight].some((id) => !threats.has(id))) {
       walk.queue = [];

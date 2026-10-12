@@ -33,7 +33,7 @@ const BURNING_TURNS = 8;
 /** Everyone alive within `radius` of a cell. */
 function around(ctx: Ctx, pos: number, radius: number): Char[] {
   const chars: Char[] = heroesOn(ctx.world, ctx.depth).filter((hero) => distance(hero.pos, pos) <= radius);
-  chars.push(...ctx.floor.mobs.filter((mob) => distance(mob.pos, pos) <= radius));
+  chars.push(...ctx.floor.mobs.filter((mob) => mob.state !== 'passive' && distance(mob.pos, pos) <= radius));
   return chars;
 }
 
@@ -65,6 +65,7 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
       break;
     case 'alarm':
       for (const mob of ctx.floor.mobs) {
+        if (mob.state === 'passive') continue;
         if (mob.state !== 'hunting') mob.state = 'wandering';
         mob.target = pos;
       }

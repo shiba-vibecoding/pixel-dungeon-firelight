@@ -11,7 +11,7 @@ const en = {
     rogue: 'Stealthy, evasive and good at finding secrets.',
     huntress: 'Fragile but deadly with a dagger.',
   } as Record<HeroClass, string>,
-  mobs: { rat: 'marsupial rat', gnoll: 'gnoll scout', crab: 'sewer crab', goo: 'Goo' } as Record<MobKind, string>,
+  mobs: { rat: 'marsupial rat', gnoll: 'gnoll scout', crab: 'sewer crab', goo: 'Goo', ghost: 'sad ghost' } as Record<MobKind, string>,
   solo: 'Play solo',
   continueRun: 'Continue',
   newRun: 'New game',
@@ -105,6 +105,7 @@ const en = {
     'missile.boomerang': 'boomerang',
     'wand.magicMissile': 'Wand of Magic Missile',
     'key.iron': 'iron key',
+    'quest.rose': 'dried rose',
   } as Record<ItemKind, string>,
   itemInfo: {
     'potion.healing': 'Restores all health and washes off ooze.',
@@ -121,7 +122,17 @@ const en = {
     'missile.dart': 'A light throwing dart. Lost when it hits, left on the floor when it misses.',
     'missile.boomerang': 'Thrown, it always flies back to your hand.',
     'wand.magicMissile': 'Fires a bolt of magic that never misses. Recharges over time.',
+    'quest.rose': 'The rose has dried long ago, but it has kept all its petals somehow.',
   } as Partial<Record<ItemKind, string>>,
+  ghost: {
+    intro:
+      'Hello adventurer... Once I was like you - strong and confident... And now I\'m dead... But I can\'t leave this place... Not until I have my dried rose... It\'s very important to me... Some monster stole it from my body...',
+    remind: 'Please... Help me... Find the rose...',
+    reward:
+      'Yes! Yes!!! This is it! Please give it to me! And you can take one of these items, maybe they will be useful to you in your journey...',
+    farewell: 'Farewell, adventurer!',
+  },
+  takeReward: (name: string) => `Take: ${name}`,
   keyInfo: (depth: number) => `Opens the locked room on depth ${depth}. Walk into its door.`,
   locked: 'The door is locked. Its key lies somewhere on this level.',
   unlocked: 'You unlock the door.',
@@ -214,7 +225,7 @@ const ru: Strings = {
     huntress: 'Хрупкая, но опасная с кинжалом.',
   },
   // Names as in the Russian localisation of the original.
-  mobs: { rat: 'сумчатая крыса', gnoll: 'гнолл-следопыт', crab: 'сточный краб', goo: 'Жижа' },
+  mobs: { rat: 'сумчатая крыса', gnoll: 'гнолл-следопыт', crab: 'сточный краб', goo: 'Жижа', ghost: 'печальное привидение' },
   solo: 'Играть одному',
   continueRun: 'Продолжить',
   newRun: 'Новая игра',
@@ -309,6 +320,7 @@ const ru: Strings = {
     'missile.boomerang': 'бумеранг',
     'wand.magicMissile': 'Палочка Волшебных Зарядов',
     'key.iron': 'железный ключ',
+    'quest.rose': 'сухая роза',
   },
   itemInfo: {
     'potion.healing': 'Полностью восстанавливает здоровье и смывает слизь.',
@@ -325,7 +337,17 @@ const ru: Strings = {
     'missile.dart': 'Лёгкий метательный дротик. Попав, теряется; промахнувшись, падает на пол.',
     'missile.boomerang': 'Брошенный, всегда возвращается в руку.',
     'wand.magicMissile': 'Выпускает волшебный заряд, который бьёт без промаха. Перезаряжается со временем.',
+    'quest.rose': 'Эта роза иссохла много лет тому назад, но, не смотря на это, сохранила каждый лепесток.',
   },
+  // From the Russian localisation of the original.
+  ghost: {
+    intro:
+      'Здравствуй путешественник... Когда-то я был таким же как и ты - сильным, уверенным... А теперь я мёртв... Но я не могу покинуть это место... Пока ко мне не вернётся сухая роза... Это очень важная для меня вещь... Чудище стащило её с моего бездыханного тела...',
+    remind: 'Прошу... Помоги... Найди розу...',
+    reward: 'Да! Да!!! То что нужно! Прошу, отдай её мне! И можешь взять любой из этих предметов, они могут тебе пригодится...',
+    farewell: 'Прощай, авантюрист!',
+  },
+  takeReward: (name) => `Взять: ${name}`,
   keyInfo: (depth) => `Открывает запертую комнату на глубине ${depth}. Просто войдите в её дверь.`,
   locked: 'Дверь заперта. Ключ от неё где-то на этом уровне.',
   unlocked: 'Вы отпираете дверь.',

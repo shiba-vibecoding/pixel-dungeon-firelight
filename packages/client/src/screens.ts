@@ -157,6 +157,46 @@ export function showMenu(options: MenuOptions): void {
   );
 }
 
+export interface GhostOptions {
+  world: World;
+  hero: Hero;
+  text: string;
+  /** Offered when the hero brings the rose. */
+  reward?: { weapon: Item; armor: Item; onChoose(choice: 'weapon' | 'armor'): void };
+  onClose(): void;
+}
+
+/** A word with the sad ghost (WndQuest / WndSadGhost). */
+export function showGhost(options: GhostOptions): void {
+  const { world, hero, reward } = options;
+  const offer = (item: Item, choice: 'weapon' | 'armor'): HTMLElement =>
+    el(
+      'div',
+      { className: 'pd-row' },
+      slot(world, item),
+      el(
+        'div',
+        { className: 'pd-offer' },
+        ...itemInfo(world, hero, item).map((line) => el('p', { className: 'pd-note', textContent: line })),
+        button(t.takeReward(itemName(world, item)), () => {
+          reward!.onChoose(choice);
+          options.onClose();
+        }, 'primary'),
+      ),
+    );
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('p', { className: 'pd-heading', textContent: capitalize(t.mobs.ghost) }),
+      el('p', { className: 'pd-info', textContent: options.text }),
+      reward && offer(reward.weapon, 'weapon'),
+      reward && offer(reward.armor, 'armor'),
+      button(t.close, options.onClose),
+    ),
+  );
+}
+
 /** The tip on a level's sign (Sign.read). */
 export function showSign(text: string, onClose: () => void): void {
   show(

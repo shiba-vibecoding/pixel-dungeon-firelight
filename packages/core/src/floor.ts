@@ -2,6 +2,7 @@ import { type Hero, isAlive, type Mob } from './actors';
 import { castShadow, terrainBlocksSight } from './fov';
 import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
+import type { GhostLine } from './quest';
 import type { TrapKind } from './traps';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
@@ -76,6 +77,7 @@ export type Effect =
   | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
   | { type: 'zapped'; depth: number; from: number; to: number }
   | { type: 'unlocked'; depth: number; pos: number; hero: string }
+  | { type: 'ghost'; hero: string; line: GhostLine }
   | { type: 'well'; hero: string; water: WellWater }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };

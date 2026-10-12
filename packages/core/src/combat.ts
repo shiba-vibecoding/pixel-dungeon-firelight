@@ -3,6 +3,7 @@ import {
 } from './actors';
 import { type Char, type Ctx, dropItem, heroesOn, isHero, leaveCell } from './floor';
 import { rollGold } from './items';
+import { questKill } from './quest';
 import { T } from './level/terrain';
 
 /*
@@ -64,6 +65,8 @@ export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
+  // The sad ghost cannot be harmed.
+  if (!isHero(victim) && victim.state === 'passive') return;
   const by = typeof source === 'string' ? null : source;
   if (!isHero(victim)) {
     if (victim.state === 'sleeping') victim.state = 'wandering';
@@ -95,6 +98,8 @@ function mobDied(ctx: Ctx, mob: Mob): void {
   for (const hero of heroes) {
     if (hero.lvl <= stats.maxLvl) earnExp(ctx, hero, stats.exp);
   }
+
+  questKill(ctx, mob);
 
   // Mob.dropLoot: gnolls carry some gold, unless the party has outgrown them.
   if (mob.kind === 'gnoll' && heroes.some((h) => h.lvl <= stats.maxLvl + 2) && ctx.rng.float() < 0.5) {

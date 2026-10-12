@@ -49,6 +49,11 @@ function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
 }
 
 export function mobAct(ctx: Ctx, mob: Mob): void {
+  // The sad ghost lingers where it is.
+  if (mob.state === 'passive') {
+    spend(mob, TICK);
+    return;
+  }
   // Poisoned or paralysed by a trap's gas.
   if (mobConditions(ctx, mob)) {
     spend(mob, TICK);

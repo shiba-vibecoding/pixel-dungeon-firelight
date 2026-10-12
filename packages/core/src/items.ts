@@ -13,7 +13,7 @@ import type { RunState } from './run';
  * upgrade levels. Wands, rings, seeds, food and thrown weapons come later.
  */
 
-export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'key';
+export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'key' | 'quest';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -72,6 +72,8 @@ export const ITEMS = {
   'wand.magicMissile': { category: 'wand', sprite: 3 },
   /** Opens the locked room of the level it was found on. */
   'key.iron': { category: 'key', sprite: 9 },
+  /** The sad ghost's dried rose. */
+  'quest.rose': { category: 'quest', sprite: 100 },
 } as const satisfies Record<string, ItemDef>;
 
 export type ItemKind = keyof typeof ITEMS;

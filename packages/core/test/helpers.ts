@@ -23,7 +23,7 @@ export function botAction(world: World, id: string): Action {
   const hero = heroById(world, id)!;
   const level = levelAt(world, hero.depth);
   const floor = floorAt(world, hero.depth);
-  const enemy = floor.mobs.find((mob) => adjacent(mob.pos, hero.pos) && mob.state !== 'sleeping');
+  const enemy = floor.mobs.find((mob) => adjacent(mob.pos, hero.pos) && mob.state !== 'sleeping' && mob.state !== 'passive');
   const healing = hero.items.findIndex((item) => item.kind === 'potion.healing');
   if (hero.hp < hero.ht / 3 && healing >= 0) return { type: 'use', item: healing };
   if (enemy) return { type: 'attack', target: enemy.id };
@@ -38,6 +38,7 @@ export function botAction(world: World, id: string): Action {
     const path = findPath(level, hero.pos, target, companions);
     if (!path || path.length === 0) return { type: 'wait' };
     const inTheWay = floor.mobs.find((mob) => mob.pos === path[0]);
+    if (inTheWay?.state === 'passive') return { type: 'wait' };
     return inTheWay ? { type: 'attack', target: inTheWay.id } : { type: 'move', to: path[0]! };
   };
 

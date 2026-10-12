@@ -176,8 +176,9 @@ export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 
 /* Monsters */
 
-export type MobKind = 'rat' | 'gnoll' | 'crab' | 'goo';
-export type MobState = 'sleeping' | 'wandering' | 'hunting';
+export type MobKind = 'rat' | 'gnoll' | 'crab' | 'goo' | 'ghost';
+/** `passive`: the sad ghost, who neither fights nor can be hurt. */
+export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'passive';
 
 export interface MobStats {
   name: string;
@@ -197,6 +198,7 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   gnoll: { name: 'gnoll scout', ht: 12, attack: 11, defense: 4, damage: [2, 5], dr: 2, exp: 2, maxLvl: 8, speed: 1 },
   crab: { name: 'sewer crab', ht: 15, attack: 12, defense: 5, damage: [3, 6], dr: 4, exp: 3, maxLvl: 9, speed: 2 },
   goo: { name: 'Goo', ht: 80, attack: 15, defense: 12, damage: [2, 12], dr: 2, exp: 10, maxLvl: 30, speed: 1 },
+  ghost: { name: 'sad ghost', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 0.5 },
 };
 
 /** Goo, pumped up: harder hits from up to two cells away. */

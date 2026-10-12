@@ -258,6 +258,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     case 'scroll.challenge': {
       // Every monster on the level comes for the reader.
       for (const mob of ctx.floor.mobs) {
+        if (mob.state === 'passive') continue;
         if (mob.state !== 'hunting') mob.state = 'wandering';
         mob.target = hero.pos;
       }
@@ -266,7 +267,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     }
     case 'scroll.lullaby': {
       const fov = heroView(world, hero);
-      const sleepers = ctx.floor.mobs.filter((mob) => fov[mob.pos]);
+      const sleepers = ctx.floor.mobs.filter((mob) => fov[mob.pos] && mob.state !== 'passive');
       for (const mob of sleepers) {
         mob.state = 'sleeping';
         if (mob.kind === 'goo') mob.pumped = false;

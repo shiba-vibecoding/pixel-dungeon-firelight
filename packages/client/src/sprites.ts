@@ -71,6 +71,11 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
     h: 16,
     anims: basic(anim(5, [0, 1, 0, 2], true), anim(15, [3, 4, 5, 6], true), anim(12, [7, 8, 9]), anim(12, [10, 11, 12, 13])),
   },
+  ghost: {
+    w: 14,
+    h: 15,
+    anims: basic(anim(5, [0, 1], true), anim(10, [0, 1], true), anim(5, [0, 1]), anim(20, [0])),
+  },
   goo: {
     w: 20,
     h: 14,
@@ -105,7 +110,7 @@ const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image
 
 export async function loadAssets(base: string): Promise<Assets> {
   const names = [
-    'tiles0', 'water0', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo',
+    'tiles0', 'water0', 'warrior', 'mage', 'rogue', 'ranger', 'rat', 'gnoll', 'crab', 'goo', 'ghost',
     'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs',
   ] as const;
   const images = Object.fromEntries(
@@ -126,7 +131,7 @@ export async function loadAssets(base: string): Promise<Assets> {
       rogue: hero(images.rogue),
       huntress: hero(images.ranger),
     },
-    mobs: { rat: mob('rat'), gnoll: mob('gnoll'), crab: mob('crab'), goo: mob('goo') },
+    mobs: { rat: mob('rat'), gnoll: mob('gnoll'), crab: mob('crab'), goo: mob('goo'), ghost: mob('ghost') },
     icons: images.icons,
     bossBanner: images['banner-boss'],
     items: images.items,
