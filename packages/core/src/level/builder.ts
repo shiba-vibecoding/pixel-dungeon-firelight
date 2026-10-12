@@ -1,3 +1,4 @@
+import type { ItemKind } from '../items';
 import type { Rng } from '../rng';
 import { cell, LENGTH, WIDTH, type Point, type Rect } from './geometry';
 import { type Room, RoomType } from './room';
@@ -37,7 +38,9 @@ export type ItemSpec =
   /** The iron key to this level's locked room. */
   | { roll: 'key' }
   /** A potion of liquid flame, to burn the way into a storage room. */
-  | { roll: 'liquidFlame' };
+  | { roll: 'liquidFlame' }
+  /** One particular item, such as the wares of a shop. */
+  | { roll: 'kind'; kind: ItemKind };
 
 export type WellWater = 'health' | 'awareness';
 
@@ -61,6 +64,8 @@ export class LevelBuilder {
   secretDoors = 0;
   /** Tengu's level: the locked door into the arena. */
   arenaDoor = -1;
+  /** A shop's level: where the shopkeeper stands. */
+  shopkeeper = -1;
   pitRoomNeeded = false;
   weakFloorCreated = false;
   /** Special rooms placed on this level, in placement order. */

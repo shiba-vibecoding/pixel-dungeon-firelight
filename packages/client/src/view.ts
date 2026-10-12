@@ -460,6 +460,24 @@ export class View {
           audio.play('bones');
           this.flashes.push({ cell: effect.pos, start: now, color: '230, 225, 200', duration: 700 });
           break;
+        case 'bought':
+        case 'sold':
+          if (effect.hero !== myId) break;
+          audio.play('gold');
+          this.say(
+            (effect.type === 'bought' ? t.bought : t.sold)(itemName(world, effect.item), effect.price),
+            COLORS.highlight, now,
+          );
+          break;
+        case 'shopkeeperFled':
+          if (effect.depth !== this.depth) break;
+          this.puppets.delete(effect.mob);
+          this.flashes.push({ cell: effect.pos, start: now, color: '220, 220, 220', duration: 600 });
+          audio.play('puff');
+          this.say(t.shopkeeperFled, COLORS.warning, now);
+          break;
+        case 'shop':
+          break;
         case 'arena':
           if (effect.depth === this.depth && effect.sealed) {
             this.say(t.arenaSealed, COLORS.warning, now);

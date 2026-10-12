@@ -147,6 +147,71 @@ describe('the prison', () => {
   });
 });
 
+describe('the shop on depth 6', () => {
+  function shopWorld(seed: number): { world: World; keeper: Mob } {
+    const world = at(6, seed);
+    const keeper = floorAt(world, 6).mobs.find((m) => m.kind === 'shopkeeper');
+    // `at` clears the monsters; put the shopkeeper back where he stands.
+    const level = levelAt(world, 6);
+    const shopkeeper = keeper ?? createMob('#keeper', 'shopkeeper', level.shopkeeper!, 'passive', 0);
+    if (!keeper) floorAt(world, 6).mobs.push(shopkeeper);
+    return { world, keeper: shopkeeper };
+  }
+
+  it('is always there, with the shopkeeper among his wares', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const world = createWorld(seed);
+      for (let d = 1; d <= 6; d++) levelAt(world, d);
+      const wares = floorAt(world, 6).heaps.filter((h) => h.kind === 'forSale');
+      expect(wares.length, `seed ${seed}`).toBe(11);
+      expect(floorAt(world, 6).mobs.filter((m) => m.kind === 'shopkeeper'), `seed ${seed}`).toHaveLength(1);
+    }
+  });
+
+  it('sells its wares for gold, and buys from the pack', () => {
+    const { world, keeper } = shopWorld(5);
+    const hero = heroById(world, 'p')!;
+    const ware = floorAt(world, 6).heaps.find((h) => h.kind === 'forSale')!;
+    hero.pos = ware.pos;
+    expect(act(world, 'p', { type: 'pickup' })).toEqual({ ok: false, reason: 'that is for sale' });
+    hero.gold = 1;
+    expect(act(world, 'p', { type: 'buy' })).toEqual({ ok: false, reason: 'not enough gold' });
+    hero.gold = 5000;
+    const item = ware.items[0]!;
+    const result = act(world, 'p', { type: 'buy' });
+    expect(result.ok && result.effects.find((e) => e.type === 'bought')).toMatchObject({ item: { kind: item.kind } });
+    expect(hero.gold).toBeLessThan(5000);
+    expect(floorAt(world, 6).heaps.includes(ware)).toBe(false);
+
+    // Selling needs the shopkeeper close by.
+    hero.items = [createItem('weapon.sword', 1, 1)];
+    const level = levelAt(world, 6);
+    hero.pos = NEIGHBOURS8.map((n) => keeper.pos + n).find((c) => canEnter(level, c) && !charAt(world, 6, c))!;
+    const gold = hero.gold;
+    const sale = act(world, 'p', { type: 'sell', item: 0 });
+    // A tier 3 sword +1: 80 gold, twice over.
+    expect(sale.ok && sale.effects.find((e) => e.type === 'sold')).toMatchObject({ price: 160 });
+    expect(hero.gold).toBe(gold + 160);
+    expect(hero.items).toHaveLength(0);
+    // Talking to him opens his trade.
+    const talk = act(world, 'p', { type: 'attack', target: keeper.id });
+    expect(talk.ok && talk.effects).toEqual([{ type: 'shop', hero: 'p' }]);
+  });
+
+  it('the shopkeeper vanishes with his wares when attacked', () => {
+    const { world, keeper } = shopWorld(6);
+    const hero = heroById(world, 'p')!;
+    const level = levelAt(world, 6);
+    hero.pos = NEIGHBOURS8.map((n) => keeper.pos + n).find((c) => canEnter(level, c) && !charAt(world, 6, c))!;
+    hero.items = [createItem('missile.dart', 5)];
+    hero.attackSkill = 1000;
+    const result = act(world, 'p', { type: 'throw', item: 0, target: keeper.pos });
+    expect(result.ok && result.effects.some((e) => e.type === 'shopkeeperFled')).toBe(true);
+    expect(floorAt(world, 6).heaps.some((h) => h.kind === 'forSale')).toBe(false);
+    expect(floorAt(world, 6).mobs.some((m) => m.kind === 'shopkeeper')).toBe(false);
+  });
+});
+
 describe("Tengu's prison", () => {
   /** A strong scripted hero: to the key, through the arena door, Tengu, then the exit. */
   function bossAction(world: World): Action {

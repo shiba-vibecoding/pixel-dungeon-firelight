@@ -198,9 +198,9 @@ export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 /* Monsters */
 
 export type MobKind =
-  | 'rat' | 'gnoll' | 'crab' | 'goo' | 'ghost'
+  | 'rat' | 'gnoll' | 'crab' | 'goo' | 'ghost' | 'shopkeeper'
   | 'skeleton' | 'thief' | 'swarm' | 'shaman' | 'bat' | 'brute' | 'tengu';
-/** `passive`: the sad ghost, who neither fights nor can be hurt; `fleeing`: a thief making off with its loot. */
+/** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
 export interface MobStats {
@@ -226,6 +226,7 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   crab: { name: 'sewer crab', ht: 15, attack: 12, defense: 5, damage: [3, 6], dr: 4, exp: 3, maxLvl: 9, speed: 2 },
   goo: { name: 'Goo', ht: 80, attack: 15, defense: 12, damage: [2, 12], dr: 2, exp: 10, maxLvl: 30, speed: 1 },
   ghost: { name: 'sad ghost', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 0.5, flying: true },
+  shopkeeper: { name: 'shopkeeper', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   // The prison (depths 6-10).
   skeleton: { name: 'skeleton', ht: 25, attack: 12, defense: 9, damage: [3, 8], dr: 5, exp: 5, maxLvl: 10, speed: 1 },
   thief: { name: 'crazy thief', ht: 20, attack: 12, defense: 12, damage: [1, 7], dr: 3, exp: 5, maxLvl: 10, speed: 1, attackDelay: 0.5 },

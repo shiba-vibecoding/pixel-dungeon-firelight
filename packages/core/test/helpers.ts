@@ -29,7 +29,9 @@ export function botAction(world: World, id: string, deepest = 4): Action {
   if (enemy) return { type: 'attack', target: enemy.id };
   const food = hero.items.findIndex((item) => item.kind.startsWith('food.'));
   if (hero.hunger >= HUNGRY && food >= 0) return { type: 'use', item: food };
-  if (floor.heaps.some((heap) => heap.pos === hero.pos) && hero.items.length < 20) return { type: 'pickup' };
+  if (floor.heaps.some((heap) => heap.pos === hero.pos && heap.kind !== 'forSale') && hero.items.length < 20) {
+    return { type: 'pickup' };
+  }
   if (hero.pos === level.exit && hero.depth < deepest) return { type: 'descend' };
   if (hero.hp < hero.ht / 2) return { type: 'wait' };
 

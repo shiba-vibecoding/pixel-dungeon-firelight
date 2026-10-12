@@ -35,6 +35,8 @@ export interface Level {
   secretDoors: number;
   /** Tengu's level: the door into the arena. */
   arenaDoor?: number;
+  /** A shop's level: where the shopkeeper stands. */
+  shopkeeper?: number;
 }
 
 /** How each depth is laid out: the sewers, Goo's lair, the prison, Tengu's prison. */
@@ -114,6 +116,7 @@ export function generateLevel(run: RunState, depth: number): Level {
       wells: level.wells,
       secretDoors: level.secretDoors,
       ...(level.arenaDoor >= 0 ? { arenaDoor: level.arenaDoor } : {}),
+      ...(level.shopkeeper >= 0 ? { shopkeeper: level.shopkeeper } : {}),
     };
   }
   throw new Error(`Unable to generate depth ${depth} after ${MAX_ATTEMPTS} attempts`);

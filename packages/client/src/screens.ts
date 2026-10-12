@@ -1,5 +1,6 @@
 import {
-  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, maxExp, wandMaxCharges, type World,
+  BACKPACK_SIZE, type Hero, type HeroClass, type InventoryAction, type Item, itemDef, itemPrice, maxExp, wandMaxCharges,
+  type World,
 } from '@pd/core';
 import { audio } from './audio';
 import { BUFF_ICONS, type BuffName } from './hud';
@@ -187,6 +188,76 @@ export function showHero(options: HeroOptions): void {
       row(t.slain, String(hero.kills)),
       el('p', { className: 'pd-heading', textContent: t.conditions }),
       ...(buffs.length > 0 ? buffs : [el('p', { className: 'pd-info', textContent: t.noConditions })]),
+      button(t.close, options.onClose),
+    ),
+  );
+}
+
+export interface TradeOptions {
+  world: World;
+  hero: Hero;
+  item: Item;
+  price: number;
+  onBuy(): void;
+  onClose(): void;
+}
+
+/** WndTradeItem for a shop's ware: what it is, and what it costs. */
+export function showTrade(options: TradeOptions): void {
+  const { world, hero, item, price } = options;
+  const buy = button(t.buyFor(price), () => {
+    options.onBuy();
+    options.onClose();
+  }, 'primary');
+  buy.disabled = hero.gold < price;
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('div', { className: 'pd-row' }, slot(world, item), el('p', { className: 'pd-heading', textContent: capitalize(itemName(world, item)) })),
+      ...itemInfo(world, hero, item).map((line) => el('p', { className: 'pd-info', textContent: line })),
+      buy,
+      el('p', { className: 'pd-note', textContent: t.yourGold(hero.gold) }),
+      button(t.close, options.onClose),
+    ),
+  );
+}
+
+export interface SellOptions {
+  world: World;
+  hero: Hero;
+  onSell(index: number): void;
+  onClose(): void;
+}
+
+/** Shopkeeper.sell: what the pack is worth to him, item by item. */
+export function showSell(options: SellOptions): void {
+  const { world, hero } = options;
+  const rows = hero.items.flatMap((item, index) => {
+    const price = itemPrice(item, world.known.includes(item.kind));
+    if (price <= 0) return [];
+    return [
+      el(
+        'div',
+        { className: 'pd-row' },
+        slot(world, item),
+        el(
+          'div',
+          { className: 'pd-offer' },
+          el('p', { className: 'pd-note', textContent: capitalize(itemName(world, item)) }),
+          button(t.sellFor(price), () => options.onSell(index)),
+        ),
+      ),
+    ];
+  });
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('p', { className: 'pd-heading', textContent: capitalize(t.mobs.shopkeeper) }),
+      el('p', { className: 'pd-info', textContent: rows.length > 0 ? t.sellInfo : t.nothingToSell }),
+      ...rows,
+      el('p', { className: 'pd-note', textContent: t.yourGold(hero.gold) }),
       button(t.close, options.onClose),
     ),
   );

@@ -51,7 +51,12 @@ function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
 }
 
 export function mobAct(ctx: Ctx, mob: Mob): void {
-  // The sad ghost drifts about the level at half speed, never after anyone.
+  // The shopkeeper minds the shop; the sad ghost drifts about the level at
+  // half speed, never after anyone.
+  if (mob.state === 'passive' && mob.kind === 'shopkeeper') {
+    spend(mob, TICK);
+    return;
+  }
   if (mob.state === 'passive') {
     const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map));
     if (mob.target !== -1 && mob.target !== mob.pos && getCloser(ctx, mob, mob.target, fov)) {
@@ -454,6 +459,7 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
     return [createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0)];
   }
   const mobs: Mob[] = [];
+  if (level.shopkeeper !== undefined) mobs.push(createMob(nextMobId(world), 'shopkeeper', level.shopkeeper, 'passive', 0));
   const count = nMobs(rng, level.depth);
   // Not yet registered in world.floors, so placement checks this list itself.
   const hidden = (cell: number): boolean => !mobs.some((mob) => mob.pos === cell);

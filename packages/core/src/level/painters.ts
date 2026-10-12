@@ -1,4 +1,4 @@
-import { Feeling, HeapType, isBossDepth, type LevelBuilder } from './builder';
+import { Feeling, HeapType, isBossDepth, type ItemSpec, type LevelBuilder } from './builder';
 import { cell, type Point } from './geometry';
 import { type Door, DoorType, type Room, RoomType } from './room';
 import { T } from './terrain';
@@ -444,6 +444,65 @@ function paintStorage(level: LevelBuilder, room: Room): void {
   level.toSpawn.push({ roll: 'liquidFlame' });
 }
 
+/**
+ * ShopPainter: the wares laid out along the walls, starting opposite the
+ * door, and the shopkeeper among them. Depth 6 sells a quarterstaff or a
+ * spear, leather armour, potions, scrolls and food; the seed pouch,
+ * weightstone, scroll of remove curse and ankh of the original are not
+ * ported yet.
+ */
+function paintShop(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY_SP, 1);
+  const w = room.width() - 2;
+  const h = room.height() - 2;
+  const perimeter = w * 2 + h * 2;
+  const toRim = (x: number, y: number): number => {
+    if (y === room.top) return x - room.left - 1;
+    if (x === room.right) return y - room.top - 1 + w;
+    if (y === room.bottom) return room.right - x - 1 + w + h;
+    return y === room.top + 1 ? 0 : room.bottom - y - 1 + w * 2 + h;
+  };
+  const fromRim = (p: number): number => {
+    if (p < w) return cell(room.left + 1 + p, room.top + 1);
+    if (p < w + h) return cell(room.right - 1, room.top + 1 + (p - w));
+    if (p < w * 2 + h) return cell(room.right - 1 - (p - (w + h)), room.bottom - 1);
+    return cell(room.left + 1, room.bottom - 1 - (p - (w * 2 + h)));
+  };
+
+  const wares: ItemSpec[] = [
+    { roll: 'kind', kind: rng.int(2) === 0 ? 'weapon.quarterstaff' : 'weapon.spear' },
+    { roll: 'kind', kind: 'armor.leather' },
+    { roll: 'kind', kind: 'potion.healing' },
+    { roll: 'category', categories: ['potion'], tries: 1 },
+    { roll: 'category', categories: ['potion'], tries: 1 },
+    { roll: 'category', categories: ['potion'], tries: 1 },
+    { roll: 'kind', kind: 'scroll.identify' },
+    { roll: 'kind', kind: 'scroll.mapping' },
+    { roll: 'category', categories: ['scroll'], tries: 1 },
+    { roll: 'kind', kind: 'food.ration' },
+    { roll: 'kind', kind: 'food.ration' },
+  ];
+  rng.shuffle(wares);
+  const door = entranceOf(room);
+  let p = toRim(door.x, door.y) + Math.trunc((perimeter - wares.length) / 2);
+  const taken = new Set<number>();
+  for (const ware of wares) {
+    let pos = fromRim(((p % perimeter) + perimeter) % perimeter);
+    while (taken.has(pos)) pos = room.random(rng);
+    taken.add(pos);
+    level.dropItem(pos, HeapType.FOR_SALE, ware);
+    p++;
+  }
+  let keeper: number;
+  do {
+    keeper = room.random(rng);
+  } while (taken.has(keeper));
+  level.shopkeeper = keeper;
+  for (const d of room.doors()) d.set(DoorType.REGULAR);
+}
+
 /** MagicWellPainter: a well of healing or awareness in the middle. */
 function paintMagicWell(level: LevelBuilder, room: Room): void {
   const { rng } = level;
@@ -502,6 +561,7 @@ export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painte
   [RoomType.MAGIC_WELL, paintMagicWell],
   [RoomType.TRAPS, paintTraps],
   [RoomType.STORAGE, paintStorage],
+  [RoomType.SHOP, paintShop],
   [RoomType.STANDARD, paintStandard],
   [RoomType.ENTRANCE, paintEntrance],
   [RoomType.EXIT, paintExit],

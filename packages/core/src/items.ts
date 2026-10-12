@@ -122,6 +122,52 @@ export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
   return item;
 }
 
+/* Prices (Item.price): what a shopkeeper pays; shops ask several times more. */
+
+const POTION_PRICES: Partial<Record<ItemKind, number>> = {
+  'potion.healing': 30, 'potion.experience': 80, 'potion.mindVision': 35, 'potion.invisibility': 40,
+  'potion.strength': 100, 'potion.toxicGas': 40, 'potion.paralyticGas': 40, 'potion.liquidFlame': 40,
+};
+const SCROLL_PRICES: Partial<Record<ItemKind, number>> = {
+  'scroll.identify': 30, 'scroll.teleportation': 40, 'scroll.mapping': 25, 'scroll.lullaby': 50,
+  'scroll.upgrade': 50, 'scroll.recharging': 40,
+};
+const FOOD_PRICES: Partial<Record<ItemKind, number>> = { 'food.ration': 10, 'food.pasty': 20, 'food.meat': 5 };
+
+/** Item.price; unknown potions and scrolls fetch a plain price. 0 for what cannot be sold. */
+export function itemPrice(item: Item, known: boolean): number {
+  const def = itemDef(item.kind);
+  // Item.considerState: better items are worth more, worse ones less.
+  const levelled = (price: number): number =>
+    Math.max(1, item.level > 0 ? price * (item.level + 1) : item.level < 0 ? Math.trunc(price / (1 - item.level)) : price);
+  switch (def.category) {
+    case 'weapon':
+      return levelled(20 * 2 ** (def.tier! - 1));
+    case 'armor':
+      return levelled(10 * 2 ** (def.tier! - 1));
+    case 'potion':
+      return (known ? POTION_PRICES[item.kind] ?? 20 : 20) * item.qty;
+    case 'scroll':
+      return (known ? SCROLL_PRICES[item.kind] ?? 15 : 15) * item.qty;
+    case 'food':
+      return (FOOD_PRICES[item.kind] ?? 10) * item.qty;
+    case 'missile':
+      return item.kind === 'missile.dart' ? 2 * item.qty : 30;
+    case 'wand':
+      return levelled(50);
+    default:
+      return 0;
+  }
+}
+
+/**
+ * WndTradeItem.price: shops ask five times the value, and more the deeper
+ * they are. Unknown potions and scrolls go for a plain price, so the price
+ * gives nothing away.
+ */
+export const buyPrice = (item: Item, depth: number, known: boolean): number =>
+  itemPrice(item, known) * 5 * (Math.trunc(depth / 5) + 1);
+
 /* Thrown weapons (MissileWeapon) and the wand of magic missile */
 
 export function missileStats(item: Item): { min: number; max: number; str: number } {
@@ -283,7 +329,8 @@ export class ItemGenerator {
 
 /* What lies around on a new level */
 
-export type HeapKind = 'heap' | 'chest' | 'skeleton' | 'tomb';
+/** `forSale`: a shop's wares, bought rather than picked up. */
+export type HeapKind = 'heap' | 'chest' | 'skeleton' | 'tomb' | 'forSale';
 
 export interface Heap {
   pos: number;
@@ -292,7 +339,7 @@ export interface Heap {
 }
 
 /** Sprites of closed containers in items.png. */
-export const HEAP_SPRITES: Readonly<Record<Exclude<HeapKind, 'heap'>, number>> = { chest: 11, skeleton: 0, tomb: 13 };
+export const HEAP_SPRITES: Readonly<Record<Exclude<HeapKind, 'heap' | 'forSale'>, number>> = { chest: 11, skeleton: 0, tomb: 13 };
 
 /** Dungeon.posNeeded / souNeeded: guaranteed strength and upgrades, spread over the floors. */
 function quotaReached(rng: Rng, depth: number, quota: readonly number[], found: number): boolean {
@@ -325,6 +372,7 @@ const HEAP_KINDS: Readonly<Partial<Record<HeapType, HeapKind>>> = {
   [HeapType.MIMIC]: 'chest',
   [HeapType.TOMB]: 'tomb',
   [HeapType.SKELETON]: 'skeleton',
+  [HeapType.FOR_SALE]: 'forSale',
 };
 
 /** Rolls what a painter asked for. */
@@ -340,6 +388,8 @@ function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: num
       return { ...createItem('key.iron'), depth };
     case 'liquidFlame':
       return createItem('potion.liquidFlame');
+    case 'kind':
+      return createItem(spec.kind);
     case 'category': {
       let best: Item | null = null;
       for (let i = 0; i < spec.tries; i++) {

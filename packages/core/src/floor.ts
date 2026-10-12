@@ -93,6 +93,12 @@ export type Effect =
   | { type: 'enraged'; depth: number; mob: string }
   /** A skeleton falls apart in an explosion of bones. */
   | { type: 'bones'; depth: number; pos: number }
+  /** A word with the shopkeeper: the hero may sell from the pack. */
+  | { type: 'shop'; hero: string }
+  | { type: 'bought'; hero: string; item: Item; price: number }
+  | { type: 'sold'; hero: string; item: Item; price: number }
+  /** Attacked, the shopkeeper vanished with his wares. */
+  | { type: 'shopkeeperFled'; depth: number; mob: string; pos: number }
   /** Tengu's arena: sealed when the fight starts, opened when it ends. */
   | { type: 'arena'; depth: number; sealed: boolean }
   | { type: 'unlocked'; depth: number; pos: number; hero: string }

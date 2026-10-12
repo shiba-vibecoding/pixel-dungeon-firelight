@@ -3,7 +3,8 @@ import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
 import { charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, leaveCell } from './floor';
 import {
-  type Heap, isStackable, type Item, itemDef, type ItemKind, magicMissileDamage, missileStats, wandMaxCharges,
+  buyPrice, type Heap, isStackable, type Item, itemDef, type ItemKind, itemPrice, magicMissileDamage, missileStats,
+  wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
 import { adjacent, LENGTH } from './level/geometry';
@@ -25,9 +26,13 @@ export type InventoryAction =
   /** Throw a dart, the boomerang or a potion at a cell; it flies until it hits someone or something. */
   | { type: 'throw'; item: number; target: number }
   /** Zap a wand at a cell. */
-  | { type: 'zap'; item: number; target: number };
+  | { type: 'zap'; item: number; target: number }
+  /** Buy the shop's ware the hero stands on. */
+  | { type: 'buy' }
+  /** Sell an item from the pack to the shopkeeper next to the hero. */
+  | { type: 'sell'; item: number };
 
-const INVENTORY_ACTIONS: ReadonlySet<string> = new Set(['pickup', 'use', 'equip', 'drop', 'throw', 'zap']);
+const INVENTORY_ACTIONS: ReadonlySet<string> = new Set(['pickup', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell']);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
   return INVENTORY_ACTIONS.has(action.type);
@@ -50,7 +55,18 @@ function heapAt(world: World, hero: Hero): Heap | undefined {
 
 export function inventoryProblem(world: World, hero: Hero, action: InventoryAction): string | null {
   if (action.type === 'pickup') {
-    return heapAt(world, hero) ? null : 'nothing here';
+    const heap = heapAt(world, hero);
+    if (!heap) return 'nothing here';
+    return heap.kind === 'forSale' ? 'that is for sale' : null;
+  }
+  if (action.type === 'buy') {
+    const heap = heapAt(world, hero);
+    const ware = heap?.kind === 'forSale' ? heap.items[0] : undefined;
+    if (!ware) return 'nothing for sale here';
+    if (hero.gold < buyPrice(ware, hero.depth, world.known.includes(ware.kind))) return 'not enough gold';
+    return isStackable(ware.kind) && hero.items.some((i) => i.kind === ware.kind) || hero.items.length < BACKPACK_SIZE
+      ? null
+      : 'your pack is full';
   }
   const item = Number.isInteger(action.item) ? hero.items[action.item] : undefined;
   if (!item) return 'no such item';
@@ -64,6 +80,9 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       return category === 'weapon' || category === 'armor' ? null : 'that cannot be equipped';
     case 'drop':
       return null;
+    case 'sell':
+      if (!shopkeeperBeside(world, hero)) return 'nobody to sell to';
+      return itemPrice(item, world.known.includes(item.kind)) > 0 ? null : 'nobody would buy that';
     case 'throw':
     case 'zap': {
       const fits = action.type === 'throw' ? category === 'missile' || category === 'potion' : category === 'wand';
@@ -109,7 +128,31 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
     case 'zap':
       zap(ctx, hero, action.item, action.target);
       return TIME_TO_ZAP;
+    case 'buy': {
+      // WndTradeItem.buy: the gold goes, the ware comes into the pack.
+      const heap = heapAt(ctx.world, hero)!;
+      const item = heap.items.shift()!;
+      const price = buyPrice(item, hero.depth, ctx.world.known.includes(item.kind));
+      hero.gold -= price;
+      collect(hero, item);
+      if (heap.items.length === 0) ctx.floor.heaps.splice(ctx.floor.heaps.indexOf(heap), 1);
+      ctx.effects.push({ type: 'bought', hero: hero.id, item, price });
+      return TIME_TO_PICK_UP;
+    }
+    case 'sell': {
+      // WndTradeItem.sellAll: the whole stack, at the item's own price.
+      const item = hero.items.splice(action.item, 1)[0]!;
+      const price = itemPrice(item, ctx.world.known.includes(item.kind));
+      hero.gold += price;
+      ctx.effects.push({ type: 'sold', hero: hero.id, item, price });
+      return 0;
+    }
   }
+}
+
+/** A shopkeeper standing next to the hero, ready to trade. */
+export function shopkeeperBeside(world: World, hero: Hero): boolean {
+  return (world.floors[hero.depth]?.mobs ?? []).some((mob) => mob.kind === 'shopkeeper' && adjacent(mob.pos, hero.pos));
 }
 
 /** MissileWeapon.onThrow: a hit uses the dart up, a miss leaves it on the floor; the boomerang returns. */

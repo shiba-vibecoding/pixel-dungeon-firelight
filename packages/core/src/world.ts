@@ -439,8 +439,10 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
     case 'attack': {
       const mob = mobById(world, hero.depth, action.target)!;
       if (mob.state === 'passive') {
-        // Not a fight: a word with the sad ghost, which takes no time.
-        talkToGhost(ctx, hero);
+        // Not a fight: a word with the sad ghost, or business with the
+        // shopkeeper; it takes no time.
+        if (mob.kind === 'shopkeeper') ctx.effects.push({ type: 'shop', hero: hero.id });
+        else talkToGhost(ctx, hero);
         break;
       }
       attack(ctx, hero, mob);

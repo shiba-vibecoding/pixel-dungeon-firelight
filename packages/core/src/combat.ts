@@ -69,6 +69,14 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   return true;
 }
 
+/** Shopkeeper.flee: attacked, he vanishes, and his wares with him. */
+function shopkeeperFlees(ctx: Ctx, keeper: Mob): void {
+  ctx.floor.heaps = ctx.floor.heaps.filter((heap) => heap.kind !== 'forSale');
+  ctx.floor.mobs.splice(ctx.floor.mobs.indexOf(keeper), 1);
+  leaveCell(ctx.world, ctx.level, ctx.depth, keeper.pos);
+  ctx.effects.push({ type: 'shopkeeperFled', depth: ctx.depth, mob: keeper.id, pos: keeper.pos });
+}
+
 /** Thief.steal: a whole stack from the pack (never a key or a quest item), then off it runs. */
 function steal(ctx: Ctx, thief: Mob, hero: Hero): void {
   const loot = hero.items.filter((item) => item.kind !== 'key.iron' && itemDef(item.kind).category !== 'quest');
@@ -102,8 +110,11 @@ export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
-  // The sad ghost cannot be harmed.
-  if (!isHero(victim) && victim.state === 'passive') return;
+  // The sad ghost cannot be harmed; the shopkeeper will not stay to be.
+  if (!isHero(victim) && victim.state === 'passive') {
+    if (victim.kind === 'shopkeeper') shopkeeperFlees(ctx, victim);
+    return;
+  }
   const by = typeof source === 'string' ? null : source;
   if (!isHero(victim)) {
     if (victim.state === 'sleeping') victim.state = 'wandering';

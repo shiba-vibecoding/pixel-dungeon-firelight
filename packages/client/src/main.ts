@@ -1,5 +1,6 @@
 import {
-  adjacent, blockers, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, HEAP_SPRITES, type Hero,
+  adjacent, blockers, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, HEAP_SPRITES,
+  type Hero, type Item,
   heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind, T,
   visibleCells, wandMaxCharges, WIDTH,
   type World,
@@ -11,8 +12,8 @@ import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showGhost, showHelp, showHero, showMenu, showRunEnd, showSign,
-  showTitle, toast,
+  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showGhost, showHelp, showHero, showMenu, showRunEnd, showSell,
+  showSign, showTitle, showTrade, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -345,7 +346,7 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
   if (walk.pickup) {
     walk.pickup = false;
     if (heapAt(world, me.depth, me.pos)) {
-      send({ type: 'pickup' }, now);
+      takeHere(world, me, now);
       return;
     }
   }
@@ -367,6 +368,42 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
     walk.stairs = null;
     useStairs(world, stairs, now);
   }
+}
+
+/** Picks up what lies here, or offers a shop's ware for sale. */
+function takeHere(world: World, me: Hero, now: number): void {
+  const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === me.pos);
+  if (!heap) return;
+  if (heap.kind === 'forSale') openTrade(world, me, heap.items[0]!);
+  else send({ type: 'pickup' }, now);
+}
+
+function openTrade(world: World, me: Hero, item: Item): void {
+  walk.reset();
+  showTrade({
+    world, hero: me, item, price: buyPrice(item, me.depth, world.known.includes(item.kind)),
+    onBuy: () => send({ type: 'buy' }, performance.now()),
+    onClose: hideOverlay,
+  });
+}
+
+/** The shopkeeper's offer for the pack; it stays open while selling. */
+let selling = false;
+
+function openShop(): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  walk.reset();
+  selling = true;
+  showSell({
+    world, hero: me,
+    onSell: (index) => send({ type: 'sell', item: index }, performance.now()),
+    onClose: () => {
+      selling = false;
+      hideOverlay();
+    },
+  });
 }
 
 function useStairs(world: World, stairs: 'descend' | 'ascend', now: number): void {
@@ -393,6 +430,8 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
 function handleMyEffects(effects: readonly Effect[], myId: string): void {
   for (const effect of effects) {
     if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line);
+    if (effect.type === 'shop' && effect.hero === myId) openShop();
+    if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     const hurt =
       (effect.type === 'attack' && effect.target === myId) ||
       (effect.type === 'hurt' && effect.who === myId) ||
@@ -454,7 +493,7 @@ function tapCell(cell: number): void {
   }
 
   if (cell === me.pos) {
-    if (heapAt(world, me.depth, me.pos)) send({ type: 'pickup' }, performance.now());
+    if (heapAt(world, me.depth, me.pos)) takeHere(world, me, performance.now());
     else if (me.pos === level.exit) useStairs(world, 'descend', performance.now());
     else if (me.pos === level.entrance && me.depth > 1) useStairs(world, 'ascend', performance.now());
     else act('search');
@@ -593,7 +632,7 @@ addEventListener('keydown', (event) => {
   } else if (event.code === 'KeyI') {
     openBackpack();
   } else if (event.code === 'KeyG') {
-    if (heapAt(world, me.depth, me.pos)) send({ type: 'pickup' }, performance.now());
+    if (heapAt(world, me.depth, me.pos)) takeHere(world, me, performance.now());
   } else if (event.code === 'Enter') {
     tapCell(me.pos);
   } else if (event.code === 'Escape') {
@@ -750,7 +789,7 @@ function tick(now: number): void {
   camera.y = Math.round(at.y + TILE / 2 - canvas.height / camera.zoom / 2);
   const heaps = (world.floors[me.depth]?.heaps ?? []).map((heap) => ({
     pos: heap.pos,
-    sprite: heap.kind === 'heap' ? itemSprite(heap.items[0]!, world.run.labels) : HEAP_SPRITES[heap.kind],
+    sprite: heap.kind === 'heap' || heap.kind === 'forSale' ? itemSprite(heap.items[0]!, world.run.labels) : HEAP_SPRITES[heap.kind],
   }));
   const scene = {
     level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, seeAll: me.mindVision > 0,
