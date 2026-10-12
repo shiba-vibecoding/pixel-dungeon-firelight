@@ -1,4 +1,4 @@
-import { type Effect, type Hero, type Item, itemDef, ITEMS, type ItemKind, type World } from '@pd/core';
+import { type Effect, type Hero, type Item, itemDef, ITEMS, type ItemKind, wavesCleared, type World } from '@pd/core';
 import { lang } from './i18n';
 import { mergeWith } from './cloud';
 
@@ -15,7 +15,10 @@ export type BadgeId =
   | 'deathGlyph' | 'deathFalling' | 'yasd' | 'boss1' | 'boss2' | 'boss3' | 'boss4' | 'boss1AllClasses' | 'boss3AllSubclasses'
   | 'haggler' | 'thorns' | 'str1' | 'str2' | 'str3' | 'str4' | 'food1' | 'food2' | 'food3' | 'food4' | 'item1' | 'item2' | 'item3'
   | 'item4' | 'rare' | 'victory' | 'victoryAllClasses' | 'happyEnd' | 'combo' | 'cooked1' | 'cooked2' | 'cooked3' | 'cooked4' | 'grim' | 'piranhas'
-  | 'games1' | 'games2' | 'games3' | 'games4' | 'champion';
+  | 'games1' | 'games2' | 'games3' | 'games4' | 'champion' | 'arena5' | 'arena10' | 'arena20';
+
+/** Where the arena's badges begin: images from here on are in meta/badges-arena.png, not badges.png. */
+export const ARENA_BADGES = 64;
 
 /** Each badge's icon in badges.png, and its words. */
 export const BADGES: ReadonlyArray<{ id: BadgeId; image: number; en: string; ru: string }> = [
@@ -80,6 +83,10 @@ export const BADGES: ReadonlyArray<{ id: BadgeId; image: number; en: string; ru:
   { id: 'games3', image: 62, en: '500 games played', ru: 'Сыграно 500 игр' },
   { id: 'games4', image: 63, en: '2000 games played', ru: 'Сыграно 2000 игр' },
   { id: 'champion', image: 39, en: 'Challenge won', ru: 'Испытание пройдено' },
+  // The arena of waves (design system v14): their own sheet, meta/badges-arena.png, from image 64 (see screens.ts sprites).
+  { id: 'arena5', image: ARENA_BADGES, en: 'Wave 5 held in the arena', ru: 'На арене выстояна 5-я волна' },
+  { id: 'arena10', image: ARENA_BADGES + 1, en: 'Wave 10 held in the arena', ru: 'На арене выстояна 10-я волна' },
+  { id: 'arena20', image: ARENA_BADGES + 2, en: 'Wave 20 held in the arena', ru: 'На арене выстояна 20-я волна' },
 ];
 
 export const badgeText = (id: BadgeId): string => {
@@ -227,6 +234,8 @@ export function checkBadges(world: World, me: Hero, effects: readonly Effect[]):
   tiers(['food1', 'food2', 'food3', 'food4'], me.stats?.food ?? 0, [10, 20, 30, 40]);
   tiers(['cooked1', 'cooked2', 'cooked3', 'cooked4'], me.stats?.brewed ?? 0, [3, 6, 9, 12]);
   earn('piranhas', (me.stats?.piranhas ?? 0) >= 6);
+  // The arena of waves: so many waves held.
+  if (world.arena) tiers(['arena5', 'arena10', 'arena20'], wavesCleared(world.arena), [5, 10, 20]);
 
   const belongings: Item[] = [...me.items, ...me.rings, me.armor, ...(me.weapon ? [me.weapon] : [])];
   const best = Math.max(0, ...belongings.map((item) => item.level));

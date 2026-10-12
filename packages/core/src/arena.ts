@@ -102,15 +102,16 @@ export const waveBudget = (wave: number, party: number): number => mobCount(Math
 export const wavesCleared = (arena: ArenaState): number => (arena.phase === 'rest' ? arena.wave : arena.wave - 1);
 
 /**
- * The run's score in the arena: waves cleared, monsters slain and the hero's level
- * (the best in the party when no hero is named).
+ * The run's score in the arena: waves cleared × 100, monsters slain × 5 and level × 10. For a
+ * hero, their own kills and level; for the party, everyone's kills and the best level.
  */
 export function arenaScore(world: World, heroId?: string): number {
   const arena = world.arena;
   if (!arena) return 0;
   const hero = world.heroes.find((h) => h.id === heroId);
+  const kills = hero ? hero.kills : arena.kills;
   const lvl = hero?.lvl ?? Math.max(1, ...world.heroes.map((h) => h.lvl));
-  return wavesCleared(arena) * 100 + arena.kills * 5 + lvl * 10;
+  return wavesCleared(arena) * 100 + kills * 5 + lvl * 10;
 }
 
 /** A fresh arena: the party on the dais of the sewers, resting before the first wave (see arenaJoined for the opening gift). */

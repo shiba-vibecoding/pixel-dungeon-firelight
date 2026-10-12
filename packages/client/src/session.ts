@@ -1,5 +1,5 @@
 import {
-  act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, heroById, type HeroClass,
+  act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, type GameMode, heroById, type HeroClass,
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
 } from '@pd/core';
 import { guestSecret } from './guest';
@@ -103,10 +103,15 @@ export function forgetSolo(key: string): void {
  * @param key local storage slot, or null not to save
  * @param newSeed seed for a fresh run (also used by restart)
  */
-/** @param challenges the challenges of a fresh run (a bit mask; see Challenges in the core) */
-export function soloSession(key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0): Session {
+/**
+ * @param challenges the challenges of a fresh run (a bit mask; see Challenges in the core)
+ * @param mode the dungeon, or the arena of waves (kept in a slot of its own: see main.ts)
+ */
+export function soloSession(
+  key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0, mode: GameMode = 'dungeon',
+): Session {
   const fresh = (): World => {
-    const world = createWorld(newSeed(), challenges);
+    const world = createWorld(newSeed(), challenges, mode);
     addHero(world, { id: 'me', name, heroClass });
     return world;
   };
@@ -196,6 +201,8 @@ export interface OnlineOptions {
   heroClass: HeroClass;
   /** Telegram.WebApp.initData when running inside Telegram. */
   initData?: string;
+  /** The arena of waves: the room is made one if it does not exist yet (whoever comes first). */
+  mode?: GameMode;
   text: { connecting: string; reconnecting: string; replaced: string; full: string; updating: string };
 }
 
@@ -362,6 +369,7 @@ export function onlineSession(options: OnlineOptions): Session {
     const url = new URL(`/room/${encodeURIComponent(options.room)}`, options.server);
     url.searchParams.set('hero', options.heroClass);
     url.searchParams.set('v', String(RULES_VERSION));
+    if (options.mode === 'arena') url.searchParams.set('mode', 'arena');
     if (options.initData) {
       url.searchParams.set('initData', options.initData);
     } else {

@@ -1,7 +1,8 @@
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
-import { type Assets, frameAt, ICONS, regionOf } from './sprites';
+import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { type Puppet, TILE, type View } from './view';
-import { bossCard, depthCard, floatNumber, levelCard, nameplate, slainCard } from './cards';
+import { bossCard, depthCard, floatNumber, levelCard, nameplate, slainCard, waveCard } from './cards';
+
 import { fx } from './fx';
 import { CHEST_ANIMS, type HeapLook } from './motion';
 import { drawFrame, frameAt as sheetFrame, regionIndex, sheet, tintedImage } from './worldsheets';
@@ -28,7 +29,7 @@ export function bakeLevel(level: Level, assets: Assets): HTMLCanvasElement {
   canvas.width = WIDTH * TILE;
   canvas.height = HEIGHT * TILE;
   const ctx = canvas.getContext('2d')!;
-  const tiles = assets.tiles[regionOf(level.depth)]!;
+  const tiles = assets.tiles[levelRegion(level)]!;
   const columns = tiles.width / TILE;
   for (let i = 0; i < LENGTH; i++) {
     const terrain = level.map[i]!;
@@ -45,7 +46,7 @@ export function bakeLevel(level: Level, assets: Assets): HTMLCanvasElement {
  */
 export function patchLevel(baked: HTMLCanvasElement, seen: Uint8Array, level: Level, assets: Assets): void {
   const ctx = baked.getContext('2d')!;
-  const tiles = assets.tiles[regionOf(level.depth)]!;
+  const tiles = assets.tiles[levelRegion(level)]!;
   const columns = tiles.width / TILE;
   for (let i = 0; i < LENGTH; i++) {
     const terrain = level.map[i]!;
@@ -265,7 +266,7 @@ export function render(
   ctx.setTransform(camera.zoom, 0, 0, camera.zoom, -Math.round(camera.x * camera.zoom), -Math.round(camera.y * camera.zoom));
 
   // Slowly drifting water under the transparent parts of water tiles.
-  const water = assets.water[regionOf(level.depth)]!;
+  const water = assets.water[levelRegion(level)]!;
   const pattern = ctx.createPattern(water, 'repeat')!;
   const drift = (now / 120) % water.width;
   pattern.setTransform(new DOMMatrix().translate(drift, drift * 0.5));
@@ -321,7 +322,7 @@ export function render(
   scene.over?.(ctx);
 
   // The sacrificial fire: a flickering blue flame on its pedestal (SacrificialParticle).
-  const ambient = sheet(`ambient${regionIndex(level.depth)}`);
+  const ambient = sheet(`ambient${levelRegion(level)}`);
   if (scene.altar !== undefined && explored[scene.altar] && ambient?.anims.altar) {
     drawFrame(ctx, ambient, sheetFrame(ambient.anims.altar, now, true), (scene.altar % WIDTH) * TILE, Math.trunc(scene.altar / WIDTH) * TILE - 4);
   } else if (scene.altar !== undefined && explored[scene.altar]) {
@@ -366,7 +367,7 @@ export function render(
   }
 
   // The region's mist, drifting slowly over what can be seen (the dark of the fog covers the rest).
-  const mist = sheet(`fog${regionIndex(level.depth)}`);
+  const mist = sheet(`fog${levelRegion(level)}`);
   if (mist && !quality.light) {
     const pattern = ctx.createPattern(mist.image, 'repeat');
     if (pattern) {
@@ -509,11 +510,20 @@ export function render(
   const descent = view.depthCard;
   const emblems = sheet('ui-map');
   if (descent && emblems) {
-    const region = regionIndex(descent.depth);
+    const region = descent.region ?? regionIndex(descent.depth);
     const text = descent.intro ? (t.meta.intros[region] ?? '') : '';
-    if (!depthCard(ctx, t.depthTitle(descent.depth), t.regionNames[region] ?? '', emblems.image, region, middle, canvas.width, now - descent.start, px, undefined, text)) {
+    // The arena's sinking card says the region and «The arena sinks deeper» (its own words).
+    const title = descent.title ?? t.depthTitle(descent.depth);
+    const sub = descent.sub ?? t.regionNames[region] ?? '';
+    if (!depthCard(ctx, title, sub, emblems.image, region, middle, canvas.width, now - descent.start, px, undefined, text)) {
       view.depthCard = null;
     }
+  }
+
+  // The arena's wave banner, once its time has come (after the sinking card, if both came at once).
+  const wave = view.waveCard;
+  if (wave && now >= wave.start && !waveCard(ctx, wave.title, wave.sub, wave.kind, middle, canvas.width, now - wave.start, px)) {
+    view.waveCard = null;
   }
 
   // A boss's title card as it notices the party: its name and epithet on a band across the free middle.

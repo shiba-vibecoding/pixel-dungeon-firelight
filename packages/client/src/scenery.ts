@@ -1,7 +1,8 @@
 import { type Effect, LENGTH, type Level, T, type TrapKind, WIDTH } from '@pd/core';
 import { quality } from './quality';
 import { TILE } from './view';
-import { drawFrame, frameAt, regionIndex, sheet } from './worldsheets';
+import { drawFrame, frameAt, sheet } from './worldsheets';
+import { levelRegion } from './sprites';
 
 /*
  * Each region's life on the walls and floors, from the ambient sheets
@@ -54,7 +55,7 @@ export class Scenery {
 
   /** Over the floor and walls, under what lies about: the region's living things. */
   draw(ctx: CanvasRenderingContext2D, level: Level, visible: readonly boolean[], explored: readonly boolean[], now: number): void {
-    const region = regionIndex(level.depth);
+    const region = levelRegion(level);
     const s = sheet(`ambient${region}`);
     if (!s) return;
     if (level.depth !== this.depth) {

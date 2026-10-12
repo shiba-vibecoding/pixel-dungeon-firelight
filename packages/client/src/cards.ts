@@ -75,6 +75,16 @@ export const TIMELINES = {
       [5733, { band: 0, rule: 0, emb: 0, dy: 0, title: 0, sub: 0, lines: 0 }],
     ],
   } as Timeline<{ band: number; rule: number; emb: number; dy: number; title: number; sub: number; lines: number }>,
+  /** The arena's wave banner: as a boss's name, but shorter (2.2 s). */
+  wave: {
+    hold: 6, dur: 2200,
+    frames: [
+      [0, { band: 0.33, rule: 0, name: 0, sub: 0 }], [66, { band: 0.66, rule: 0.25, name: 0, sub: 0 }], [133, { band: 1, rule: 0.5, name: 0, sub: 0 }],
+      [200, { band: 1, rule: 1, name: 0.5, sub: 0 }], [266, { band: 1, rule: 1, name: 1, sub: 0 }], [400, { band: 1, rule: 1, name: 1, sub: 0.5 }],
+      [466, { band: 1, rule: 1, name: 1, sub: 1 }], [1933, { band: 0.66, rule: 0.66, name: 0.66, sub: 0.66 }],
+      [2000, { band: 0.33, rule: 0.33, name: 0.33, sub: 0.33 }], [2066, { band: 0, rule: 0, name: 0, sub: 0 }],
+    ],
+  } as Timeline<{ band: number; rule: number; name: number; sub: number }>,
   number: {
     hold: 0, dur: 700,
     frames: [[0, { a: 1, dy: 0 }], [100, { a: 1, dy: -2 }], [200, { a: 1, dy: -4 }], [300, { a: 1, dy: -6 }], [400, { a: 0.66, dy: -8 }], [500, { a: 0.33, dy: -8 }], [600, { a: 0, dy: -8 }]],
@@ -186,7 +196,42 @@ export function bossCard(ctx: CanvasRenderingContext2D, name: string, sub: strin
 }
 
 /**
+ * A wave of the arena begins (PD.fx.wave): «Wave 5» in gold ×4 on the band, its line under it; a
+ * champions' wave has its rules and line in the boss's red, a boss's wave its number too.
+ */
+export function waveCard(
+  ctx: CanvasRenderingContext2D, title: string, sub: string, kind: '' | 'champions' | 'boss', cy: number, width: number, t: number, px: number,
+): boolean {
+  const k = step(TIMELINES.wave, t);
+  const h = 104 * px;
+  if (k.band > 0) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = k.band;
+    ctx.fillStyle = FX_COLORS.band;
+    ctx.fillRect(0, snap(cy - h / 2, 2 * px), width, h);
+    ctx.restore();
+  }
+  const red = kind === 'champions' || kind === 'boss';
+  const half = Math.round(width * 0.4 * k.rule);
+  if (half > 0) {
+    rule(ctx, width / 2 - half, cy - h / 2 + 6 * px, half * 2, 2 * px, red ? FX_COLORS.boss : FX_COLORS.line, k.band);
+    rule(ctx, width / 2 - half, cy + h / 2 - 8 * px, half * 2, 2 * px, red ? FX_COLORS.boss : FX_COLORS.line, k.band);
+  }
+  if (k.name > 0) {
+    const scale = fits(ctx, title, width * 0.9, px, [4, 3]);
+    fxText(ctx, title, width / 2, cy + 6 * px, px, { scale, color: kind === 'boss' ? FX_COLORS.boss : FX_COLORS.gold, alpha: k.name });
+  }
+  if (k.sub > 0 && sub) fxText(ctx, sub, width / 2, cy + 34 * px, px, { scale: 1.5, color: red ? FX_COLORS.boss : FX_COLORS.ink, alpha: k.sub, shadow: 0 });
+  return t < TIMELINES.wave.dur;
+}
+
+/** How long a depth card stays up (the arena's sinking card goes before its wave's banner). */
+export const DEPTH_CARD_MS = TIMELINES.depth.dur;
+
+/**
  * Going down to a new region: «Depth 6» and the region's name beside its
+
  * emblem, on the same band as a boss's name. `emblems` is
  * assets/world/ui-map.png; region 0..4 picks the 32×32 emblem in its
  * `emblems` row (atlas ui-map.json), drawn ×2.

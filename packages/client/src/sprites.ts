@@ -300,6 +300,10 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
 /** 0 for the sewers (depths 1-5), 1 for the prison (6-10), 2 for the caves (11-15), 3 for the city (16-20), 4 for the halls. */
 export const regionOf = (depth: number): number => Math.min(4, Math.max(0, Math.floor((depth - 1) / 5)));
 
+/** The region whose look a level takes: its own (the arena of waves takes its tier's), else its depth's. */
+export const levelRegion = (level: { depth: number; region?: number }): 0 | 1 | 2 | 3 | 4 =>
+  Math.min(4, Math.max(0, level.region ?? regionOf(level.depth))) as 0 | 1 | 2 | 3 | 4;
+
 /** Frame of an animation `elapsed` ms after it started; non-looping ones hold the last frame. */
 export function frameAt(animation: Animation, elapsed: number): number {
   const index = Math.floor((elapsed / 1000) * animation.fps);

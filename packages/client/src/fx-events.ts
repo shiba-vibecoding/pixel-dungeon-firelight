@@ -2,7 +2,7 @@ import { type Effect, HEIGHT, type Level, type MobKind, T, WIDTH, type World } f
 import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
-import { duration } from './sprites';
+import { duration, levelRegion } from './sprites';
 
 /*
  * What the dungeon's events look like beyond the sprites: blood and sparks on
@@ -516,7 +516,7 @@ const region = (depth: number): number => Math.min(4, Math.floor((depth - 1) / 5
  * demon halls' streams.
  */
 export function regionFx(level: Level, visible: readonly boolean[], now: number, dt: number): void {
-  const r = region(level.depth);
+  const r = levelRegion(level);
   const perCell = [0.6, 9, 0.5, 1.2, 2.5][r]! * (dt / 1000);
   for (let cell = 0; cell < level.map.length; cell++) {
     const terrain = level.map[cell]!;
@@ -547,7 +547,8 @@ export function regionFx(level: Level, visible: readonly boolean[], now: number,
 export function lightsFor(level: Level, visible: readonly boolean[], view: View, now: number): Light[] {
   const lights: Light[] = [];
   const flicker = (seed: number): number => 0.85 + 0.15 * Math.sin(now / 70 + seed) * Math.sin(now / 23 + seed * 3);
-  if (region(level.depth) === 1) {
+  // (The arena's stands hold a crowd, not torches: arenaview.ts lights its braziers.)
+  if (levelRegion(level) === 1 && !level.ring) {
     for (let cell = 0; cell < level.map.length; cell++) {
       if (level.map[cell] !== T.WALL_DECO || !visible[cell]) continue;
       lights.push({ x: (cell % WIDTH) * TILE + 8, y: Math.trunc(cell / WIDTH) * TILE + 6, radius: 38, color: '255, 150, 60', strength: 0.22 * flicker(cell) });

@@ -14,13 +14,14 @@ export interface RunRecord {
   name: string;
   heroClass: HeroClass;
   lvl: number;
-  /** The deepest depth reached. */
+  /** The deepest depth reached; in the arena, the waves held. */
   depth: number;
   gold: number;
   won: boolean;
   /** What ended the run, as shown at its end. */
   cause: string;
-  mode: 'solo' | 'daily' | 'coop';
+  /** The arena of waves' runs are scored by arenaScore (core arena.ts) and say so in the table. */
+  mode: 'solo' | 'daily' | 'coop' | 'arena';
   date: number;
 }
 
