@@ -66,3 +66,31 @@ canvas#game {
 
 /* An offer's armour tiers: seven equal columns, whatever the canvases ask for. */
 .pd-tiers > div { min-width: 0; }
+
+/* Windows come in by steps, as the design system moves (2–4 frames, no springs): the scrim darkens,
+   the window rises a few pixels and settles. Reduced motion shows them at once. */
+#overlay.open { animation: pd-scrim-in 0.18s steps(3) both; }
+#overlay.open > .pd-window, #overlay.open > .pd-sign { animation: pd-window-in 0.2s steps(4) both; }
+#overlay.bare.open { animation: none; }
+@keyframes pd-scrim-in { from { background-color: rgba(5, 5, 4, 0); } }
+@keyframes pd-window-in { from { opacity: 0; transform: translateY(calc(6 * var(--u))); } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  #overlay.open, #overlay.open > .pd-window, #overlay.open > .pd-sign { animation: none; }
+}
+
+/* Health's wound trace: under the fill, the pale stretch of what a blow took, catching up after a beat. */
+.pd-bar::before { z-index: 1; }
+.pd-bar .pd-bar-text { z-index: 2; }
+.pd-bar-lag {
+  position: absolute; left: 0; top: 0; bottom: 0; z-index: 0;
+  width: calc(var(--lag, 1) * 100%);
+  background: rgba(255, 235, 164, 0.55);
+  transition: width 0.45s steps(6) 0.3s;
+}
+@media (prefers-reduced-motion: reduce) { .pd-bar-lag { transition: none; } }
+
+/* A picked-up item on its way into the backpack, and the backpack's hop as it lands. */
+.pd-flying { position: fixed; z-index: 40; width: 32px; height: 32px; --u: 2px; pointer-events: none; }
+.pd-tool.bag.got { animation: pd-bag-hop 0.24s steps(3); }
+@keyframes pd-bag-hop { 40% { transform: translateY(-4px) scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .pd-tool.bag.got { animation: none; } }

@@ -42,6 +42,14 @@ function drawIcon(ctx: CanvasRenderingContext2D, assets: Assets, icon: readonly 
   ctx.drawImage(assets.icons, sx, sy, w, h, Math.round(x - w / 2), Math.round(y - h), w, h);
 }
 
+/**
+ * The finest step on screen, in world pixels: one device pixel. Walkers and
+ * the camera move by it rather than by the art's own (much coarser) pixel, so
+ * motion glides; every sprite still lands on whole device pixels and stays crisp.
+ */
+let fine = 1;
+const snap = (v: number): number => Math.round(v / fine) * fine;
+
 function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y: number, now: number): void {
   const { sheet, anims } = puppet.sprite;
   const anim = puppet.anim === 'idle' && puppet.pumped ? 'pump' : puppet.anim;
@@ -50,8 +58,8 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   const sy = (Math.floor(frame / sheet.cols) + puppet.row) * sheet.h;
   // A melee lunge: forward and back again in a blink.
   const lunge = puppet.lungeStart !== undefined && now - puppet.lungeStart < LUNGE_MS ? Math.sin((Math.PI * (now - puppet.lungeStart)) / LUNGE_MS) : 0;
-  const dx = Math.round(x + (TILE - sheet.w) / 2 + lunge * (puppet.lungeX ?? 0));
-  const dy = Math.round(y + TILE - sheet.h + lunge * (puppet.lungeY ?? 0));
+  const dx = snap(x + (TILE - sheet.w) / 2 + lunge * (puppet.lungeX ?? 0));
+  const dy = snap(y + TILE - sheet.h + lunge * (puppet.lungeY ?? 0));
 
   ctx.save();
   if (puppet.invisible) ctx.globalAlpha = 0.4;
@@ -87,8 +95,8 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
 const LUNGE_MS = 150;
 
 function drawHealth(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y: number): void {
-  const top = Math.round(y + TILE - puppet.sprite.sheet.h - 3);
-  const left = Math.round(x + 2);
+  const top = snap(y + TILE - puppet.sprite.sheet.h - 3);
+  const left = snap(x + 2);
   const width = TILE - 4;
   ctx.fillStyle = '#000';
   ctx.fillRect(left - 0.5, top - 0.5, width + 1, 2);
@@ -139,7 +147,8 @@ export function render(
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(camera.zoom, 0, 0, camera.zoom, -camera.x * camera.zoom, -camera.y * camera.zoom);
+  fine = 1 / camera.zoom;
+  ctx.setTransform(camera.zoom, 0, 0, camera.zoom, -Math.round(camera.x * camera.zoom), -Math.round(camera.y * camera.zoom));
 
   // Slowly drifting water under the transparent parts of water tiles.
   const water = assets.water[regionOf(level.depth)]!;

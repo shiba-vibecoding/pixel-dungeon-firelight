@@ -13,7 +13,7 @@ import './game.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
-import { ambientFx, effectFx, lightsFor, regionFx } from './fx-events';
+import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
 /** The visual clock's last reading, for frame-to-frame particle steps. */
 let lastVisual = 0;
 /** When my hero fell, on the visual clock, or 0 while alive. */
@@ -587,7 +587,10 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'fell' && effect.hero === myId) justFell = true;
     // Hero.interrupt: an item breaking stops whatever the hero was doing.
     if (effect.type === 'worn' && effect.hero === myId && effect.state === 'broken') walk.reset();
-    if (effect.type === 'pickedUp' && effect.hero === myId && effect.item.kind !== 'gold') newLoot = true;
+    if (effect.type === 'pickedUp' && effect.hero === myId && effect.item.kind !== 'gold') {
+      newLoot = true;
+      flyToBag(itemSprite(effect.item, world!.run.labels));
+    }
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     const hurt =
       (effect.type === 'attack' && effect.target === myId) ||
@@ -979,6 +982,59 @@ const backdrop = (() => {
   return { level, baked: bakeLevel(level, assets), all, view: new View(assets) };
 })();
 
+/**
+ * What is picked up flies from the hero's hands into the backpack on the toolbar,
+ * by steps, and the backpack gives a little hop as it lands.
+ */
+function flyToBag(sprite: number): void {
+  const world = session?.world;
+  const puppet = world && view.puppets.get(session!.myId);
+  const bag = document.querySelector<HTMLElement>('.pd-tool.bag');
+  if (!puppet || !bag || quality.reducedMotion) return;
+  const at = view.position(puppet, fx.time(performance.now()));
+  const scale = camera.zoom / (canvas.width / (canvas.clientWidth || canvas.width));
+  const x = (at.x + TILE / 2 - camera.x) * scale;
+  const y = (at.y - camera.y) * scale;
+  const target = bag.getBoundingClientRect();
+  const icon = document.createElement('i');
+  icon.className = 'pd-item pd-flying';
+  icon.style.setProperty('--ix', String(sprite % 8));
+  icon.style.setProperty('--iy', String(Math.floor(sprite / 8)));
+  icon.style.left = `${x - 16}px`;
+  icon.style.top = `${y - 16}px`;
+  document.body.append(icon);
+  // Should the animation never finish (a hidden tab), the icon does not linger.
+  const lost = window.setTimeout(() => icon.remove(), 1500);
+  const dx = target.left + target.width / 2 - x;
+  const dy = target.top + target.height / 2 - y;
+  // An arc: up a little first, then down into the pack.
+  icon.animate(
+    [
+      { transform: 'translate(0, 0) scale(1)' },
+      { transform: `translate(${dx * 0.35}px, ${dy * 0.15 - 36}px) scale(1.1)`, offset: 0.35 },
+      { transform: `translate(${dx}px, ${dy}px) scale(0.55)`, opacity: 0.85 },
+    ],
+    { duration: 520, easing: 'steps(10, end)' },
+  ).finished.then(() => {
+    clearTimeout(lost);
+    icon.remove();
+    bag.classList.remove('got');
+    void bag.offsetWidth;
+    bag.classList.add('got');
+  }, () => icon.remove());
+}
+
+/** When the low-health heartbeat last pulsed, on the visual clock. */
+let lastBeat = 0;
+
+/** Which foot: footsteps alternate a touch in pitch. */
+let stride = 1;
+
+/** The soft camera: where it looks, eased after the hero (see tick). */
+const follow = { x: 0, y: 0, depth: 0, ready: false };
+/** How far behind the camera trails: the time it takes to close two thirds of the gap. */
+const CAMERA_LAG_MS = 85;
+
 /** When the last game frame was drawn, for telling a phone that struggles. */
 let lastFrame = 0;
 
@@ -1029,6 +1085,18 @@ function tick(now: number): void {
     return;
   }
 
+  // Low on health, the edges of the view pulse red like a heartbeat, quicker the nearer death.
+  if (session.world) {
+    const self = heroById(session.world, session.myId);
+    if (self && isAlive(self) && self.hp <= self.ht / 4) {
+      const danger = 1 - self.hp / (self.ht / 4);
+      const vnowBeat = fx.time(now);
+      if (vnowBeat - lastBeat > 1150 - danger * 450) {
+        lastBeat = vnowBeat;
+        fx.flash('170, 0, 0', 0.16 + danger * 0.22, 520, vnowBeat, true);
+      }
+    }
+  }
   // A phone that cannot keep up gets light effects («auto» in quality.ts).
   if (quality.frame(now - lastFrame)) {
     resize();
@@ -1046,6 +1114,7 @@ function tick(now: number): void {
     seenGeneration = session.generation;
     view.reset(me.depth);
     fx.reset();
+    follow.ready = false;
     walk.reset();
     bakedKey = '';
     threats = new Set();
@@ -1071,7 +1140,11 @@ function tick(now: number): void {
       if (feeling && me.depth > lastPlace.depth) view.say(feeling, '#ffff44');
     } else if (me.pos !== lastPlace.pos) {
       const terrain = level.map[me.pos]!;
-      audio.play(terrain >= T.WATER_TILES && terrain <= T.WATER ? 'water' : 'step', 1, 0.5);
+      // Footsteps: never quite the same twice, left foot and right a touch apart.
+      stride = -stride;
+      audio.play(terrain >= T.WATER_TILES && terrain <= T.WATER ? 'water' : 'step', 1 + stride * 0.05 + (Math.random() - 0.5) * 0.08, 0.45 + Math.random() * 0.1);
+      // And what the step stirs where it left: dust, a splash, a few blades of grass.
+      stepFx(level.map[lastPlace.pos] ?? terrain, lastPlace.pos, vnow);
       if (terrain === T.OPEN_DOOR) audio.play('door_open', 1, 0.6);
       // Stepping onto a sign reads it.
       // Below the last shop the signs burst into flames as one reads them (Sign.read).
@@ -1128,8 +1201,24 @@ function tick(now: number): void {
   freeMiddle = freeMiddle < 0 || view.depth !== freeDepth ? wanted : freeMiddle + (wanted - freeMiddle) * Math.min(1, dt / 140);
   freeDepth = view.depth;
   const middle = freeMiddle;
-  camera.x = Math.round(at.x + TILE / 2 - canvas.width / camera.zoom / 2) + kick.x;
-  camera.y = Math.round(at.y + TILE / 2 - middle / camera.zoom) + kick.y;
+  // The view follows the hero softly: it eases after them (a short exponential lag), so a walk
+  // starts and stops with a little weight instead of the map jerking under them. A jump of
+  // more than a few cells (a new depth, a teleport, a fall) is not followed but cut to.
+  const targetX = at.x + TILE / 2 - canvas.width / camera.zoom / 2;
+  const targetY = at.y + TILE / 2 - middle / camera.zoom;
+  const far = Math.hypot(targetX - follow.x, targetY - follow.y) > TILE * 4;
+  if (!follow.ready || far || follow.depth !== me.depth) {
+    follow.x = targetX;
+    follow.y = targetY;
+  } else {
+    const ease = 1 - Math.exp(-Math.max(0, dt) / CAMERA_LAG_MS);
+    follow.x += (targetX - follow.x) * ease;
+    follow.y += (targetY - follow.y) * ease;
+  }
+  follow.ready = true;
+  follow.depth = me.depth;
+  camera.x = follow.x + kick.x;
+  camera.y = follow.y + kick.y;
   // What lies hidden (the phantom fish) is not drawn until found.
   const heaps = (world.floors[me.depth]?.heaps ?? []).filter((heap) => heap.kind !== 'hidden').map((heap) => ({
     pos: heap.pos,

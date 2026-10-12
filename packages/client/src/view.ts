@@ -16,6 +16,11 @@ import { haptic } from './telegram';
  */
 
 export const STEP_MS = 110;
+/**
+ * How long after a step ends a walker still counts as walking: the next step
+ * of a walk starts within a frame or two, and the legs should not stop for it.
+ */
+const WALK_GRACE_MS = 70;
 
 /** Potions whose shattering does something; the rest splash harmlessly. */
 const HARMFUL: ReadonlySet<ItemKind> = new Set([
@@ -43,6 +48,9 @@ export const TILE = 16;
 
 export interface Puppet {
   id: string;
+  /** Where the current step started, in world pixels: wherever the walker was, not the middle of a cell. */
+  fromX?: number;
+  fromY?: number;
   /** A hero's Pixel-Mart look (effect, the patron's star); undefined for monsters. */
   look?: Look;
   /** Hero class or monster kind. */
@@ -194,11 +202,17 @@ export class View {
         this.puppets.set(id, puppet);
       } else if (puppet.to !== pos) {
         const at = this.cellOf(puppet, now);
+        // The next step starts from where the walker is now, so a walk flows from cell to cell without a jolt.
+        const here = this.position(puppet, now);
         if (cellX(pos) !== cellX(puppet.to)) puppet.flip = cellX(pos) < cellX(puppet.to);
+        const walking = puppet.anim === 'run' && now - puppet.moveStart < STEP_MS + WALK_GRACE_MS;
         puppet.from = at;
+        puppet.fromX = here.x;
+        puppet.fromY = here.y;
         puppet.to = pos;
         puppet.moveStart = now;
-        if (puppet.alive && puppet.anim !== 'attack') {
+        // Legs keep their stride along a walk; only a walk's first step starts the run anew.
+        if (puppet.alive && puppet.anim !== 'attack' && !walking) {
           puppet.anim = 'run';
           puppet.animStart = now;
         }
@@ -255,7 +269,7 @@ export class View {
     // Finished one-off animations fall back to idle (or keep running while moving).
     for (const puppet of this.puppets.values()) {
       if (!puppet.alive) continue;
-      const moving = now - puppet.moveStart < STEP_MS;
+      const moving = now - puppet.moveStart < STEP_MS + WALK_GRACE_MS;
       if (puppet.anim === 'run' && !moving) {
         puppet.anim = 'idle';
         puppet.animStart = now;
@@ -277,9 +291,11 @@ export class View {
   /** Interpolated position in world pixels. */
   position(puppet: Puppet, now: number): { x: number; y: number } {
     const k = Math.min(1, Math.max(0, (now - puppet.moveStart) / STEP_MS));
+    const fromX = puppet.fromX ?? cellX(puppet.from) * TILE;
+    const fromY = puppet.fromY ?? cellY(puppet.from) * TILE;
     return {
-      x: (cellX(puppet.from) + (cellX(puppet.to) - cellX(puppet.from)) * k) * TILE,
-      y: (cellY(puppet.from) + (cellY(puppet.to) - cellY(puppet.from)) * k) * TILE,
+      x: fromX + (cellX(puppet.to) * TILE - fromX) * k,
+      y: fromY + (cellY(puppet.to) * TILE - fromY) * k,
     };
   }
 

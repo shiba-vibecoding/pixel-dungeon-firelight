@@ -451,3 +451,18 @@ export function ambientFx(view: View, now: number, dt: number): void {
     fx.burst(x, y, now, { count: 1, colors: p.color ? [`rgb(${p.color})`, '#ffffff'] : ['#90c8ff', '#ffffff'], glow: true, speed: [2, 10], life: [150, 350], size: [1, 1], spread: 1 });
   }
 }
+
+/** What a step stirs where the foot left: water splashes, grass rustles, a dry floor puffs a little dust. */
+export function stepFx(terrain: number, cell: number, now: number): void {
+  const x = (cell % WIDTH) * TILE + TILE / 2;
+  const y = Math.trunc(cell / WIDTH) * TILE + TILE - 2;
+  if (terrain >= T.WATER_TILES && terrain <= T.WATER) {
+    fx.burst(x, y - 1, now, { count: 5, colors: ['#9ad4ff', '#d8f0ff', '#5fa8e0'], speed: [14, 34], life: [220, 420], gravity: 220, drag: 0.2, angle: -Math.PI / 2, cone: 1.6, size: [1, 1], spread: 3 });
+  } else if (terrain === T.GRASS || terrain === T.HIGH_GRASS) {
+    fx.burst(x, y - 2, now, { count: 3, colors: ['#6aa84f', '#93c47d', '#38761d'], speed: [8, 20], life: [300, 520], gravity: 120, drag: 0.3, angle: -Math.PI / 2, cone: 2.2, size: [1, 1], spread: 3 });
+  } else if (terrain !== T.EMBERS) {
+    fx.burst(x, y, now, { count: 2, colors: ['rgba(190, 180, 160, 0.7)', 'rgba(140, 130, 115, 0.6)'], speed: [4, 10], life: [260, 420], rise: 6, drag: 0.3, size: [1, 1], spread: 4 });
+  } else {
+    fx.burst(x, y, now, { count: 3, colors: ['#ff9933', '#ffcc66', '#ff5522'], glow: true, speed: [6, 14], life: [240, 420], rise: 14, drag: 0.4, size: [1, 1], spread: 3 });
+  }
+}

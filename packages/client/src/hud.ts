@@ -164,6 +164,7 @@ export class Hud {
   private readonly level: HTMLElement;
   private readonly hp: HTMLElement;
   private readonly hpText: HTMLElement;
+  private readonly hpLag: HTMLElement;
   private readonly xp: HTMLElement;
   private readonly food: HTMLElement;
   private readonly depth: Text;
@@ -192,7 +193,9 @@ export class Hud {
     avatarButton.onclick = tap(() => handlers.hero());
     this.level = el('span', 'pd-hero-lvl');
     this.hpText = el('span', 'pd-bar-text');
-    this.hp = el('div', 'pd-bar', this.hpText);
+    // The wound's trace: a pale stretch where health was, melting away a moment after a blow.
+    this.hpLag = el('span', 'pd-bar-lag');
+    this.hp = el('div', 'pd-bar', this.hpLag, this.hpText);
     this.xp = el('div', 'pd-bar thin xp');
     this.food = el('div', 'pd-bar thin food');
     this.depth = document.createTextNode('');
@@ -322,7 +325,12 @@ export class Hud {
     if (this.changed('lvl', String(me.lvl))) this.level.textContent = String(me.lvl);
     const hp = Math.max(0, me.hp);
     if (this.changed('hp', `${hp}/${me.ht}/${me.poison > 0}`)) {
-      this.hp.style.setProperty('--v', String(hp / me.ht));
+      const share = hp / me.ht;
+      const before = Number(this.hp.style.getPropertyValue('--v') || share);
+      this.hp.style.setProperty('--v', String(share));
+      // Healing fills at once; a wound leaves its trace, which follows down after a beat (CSS).
+      if (share >= before) this.hpLag.style.setProperty('--lag', String(share));
+      else window.setTimeout(() => this.hpLag.style.setProperty('--lag', String(share)), 0);
       this.hp.classList.toggle('low', hp <= me.ht / 4);
       this.hp.classList.toggle('poisoned', me.poison > 0);
       this.hpText.textContent = `${hp}/${me.ht}`;
