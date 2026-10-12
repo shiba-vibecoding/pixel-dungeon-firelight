@@ -64,6 +64,8 @@ export type InventoryAction =
   | { type: 'sell'; item: number }
   /** Take off a worn ring, back into the pack. */
   | { type: 'remove'; ring: number }
+  /** Put the weapon in hand away (KindOfWeapon's UNEQUIP), into the pack or, with no room there, at the hero's feet. */
+  | { type: 'unequip' }
   /** Read the Tome of Mastery and master one of the two ways of the hero's class. */
   | { type: 'master'; item: number; subclass: SubClass }
   /** Mine the vein of dark gold next to the hero with the blacksmith's pickaxe. */
@@ -74,7 +76,7 @@ export type InventoryAction =
   | { type: 'balance'; item: number; weapon?: number; imbue: 'speed' | 'accuracy' };
 
 const INVENTORY_ACTIONS: ReadonlySet<string> = new Set([
-  'pickup', 'open', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'master', 'mine', 'special', 'balance',
+  'pickup', 'open', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'unequip', 'master', 'mine', 'special', 'balance',
 ]);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
@@ -133,6 +135,11 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   }
   if (action.type === 'mine') return mineProblem(world, hero);
   if (action.type === 'special') return specialProblem(world, hero, action.target);
+  if (action.type === 'unequip') {
+    if (!hero.weapon) return 'nothing in hand';
+    // EquipableItem.doUnequip: a cursed weapon will not leave the hand.
+    return hero.weapon.cursed ? CURSED : null;
+  }
   if (action.type === 'remove') {
     if (!Number.isInteger(action.ring) || !hero.rings[action.ring]) return 'no such ring';
     if (hero.rings[action.ring]!.cursed) return CURSED;
@@ -272,6 +279,14 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       hero.subclass = action.subclass;
       ctx.effects.push({ type: 'mastered', hero: hero.id, subclass: action.subclass });
       return TIME_TO_READ_TOME;
+    case 'unequip': {
+      const weapon = hero.weapon!;
+      hero.weapon = null;
+      if (hasRoom(hero, weapon)) hero.items.push(weapon);
+      else dropItem(ctx.floor, hero.pos, weapon);
+      ctx.effects.push({ type: 'dropped', hero: hero.id, item: weapon });
+      return TIME_TO_EQUIP;
+    }
     case 'remove': {
       const ring = hero.rings.splice(action.ring, 1)[0]!;
       hero.items.push(ring);

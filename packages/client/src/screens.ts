@@ -1177,8 +1177,8 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
       if (!passes(filter, item)) node.classList.add('dim');
       const opts = { ...options, item, ...where(here) };
       holdToUse(node, () => firstActionName(opts), () => firstAction(opts));
-      // What can be dragged: anything in the pack, and a worn ring (to take it off).
-      if ('index' in here || 'ring' in here) node.dataset.from = JSON.stringify(here);
+      // What can be dragged: anything in the pack, and a worn ring or the weapon in hand (to take it off).
+      if ('index' in here || 'ring' in here || ('worn' in here && here.worn === 'weapon')) node.dataset.from = JSON.stringify(here);
     }
     node.dataset.drop = String(ref);
     return node;
@@ -1308,6 +1308,12 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
     if ('ring' in from) {
       drops.set('pack', { type: 'remove', ring: from.ring });
       hero.items.forEach((_, i) => drops.set(String(i), { type: 'remove', ring: from.ring }));
+      return drops;
+    }
+    // The weapon in hand back into the pack.
+    if ('worn' in from && from.worn === 'weapon') {
+      drops.set('pack', { type: 'unequip' });
+      hero.items.forEach((_, i) => drops.set(String(i), { type: 'unequip' }));
       return drops;
     }
     if (!('index' in from)) return drops;
@@ -1635,6 +1641,8 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
   } else if (options.ring !== undefined) {
     const ring = options.ring;
     use(t.takeOff, () => stay({ type: 'remove', ring }));
+  } else if (item === hero.weapon) {
+    use(t.takeOff, () => stay({ type: 'unequip' }));
   } else if (item === hero.armor && item.kind === CLASS_ARMOR_OF[hero.heroClass]) {
     // ClassArmor.doSpecial: the leap and the smoke bomb want a cell; the others act at once.
     const aimed = hero.heroClass === 'warrior' || hero.heroClass === 'rogue';

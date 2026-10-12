@@ -98,6 +98,8 @@ export function sanitizeAction(raw: unknown): Action | null {
       const target = cell(a.target);
       return item === null || target === null ? null : { type: a.type, item, target };
     }
+    case 'unequip':
+      return { type: 'unequip' };
     case 'remove': {
       const ring = slot(a.ring);
       return ring === null ? null : { type: 'remove', ring };
