@@ -75,6 +75,7 @@ const PASS_RIGHT = [2, 3, 4, 3, 2] as const;
 const PASS_LEFT = [2, 1, 0, 1, 2] as const;
 const PASS_MS = 80;
 const COIN_MS = 650;
+const SEARCH_MS = 520;
 
 /** A heap that has just come to lie somewhere: it falls in (from a hand, a corpse, a throw) and bounces. */
 interface Arrival {
@@ -153,6 +154,8 @@ export class Motion {
   private nextGlint = 0;
   /** Where gold was taken this frame. */
   private gold: number[] = [];
+  /** A search going out from a hero: a ring that spreads as far as it reaches. */
+  private searches: Array<{ x: number; y: number; start: number }> = [];
   /** Each walker's last step, to notice new ones. */
   private steps = new Map<string, number>();
   /** This frame's events: who picked up where, chests opened, mimics sprung, throws landing. */
@@ -175,6 +178,7 @@ export class Motion {
     this.ripples = [];
     this.flashes = [];
     this.coins = [];
+    this.searches = [];
     this.wet.clear();
     this.steps.clear();
     this.launches = [];
@@ -189,6 +193,9 @@ export class Motion {
         this.pickedAt.set(hero.pos, effect.hero);
         this.picked.push({ hero: effect.hero, sprite: itemSprite(effect), gold: effect.item.kind === 'gold' });
         if (effect.item.kind === 'gold') this.gold.push(hero.pos);
+      } else if (effect.type === 'searched') {
+        const hero = heroById(world, effect.hero);
+        if (hero && hero.depth === depth) this.searches.push({ ...centre(hero.pos), start: performance.now() });
       } else if (effect.type === 'opened' && effect.depth === depth) {
         this.opened.add(effect.pos);
       } else if (effect.type === 'mimic' && effect.depth === depth) {
@@ -572,6 +579,17 @@ export class Motion {
 
     // Splashes, rings, wet footprints and dust (glints go over the heaps: drawOver).
     this.drawFlashes(ctx, now, false);
+
+    // A search: a faint gold ring spreading out two cells, as far as a search reaches.
+    this.searches = this.searches.filter((s) => performance.now() - s.start < SEARCH_MS);
+    for (const s of this.searches) {
+      const k = (performance.now() - s.start) / SEARCH_MS;
+      ctx.strokeStyle = `rgba(255, 230, 150, ${0.45 * (1 - k)})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 4 + easeOut(k) * TILE * 2.4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // Heaps on their way out.
     for (const g of this.ghosts) {
