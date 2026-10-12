@@ -1,5 +1,5 @@
 import {
-  cellX, cellY, type Effect, type Enchantment, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind,
+  adjacent, cellX, cellY, type Effect, type Enchantment, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind,
   WIDTH, type World,
   type Look,
 } from '@pd/core';
@@ -218,11 +218,15 @@ export class View {
         const here = this.position(puppet, now);
         if (cellX(pos) !== cellX(puppet.to)) puppet.flip = cellX(pos) < cellX(puppet.to);
         const walking = puppet.anim === 'run' && now - puppet.moveStart < STEP_MS + WALK_GRACE_MS;
+        // The next step of a walk carries straight on from where the last one ended, as if it had
+        // been sent that very moment: no standstill of a frame or two at every cell.
+        const late = now - (puppet.moveStart + STEP_MS);
+        const chained = walking && late >= 0 && late < STEP_MS / 2 && adjacent(pos, puppet.to);
         puppet.from = at;
         puppet.fromX = here.x;
         puppet.fromY = here.y;
         puppet.to = pos;
-        puppet.moveStart = now;
+        puppet.moveStart = chained ? now - late : now;
         // Legs keep their stride along a walk; only a walk's first step starts the run anew.
         if (puppet.alive && puppet.anim !== 'attack' && !walking) {
           puppet.anim = 'run';
