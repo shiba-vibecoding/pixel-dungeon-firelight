@@ -1,6 +1,6 @@
 import { createMob, type Hero, heroArmor, isAlive, type Mob, rollMob } from './actors';
 import { hurt } from './combat';
-import { charAt, type Char, type Ctx, exploredCells, heroesOn, isPassable } from './floor';
+import { charAt, type Char, type Ctx, exploredCells, heroesOn, isPassable, isWater } from './floor';
 import { distance, NEIGHBOURS8 } from './level/geometry';
 import { T } from './level/terrain';
 
@@ -30,6 +30,30 @@ const TOXIC_TURNS = 6;
 const PARALYSIS_TURNS = 5;
 const BURNING_TURNS = 8;
 
+/** What a gas trap or a shattered potion releases. */
+export type Burst = 'toxic' | 'paralytic' | 'fire';
+
+/**
+ * A cloud of gas or a burst of flame centred on a cell. The original's gas
+ * spreads and lingers; here it reaches everyone within `radius` at once.
+ * Flames set the grass around alight, but not those standing in water.
+ */
+export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS): void {
+  ctx.effects.push({ type: 'burst', depth: ctx.depth, pos, kind, radius });
+  const { level } = ctx;
+  for (const char of around(ctx, pos, radius)) {
+    if (kind === 'toxic') char.poison = Math.max(char.poison ?? 0, TOXIC_TURNS);
+    if (kind === 'paralytic') char.paralysed = Math.max(char.paralysed ?? 0, PARALYSIS_TURNS);
+    if (kind === 'fire' && !isWater(level.map[char.pos]!)) char.burning = Math.max(char.burning ?? 0, BURNING_TURNS);
+  }
+  if (kind !== 'fire') return;
+  for (let cell = 0; cell < level.map.length; cell++) {
+    if (distance(cell, pos) <= radius + 1 && (level.map[cell] === T.GRASS || level.map[cell] === T.HIGH_GRASS)) {
+      level.map[cell] = T.EMBERS;
+    }
+  }
+}
+
 /** Everyone alive within `radius` of a cell. */
 function around(ctx: Ctx, pos: number, radius: number): Char[] {
   const chars: Char[] = heroesOn(ctx.world, ctx.depth).filter((hero) => distance(hero.pos, pos) <= radius);
@@ -50,18 +74,12 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
       hero.poison = Math.max(hero.poison, 4 + Math.trunc(depth / 2));
       break;
     case 'toxic':
-      for (const char of around(ctx, pos, GAS_RADIUS)) char.poison = Math.max(char.poison ?? 0, TOXIC_TURNS);
-      break;
     case 'paralytic':
-      for (const char of around(ctx, pos, GAS_RADIUS)) char.paralysed = Math.max(char.paralysed ?? 0, PARALYSIS_TURNS);
+      burst(ctx, pos, kind);
       break;
     case 'fire':
-      hero.burning = BURNING_TURNS;
-      // The flames catch the grass around.
-      for (const n of [0, ...NEIGHBOURS8]) {
-        const cell = pos + n;
-        if (level.map[cell] === T.GRASS || level.map[cell] === T.HIGH_GRASS) level.map[cell] = T.EMBERS;
-      }
+      // A small fire on the trap itself, catching the grass around.
+      burst(ctx, pos, 'fire', 0);
       break;
     case 'alarm':
       for (const mob of ctx.floor.mobs) {
@@ -107,6 +125,17 @@ export function mobConditions(ctx: Ctx, mob: Mob): boolean {
     ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: mob.id, damage: 1 });
     hurt(ctx, mob, 1, 'poison');
     if (!isAlive(mob)) return true;
+  }
+  if ((mob.burning ?? 0) > 0) {
+    mob.burning!--;
+    if (isWater(ctx.level.map[mob.pos]!)) {
+      mob.burning = 0;
+    } else {
+      const damage = ctx.rng.intRange(1, 3 + Math.trunc(ctx.depth / 4));
+      ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: mob.id, damage });
+      hurt(ctx, mob, damage, 'burning');
+      if (!isAlive(mob)) return true;
+    }
   }
   if ((mob.paralysed ?? 0) > 0) {
     mob.paralysed!--;

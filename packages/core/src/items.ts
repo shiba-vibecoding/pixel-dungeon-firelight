@@ -42,6 +42,10 @@ export const ITEMS = {
   'potion.mindVision': { category: 'potion' },
   'potion.invisibility': { category: 'potion' },
   'potion.strength': { category: 'potion' },
+  // Harmful when drunk, and worth throwing at monsters instead.
+  'potion.toxicGas': { category: 'potion' },
+  'potion.paralyticGas': { category: 'potion' },
+  'potion.liquidFlame': { category: 'potion' },
 
   'scroll.identify': { category: 'scroll' },
   'scroll.teleportation': { category: 'scroll' },
@@ -49,6 +53,7 @@ export const ITEMS = {
   'scroll.challenge': { category: 'scroll' },
   'scroll.lullaby': { category: 'scroll' },
   'scroll.upgrade': { category: 'scroll' },
+  'scroll.recharging': { category: 'scroll' },
 
   'weapon.knuckles': weapon(1, 16, 1, 0.5),
   'weapon.dagger': weapon(1, 19, 1.2),
@@ -208,12 +213,18 @@ const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
 ];
 
 const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
-  // The original also has toxic gas, paralytic gas, liquid flame, levitation,
-  // purity and frost; strength and might only come as guaranteed finds.
-  potion: [['potion.healing', 45], ['potion.experience', 4], ['potion.mindVision', 20], ['potion.invisibility', 10]],
-  // Also remove curse, recharging, terror, psionic blast and mirror image;
-  // upgrade only comes as guaranteed finds.
-  scroll: [['scroll.identify', 30], ['scroll.teleportation', 10], ['scroll.mapping', 15], ['scroll.challenge', 12], ['scroll.lullaby', 8]],
+  // The original also has levitation, purity and frost; strength and might
+  // only come as guaranteed finds.
+  potion: [
+    ['potion.healing', 45], ['potion.experience', 4], ['potion.toxicGas', 15], ['potion.paralyticGas', 10],
+    ['potion.liquidFlame', 15], ['potion.mindVision', 20], ['potion.invisibility', 10],
+  ],
+  // Also remove curse, terror, psionic blast and mirror image; upgrade only
+  // comes as guaranteed finds.
+  scroll: [
+    ['scroll.identify', 30], ['scroll.teleportation', 10], ['scroll.recharging', 10], ['scroll.mapping', 15],
+    ['scroll.challenge', 12], ['scroll.lullaby', 8],
+  ],
   weapon: [
     ['weapon.dagger', 1], ['weapon.knuckles', 1], ['weapon.quarterstaff', 1], ['weapon.spear', 1], ['weapon.mace', 1],
     ['weapon.sword', 1], ['weapon.longsword', 1], ['weapon.battleAxe', 1], ['weapon.warHammer', 1], ['weapon.glaive', 1],

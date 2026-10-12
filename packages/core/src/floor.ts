@@ -4,7 +4,7 @@ import type { Heap, HeapKind, Item, ItemKind } from './items';
 import type { WellWater } from './level/builder';
 import type { MeatOutcome } from './inventory';
 import type { GhostLine } from './quest';
-import type { TrapKind } from './traps';
+import type { Burst, TrapKind } from './traps';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
@@ -73,7 +73,7 @@ export type Effect =
   | { type: 'upgraded'; hero: string; item: Item }
   | { type: 'teleported'; hero: string }
   | { type: 'mapped'; hero: string }
-  | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby'; count: number }
+  | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby' | 'recharging'; count: number }
   | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
   | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
   | { type: 'zapped'; depth: number; from: number; to: number }
@@ -83,6 +83,10 @@ export type Effect =
   /** Something eaten; mystery meat may disagree with the eater. */
   | { type: 'ate'; hero: string; kind: ItemKind; outcome: MeatOutcome | null }
   | { type: 'hunger'; hero: string; state: 'hungry' | 'starving' }
+  /** Gas or flames released at a cell, reaching `radius` cells around. */
+  | { type: 'burst'; depth: number; pos: number; kind: Burst; radius: number }
+  /** A thrown potion breaking; `identified` when what came out taught the party what it was. */
+  | { type: 'shattered'; hero: string; depth: number; pos: number; kind: ItemKind; identified: boolean }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };
 

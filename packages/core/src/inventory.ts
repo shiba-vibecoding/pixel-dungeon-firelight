@@ -8,6 +8,7 @@ import {
 import { discoverable } from './level/flags';
 import { adjacent, LENGTH } from './level/geometry';
 import { discover, F, hasFlag } from './level/terrain';
+import { type Burst, burst } from './traps';
 import type { World } from './world';
 
 /*
@@ -21,7 +22,7 @@ export type InventoryAction =
   | { type: 'use'; item: number; target?: 'weapon' | 'armor' }
   | { type: 'equip'; item: number }
   | { type: 'drop'; item: number }
-  /** Throw a dart or the boomerang at a cell; it flies until it hits someone or something. */
+  /** Throw a dart, the boomerang or a potion at a cell; it flies until it hits someone or something. */
   | { type: 'throw'; item: number; target: number }
   /** Zap a wand at a cell. */
   | { type: 'zap'; item: number; target: number };
@@ -65,7 +66,8 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       return null;
     case 'throw':
     case 'zap': {
-      if (category !== (action.type === 'throw' ? 'missile' : 'wand')) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
+      const fits = action.type === 'throw' ? category === 'missile' || category === 'potion' : category === 'wand';
+      if (!fits) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
       if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
         return 'bad target';
       }
@@ -113,6 +115,10 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
 /** MissileWeapon.onThrow: a hit uses the dart up, a miss leaves it on the floor; the boomerang returns. */
 function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
   const item = hero.items[index]!;
+  if (itemDef(item.kind).category === 'potion') {
+    throwPotion(ctx, hero, index, target);
+    return;
+  }
   const boomerang = item.kind === 'missile.boomerang';
   let thrown = item;
   if (!boomerang) {
@@ -137,6 +143,27 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
   }
   if (!boomerang && !hit) dropItem(ctx.floor, end, thrown);
 }
+
+/** Potion.shatter: a thrown potion breaks where it lands, letting out whatever is inside. */
+function throwPotion(ctx: Ctx, hero: Hero, index: number, target: number): void {
+  const item = hero.items[index]!;
+  const kind = item.kind;
+  if (--item.qty <= 0) hero.items.splice(index, 1);
+  const end = ballistica(ctx, hero.pos, target).at(-1)!;
+  ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: kind });
+  const harmful = BURSTS[kind];
+  ctx.effects.push({
+    type: 'shattered', hero: hero.id, depth: ctx.depth, pos: end, kind, identified: harmful ? identify(ctx.world, kind) : false,
+  });
+  if (harmful) burst(ctx, end, harmful.kind, harmful.radius);
+}
+
+/** What breaks out of a harmful potion, and how far it reaches. */
+const BURSTS: Partial<Record<ItemKind, { kind: Burst; radius: number }>> = {
+  'potion.toxicGas': { kind: 'toxic', radius: 2 },
+  'potion.paralyticGas': { kind: 'paralytic', radius: 2 },
+  'potion.liquidFlame': { kind: 'fire', radius: 1 },
+};
 
 /** WandOfMagicMissile: a bolt that never misses the first creature in its way. */
 function zap(ctx: Ctx, hero: Hero, index: number, target: number): void {
@@ -268,6 +295,14 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     case 'potion.invisibility':
       hero.invisible = INVISIBILITY_DURATION;
       break;
+    case 'potion.toxicGas':
+    case 'potion.paralyticGas':
+    case 'potion.liquidFlame': {
+      // Drunk, it bursts right where the hero stands.
+      const harmful = BURSTS[kind]!;
+      burst(ctx, hero.pos, harmful.kind, harmful.radius);
+      break;
+    }
 
     case 'scroll.identify': {
       // The original lets you pick the item; here it is the first unknown one you carry.
@@ -318,6 +353,17 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
         if (mob.kind === 'goo') mob.pumped = false;
       }
       ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'lullaby', count: sleepers.length });
+      break;
+    }
+    case 'scroll.recharging': {
+      // ScrollOfRecharging: every wand in the pack is full again.
+      let count = 0;
+      for (const wand of hero.items) {
+        if (wand.charges === undefined || wand.charges >= wandMaxCharges(wand)) continue;
+        wand.charges = wandMaxCharges(wand);
+        count++;
+      }
+      ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'recharging', count });
       break;
     }
     case 'scroll.upgrade': {

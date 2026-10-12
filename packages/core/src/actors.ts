@@ -243,9 +243,10 @@ export interface Mob {
   time: number;
   /** Goo only: pumped up for a big attack. */
   pumped?: boolean;
-  /** Turns left of poison and paralysis from trap gas. */
+  /** Turns left of poison, paralysis and burning from traps and potions. */
   poison?: number;
   paralysed?: number;
+  burning?: number;
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {

@@ -381,7 +381,15 @@ function showItem(options: ItemOptions): void {
   };
   const actions: HTMLElement[] = [];
   if (index !== null) {
-    if (category === 'potion') actions.push(button(t.drink, () => act({ type: 'use', item: index }), 'primary'));
+    if (category === 'potion') {
+      actions.push(button(t.drink, () => act({ type: 'use', item: index }), 'primary'));
+      actions.push(
+        button(t.throwItem, () => {
+          options.onClose();
+          options.onAim(index, 'throw');
+        }),
+      );
+    }
     if (category === 'food') actions.push(button(t.eat, () => act({ type: 'use', item: index }), 'primary'));
     if (category === 'scroll') {
       if (item.kind === 'scroll.upgrade' && isKnown(world, item)) {

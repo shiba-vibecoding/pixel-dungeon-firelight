@@ -1,4 +1,7 @@
-import { cellX, cellY, type Effect, heroById, isAlive, itemDef, type MobKind, type World } from '@pd/core';
+import {
+  cellX, cellY, type Effect, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind, WIDTH,
+  type World,
+} from '@pd/core';
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
 import { itemName } from './itemtext';
@@ -12,6 +15,9 @@ import { haptic } from './telegram';
  */
 
 export const STEP_MS = 110;
+
+/** Potions whose shattering does something; the rest splash harmlessly. */
+const HARMFUL: ReadonlySet<ItemKind> = new Set(['potion.toxicGas', 'potion.paralyticGas', 'potion.liquidFlame']);
 export const TILE = 16;
 
 export interface Puppet {
@@ -217,6 +223,8 @@ export class View {
   apply(effects: readonly Effect[], world: World, myId: string, now: number): void {
     const searchedByMe = effects.some((e) => e.type === 'searched' && e.hero === myId);
     let discovered = false;
+    // Traps announce their own gas and flames.
+    let trapped = false;
     for (const effect of effects) {
       switch (effect.type) {
         case 'attack': {
@@ -373,7 +381,26 @@ export class View {
           if (effect.hero === myId) this.say(t.mapped, COLORS.highlight, now);
           break;
         case 'scroll':
-          this.say(effect.kind === 'challenge' ? t.challenge : t.lullaby, COLORS.warning, now);
+          if (effect.kind !== 'recharging') this.say(effect.kind === 'challenge' ? t.challenge : t.lullaby, COLORS.warning, now);
+          else if (effect.hero === myId) this.say(effect.count > 0 ? t.recharged : t.nothingToRecharge, COLORS.default, now);
+          break;
+        case 'shattered':
+          audio.play('shatter');
+          if (effect.identified) this.say(t.itWas(t.items[effect.kind]), COLORS.highlight, now);
+          else if (effect.hero === myId && !HARMFUL.has(effect.kind)) this.say(t.splashes, COLORS.default, now);
+          break;
+        case 'burst':
+          if (effect.depth !== this.depth) break;
+          for (let y = -effect.radius; y <= effect.radius; y++) {
+            for (let x = -effect.radius; x <= effect.radius; x++) {
+              const cell = effect.pos + x + y * WIDTH;
+              if (cellX(effect.pos) + x >= 0 && cellX(effect.pos) + x < WIDTH && cell >= 0 && cell < LENGTH) {
+                this.flashes.push({ cell, start: now });
+              }
+            }
+          }
+          if (effect.kind === 'fire') audio.play('burning');
+          if (!trapped) this.say(t.bursts[effect.kind], COLORS.warning, now);
           break;
         case 'unlocked':
           audio.play('unlock');
@@ -387,13 +414,16 @@ export class View {
           }
           break;
         case 'thrown':
-          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, itemDef(effect.item).sprite ?? 31, now);
+          if (effect.depth === this.depth) {
+            this.shoot(effect.from, effect.to, itemSprite({ kind: effect.item, qty: 1, level: 0 }, world.run.labels), now);
+          }
           break;
         case 'zapped':
           if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now);
           audio.play('zap');
           break;
         case 'trap':
+          trapped = true;
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.pos, start: now });
           audio.play(effect.kind === 'lightning' ? 'lightning' : effect.kind === 'fire' ? 'burning' : 'trap');
           if (effect.hero === myId) {
