@@ -174,6 +174,8 @@ export const ITEMS = {
   'key.iron': { category: 'key', sprite: 9 },
   /** Opens a locked or crystal chest of the level it was found on. */
   'key.golden': { category: 'key', sprite: 10 },
+  /** SkeletonKey: dropped by a boss, it opens the locked way down from its level. */
+  'key.skeleton': { category: 'key', sprite: 8 },
   /** The sad ghost's dried rose. */
   'quest.rose': { category: 'quest', sprite: 100 },
   /** The fetid rat's, for the sad ghost. */

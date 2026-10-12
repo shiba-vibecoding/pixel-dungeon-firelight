@@ -742,6 +742,11 @@ function tapCell(cell: number): void {
     view.say(t.locked, '#ff8800');
     return;
   }
+  // Hero.handle: the way down from a boss's depth wants its skeleton key.
+  if (level.map[cell] === T.LOCKED_EXIT && !me.items.some((i) => i.kind === 'key.skeleton' && i.depth === me.depth)) {
+    view.say(t.exitLocked, '#ff8800');
+    return;
+  }
   if (level.map[cell] === T.BARRICADE) {
     view.say(t.barricade, '#ff8800');
     return;
@@ -1143,7 +1148,7 @@ function tick(now: number): void {
       buffs: heroBuffs(me),
       examining,
       newLoot,
-      keys: me.items.filter((i) => i.kind === 'key.iron' && i.depth === me.depth).length,
+      keys: me.items.filter((i) => (i.kind === 'key.iron' || i.kind === 'key.skeleton') && i.depth === me.depth).length,
       quick: quickItem
         ? {
             sprite: itemSprite(quickItem, world.run.labels),

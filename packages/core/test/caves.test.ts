@@ -4,7 +4,7 @@ import {
   findPath, floorAt, generateLevel, heroById, heroView, isAlive, levelAt, NEIGHBOURS8, RoomType, T, terrainBlocksSight,
   type World,
 } from '../src/index';
-import { botAction, checkInvariants, pacify } from './helpers';
+import { botAction, checkInvariants, pacify, skeletonKey } from './helpers';
 
 function at(depth: number, seed = 3): World {
   const world = createWorld(seed);
@@ -104,6 +104,8 @@ describe("DM-300's caves", () => {
       const step = (): Action => {
         const dm = floorAt(world, 15).mobs.find((m) => m.kind === 'dm300');
         if (dm && adjacent(dm.pos, hero.pos)) return { type: 'attack', target: dm.id };
+        const key = dm ? null : skeletonKey(world, 'p');
+        if (key) return key;
         if (hero.pos === level.exit) return { type: 'descend' };
         const goal = dm ? dm.pos : floorAt(world, 15).arenaEntered ? level.exit : level.arenaDoor! + 32;
         const others = new Set(floorAt(world, 15).mobs.map((m) => m.pos));

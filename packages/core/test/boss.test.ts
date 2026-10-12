@@ -3,7 +3,7 @@ import {
   act, type Action, addHero, adjacent, createWorld, type Effect, F, findPath, floorAt, hasFlag, heroById, isAlive,
   levelAt, LENGTH, NEIGHBOURS8, RoomType, T, trapAt, WIDTH, type World,
 } from '../src/index';
-import { checkInvariants, pacify } from './helpers';
+import { checkInvariants, pacify, skeletonKey } from './helpers';
 
 /** Cells reachable from `from`, treating hidden doors as open. */
 function reachable(world: World, depth: number, from: number): Set<number> {
@@ -91,6 +91,8 @@ describe("Goo's lair", () => {
             const path = findPath(level, hero.pos, goo.pos);
             play(path && path.length > 1 ? { type: 'move', to: path[0]! } : { type: 'wait' });
           }
+        } else if (skeletonKey(world, 'p')) {
+          play(skeletonKey(world, 'p')!);
         } else if (hero.pos === level.exit) {
           play({ type: 'descend' });
           break;
@@ -105,6 +107,9 @@ describe("Goo's lair", () => {
       expect(types.has('yell')).toBe(true);
       if (isAlive(hero)) {
         expect(types.has('bossSlain')).toBe(true);
+        // The way down opened to the skeleton key Goo dropped, not to its fall alone.
+        expect(effects.some((e) => e.type === 'pickedUp' && e.item.kind === 'key.skeleton')).toBe(true);
+        expect(effects.some((e) => e.type === 'unlocked' && e.pos === level.exit)).toBe(true);
         expect(level.map[level.entrance]).toBe(T.ENTRANCE);
         expect(hero.depth).toBe(6);
         expect(world.over).toBe(false);

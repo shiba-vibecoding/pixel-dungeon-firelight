@@ -96,3 +96,18 @@ export function checkInvariants(world: World): void {
     }
   }
 }
+
+/**
+ * After a boss falls: off to the skeleton key it dropped and up with it,
+ * for the locked way down. Null once the hero holds the key (or there is none).
+ */
+export function skeletonKey(world: World, id: string): Action | null {
+  const hero = heroById(world, id)!;
+  if (hero.items.some((item) => item.kind === 'key.skeleton' && item.depth === hero.depth)) return null;
+  const heap = floorAt(world, hero.depth).heaps.find((h) => h.items.some((item) => item.kind === 'key.skeleton'));
+  if (!heap) return null;
+  if (heap.pos === hero.pos) return { type: 'pickup' };
+  const level = levelAt(world, hero.depth);
+  const path = findPath(level, hero.pos, heap.pos) ?? findPath(level, hero.pos, heap.pos, new Set(), undefined, false, true);
+  return path && path.length > 0 ? { type: 'move', to: path[0]! } : null;
+}

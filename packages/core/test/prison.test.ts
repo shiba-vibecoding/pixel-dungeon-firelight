@@ -3,7 +3,7 @@ import {
   act, type Action, addHero, adjacent, canEnter, charAt, createItem, createMob, createWorld, type Effect, findPath,
   floorAt, heroById, isAlive, levelAt, type Mob, type MobKind, NEIGHBOURS8, RoomType, T, WIDTH, type World,
 } from '../src/index';
-import { botAction, checkInvariants, pacify } from './helpers';
+import { botAction, checkInvariants, pacify, skeletonKey } from './helpers';
 
 /** A hero on the given depth with no monsters around, ready to meet one. */
 function at(depth: number, seed = 3): World {
@@ -293,6 +293,8 @@ describe("Tengu's prison", () => {
     const floor = floorAt(world, 10);
     const tengu = floor.mobs.find((m) => m.kind === 'tengu');
     if (tengu && adjacent(tengu.pos, hero.pos)) return { type: 'attack', target: tengu.id };
+    const skeleton = tengu ? null : skeletonKey(world, 'p');
+    if (skeleton) return skeleton;
     const key = hero.items.some((i) => i.kind === 'key.iron');
     const chest = floor.heaps.find((h) => h.items.some((i) => i.kind === 'key.iron'));
     if (chest && hero.pos === chest.pos) return { type: 'pickup' };

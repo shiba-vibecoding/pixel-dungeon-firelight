@@ -91,7 +91,10 @@ function describe(world: World, hero: Hero, item: Item): string[] {
     if (!isKnown(world, item)) return [t.unknownRingInfo];
     return [t.itemInfo[item.kind] ?? '', ...(item.level < 0 ? [t.ringNegative] : []), ...(item.cursed ? [t.cursedInfo] : [])];
   }
-  if (category === 'key') return [item.kind === 'key.golden' ? t.goldenKeyInfo(item.depth ?? 0) : t.keyInfo(item.depth ?? 0)];
+  if (category === 'key') {
+    if (item.kind === 'key.skeleton') return [t.skeletonKeyInfo];
+    return [item.kind === 'key.golden' ? t.goldenKeyInfo(item.depth ?? 0) : t.keyInfo(item.depth ?? 0)];
+  }
   if (category === 'gold') return [];
   if (category === 'beacon') return [t.itemInfo[item.kind] ?? '', ...(item.returnTo ? [t.beaconSetAt(item.returnTo.depth)] : [])];
   return [isKnown(world, item) ? (t.itemInfo[item.kind] ?? '') : t.unknownInfo];

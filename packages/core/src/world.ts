@@ -220,6 +220,10 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       if (Number.isInteger(action.to) && adjacent(hero.pos, action.to) && level.map[action.to] === T.LOCKED_DOOR) {
         return keyFor(hero) >= 0 ? null : 'the door is locked';
       }
+      // A boss's level: its way down opens to the skeleton key it dropped.
+      if (Number.isInteger(action.to) && adjacent(hero.pos, action.to) && level.map[action.to] === T.LOCKED_EXIT) {
+        return keyFor(hero, 'key.skeleton') >= 0 ? null : 'the way down is locked';
+      }
       if (!heroCanEnter(level, hero, action.to) || !adjacent(hero.pos, action.to)) return 'cannot move there';
       return charAt(world, hero.depth, action.to) && !swapsWithHero(charAt(world, hero.depth, action.to)) ? 'cell is occupied' : null;
     case 'attack': {
@@ -547,6 +551,12 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         level.map[action.to] = T.DOOR;
         ctx.effects.push({ type: 'unlocked', depth: hero.depth, pos: action.to, hero: hero.id });
       }
+      if (level.map[action.to] === T.LOCKED_EXIT) {
+        // Hero.actUnlock: the skeleton key opens the way down for the whole party.
+        hero.items.splice(keyFor(hero, 'key.skeleton'), 1);
+        level.map[action.to] = T.UNLOCKED_EXIT;
+        ctx.effects.push({ type: 'unlocked', depth: hero.depth, pos: action.to, hero: hero.id });
+      }
       // Vertigo: a dizzy hero staggers to some other cell, or into a wall.
       let to = action.to;
       if (hero.dizzy > 0) {
@@ -842,8 +852,8 @@ function trample(ctx: Ctx, pos: number, hero?: Hero): void {
 }
 
 /** The backpack slot of an iron key for the hero's current depth, or -1. */
-function keyFor(hero: Hero): number {
-  return hero.items.findIndex((item) => item.kind === 'key.iron' && item.depth === hero.depth);
+function keyFor(hero: Hero, kind: 'key.iron' | 'key.skeleton' = 'key.iron'): number {
+  return hero.items.findIndex((item) => item.kind === kind && item.depth === hero.depth);
 }
 
 /**
@@ -1063,7 +1073,7 @@ export function findPath(
       const next = cell + n;
       if (next < 0 || next >= LENGTH || previous.has(next) || !adjacent(cell, next)) continue;
       // A locked door may end a path: walking into it unlocks it with a key.
-      const lockedGoal = next === to && level.map[next] === T.LOCKED_DOOR;
+      const lockedGoal = next === to && (level.map[next] === T.LOCKED_DOOR || level.map[next] === T.LOCKED_EXIT);
       const overPit = floating && hasFlag(level.map[next]!, F.PIT) && canEnter(level, next) === false && next % WIDTH > 0 &&
         next % WIDTH < WIDTH - 1 && next >= WIDTH && next < LENGTH - WIDTH;
       if ((!canEnter(level, next) && !lockedGoal && !overPit) || (blocked.has(next) && next !== to)) continue;

@@ -391,7 +391,12 @@ function mobDied(ctx: Ctx, mob: Mob, by?: string): void {
       level.map[level.arenaDoor] = level.map[level.arenaDoor] === T.WALL ? T.EMPTY_DECO : T.DOOR;
       ctx.effects.push({ type: 'arena', depth: ctx.depth, sealed: false });
     }
-    if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
+    // Goo, Tengu, DM-300 and the King drop a skeleton key for the locked way down; Yog's fall opens it.
+    if (mob.kind === 'yog') {
+      if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
+    } else {
+      dropItem(ctx.floor, mob.pos, { ...createItem('key.skeleton'), depth: ctx.depth });
+    }
     ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'death' });
     ctx.effects.push({ type: 'bossSlain', depth: ctx.depth, kind: mob.kind });
     // King.die: the armour kit.

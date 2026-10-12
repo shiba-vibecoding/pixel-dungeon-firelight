@@ -2,7 +2,7 @@ import {
   act, type Action, addHero, adjacent, createItem, createWorld, type Effect, findPath, floorAt, heroById, type HeroClass,
   canEnter, isAlive, levelAt, NEIGHBOURS8, swapsWithHero, T, WIDTH, type World,
 } from '../src/index';
-import { botAction, checkInvariants, unblock } from './helpers';
+import { botAction, checkInvariants, skeletonKey, unblock } from './helpers';
 
 /*
  * The whole dungeon in one go: a sturdy bot walks from the first depth to
@@ -29,6 +29,9 @@ export function step(world: World, id = 'p'): Action {
   const awake = floor.mobs.filter((m) => adjacent(m.pos, hero.pos) && m.state !== 'passive');
   const foe = awake.find((m) => m.kind !== 'yog') ?? awake[0];
   if (foe) return { type: 'attack', target: foe.id };
+  // A fallen boss's skeleton key, for the locked way down.
+  const skeleton = skeletonKey(world, id);
+  if (skeleton) return skeleton;
   if (hero.pos === level.exit) return { type: 'descend' };
   // A boss on the floor is hunted down: its fall opens the way on.
   const boss = floor.mobs.find((m) => m.kind === 'rottingFist' || m.kind === 'burningFist') ?? floor.mobs.find((m) => BOSSES.has(m.kind));

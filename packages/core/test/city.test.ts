@@ -3,7 +3,7 @@ import {
   act, type Action, addHero, adjacent, canEnter, charAt, createItem, createMob, createRun, createWorld, type Effect,
   findPath, floorAt, generateLevel, heroById, heroStr, isAlive, levelAt, NEIGHBOURS8, RoomType, T, type World,
 } from '../src/index';
-import { botAction, checkInvariants, pacify } from './helpers';
+import { botAction, checkInvariants, pacify, skeletonKey } from './helpers';
 
 function at(depth: number, seed = 3): World {
   const world = createWorld(seed);
@@ -95,6 +95,8 @@ describe("the King of Dwarves' hall", () => {
         const king = floor.mobs.find((m) => m.kind === 'king');
         const foe = floor.mobs.find((m) => adjacent(m.pos, hero.pos));
         if (foe) return { type: 'attack', target: foe.id };
+        const key = king ? null : skeletonKey(world, 'p');
+        if (key) return key;
         if (hero.pos === level.exit) return { type: 'descend' };
         const goal = king ? king.pos : floor.arenaEntered ? level.exit : level.arenaDoor! - 32;
         const others = new Set(floor.mobs.map((m) => m.pos));

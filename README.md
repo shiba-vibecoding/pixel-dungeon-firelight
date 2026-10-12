@@ -133,8 +133,9 @@ stands in it is marked, and marked creatures slain are offerings. Once it
 has had enough, it goes out and leaves a scroll of wipe out, which kills
 every monster on a level but its boss (and frees a shop's wares).
 
-Every item, monster, quest and room of the original is now in (the boss
-levels' skeleton keys aside: slaying the boss opens the way down directly).
+Every item, monster, quest and room of the original is now in. Goo, Tengu,
+DM-300 and the King drop a skeleton key that opens the locked way down from
+their depth, for the whole party; Yog-Dzewa's fall opens it at once.
 
 Upgraded weapons, armour, wands, rings and the boomerang wear with use, as
 in the original: worn out, an item is "broken" and works as if it had never
