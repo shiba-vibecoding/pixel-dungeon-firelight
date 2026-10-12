@@ -5,6 +5,7 @@ import { attack, hurt } from './combat';
 import { castShadow, terrainBlocksSight, viewDistance } from './fov';
 import { charAt, type Ctx, enterCell, heroesOn, isPassable, isWater, leaveCell } from './floor';
 import { isBossDepth } from './level/builder';
+import { KING_PEDESTALS } from './level/city-boss';
 import type { Level, RoomInfo } from './level/generate';
 import { adjacent, cellX, cellY, distance, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { RoomType } from './level/room';
@@ -222,14 +223,18 @@ function notice(ctx: Ctx, mob: Mob, enemy: Hero, state: MobState): void {
   mob.state = state;
   mob.target = enemy.pos;
   ctx.effects.push({ type: 'noticed', depth: ctx.depth, mob: mob.id });
-  if (mob.kind === 'goo' || mob.kind === 'tengu' || mob.kind === 'dm300') {
+  if (mob.kind === 'goo' || mob.kind === 'tengu' || mob.kind === 'dm300' || mob.kind === 'king') {
     ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'notice', hero: enemy.id });
   }
 }
 
 function canAttack(ctx: Ctx, mob: Mob, enemy: Hero): boolean {
-  // Shamans cast lightning and Tengu throws shuriken at anyone in a clear line.
-  if (mob.kind === 'shaman' || mob.kind === 'tengu') return ballistica(ctx, mob.pos, enemy.pos).at(-1) === enemy.pos;
+  // Shamans cast lightning, warlocks shadow bolts, and Tengu throws shuriken at anyone in a clear line.
+  if (mob.kind === 'shaman' || mob.kind === 'warlock' || mob.kind === 'tengu') {
+    return ballistica(ctx, mob.pos, enemy.pos).at(-1) === enemy.pos;
+  }
+  // The King goes to a pedestal to raise his undead while his court is short.
+  if (mob.kind === 'king' && kingCanSummon(ctx, mob)) return mob.pos === kingPedestal(mob);
   return mob.pumped ? distance(mob.pos, enemy.pos) <= 2 : adjacent(mob.pos, enemy.pos);
 }
 
@@ -249,6 +254,66 @@ function zapLightning(ctx: Ctx, mob: Mob, enemy: Hero): void {
 }
 
 const TIME_TO_ZAP = 2;
+
+/** Warlock.zap: a shadow bolt that hurts, and half the time leaves the hero weakened. */
+function shadowBolt(ctx: Ctx, mob: Mob, enemy: Hero): void {
+  spend(mob, TICK);
+  ctx.effects.push({ type: 'zapped', depth: ctx.depth, from: mob.pos, to: enemy.pos, bolt: 'shadow' });
+  const hit = ctx.rng.floatMax(MOBS.warlock.attack) * 2 >= ctx.rng.floatMax(heroDefenseSkill(enemy));
+  let damage = 0;
+  if (hit) {
+    if (ctx.rng.int(2) === 0) {
+      if (enemy.weakened <= 0) ctx.effects.push({ type: 'weakened', hero: enemy.id });
+      enemy.weakened = Math.max(enemy.weakened, WEAKNESS_TURNS);
+    }
+    damage = ctx.rng.intBetween(12, 18);
+  }
+  ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: mob.id, target: enemy.id, hit, damage });
+  if (hit) hurt(ctx, enemy, damage, mob);
+}
+
+/** Weakness.DURATION. */
+const WEAKNESS_TURNS = 40;
+
+const kingPedestal = (mob: Mob): number => KING_PEDESTALS[mob.rightPedestal ? 1 : 0];
+
+/** King.canTryToSummon: his court is short, and his pedestal is free. */
+function kingCanSummon(ctx: Ctx, mob: Mob): boolean {
+  const army = ctx.floor.mobs.filter((m) => m.kind === 'undead').length;
+  const maxArmy = 1 + Math.trunc((5 * (mob.ht - mob.hp)) / mob.ht);
+  if (army >= maxArmy) return false;
+  const there = charAt(ctx.world, ctx.depth, kingPedestal(mob));
+  return !there || there === mob;
+}
+
+/** King.summon: undead dwarves rise around him, as many as his court is short. */
+function summonUndead(ctx: Ctx, king: Mob): void {
+  const { world, depth, level, floor } = ctx;
+  king.rightPedestal = !king.rightPedestal;
+  const maxArmy = 1 + Math.trunc((5 * (king.ht - king.hp)) / king.ht);
+  let wanted = maxArmy - floor.mobs.filter((m) => m.kind === 'undead').length;
+  const dist = new Int32Array(LENGTH).fill(-1);
+  dist[king.pos] = 0;
+  const queue = [king.pos];
+  for (let head = 0; head < queue.length && wanted > 0; head++) {
+    const c = queue[head]!;
+    for (const n of NEIGHBOURS8) {
+      const next = c + n;
+      if (next < 0 || next >= LENGTH || dist[next]! >= 0 || !adjacent(c, next) || !isPassable(level, next)) continue;
+      dist[next] = dist[c]! + 1;
+      if (charAt(world, depth, next)) continue;
+      queue.push(next);
+      if (wanted > 0) {
+        const undead = createMob(`#${++world.nextId}`, 'undead', next, 'hunting', floor.now + 1);
+        Object.assign(undead, { enemy: king.enemy, target: king.target });
+        floor.mobs.push(undead);
+        enterCell(level, next);
+        wanted--;
+      }
+    }
+  }
+  ctx.effects.push({ type: 'yell', depth, mob: king.id, kind: 'king', line: 'summon' });
+}
 /** Tengu jumps away after this many blows at close quarters. */
 const TENGU_JUMP_DELAY = 5;
 /** ItemSpriteSheet.SHURIKEN. */
@@ -286,6 +351,19 @@ function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
   if (mob.kind === 'shaman' && !adjacent(mob.pos, enemy.pos)) {
     zapLightning(ctx, mob, enemy);
     return;
+  }
+  if (mob.kind === 'warlock' && !adjacent(mob.pos, enemy.pos)) {
+    shadowBolt(ctx, mob, enemy);
+    return;
+  }
+  if (mob.kind === 'king') {
+    if (kingCanSummon(ctx, mob) && mob.pos === kingPedestal(mob)) {
+      summonUndead(ctx, mob);
+      spend(mob, TICK);
+      return;
+    }
+    // King.attack: a hero standing on his pedestal makes him use the other one.
+    if (charAt(ctx.world, ctx.depth, kingPedestal(mob)) === enemy) mob.rightPedestal = !mob.rightPedestal;
   }
   if (mob.kind === 'tengu') {
     mob.jumpIn = (mob.jumpIn ?? TENGU_JUMP_DELAY) - 1;
@@ -369,6 +447,7 @@ export function ballistica(ctx: Ctx, from: number, to: number, hitChars = true):
 
 function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean {
   if (mob.kind === 'goo') mob.pumped = false;
+  if (mob.kind === 'king' && kingCanSummon(ctx, mob)) target = kingPedestal(mob);
   // Tengu does not walk up to anyone it can see: it jumps.
   if (mob.kind === 'tengu' && fov[target]) {
     tenguJump(ctx, mob);

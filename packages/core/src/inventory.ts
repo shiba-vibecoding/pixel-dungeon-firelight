@@ -323,8 +323,10 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     case 'potion.healing': {
       const amount = hero.ht - hero.hp;
       hero.hp = hero.ht;
+      // PotionOfHealing.cure: poison and weakness go too.
       hero.ooze = -1;
       hero.poison = 0;
+      hero.weakened = 0;
       ctx.effects.push({ type: 'healed', hero: hero.id, amount });
       break;
     }

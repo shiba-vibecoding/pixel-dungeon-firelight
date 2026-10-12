@@ -1,3 +1,4 @@
+import type { ItemKind } from '../items';
 import { Feeling, HeapType, isBossDepth, type ItemSpec, type LevelBuilder } from './builder';
 import { cell, type Point } from './geometry';
 import { type Door, DoorType, type Room, RoomType } from './room';
@@ -472,11 +473,15 @@ function paintShop(level: LevelBuilder, room: Room): void {
     return cell(room.left + 1, room.bottom - 1 - (p - (w * 2 + h)));
   };
 
-  // Each shop's weapon and armour (ShopPainter.range): depth 6, then depth 11.
-  const sixth = level.depth < 11;
+  // Each shop's weapon and armour (ShopPainter.range): depths 6, 11 and 16.
+  const pick = <K>(a: K, b: K): K => (rng.int(2) === 0 ? a : b);
+  const [weapon, armor] =
+    level.depth < 11 ? [pick('weapon.quarterstaff', 'weapon.spear'), 'armor.leather']
+    : level.depth < 16 ? [pick('weapon.sword', 'weapon.mace'), 'armor.mail']
+    : [pick('weapon.longsword', 'weapon.battleAxe'), 'armor.scale'];
   const wares: ItemSpec[] = [
-    { roll: 'kind', kind: sixth ? rng.int(2) === 0 ? 'weapon.quarterstaff' : 'weapon.spear' : rng.int(2) === 0 ? 'weapon.sword' : 'weapon.mace' },
-    { roll: 'kind', kind: sixth ? 'armor.leather' : 'armor.mail' },
+    { roll: 'kind', kind: weapon as ItemKind },
+    { roll: 'kind', kind: armor as ItemKind },
     { roll: 'kind', kind: 'potion.healing' },
     { roll: 'category', categories: ['potion'], tries: 1 },
     { roll: 'category', categories: ['potion'], tries: 1 },

@@ -2,7 +2,7 @@ import {
   BRUTE_ENRAGED_DAMAGE, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
   maxExp, type Mob, MOBS,
 } from './actors';
-import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, leaveCell } from './floor';
+import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, isWater, leaveCell } from './floor';
 import { createItem, type Item, itemDef, ItemGenerator, rollGold } from './items';
 import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
 import { questKill } from './quest';
@@ -62,6 +62,12 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     // The vampire bat drinks what it draws.
     if (attacker.kind === 'bat') attacker.hp += Math.min(damage, attacker.ht - attacker.hp);
     if (attacker.kind === 'thief' && !attacker.item && isHero(defender)) steal(ctx, attacker, defender);
+    // Elemental.attackProc: half its blows set their target alight.
+    if (attacker.kind === 'elemental' && ctx.rng.int(2) === 0 && !isWater(ctx.level.map[defender.pos]!)) {
+      defender.burning = Math.max(defender.burning ?? 0, ELEMENTAL_BURNING);
+    }
+    // Undead.attackProc: now and then a blow stuns.
+    if (attacker.kind === 'undead' && ctx.rng.int(5) === 0) defender.paralysed = Math.max(defender.paralysed ?? 0, 1);
     // Spinner.attackProc: half its bites are venomous, and then it backs off.
     if (attacker.kind === 'spinner' && ctx.rng.int(2) === 0) {
       defender.poison = Math.max(defender.poison ?? 0, ctx.rng.intBetween(7, 9));
@@ -146,6 +152,9 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
   }
 }
 
+/** Burning.DURATION, as an elemental's touch sets it. */
+const ELEMENTAL_BURNING = 8;
+
 /** Crab.lootChance. */
 const CRAB_MEAT_CHANCE = 0.167;
 
@@ -175,7 +184,7 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 
   if (mob.kind === 'skeleton') explode(ctx, mob);
 
-  if (mob.kind === 'goo' || mob.kind === 'tengu' || mob.kind === 'dm300') {
+  if (mob.kind === 'goo' || mob.kind === 'tengu' || mob.kind === 'dm300' || mob.kind === 'king') {
     const { level } = ctx;
     // Goo's lair dries out behind the heroes; Tengu's arena opens; the rock
     // in DM-300's way back crumbles.
@@ -219,6 +228,12 @@ function dropLoot(ctx: Ctx, mob: Mob): Item | null {
       return rng.float() < 0.5 ? rollGold(rng, ctx.depth) : null;
     case 'spinner':
       return rng.float() < 0.125 ? createItem('food.meat') : null;
+    case 'elemental':
+      return rng.float() < 0.1 ? createItem('potion.liquidFlame') : null;
+    case 'monk':
+      return rng.float() < 0.083 ? createItem('food.ration') : null;
+    case 'warlock':
+      return rng.float() < 0.83 ? generator().of('potion') : null;
     default:
       return null;
   }

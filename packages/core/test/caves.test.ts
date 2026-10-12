@@ -91,7 +91,7 @@ describe("DM-300's caves", () => {
     expect(level.map[door]).toBe(T.WALL);
   });
 
-  it('it leaks gas, repairs itself on spent traps, and its fall opens the way out to victory', () => {
+  it('it leaks gas, repairs itself on spent traps, and its fall opens the way down to the city', () => {
     let won = 0;
     for (const seed of [2, 3]) {
       const world = at(15, seed);
@@ -110,7 +110,7 @@ describe("DM-300's caves", () => {
         const path = findPath(level, hero.pos, goal, others);
         return path && path.length > 0 ? { type: 'move', to: path[0]! } : { type: 'wait' };
       };
-      for (let i = 0; i < 4000 && !world.over; i++) {
+      for (let i = 0; i < 4000 && !world.over && hero.depth === 15; i++) {
         let result = act(world, 'p', step());
         if (!result.ok) result = act(world, 'p', { type: 'wait' });
         if (result.ok) effects.push(...result.effects);
@@ -119,7 +119,8 @@ describe("DM-300's caves", () => {
       expect(effects.some((e) => e.type === 'burst' && e.silent), `seed ${seed}`).toBe(true);
       expect(effects.some((e) => e.type === 'bossSlain' && e.kind === 'dm300'), `seed ${seed}`).toBe(true);
       expect(level.map[level.arenaDoor!], `seed ${seed}`).toBe(T.EMPTY_DECO);
-      expect(world, `seed ${seed}`).toMatchObject({ over: true, victory: true });
+      expect(hero.depth, `seed ${seed}`).toBe(16);
+      expect(world.over, `seed ${seed}`).toBe(false);
       won++;
     }
     expect(won).toBe(2);

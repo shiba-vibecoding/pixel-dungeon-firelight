@@ -22,7 +22,7 @@ const HARMFUL: ReadonlySet<ItemKind> = new Set(['potion.toxicGas', 'potion.paral
 /** Colours of magic bolts in flight. */
 const BOLT_COLORS: Record<string, string> = {
   magic: '120, 180, 255', lightning: '255, 255, 200', fire: '255, 130, 40', poison: '120, 220, 60', slow: '230, 220, 120',
-  teleport: '170, 230, 255', blink: '255, 255, 255', beam: '200, 90, 255', rocks: '170, 160, 140',
+  teleport: '170, 230, 255', blink: '255, 255, 255', beam: '200, 90, 255', rocks: '170, 160, 140', shadow: '90, 40, 120',
 };
 
 /** Tints of the clouds: green poison, yellow paralysis, orange flames. */
@@ -331,11 +331,13 @@ export class View {
           break;
         case 'yell': {
           if (effect.depth !== this.depth) break;
-          const hero = effect.hero ? heroById(world, effect.hero) : undefined;
+          const hero = heroById(world, effect.hero ?? myId);
           const notice = effect.line === 'notice';
           const line =
             effect.kind === 'goo' ? notice ? t.gooNotice : t.gooDeath
             : effect.kind === 'dm300' ? notice ? t.dm300Notice : t.dm300Death
+            : effect.kind === 'king'
+              ? effect.line === 'summon' ? t.kingSummon : notice ? t.kingNotice : t.kingDeath(hero ? t.classes[hero.heroClass] : '')
             : notice ? t.tenguNotice(hero ? t.classes[hero.heroClass] : '') : t.tenguDeath;
           this.say(`${t.mobs[effect.kind]}: «${line}»`, COLORS.negative, now);
           break;
@@ -495,6 +497,9 @@ export class View {
             this.say(effect.depth === 15 ? t.lairSealed : t.arenaSealed, COLORS.warning, now);
             audio.play(effect.depth === 15 ? 'rocks' : 'door_open', 0.7);
           }
+          break;
+        case 'weakened':
+          if (effect.hero === myId) this.say(t.weakened, COLORS.negative, now);
           break;
         case 'repaired':
           if (effect.depth !== this.depth) break;

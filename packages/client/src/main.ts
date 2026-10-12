@@ -754,6 +754,7 @@ function tick(now: number): void {
       view.say(me.depth > lastPlace.depth ? t.descended(me.depth) : t.ascended(me.depth));
       if (me.depth === 6 && lastPlace.depth === 5) view.say(t.enterPrison, '#ffff44');
       if (me.depth === 11 && lastPlace.depth === 10) view.say(t.enterCaves, '#ffff44');
+      if (me.depth === 16 && lastPlace.depth === 15) view.say(t.enterCity, '#ffff44');
       const feeling = t.feelings[level.feeling];
       if (feeling && me.depth > lastPlace.depth) view.say(feeling, '#ffff44');
     } else if (me.pos !== lastPlace.pos) {

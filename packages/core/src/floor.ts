@@ -62,7 +62,9 @@ export type Effect =
   | { type: 'oozed'; hero: string }
   | { type: 'pumped'; depth: number; mob: string }
   /** A boss speaks up; `hero` is whom it noticed. */
-  | { type: 'yell'; depth: number; mob: string; kind: MobKind; line: 'notice' | 'death'; hero?: string }
+  | { type: 'yell'; depth: number; mob: string; kind: MobKind; line: 'notice' | 'death' | 'summon'; hero?: string }
+  /** A warlock's shadow bolt left the hero weakened. */
+  | { type: 'weakened'; hero: string }
   | { type: 'bossSlain'; depth: number; kind: MobKind }
   | { type: 'victory'; hero: string }
   | { type: 'opened'; depth: number; pos: number; heap: HeapKind }

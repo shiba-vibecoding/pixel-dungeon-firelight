@@ -68,6 +68,8 @@ export interface Hero {
   /** Turns left of being rooted to the spot and of moving at half speed (mystery meat). */
   rooted: number;
   slowed: number;
+  /** Turns left of weakness (a warlock's shadow bolt): two points of strength less. */
+  weakened: number;
   /** Hunger.level: 0 when fed, hungry from HUNGRY, starving at STARVING; and time towards its next step. */
   hunger: number;
   hungerTime: number;
@@ -113,6 +115,7 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
     paralysed: 0,
     rooted: 0,
     slowed: 0,
+    weakened: 0,
     hunger: 0,
     hungerTime: 0,
     kills: 0,
@@ -121,6 +124,9 @@ export function createHero(player: PlayerInfo, depth: number, pos: number, time:
 }
 
 export const isAlive = (char: { hp: number }): boolean => char.hp > 0;
+
+/** Hero.STR: weakness takes two points of strength away while it lasts. */
+export const heroStr = (hero: Hero): number => hero.str - (hero.weakened > 0 ? 2 : 0);
 
 /* Hunger */
 
@@ -134,13 +140,13 @@ export const isHungry = (hero: Hero): boolean => hero.hunger >= HUNGRY;
 
 export function heroAttackSkill(hero: Hero): number {
   const weapon = weaponStats(hero.weapon);
-  const encumbrance = weapon.str - hero.str;
+  const encumbrance = weapon.str - heroStr(hero);
   const factor = encumbrance > 0 ? f32(weapon.accuracy / 1.5 ** encumbrance) : f32(weapon.accuracy);
   return Math.trunc(f32(hero.attackSkill * factor));
 }
 
 export function heroDefenseSkill(hero: Hero): number {
-  const encumbrance = armorStats(hero.armor).str - hero.str;
+  const encumbrance = armorStats(hero.armor).str - heroStr(hero);
   if (encumbrance > 0) {
     return Math.trunc(hero.defenseSkill / 1.5 ** encumbrance);
   }
@@ -154,7 +160,7 @@ export function heroDefenseSkill(hero: Hero): number {
  * point-blank.
  */
 export function heroRangedSkill(hero: Hero, item: Item, pointBlank: boolean): number {
-  let encumbrance = missileStats(item).str - hero.str;
+  let encumbrance = missileStats(item).str - heroStr(hero);
   if (hero.heroClass === 'warrior') encumbrance += 3;
   if (hero.heroClass === 'huntress') encumbrance -= 2;
   let factor = encumbrance > 0 ? f32(1 / 1.5 ** encumbrance) : 1;
@@ -164,7 +170,7 @@ export function heroRangedSkill(hero: Hero, item: Item, pointBlank: boolean): nu
 
 /** Heavy armour slows its wearer down (Hero.speed). */
 export function heroSpeed(hero: Hero): number {
-  const encumbrance = armorStats(hero.armor).str - hero.str;
+  const encumbrance = armorStats(hero.armor).str - heroStr(hero);
   return encumbrance > 0 ? 1.3 ** -encumbrance : 1;
 }
 
@@ -172,7 +178,7 @@ export function heroDamageRoll(hero: Hero, rng: Rng): number {
   const weapon = weaponStats(hero.weapon);
   let damage = rng.normalIntRange(weapon.min, weapon.max);
   if (hero.heroClass !== 'huntress') {
-    const excess = hero.str - weapon.str;
+    const excess = heroStr(hero) - weapon.str;
     if (excess > 0) {
       damage += rng.intRange(0, excess);
     }
@@ -182,7 +188,7 @@ export function heroDamageRoll(hero: Hero, rng: Rng): number {
 
 export function heroAttackDelay(hero: Hero): number {
   const weapon = weaponStats(hero.weapon);
-  const encumbrance = weapon.str - hero.str;
+  const encumbrance = weapon.str - heroStr(hero);
   return encumbrance > 0 ? f32(weapon.delay * 1.2 ** encumbrance) : weapon.delay;
 }
 
@@ -200,7 +206,8 @@ export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 export type MobKind =
   | 'rat' | 'gnoll' | 'crab' | 'goo' | 'ghost' | 'shopkeeper' | 'wandmaker'
   | 'skeleton' | 'thief' | 'swarm' | 'shaman' | 'bat' | 'brute' | 'tengu'
-  | 'spinner' | 'dm300';
+  | 'spinner' | 'dm300'
+  | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -240,6 +247,13 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   // The caves (depths 11-15).
   spinner: { name: 'cave spinner', ht: 50, attack: 20, defense: 14, damage: [12, 16], dr: 6, exp: 9, maxLvl: 16, speed: 1 },
   dm300: { name: 'DM-300', ht: 200, attack: 28, defense: 18, damage: [18, 24], dr: 10, exp: 30, maxLvl: 30, speed: 1 },
+  // The dwarven city (depths 16-20).
+  elemental: { name: 'fire elemental', ht: 65, attack: 25, defense: 20, damage: [16, 20], dr: 5, exp: 10, maxLvl: 20, speed: 1, flying: true },
+  monk: { name: 'dwarf monk', ht: 70, attack: 30, defense: 30, damage: [12, 16], dr: 2, exp: 11, maxLvl: 21, speed: 1, attackDelay: 0.5 },
+  warlock: { name: 'dwarf warlock', ht: 70, attack: 25, defense: 18, damage: [12, 20], dr: 8, exp: 11, maxLvl: 21, speed: 1 },
+  golem: { name: 'golem', ht: 85, attack: 28, defense: 18, damage: [20, 40], dr: 12, exp: 12, maxLvl: 22, speed: 1, attackDelay: 1.5 },
+  king: { name: 'King of Dwarves', ht: 300, attack: 32, defense: 25, damage: [20, 38], dr: 14, exp: 40, maxLvl: 30, speed: 1 },
+  undead: { name: 'undead dwarf', ht: 28, attack: 16, defense: 15, damage: [12, 16], dr: 5, exp: 0, maxLvl: 30, speed: 1 },
 };
 
 /** The brute, enraged when badly hurt: much harder hits. */
@@ -280,6 +294,8 @@ export interface Mob {
   enraged?: boolean;
   /** Tengu: attacks left before it jumps away. */
   jumpIn?: number;
+  /** The King of Dwarves: which pedestal he summons his undead from next. */
+  rightPedestal?: boolean;
 }
 
 export function createMob(id: string, kind: MobKind, pos: number, state: MobState, time: number): Mob {
@@ -308,6 +324,12 @@ const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]
   13: [['bat', 1], ['brute', 3], ['shaman', 1], ['spinner', 1]],
   14: [['bat', 1], ['brute', 3], ['shaman', 1], ['spinner', 4]],
   15: [['dm300', 1]],
+  // The original's rare succubus of depth 19 belongs to the halls below.
+  16: [['elemental', 1], ['warlock', 1], ['monk', 0.2]],
+  17: [['elemental', 1], ['monk', 1], ['warlock', 1]],
+  18: [['elemental', 1], ['monk', 2], ['golem', 1], ['warlock', 1]],
+  19: [['elemental', 1], ['monk', 2], ['golem', 3], ['warlock', 1]],
+  20: [['king', 1]],
 };
 
 export function rollMob(rng: Rng, depth: number): MobKind {

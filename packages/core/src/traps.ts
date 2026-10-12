@@ -131,7 +131,11 @@ export function mobConditions(ctx: Ctx, mob: Mob): boolean {
   }
   if ((mob.burning ?? 0) > 0) {
     mob.burning!--;
-    if (isWater(ctx.level.map[mob.pos]!)) {
+    if (mob.kind === 'elemental') {
+      // Fire only feeds a fire elemental (Elemental.add).
+      mob.burning = 0;
+      if (mob.hp < mob.ht) mob.hp++;
+    } else if (isWater(ctx.level.map[mob.pos]!)) {
       mob.burning = 0;
     } else {
       const damage = ctx.rng.intRange(1, 3 + Math.trunc(ctx.depth / 4));

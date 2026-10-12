@@ -14,7 +14,7 @@ import { burst } from './traps';
  */
 
 /** How a bolt looks in flight. */
-export type Bolt = 'magic' | 'lightning' | 'fire' | 'poison' | 'slow' | 'teleport' | 'blink' | 'beam' | 'rocks';
+export type Bolt = 'magic' | 'lightning' | 'fire' | 'poison' | 'slow' | 'teleport' | 'blink' | 'beam' | 'rocks' | 'shadow';
 
 /** The monster at a cell, if any; heroes are never the target of a hero's wand. */
 function mobAt(ctx: Ctx, cell: number): Mob | undefined {

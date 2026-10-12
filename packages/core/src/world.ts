@@ -76,7 +76,7 @@ export interface World {
 }
 
 /** The last depth of the port so far: Goo's lair. Leaving it wins the run. */
-export const DEEPEST_AVAILABLE = 15;
+export const DEEPEST_AVAILABLE = 20;
 const TIME_TO_REST = 1;
 const TIME_TO_SEARCH = 2;
 /** How far a deliberate search reaches; the original only checked adjacent cells. */
@@ -345,6 +345,7 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   hero.paralysed = Math.max(0, hero.paralysed - time);
   hero.rooted = Math.max(0, hero.rooted - time);
   hero.slowed = Math.max(0, hero.slowed - time);
+  hero.weakened = Math.max(0, hero.weakened - time);
 
   // Wands recharge with time.
   for (const item of hero.items) {
@@ -442,6 +443,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       if (level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos);
       if (level.arenaDoor !== undefined) {
         if (hero.depth === 15) enterLair(ctx, hero);
+        else if (hero.depth === 20) enterThroneHall(ctx, hero);
         else enterArena(ctx, hero);
       }
       search(ctx, hero, false);
@@ -560,6 +562,38 @@ function enterLair(ctx: Ctx, hero: Hero): void {
   }
 }
 
+/**
+ * CityBossLevel.press: the King of Dwarves appears in his hall, out of sight
+ * if he can, when a hero steps through its door; the door locks once the
+ * whole party is in.
+ */
+function enterThroneHall(ctx: Ctx, hero: Hero): void {
+  const { level, floor, world, depth, rng } = ctx;
+  const door = level.arenaDoor!;
+  const inHall = (pos: number): boolean => cellY(pos) < cellY(door);
+  if (!floor.arenaEntered) {
+    if (!inHall(hero.pos)) return;
+    floor.arenaEntered = true;
+    const seen = heroView(world, hero);
+    let pos = -1;
+    for (let attempt = 0; attempt < 500 && pos === -1; attempt++) {
+      const cell = rng.int(LENGTH);
+      if (isPassable(level, cell) && inHall(cell) && !charAt(world, depth, cell) && (!seen[cell] || attempt > 20)) pos = cell;
+    }
+    if (pos === -1) return;
+    const king = createMob(`#${++world.nextId}`, 'king', pos, 'hunting', floor.now);
+    Object.assign(king, { enemy: hero.id, target: hero.pos, enemySeen: true });
+    floor.mobs.push(king);
+    enterCell(level, pos);
+    ctx.effects.push({ type: 'yell', depth, mob: king.id, kind: 'king', line: 'notice', hero: hero.id });
+  }
+  const fighting = floor.mobs.some((mob) => mob.kind === 'king');
+  if (fighting && level.map[door] !== T.LOCKED_DOOR && heroesOn(world, depth).every((h) => inHall(h.pos))) {
+    level.map[door] = T.LOCKED_DOOR;
+    ctx.effects.push({ type: 'arena', depth, sealed: true });
+  }
+}
+
 /** HighGrass.trample: walked through, tall grass is flattened and sometimes sheds a dewdrop. */
 function trample(ctx: Ctx, pos: number): void {
   ctx.level.map[pos] = T.GRASS;
@@ -588,6 +622,7 @@ function drinkFromWell(ctx: Ctx, hero: Hero): void {
     hero.burning = 0;
     hero.ooze = -1;
     hero.hunger = 0;
+    hero.weakened = 0;
   } else {
     for (const item of hero.items) {
       const category = itemDef(item.kind).category;
@@ -653,7 +688,7 @@ function reviveFallen(world: World, depth: number, effects: Effect[]): void {
     // Back on their feet, rid of whatever ailed them.
     Object.assign(fallen, {
       hp: Math.max(1, Math.floor(fallen.ht / 2)), depth, intent: null, regen: 0, ooze: -1,
-      poison: 0, burning: 0, paralysed: 0, rooted: 0, slowed: 0, hunger: 0,
+      poison: 0, burning: 0, paralysed: 0, rooted: 0, slowed: 0, hunger: 0, weakened: 0,
     });
     place(world, fallen, level, level.entrance);
     effects.push({ type: 'revived', hero: fallen.id });
