@@ -273,6 +273,99 @@
 
 Если сохранения нет, «Продолжить» не показывается, а основной становится «Новая игра». Фон экрана задаётся через `--title-bg`. На экранах ниже 700px логотип уменьшается, а подпись логотипа, подпись поля и подпись блока дня скрываются — экран помещается в 360×640.
 
+### Справка
+
+```html
+<section class="pd-window" role="dialog" aria-labelledby="help">
+  <header class="pd-window-head"><div class="pd-titles"><h2 class="pd-heading" id="help">Справка</h2></div><button class="pd-close" aria-label="Закрыть"></button></header>
+  <div class="pd-tabs" role="tablist">
+    <button class="pd-tab" role="tab" aria-selected="true">Управление</button>
+    <button class="pd-tab" role="tab" aria-selected="false">Советы</button>
+  </div>
+  <div class="pd-scroll" style="max-height:min(520px, 60vh)">
+    <ul class="pd-tips">   <!-- вкладка «Советы»: class="pd-tips plain", без .pd-tip-ico -->
+      <li class="pd-tip">
+        <span class="pd-tip-ico"><i class="pd-icon" style="--w:12;--h:12;background-image:var(--spr-tool-wait)"></i></span>
+        <p class="pd-info">Касание часов — пропустить ход. Удержание — отдых…</p>
+      </li>
+    </ul>
+  </div>
+</section>
+```
+
+Иконки строк: `--spr-target` (касание клетки), `--spr-tool-wait/-search/-info/-backpack`, `.pd-item` (быстрый слот), `--spr-menu`. `--w/--h` — размер кадра в пикселях спрайта.
+
+### Строка состояния
+
+```html
+<header class="pd-hud">
+  …
+  <div class="pd-status target" role="status">
+    <i class="pd-item" data-i="31" style="width:32px;height:32px"></i>
+    <span class="pd-status-text">Выберите цель</span>
+    <button class="pd-button small">Отмена</button>
+  </div>
+</header>
+```
+
+Остальные варианты: `.connecting` и `.reconnecting` с `<span class="pd-dots"><i></i><i></i><i></i></span>` вместо иконки; `.waiting` с `--spr-busy` и именами в `<span class="pd-ally">`; `.dead` с `--spr-skull`; `.examine` с `--spr-tool-info`. Когда режима нет — `hidden`. Кнопке «Осмотреть» на панели в этом режиме ставьте `aria-pressed="true"`.
+
+### Выбор пути
+
+```html
+<section class="pd-window" role="dialog" aria-labelledby="way">
+  <header class="pd-window-head">
+    <div class="pd-slot"><i class="pd-item" data-i="82"></i></div>
+    <div class="pd-titles"><h2 class="pd-heading" id="way">Какой путь выберете?</h2></div>
+  </header>
+  <div class="pd-choices">
+    <div class="pd-choice">
+      <span class="pd-choice-name">Гладиатор</span>
+      <p class="pd-choice-desc">…2–3 строки…</p>
+      <button class="pd-button small">Выбрать</button>
+    </div>
+    <div class="pd-choice">…Берсерк…</div>
+  </div>
+  <button class="pd-button quiet">Решу позже</button>
+</section>
+```
+
+Крестика нет: закрывает окно «Решу позже». Если выбор надо подтвердить, отметьте карточку `.chosen`, а её кнопку сделайте `.primary`.
+
+### Загрузка и ошибка соединения
+
+```html
+<main class="pd-loading" aria-busy="true">
+  <div class="pd-logo">…</div>
+  <div class="pd-runner" aria-hidden="true"></div>
+  <div class="pd-progress" style="--v:.62" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62"></div>
+  <p class="pd-loading-text">Загрузка спрайтов… 62%</p>
+  <p class="pd-loading-tip"><b>Совет:</b> …</p>
+</main>
+
+<div id="overlay" class="open">
+  <section class="pd-window narrow" role="alertdialog" aria-labelledby="err">
+    <div class="pd-error-icon" aria-hidden="true"></div>
+    <h2 class="pd-heading center" id="err">Нет соединения</h2>
+    <p class="pd-info center">…</p>
+    <button class="pd-button primary">Повторить</button>
+    <p class="pd-note center">Повторим сами через 5&nbsp;с · код&nbsp;1006</p>
+  </section>
+</div>
+```
+
+`.pd-runner` берёт кадры из `--atlas-warrior`. Чтобы бежал другой герой, переопределите переменную. Обновляйте `--v` не чаще одного раза за кадр: полоса заполняется сегментами по 8 пикселей сетки.
+
+### Новые классы
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-tips`, `.pd-tips.plain`, `.pd-tip`, `.pd-tip-ico` | список справки |
+| `.pd-status` + `.connecting` / `.reconnecting` / `.waiting` / `.target` / `.dead` / `.examine`, `.pd-status-text`, `.pd-dots` | строка состояния |
+| `.pd-tool[aria-pressed="true"]`, `.pd-tool.active` | включённый режим «Осмотреть» |
+| `.pd-choices`, `.pd-choice`, `.pd-choice-name`, `.pd-choice-desc`, `.chosen` | выбор пути |
+| `.pd-loading`, `.pd-runner`, `.pd-progress`, `.pd-loading-text`, `.pd-loading-tip`, `.pd-error-icon` | загрузка и ошибка |
+
 ## Игровой экран
 
 ### HUD

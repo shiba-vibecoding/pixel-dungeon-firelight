@@ -9,6 +9,7 @@ import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
 import { isKnown, itemInfo, itemName } from './itemtext';
 import type { DailyBoard } from './leaderboard';
+import type { RunRecord } from './rankings';
 import type { Assets } from './sprites';
 import type { LogLine } from './view';
 
@@ -303,6 +304,7 @@ export interface TitleOptions {
   onDaily(): void;
   /** Shows today's leaderboard; absent without a server. */
   onDailyBoard?: () => void;
+  onRankings(): void;
 }
 
 export function showTitle(options: TitleOptions): void {
@@ -400,6 +402,7 @@ export function showTitle(options: TitleOptions): void {
           ...main,
           ...rest,
           options.coopAvailable ? button(t.coop, options.onCoop, 'ally') : info(t.coopUnavailable, 'pd-note center'),
+          button(t.rankings, options.onRankings, 'quiet'),
         ),
         daily,
       ),
@@ -775,15 +778,60 @@ export function showConfirm(title: string, text: string, yes: string, no: string
   );
 }
 
+/** The help's controls: the button each line is about, and which line of the help text it is. */
+const CONTROLS: ReadonlyArray<{ sprite?: string; item?: number; w: number; h: number; line?: number }> = [
+  { sprite: 'target', w: 16, h: 16, line: 0 },
+  { sprite: 'tool-backpack', w: 14, h: 15, line: 1 },
+  { item: 31, w: 16, h: 16, line: 3 },
+  { sprite: 'tool-search', w: 12, h: 12, line: 4 },
+  { sprite: 'tool-wait', w: 12, h: 12, line: 5 },
+  { sprite: 'tool-info', w: 8, h: 12, line: 6 },
+  { sprite: 'menu', w: 6, h: 5 },
+];
+/** The rest of the help text: tips rather than controls. */
+const TIPS = [2, 7, 8, 9, 10];
+
+/** The help: «Controls», each line beside the button it is about, and «Tips»; only the list scrolls. */
 export function showHelp(onClose: () => void): void {
-  show(
-    windowOf(
-      { title: t.help, onClose },
-      el('div', { className: 'pd-scroll' }, el('ul', { className: 'pd-help' }, ...t.helpText.map((line) => el('li', { textContent: line })))),
-      actions([button('OK', onClose, 'primary')], []),
-    ),
-    onClose,
+  const controls = el(
+    'ul',
+    { className: 'pd-tips' },
+    ...CONTROLS.map((control) => {
+      let glyph: HTMLElement;
+      if (control.item !== undefined) {
+        glyph = el('i', { className: 'pd-item' });
+        glyph.dataset.i = String(control.item);
+      } else {
+        glyph = picture(control.sprite!);
+        glyph.style.setProperty('--w', String(control.w));
+        glyph.style.setProperty('--h', String(control.h));
+      }
+      const text = control.line === undefined ? t.helpHud : t.helpText[control.line] ?? '';
+      return el('li', { className: 'pd-tip' }, el('span', { className: 'pd-tip-ico' }, glyph), info(text));
+    }),
   );
+  const tips = el('ul', { className: 'pd-tips plain' }, ...TIPS.map((i) => el('li', { className: 'pd-tip' }, info(t.helpText[i] ?? ''))));
+  const scroll = el('div', { className: 'pd-scroll' }, controls);
+  const tabs = el('div', { className: 'pd-tabs' });
+  tabs.setAttribute('role', 'tablist');
+  const tab = (label: string, list: HTMLElement): HTMLButtonElement => {
+    const node = el('button', { className: 'pd-tab', textContent: label });
+    node.setAttribute('role', 'tab');
+    node.onclick = () => {
+      audio.play('click');
+      for (const other of tabs.children) other.setAttribute('aria-selected', String(other === node));
+      scroll.replaceChildren(list);
+      scroll.scrollTop = 0;
+      sprites(scroll);
+    };
+    return node;
+  };
+  const first = tab(t.helpControls, controls);
+  first.setAttribute('aria-selected', 'true');
+  const second = tab(t.helpTips, tips);
+  second.setAttribute('aria-selected', 'false');
+  tabs.append(first, second);
+  show(windowOf({ title: t.help, onClose }, tabs, scroll), onClose);
 }
 
 /** The log's history: every message kept, newest last, depths marked. */
@@ -815,6 +863,8 @@ export interface EndOptions {
   onRestart: () => void;
   restartLabel: string;
   onExit: () => void;
+  /** The run's place among this device's best, if it made the table. */
+  place?: number | null;
   /** For the daily dungeon: today's leaderboard (loading) and a way to share. */
   daily?: { score: number; board: Promise<DailyBoard | null>; onShare: () => void };
 }
@@ -860,6 +910,7 @@ export function showRunEnd(options: EndOptions): void {
       { className: `pd-window pd-runend${options.victory ? ' win' : ''}` },
       el('h2', { className: 'pd-display', textContent: options.title }),
       options.cause && el('p', { className: 'pd-cause', textContent: options.cause }),
+      options.place ? el('p', { className: 'pd-info center pd-gold', textContent: options.place === 1 ? t.newRecord : t.rankPlace(options.place) }) : null,
       el(
         'div',
         { className: 'pd-runend-hero' },
@@ -880,6 +931,37 @@ export function showRunEnd(options: EndOptions): void {
     board.replaceChildren(...(loaded?.rank ? [info(t.yourPlace(loaded.rank), 'pd-info center')] : []), boardView(loaded));
     sprites(board);
   });
+}
+
+/** Rankings: the best runs on this device; `latest` is highlighted. */
+export function showRankings(records: readonly RunRecord[], onClose: () => void, latest?: string): void {
+  const ranks = el('div', { className: 'pd-ranks' });
+  records.forEach((record, i) => {
+    const face = el('i', { className: 'pd-rank-face' });
+    face.style.setProperty('--av', String(AVATAR[record.heroClass]));
+    const what = record.won ? `★ ${t.won}` : record.cause;
+    ranks.append(
+      el(
+        'div',
+        { className: `pd-rank${record.key === latest ? ' me' : ''}` },
+        el('span', { className: 'pd-rank-n', textContent: String(i + 1) }),
+        face,
+        el(
+          'span',
+          { className: 'pd-rank-name', textContent: `${record.name} · ${t.classes[record.heroClass]}` },
+          el('small', { textContent: `${t.levelShort} ${record.lvl} · ${t.depthShort(record.depth)}${what ? ` · ${what}` : ''}` }),
+        ),
+        el('span', { className: 'pd-rank-score', textContent: record.score.toLocaleString('ru-RU') }),
+      ),
+    );
+  });
+  show(
+    windowOf(
+      { title: t.rankings, onClose },
+      records.length === 0 ? info(t.noRankings, 'pd-note') : el('div', { className: 'pd-scroll' }, ranks),
+    ),
+    onClose,
+  );
 }
 
 /** Today's leaderboard from the title screen. */
@@ -1043,26 +1125,29 @@ function showItem(options: ItemOptions): void {
   );
 }
 
-/** TomeOfMastery: the two ways of the hero's class, as cards to choose from. */
+/** TomeOfMastery: the two ways of the hero's class, as equal cards; the choice can wait. */
 function showWays(options: ItemOptions, index: number, act: (action: Action) => void): void {
   const { hero } = options;
+  const back = (): void => showBackpack(options);
+  const book = el('div', { className: 'pd-slot' }, itemIcon(options.world, hero.items[index]!));
   show(
     windowOf(
-      { title: t.chooseWay, onClose: () => showBackpack(options) },
+      { title: t.chooseWay, icon: book },
       el(
         'div',
-        { className: 'pd-rewards' },
+        { className: 'pd-choices' },
         ...SUBCLASSES[hero.heroClass].map((way) =>
           el(
             'div',
-            { className: 'pd-reward pd-way' },
-            el('div', { className: 'pd-reward-name', textContent: capitalize(t.subclasses[way]) }),
-            el('div', { className: 'pd-reward-desc', textContent: t.subclassInfo[way] }),
+            { className: 'pd-choice' },
+            el('span', { className: 'pd-choice-name', textContent: capitalize(t.subclasses[way]) }),
+            el('p', { className: 'pd-choice-desc', textContent: t.subclassInfo[way] }),
             button(t.choose, () => act({ type: 'master', item: index, subclass: way }), 'small'),
           )),
       ),
+      button(t.later, back, 'quiet'),
     ),
-    () => showBackpack(options),
+    back,
   );
 }
 

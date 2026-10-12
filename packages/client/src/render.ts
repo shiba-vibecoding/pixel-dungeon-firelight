@@ -1,6 +1,7 @@
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
+import { bossCard, floatNumber, fxText, levelCard, slainCard } from './cards';
 import { fx } from './fx';
 import { t } from './i18n';
 
@@ -8,8 +9,6 @@ import { t } from './i18n';
 
 export const FONT = '"Galmuri11", "Galmuri9", ui-monospace, monospace';
 /** How long a boss's title card stays up. */
-const BOSS_CARD_MS = 3200;
-const LEVEL_CARD_MS = 1800;
 
 export interface Camera {
   /** World pixel shown at the canvas's top-left corner. */
@@ -119,6 +118,8 @@ export interface Scene {
   lights?: ReadonlyArray<{ x: number; y: number; radius: number; color: string; strength: number }>;
   /** The hero has fallen: how far the world has drained of colour, 0 to 1. */
   mourning?: number;
+  /** The middle of the band the HUD and toolbar leave free, in device pixels: cards are centred there. */
+  middle?: number;
 }
 
 export function render(
@@ -266,38 +267,24 @@ export function render(
     ctx.fillStyle = `rgba(0, 0, 0, ${scene.mourning * 0.3})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.font = `${Math.round(6 * camera.zoom)}px ${FONT}`;
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(2, camera.zoom);
-  // Companions' names above their heads.
-  ctx.font = `${Math.round(5 * camera.zoom)}px ${FONT}`;
+  // Device pixels per CSS pixel: the cards' sizes are in CSS pixels, as in the design system.
+  const px = canvas.width / (canvas.clientWidth || canvas.width);
+  // Companions' names above their heads, in the colour co-op wears everywhere.
   for (const { puppet, x, y } of shown) {
     if (!puppet.label || !puppet.alive) continue;
     const sx = (x + TILE / 2 - camera.x) * camera.zoom;
     const sy = (y + TILE - puppet.sprite.sheet.h - 2 - camera.y) * camera.zoom;
-    ctx.globalAlpha = 0.85;
-    ctx.strokeStyle = '#000';
-    ctx.strokeText(puppet.label, sx, sy);
-    ctx.fillStyle = '#ffeba4';
-    ctx.fillText(puppet.label, sx, sy);
+    fxText(ctx, puppet.label, sx, sy, px, { font: 'small', scale: 1.5, color: '#5ec8c0', shadow: 0, alpha: 0.9 });
   }
   ctx.globalAlpha = 1;
-  ctx.font = `${Math.round(6 * camera.zoom)}px ${FONT}`;
 
+  // Numbers and words rising over characters (PD.fx.number): damage red, healing green, words in their colour.
   for (const floater of view.floaters) {
-    const age = (now - floater.start) / 1200;
     const sx = (floater.x - camera.x) * camera.zoom;
-    const sy = (floater.y - 2 - age * 14 - camera.y) * camera.zoom;
-    // Numbers pop in large and settle; a heavy blow's stays bigger.
-    const pop = 1 + Math.max(0, 1 - (now - floater.start) / 140) * 0.6;
-    ctx.font = `${Math.round(6 * camera.zoom * (floater.scale ?? 1) * pop)}px ${FONT}`;
-    ctx.globalAlpha = age < 0.6 ? 1 : (1 - age) / 0.4;
-    ctx.strokeStyle = '#000';
-    ctx.strokeText(floater.text, sx, sy);
-    ctx.fillStyle = floater.color;
-    ctx.fillText(floater.text, sx, sy);
+    const sy = (floater.y - camera.y) * camera.zoom;
+    const numeric = /^\d+$/.test(floater.text);
+    const kind = numeric ? ((floater.scale ?? 1) > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
+    floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px);
   }
   ctx.globalAlpha = 1;
 
@@ -315,73 +302,22 @@ export function render(
   }
   fx.drawScreen(ctx, canvas.width, canvas.height, now);
 
-  // My level-up: the new level, golden, for a moment.
+  const middle = scene.middle ?? canvas.height / 2;
+
+  // My level-up: the new level, golden, three tiles over the hero.
   const card = view.levelCard;
-  if (card && now - card.start < LEVEL_CARD_MS) {
-    const t0 = now - card.start;
-    const size = Math.round(Math.min(canvas.width / 11, 10 * camera.zoom));
-    const swell = 1 + Math.max(0, 1 - t0 / 250) * 0.4;
-    ctx.globalAlpha = Math.max(0, Math.min(1, t0 / 200, (LEVEL_CARD_MS - t0) / 500));
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height * 0.36 - (t0 / LEVEL_CARD_MS) * size * 0.6);
-    ctx.scale(swell, swell);
-    ctx.font = `${size}px ${FONT}`;
-    ctx.lineWidth = Math.max(3, size / 6);
-    ctx.strokeStyle = '#000';
-    const text = t.levelCard(card.lvl);
-    ctx.strokeText(text, 0, 0);
-    ctx.fillStyle = '#ffe070';
-    ctx.fillText(text, 0, 0);
-    ctx.restore();
-    ctx.globalAlpha = 1;
+  if (card && scene.focus) {
+    const x = (scene.focus.x - camera.x) * camera.zoom;
+    const y = (scene.focus.y - camera.y) * camera.zoom - TILE * camera.zoom * 3;
+    if (!levelCard(ctx, t.levelCard(card.lvl), x, y, now - card.start, px)) view.levelCard = null;
   }
 
-  // A boss's title card: its name and epithet, large, as it notices the party.
+  // A boss's title card as it notices the party: its name and epithet on a band across the free middle.
   const intro = view.bossIntro;
-  if (intro && now - intro.start < BOSS_CARD_MS) {
-    const t0 = now - intro.start;
-    const alpha = Math.max(0, Math.min(1, t0 / 350, (BOSS_CARD_MS - t0) / 700));
-    const cx = canvas.width / 2;
-    const cy = canvas.height * 0.3;
-    const size = Math.round(Math.min(canvas.width / 9, 13 * camera.zoom));
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.fillRect(0, cy - size * 1.3, canvas.width, size * 2.6);
-    ctx.font = `${size}px ${FONT}`;
-    ctx.lineWidth = Math.max(3, size / 6);
-    ctx.strokeStyle = '#000';
-    const name = t.mobs[intro.kind].toUpperCase();
-    // A slight swell as it appears.
-    const swell = 1 + Math.max(0, 1 - t0 / 300) * 0.25;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(swell, swell);
-    ctx.strokeText(name, 0, 0);
-    ctx.fillStyle = '#ffcf60';
-    ctx.fillText(name, 0, 0);
-    ctx.restore();
-    ctx.font = `${Math.round(size * 0.42)}px ${FONT}`;
-    ctx.lineWidth = Math.max(2, size / 10);
-    const epithet = t.bossEpithets[intro.kind] ?? '';
-    ctx.strokeText(epithet, cx, cy + size * 0.85);
-    ctx.fillStyle = '#e8e2c8';
-    ctx.fillText(epithet, cx, cy + size * 0.85);
-    ctx.globalAlpha = 1;
+  if (intro && !bossCard(ctx, t.mobs[intro.kind].toUpperCase(), t.bossEpithets[intro.kind] ?? '', middle, canvas.width, now - intro.start, px)) {
+    view.bossIntro = null;
   }
 
-  // "Boss slain" banner, fading in and out.
-  const age = now - view.bannerStart;
-  if (view.bannerStart > 0 && age < 4000) {
-    const banner = assets.bossBanner;
-    const scale = camera.zoom;
-    ctx.globalAlpha = Math.min(1, age / 300, (4000 - age) / 600);
-    ctx.drawImage(
-      banner,
-      Math.round(canvas.width / 2 - (banner.width * scale) / 2),
-      Math.round(canvas.height / 3 - (banner.height * scale) / 2),
-      banner.width * scale,
-      banner.height * scale,
-    );
-    ctx.globalAlpha = 1;
-  }
+  // «Boss slain», white for a frame, then gold.
+  if (view.bannerStart > 0 && !slainCard(ctx, t.bossDown, canvas.width / 2, middle, now - view.bannerStart, px)) view.bannerStart = 0;
 }

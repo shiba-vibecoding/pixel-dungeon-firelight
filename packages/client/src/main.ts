@@ -20,15 +20,16 @@ let lastVisual = 0;
 let fallenAt = 0;
 import { BADGES, type BadgeId, badgeText, checkBadges, countGame } from './badges';
 import { audio } from './audio';
-import { BUFF_ICONS, heroBuffs, Hud } from './hud';
+import { heroBuffs, Hud, type HudStatus } from './hud';
 import { capitalize, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
-  showHistory, showMenu, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
+  showHistory, showMenu, showRankings, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
+import { rankings, recordRun, runScore } from './rankings';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
 import {
@@ -50,9 +51,53 @@ initTelegram('#1f1d1d');
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
-const assets = await loadAssets(`${import.meta.env.BASE_URL}assets/`);
+/*
+ * The loading screen (the design's .pd-loading): the logo, a running warrior,
+ * a bar in steps and a tip. If the sprites cannot be had, a window says so
+ * and offers to try again.
+ */
+const loading = document.getElementById('loading')!;
+const progress = document.createElement('div');
+const progressText = document.createElement('p');
+{
+  const tips = [2, 7, 8, 9, 10];
+  const tip = t.helpText[tips[Math.floor(Math.random() * tips.length)]!] ?? '';
+  loading.className = 'pd-loading';
+  loading.setAttribute('aria-busy', 'true');
+  progress.className = 'pd-progress';
+  progress.setAttribute('role', 'progressbar');
+  progressText.className = 'pd-loading-text';
+  progressText.textContent = t.loadingSprites(0);
+  const logo = Object.assign(document.createElement('div'), { className: 'pd-logo' });
+  logo.append(Object.assign(document.createElement('img'), { src: 'assets/banner-title.png', alt: 'Pixel Dungeon' }));
+  const runner = Object.assign(document.createElement('div'), { className: 'pd-runner' });
+  const hint = Object.assign(document.createElement('p'), { className: 'pd-loading-tip' });
+  hint.append(Object.assign(document.createElement('b'), { textContent: t.tip }), ` ${tip}`);
+  loading.replaceChildren(logo, runner, progress, progressText, hint);
+}
+const assets = await loadAssets(`${import.meta.env.BASE_URL}assets/`, (done) => {
+  const percent = Math.round(done * 100);
+  progress.style.setProperty('--v', String(done));
+  progressText.textContent = t.loadingSprites(percent);
+}).catch((error: unknown) => {
+  const box = document.createElement('section');
+  box.className = 'pd-window narrow';
+  box.setAttribute('role', 'alertdialog');
+  const retry = Object.assign(document.createElement('button'), { className: 'pd-button primary', textContent: t.retry, onclick: () => location.reload() });
+  box.append(
+    Object.assign(document.createElement('div'), { className: 'pd-error-icon' }),
+    Object.assign(document.createElement('h2'), { className: 'pd-heading center', textContent: t.noConnection }),
+    Object.assign(document.createElement('p'), { className: 'pd-info center', textContent: t.noConnectionText }),
+    retry,
+    Object.assign(document.createElement('p'), { className: 'pd-note center', textContent: String(error instanceof Error ? error.message : error) }),
+  );
+  const overlay = document.getElementById('overlay')!;
+  overlay.replaceChildren(box);
+  overlay.classList.add('open');
+  throw error;
+});
 await Promise.all([document.fonts.load('18px Galmuri11'), document.fonts.load('15px Galmuri9')]).catch(() => undefined);
-document.getElementById('loading')?.remove();
+loading.remove();
 setAssets(assets);
 
 const view = new View(assets);
@@ -279,6 +324,7 @@ function toTitle(): void {
     onJoin: () => startOnline(invited!),
     onDaily: () => startSolo('daily'),
     onDailyBoard: SERVER ? () => showDailyBoard(dailyBoard(), toTitle) : undefined,
+    onRankings: () => showRankings(rankings(), toTitle),
   });
 }
 
@@ -892,6 +938,10 @@ const backdrop = (() => {
   return { level, baked: bakeLevel(level, assets), all, view: new View(assets) };
 })();
 
+/** The middle of the free band, in device pixels, eased from frame to frame; -1 until known. */
+let freeMiddle = -1;
+let freeDepth = 0;
+
 /** Where my hero was last frame, for footstep and stairs sounds. */
 let lastPlace = { generation: -1, depth: 0, pos: -1 };
 
@@ -925,7 +975,8 @@ function tick(now: number): void {
     drawBackdrop(now);
     hud.update(
       {
-        me: placeholderHero, party: [], online: [], notice: session.status, cancel: null, log: [], buffs: [], quick: null,
+        me: placeholderHero, party: [], online: [], log: [], buffs: [], quick: null,
+        status: session.status ? { kind: session.status === t.reconnecting ? 'reconnecting' : 'connecting', text: session.status } : null,
         keys: 0, examining: false, newLoot: false,
       },
       false,
@@ -1018,8 +1069,12 @@ function tick(now: number): void {
   const at = mine ? view.position(mine, vnow) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
   const kick = fx.shakeOffset(vnow);
   // The hero stands in the middle of the band the HUD and the toolbar leave free, not of the screen.
+  // When that band changes (a buff, a notice, companions), the view glides there rather than jumps.
   const free = hud.freeZone();
-  const middle = ((free.top + free.bottom) / 2) * (canvas.height / (canvas.clientHeight || 1));
+  const wanted = ((free.top + free.bottom) / 2) * (canvas.height / (canvas.clientHeight || 1));
+  freeMiddle = freeMiddle < 0 || view.depth !== freeDepth ? wanted : freeMiddle + (wanted - freeMiddle) * Math.min(1, dt / 140);
+  freeDepth = view.depth;
+  const middle = freeMiddle;
   camera.x = Math.round(at.x + TILE / 2 - canvas.width / camera.zoom / 2) + kick.x;
   camera.y = Math.round(at.y + TILE / 2 - middle / camera.zoom) + kick.y;
   // What lies hidden (the phantom fish) is not drawn until found.
@@ -1040,6 +1095,7 @@ function tick(now: number): void {
     focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
     lights: lightsFor(level, visible, view, vnow),
     mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
+    middle,
   };
   render(ctx, scene, view, session.myId, assets, camera, vnow);
 
@@ -1050,26 +1106,27 @@ function tick(now: number): void {
     busySince && now - busySince > 400
       ? blockers(world).filter((id) => id !== me.id).map((id) => heroById(world, id)?.name ?? '?')
       : [];
-  const notice =
-    session.status ||
-    (!isAlive(me) && !world.over ? `${t.youDied}. ${t.youDiedCoop}`
-      : aim ? t.chooseTarget
-      : examining ? t.examinePrompt
-      : waitingFor.length > 0 ? t.waitingFor(waitingFor.join(', '))
-      : '');
   const quick = quickIndex(me);
   const quickItem = me.items[quick];
   const cancelChoice = (): void => {
     aim = null;
     examining = false;
   };
+  // One state at a time, the most pressing: the connection, death, a target to choose, examining, companions.
+  const aimed = aim && aim.index >= 0 ? me.items[aim.index] : undefined;
+  const status: HudStatus | null =
+    session.status ? { kind: session.status === t.reconnecting ? 'reconnecting' : 'connecting', text: session.status }
+    : !isAlive(me) && !world.over ? { kind: 'dead', text: `${t.youDied}. ${t.youDiedCoop}` }
+    : aim ? { kind: 'target', text: t.chooseTarget, cancel: { label: t.cancel, onClick: cancelChoice }, ...(aimed ? { item: itemSprite(aimed, world.run.labels) } : {}) }
+    : examining ? { kind: 'examine', text: t.examinePrompt, cancel: { label: t.cancel, onClick: cancelChoice } }
+    : waitingFor.length > 0 ? { kind: 'waiting', text: t.waitingShort, names: waitingFor }
+    : null;
   hud.update(
     {
       me,
       party: session.mode === 'online' ? world.heroes.filter((h) => h.id !== me.id) : [],
       online: session.online,
-      notice,
-      cancel: aim || examining ? { label: t.cancel, onClick: cancelChoice } : null,
+      status,
       log: view.log,
       buffs: heroBuffs(me),
       examining,
@@ -1119,7 +1176,24 @@ function tick(now: number): void {
       if (!session?.world?.over) return;
       if (!victory) haptic('error');
       const cause = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? me.killedBy);
+      // Rankings: the run takes its place among this device's best.
+      const deepest = Object.keys(world.levels).length;
+      const gold = me.stats?.gold ?? me.gold;
+      const place = recordRun({
+        key: `${world.run.seed}:${me.id}:${world.turn}`,
+        score: runScore(gold, me.lvl, deepest, victory),
+        name: me.name || playerName || telegramName() || t.heroLabel,
+        heroClass: me.heroClass,
+        lvl: me.lvl,
+        depth: deepest,
+        gold,
+        won: victory,
+        cause: cause ? capitalize(cause) : '',
+        mode: dailyRun ? 'daily' : solo ? 'solo' : 'coop',
+        date: Date.now(),
+      });
       showRunEnd({
+        place,
         victory,
         title: victory ? t.victory : solo ? t.youDied : t.partyFell,
         cause: victory ? t.victoryText : [t.soloFell(me.depth), cause ? t.killedBy(cause) : ''].filter(Boolean).join(' '),

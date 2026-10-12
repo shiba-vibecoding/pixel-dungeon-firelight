@@ -329,7 +329,8 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image, w, h, cols: Math.floor(image.width / w) });
 
-export async function loadAssets(base: string): Promise<Assets> {
+/** Loads every sprite sheet; `onProgress` hears the share done, from 0 to 1. */
+export async function loadAssets(base: string, onProgress?: (done: number) => void): Promise<Assets> {
   const names = [
     'tiles0', 'water0', 'tiles1', 'water1', 'tiles2', 'water2', 'spinner', 'dm300', 'tiles3', 'water3',
     'elemental', 'monk', 'warlock', 'golem', 'king', 'undead', 'tiles4', 'water4',
@@ -337,8 +338,15 @@ export async function loadAssets(base: string): Promise<Assets> {
     'skeleton', 'thief', 'swarm', 'shaman', 'bat', 'brute', 'tengu', 'shopkeeper', 'wandmaker',
     'icons', 'status_pane', 'toolbar', 'hp_bar', 'exp_bar', 'banner-boss', 'items', 'buffs', 'plants',
   ] as const;
+  let loaded = 0;
   const images = Object.fromEntries(
-    await Promise.all(names.map(async (name) => [name, await loadImage(`${base}${name}.png`)] as const)),
+    await Promise.all(
+      names.map(async (name) => {
+        const image = await loadImage(`${base}${name}.png`);
+        onProgress?.(++loaded / names.length);
+        return [name, image] as const;
+      }),
+    ),
   ) as Record<(typeof names)[number], HTMLImageElement>;
 
   const hero = (image: HTMLImageElement): CharSprite => ({ sheet: sheet(image, 12, 15), anims: HERO_ANIMS });

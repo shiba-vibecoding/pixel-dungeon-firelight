@@ -34,32 +34,12 @@ canvas#game {
   z-index: var(--z-hud);
   pointer-events: none;
 }
-#ui[hidden], #toast[hidden], .pd-log[hidden], .pd-mates[hidden], .pd-hud-notice[hidden] { display: none; }
+#ui[hidden], #toast[hidden], .pd-log[hidden], .pd-mates[hidden] { display: none; }
 #ui .pd-toolbar { pointer-events: auto; }
 
 /* The log lets taps through to the map; only «History» is a button. */
 .pd-log { pointer-events: none; }
 .pd-log .pd-log-more { pointer-events: auto; min-height: var(--tap-min); padding: 0 var(--space-1); margin-bottom: calc(-1 * var(--space-2)); }
-
-/* A passing state under the HUD: connecting, waiting for companions, choosing a target. */
-.pd-hud-notice {
-  align-self: center;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  max-width: 100%;
-  padding: var(--space-1) var(--space-3);
-  font: var(--text-body);
-  color: var(--gold);
-  text-align: center;
-  text-shadow: var(--text-outline);
-  background: rgba(11, 11, 9, 0.6);
-  clip-path: var(--notch);
-}
-.pd-hud-notice .pd-button { min-height: 36px; padding: 0 var(--space-2); font: var(--text-caption); }
-
-/* The examine tool is on: its button stays lit until a cell is tapped. */
-.pd-tool.active { background: var(--stone-500); box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void); }
 
 /* Windows without the dimmed map behind: the title screen. */
 #overlay.bare { background: none; padding: 0; }
@@ -69,23 +49,12 @@ canvas#game {
 /* NPC and monster portraits are drawn from their sprite sheets on a small canvas. */
 .pd-portrait canvas { image-rendering: pixelated; }
 
-/* Help: tips as a list. */
-.pd-help { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--space-2); font: var(--text-body); }
-
 /* Windows that may grow long scroll inside, keeping the frame and the cross in place. */
 .pd-window > .pd-scroll { max-height: 55vh; }
 
-#loading {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font: var(--text-body);
-  color: var(--ink-muted);
-}
 
-/* Reward cards without an item slot: a way to choose after the Tome of Mastery, a pair to reforge. */
-.pd-reward.pd-way, .pd-reforges .pd-reward { grid-template-columns: 1fr; }
+/* Reward cards without an item slot: a pair to reforge. */
+.pd-reforges .pd-reward { grid-template-columns: 1fr; }
 .pd-reforges .pd-reforge { justify-content: flex-start; }
 .pd-reforges .pd-reforge .pd-slot { width: var(--slot); height: var(--slot); }
 

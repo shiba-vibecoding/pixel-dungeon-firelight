@@ -69,15 +69,23 @@ export interface HudHandlers {
   mate(id: string): void;
 }
 
+/** The status line under the HUD: one passing state at a time (the design's .pd-status). */
+export interface HudStatus {
+  kind: 'connecting' | 'reconnecting' | 'dead' | 'target' | 'examine' | 'waiting';
+  text: string;
+  /** Companions the turn waits for, shown in their colour. */
+  names?: readonly string[];
+  /** The item being aimed. */
+  item?: number;
+  cancel?: { label: string; onClick(): void };
+}
+
 export interface HudState {
   me: Hero;
   /** Other heroes in the party, for the co-op roster. */
   party: Hero[];
   online: readonly string[];
-  /** A passing state under the HUD (connecting, waiting for companions, choosing a target). */
-  notice: string;
-  /** Shown beside the notice: e.g. cancelling the choice of a target. */
-  cancel: { label: string; onClick(): void } | null;
+  status: HudStatus | null;
   log: readonly LogLine[];
   buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
   /** The quickslot: a thrown weapon or a wand, ready to use. */
@@ -116,6 +124,35 @@ function glyph(sprite: string, w: number, h: number): HTMLElement {
   node.style.setProperty('--w', String(w));
   node.style.setProperty('--h', String(h));
   return node;
+}
+
+/** What the status line holds: an icon or three stepping dots, then the text. */
+function statusContent(status: HudStatus): Node[] {
+  const text = el('span', 'pd-status-text');
+  if (status.names?.length) {
+    text.append(`${status.text} `);
+    status.names.forEach((name, i) => text.append(...[i > 0 ? ', ' : '', el('span', 'pd-ally', name)].filter(Boolean) as Array<string | Node>));
+    text.append('…');
+  } else {
+    text.textContent = status.text;
+  }
+  let lead: HTMLElement;
+  if (status.kind === 'connecting' || status.kind === 'reconnecting') {
+    lead = el('span', 'pd-dots', el('i'), el('i'), el('i'));
+  } else if (status.kind === 'target' && status.item !== undefined) {
+    lead = el('i', 'pd-item');
+    lead.dataset.i = String(status.item);
+    lead.style.width = '32px';
+    lead.style.height = '32px';
+    lead.style.backgroundSize = '256px 512px';
+  } else {
+    lead = icon(status.kind === 'dead' ? 'skull' : status.kind === 'examine' ? 'tool-info' : status.kind === 'waiting' ? 'busy' : 'target');
+    if (status.kind === 'examine') {
+      lead.style.width = '16px';
+      lead.style.height = '24px';
+    }
+  }
+  return [lead, text];
 }
 
 export class Hud {
@@ -163,7 +200,8 @@ export class Hud {
     menu.onclick = tap(() => handlers.menu());
     this.buffBox = el('div', 'pd-buffs');
     this.mates = el('div', 'pd-mates');
-    this.notice = el('div', 'pd-hud-notice');
+    this.notice = el('div', 'pd-status');
+    this.notice.setAttribute('role', 'status');
     this.band = el(
       'header',
       'pd-hud',
@@ -332,18 +370,22 @@ export class Hud {
       );
     }
 
-    if (this.changed('notice', `${state.notice}|${state.cancel?.label ?? ''}`)) {
-      this.notice.hidden = !state.notice;
-      this.notice.replaceChildren(el('span', '', state.notice));
-      if (state.cancel) {
-        const cancel = el('button', 'pd-button quiet', state.cancel.label);
-        const onClick = state.cancel.onClick;
+    const status = state.status;
+    if (this.changed('notice', status ? `${status.kind}|${status.text}|${status.names?.join(',') ?? ''}|${status.item ?? ''}` : '')) {
+      this.notice.hidden = !status;
+      this.notice.className = `pd-status${status ? ` ${status.kind}` : ''}`;
+      this.notice.replaceChildren();
+      if (status) this.notice.append(...statusContent(status));
+      if (status?.cancel) {
+        const cancel = el('button', 'pd-button small', status.cancel.label);
+        const onClick = status.cancel.onClick;
         cancel.onclick = () => {
           audio.play('click');
           onClick();
         };
         this.notice.append(cancel);
       }
+      sprites(this.notice);
     }
 
     this.updateLog(state.log);
@@ -363,7 +405,7 @@ export class Hud {
         button.replaceChildren();
       }
     }
-    this.tools.examine.classList.toggle('active', state.examining);
+    this.tools.examine.setAttribute('aria-pressed', String(state.examining));
     this.tools.bag.classList.toggle('alert', state.newLoot);
     this.tools.wait.classList.toggle('resting', resting);
     for (const button of Object.values(this.tools)) button.disabled = dead;
