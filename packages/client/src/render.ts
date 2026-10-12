@@ -98,6 +98,8 @@ export interface Scene {
   heaps: ReadonlyArray<{ pos: number; sprite: number }>;
   /** Plants growing here, with their index in plants.png. */
   plants?: ReadonlyArray<{ pos: number; index: number }>;
+  /** Clouds of gas: how much is in each cell, and its colour. */
+  gas?: ReadonlyArray<{ pos: number; volume: number; color: string }>;
   /** Mind vision: every monster on the level shows. */
   seeAll: boolean;
 }
@@ -152,6 +154,14 @@ export function render(
     const fade = 1 - (now - flash.start) / (flash.duration ?? 600);
     ctx.fillStyle = `rgba(${flash.color ?? '255, 255, 200'}, ${0.6 * fade})`;
     ctx.fillRect((flash.cell % WIDTH) * TILE, Math.trunc(flash.cell / WIDTH) * TILE, TILE, TILE);
+  }
+
+  // Gas where it can be seen, thicker where there is more of it, slowly swirling.
+  for (const cloud of scene.gas ?? []) {
+    if (!visible[cloud.pos]) continue;
+    const swirl = 0.85 + 0.15 * Math.sin(now / 400 + cloud.pos);
+    ctx.fillStyle = `rgba(${cloud.color}, ${Math.min(0.55, 0.12 + cloud.volume / 120) * swirl})`;
+    ctx.fillRect((cloud.pos % WIDTH) * TILE, Math.trunc(cloud.pos / WIDTH) * TILE, TILE, TILE);
   }
 
   // Fog of war: unexplored cells are black, remembered ones are dimmed.

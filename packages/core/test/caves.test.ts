@@ -100,6 +100,7 @@ describe("DM-300's caves", () => {
       hero.weapon = { kind: 'weapon.glaive', qty: 1, level: 5 };
       const level = levelAt(world, 15);
       const effects: Effect[] = [];
+      let leaked = false;
       const step = (): Action => {
         const dm = floorAt(world, 15).mobs.find((m) => m.kind === 'dm300');
         if (dm && adjacent(dm.pos, hero.pos)) return { type: 'attack', target: dm.id };
@@ -114,9 +115,10 @@ describe("DM-300's caves", () => {
         let result = act(world, 'p', step());
         if (!result.ok) result = act(world, 'p', { type: 'wait' });
         if (result.ok) effects.push(...result.effects);
+        if (floorAt(world, 15).gas?.toxic?.length) leaked = true;
         checkInvariants(world);
       }
-      expect(effects.some((e) => e.type === 'burst' && e.silent), `seed ${seed}`).toBe(true);
+      expect(leaked, `seed ${seed}`).toBe(true);
       expect(effects.some((e) => e.type === 'bossSlain' && e.kind === 'dm300'), `seed ${seed}`).toBe(true);
       expect(level.map[level.arenaDoor!], `seed ${seed}`).toBe(T.EMPTY_DECO);
       expect(hero.depth, `seed ${seed}`).toBe(16);

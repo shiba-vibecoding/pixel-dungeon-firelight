@@ -10,6 +10,7 @@ import type { WandmakerLine } from './wandmaker';
 import type { ImpLine } from './imp';
 import type { SmithLine } from './smith';
 import type { Bolt } from './wands';
+import type { GasKind } from './gas';
 import type { Level } from './level/generate';
 import { LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
@@ -38,6 +39,9 @@ export interface Floor {
   plants?: PlantInfo[];
   /** Items that fell into a chasm here, on their way to the depth below. */
   falling?: Item[];
+  /** Clouds of gas, as [cell, volume] pairs in cell order, and when they next spread (see gas.ts). */
+  gas?: Partial<Record<GasKind, Array<[number, number]>>>;
+  gasAt?: number;
 }
 
 /** Level.drop: an item that comes down on a chasm falls through it, to land on the depth below. */

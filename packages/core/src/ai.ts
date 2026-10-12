@@ -12,6 +12,7 @@ import { adjacent, cellX, cellY, distance, LENGTH, NEIGHBOURS8, WIDTH } from './
 import { RoomType } from './level/room';
 import { F, hasFlag, T } from './level/terrain';
 import { burst, mobConditions } from './traps';
+import { seedGas } from './gas';
 import { staggerTarget, stepOnPlant } from './plants';
 import type { Rng } from './rng';
 import type { World } from './world';
@@ -300,21 +301,9 @@ function getFurther(ctx: Ctx, mob: Mob, threat: number): 'moved' | 'safe' | 'cor
   return 'moved';
 }
 
-/**
- * DM300.act: the machine leaks toxic gas all around it. The original's
- * cloud spreads and lingers; here it hurts whoever stands next to it, as
- * much as a turn in the gas would (ToxicGas).
- */
+/** DM300.act: the machine leaks toxic gas all around it, a cloud that spreads and lingers (it breathes it unharmed). */
 function ventGas(ctx: Ctx, mob: Mob): void {
-  ctx.effects.push({ type: 'burst', depth: ctx.depth, pos: mob.pos, kind: 'toxic', radius: 1, silent: true });
-  const strength = 5 + ctx.depth * 5;
-  for (const hero of heroesOn(ctx.world, ctx.depth)) {
-    if (distance(hero.pos, mob.pos) > 1 || (hero.gasImmune ?? 0) > 0) continue;
-    let damage = Math.trunc((hero.ht + strength) / 40);
-    if (ctx.rng.int(40) < (hero.ht + strength) % 40) damage++;
-    ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: hero.id, damage });
-    hurt(ctx, hero, damage, 'gas');
-  }
+  seedGas(ctx, mob.pos, 'toxic', 30);
 }
 
 /**

@@ -41,13 +41,13 @@ describe('traps', () => {
     const rat = createMob('#90', 'rat', NEIGHBOURS8.map((n) => cell + n).find((c) => canEnter(level, c) && hasFlag(level.map[c]!, F.PASSABLE) && !charAt(world, 1, c) && c !== hero.pos)!, 'hunting', 0);
     floorAt(world, 1).mobs.push(rat);
     const result = act(world, 'p', { type: 'move', to: cell });
-    // The paralysed turns pass at once: the step, then five lost turns. The
-    // rat, caught in the gas before its own turn, recovers a turn earlier and
-    // gets at most one bite in.
-    expect(hero.time).toBe(6);
+    // The paralysed turns pass at once, for as long as the cloud lingers and a
+    // few turns after; the rat in it is held just as long, and gets at most a
+    // bite or two in.
+    expect(hero.time).toBeGreaterThan(6);
     expect(hero.paralysed).toBe(0);
-    expect(rat.paralysed).toBe(0);
-    expect(result.ok && result.effects.filter((e) => e.type === 'attack').length).toBeLessThanOrEqual(1);
+    expect(rat.paralysed ?? 0).toBeLessThanOrEqual(1);
+    expect(result.ok && result.effects.filter((e) => e.type === 'attack').length).toBeLessThanOrEqual(2);
   });
 
   it('summoning traps call monsters around their victim', () => {

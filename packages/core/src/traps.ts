@@ -3,6 +3,7 @@ import { hurt } from './combat';
 import { charAt, type Char, type Ctx, exploredCells, heroesOn, isHero, isPassable, isWater } from './floor';
 import { distance, NEIGHBOURS8 } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
+import { clearGas, seedGas } from './gas';
 
 /*
  * Traps (levels/traps): set off by stepping on them, visible or hidden; then
@@ -26,8 +27,6 @@ const TRAPS: ReadonlyMap<number, TrapKind> = new Map<number, TrapKind>([
 export const trapAt = (terrain: number): TrapKind | undefined => TRAPS.get(terrain);
 
 const GAS_RADIUS = 2;
-const TOXIC_TURNS = 6;
-const PARALYSIS_TURNS = 5;
 const BURNING_TURNS = 8;
 
 /** Frost.DURATION; GasesImmunity, as a cleansing cloud gives it. */
@@ -44,22 +43,27 @@ export type Burst = 'toxic' | 'paralytic' | 'fire' | 'frost' | 'purity';
 export function immuneTo(char: Char, harm: 'burning' | 'gas' | 'frost'): boolean {
   if (isHero(char)) return harm === 'gas' && (char.gasImmune ?? 0) > 0;
   if (char.kind === 'piranha') return true;
+  // DM-300 breathes its own fumes unharmed.
+  if (harm === 'gas' && char.kind === 'dm300') return true;
   return harm !== 'frost' && (char.kind === 'yog' || (harm === 'burning' && char.kind === 'burningFist'));
 }
 
 /**
- * A cloud of gas or a burst of flame centred on a cell. The original's gas
- * spreads and lingers; here it reaches everyone within `radius` at once.
- * Flames set the grass around alight, but not those standing in water.
+ * Gas let out at a cell (`amount` of it, a cloud that spreads and lingers:
+ * see gas.ts), or a burst of flame, frost or cleansing air reaching everyone
+ * within `radius`. Flames set the grass around alight, but not those
+ * standing in water.
  */
-export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS, silent = false): void {
+export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS, silent = false, amount = 1000): void {
   ctx.effects.push({ type: 'burst', depth: ctx.depth, pos, kind, radius, ...(silent ? { silent } : {}) });
+  if (kind === 'toxic' || kind === 'paralytic') {
+    seedGas(ctx, pos, kind, amount);
+    return;
+  }
   const { level } = ctx;
+  // PotionOfPurity.shatter: the air around is cleared of gas.
+  if (kind === 'purity') clearGas(ctx, pos, radius);
   for (const char of around(ctx, pos, radius)) {
-    const gas = kind === 'toxic' || kind === 'paralytic';
-    if (gas && immuneTo(char, 'gas')) continue;
-    if (kind === 'toxic') char.poison = Math.max(char.poison ?? 0, TOXIC_TURNS);
-    if (kind === 'paralytic') char.paralysed = Math.max(char.paralysed ?? 0, PARALYSIS_TURNS);
     if (kind === 'fire' && !isWater(level.map[char.pos]!) && !immuneTo(char, 'burning')) {
       char.burning = Math.max(char.burning ?? 0, BURNING_TURNS);
     }
@@ -101,7 +105,8 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
       break;
     case 'toxic':
     case 'paralytic':
-      burst(ctx, pos, kind);
+      // ToxicTrap and ParalyticTrap: a cloud, the bigger the deeper.
+      burst(ctx, pos, kind, GAS_RADIUS, false, kind === 'toxic' ? 300 + 20 * depth : 80 + 5 * depth);
       break;
     case 'fire':
       // A small fire on the trap itself, catching the grass around.

@@ -89,8 +89,11 @@ Yendor on depth 26:
 Worse-than-plain gear is cursed: once worn, it will not come off until a
 scroll of remove curse (or of upgrade) lifts the curse.
 
-Not ported yet: gas clouds (gas acts at once on everyone within reach
-instead).
+Clouds of toxic and paralytic gas (from traps, potions, DM-300, rotberries and
+armour of stench) spread through open cells, never through walls or closed
+doors, thin out a little every turn, and act on whoever breathes them.
+
+Everything of the original's game content is now ported.
 
 ## How co-op works
 

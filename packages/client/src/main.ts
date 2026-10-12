@@ -902,8 +902,14 @@ function tick(now: number): void {
     sprite: heap.kind === 'heap' || heap.kind === 'forSale' ? itemSprite(heap.items[0]!, world.run.labels) : HEAP_SPRITES[heap.kind],
   }));
   const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
+  // Clouds of gas: green toxic, yellow paralytic.
+  const clouds = world.floors[me.depth]?.gas ?? {};
+  const gas = [
+    ...(clouds.toxic ?? []).map(([pos, volume]) => ({ pos, volume, color: '80, 200, 60' })),
+    ...(clouds.paralytic ?? []).map(([pos, volume]) => ({ pos, volume, color: '230, 220, 70' })),
+  ];
   const scene = {
-    level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, plants, seeAll: me.mindVision > 0,
+    level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, plants, gas, seeAll: me.mindVision > 0,
   };
   render(ctx, scene, view, session.myId, assets, camera, now);
 

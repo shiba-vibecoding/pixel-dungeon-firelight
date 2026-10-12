@@ -14,6 +14,7 @@ import { staggerTarget, stepOnPlant, sungrassHeals } from './plants';
 import { discoverable } from './level/flags';
 import { type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
+import { evolveGas } from './gas';
 import { type ImpQuest, impRewardProblem, ringFromImp, spawnImp, talkToImp } from './imp';
 import { type ItemRef, reforge, reforgeProblem, type SmithQuest, spawnBlacksmith, talkToSmith } from './smith';
 import { spawnWandmaker, talkToWandmaker, type WandQuest, wandFromWandmaker, wandRewardProblem } from './wandmaker';
@@ -263,7 +264,7 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
 
 /* Scheduling */
 
-type Turn = { kind: 'hero'; hero: Hero } | { kind: 'mob'; mob: Mob } | { kind: 'respawn' };
+type Turn = { kind: 'hero'; hero: Hero } | { kind: 'mob'; mob: Mob } | { kind: 'respawn' } | { kind: 'gas' };
 
 /** Who is due next on a depth; nothing happens on a depth without living heroes. */
 function nextTurn(world: World, depth: number): Turn | undefined {
@@ -279,7 +280,9 @@ function nextTurn(world: World, depth: number): Turn | undefined {
   for (const mob of floor.mobs) {
     if (mob.time < time) [turn, time] = [{ kind: 'mob', mob }, mob.time];
   }
-  if (floor.respawn >= 0 && floor.respawn < time) turn = { kind: 'respawn' };
+  if (floor.respawn >= 0 && floor.respawn < time) [turn, time] = [{ kind: 'respawn' }, floor.respawn];
+  // Clouds of gas spread a turn at a time (Blob.act).
+  if (floor.gasAt !== undefined && floor.gasAt < time) turn = { kind: 'gas' };
   return turn;
 }
 
@@ -328,6 +331,12 @@ function advance(world: World, depth: number, effects: Effect[]): void {
     if (turn.kind === 'respawn') {
       floor.now = Math.max(floor.now, floor.respawn);
       respawn(ctx);
+      continue;
+    }
+    if (turn.kind === 'gas') {
+      floor.now = Math.max(floor.now, floor.gasAt!);
+      floor.gasAt! += 1;
+      evolveGas(ctx);
       continue;
     }
 

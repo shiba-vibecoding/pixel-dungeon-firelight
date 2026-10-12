@@ -214,7 +214,7 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
       // A cloud of stinking gas around the attacker.
       if (!near || rng.int(level + 5) < 4) return damage;
       shown();
-      burst(ctx, mob.pos, 'toxic', 1);
+      burst(ctx, mob.pos, 'toxic', 1, false, 20);
       return damage;
     case 'viscosity':
       // The blow is taken a point a turn, later.

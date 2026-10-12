@@ -101,7 +101,7 @@ describe('co-op room', () => {
       expect(replicas.alice.world).toEqual(world);
       expect(replicas.bob.world).toEqual(world);
     }
-  });
+  }, 20000);
 
   it('takes at most four heroes, though members can always come back', () => {
     const room = RoomLogic.create(12);

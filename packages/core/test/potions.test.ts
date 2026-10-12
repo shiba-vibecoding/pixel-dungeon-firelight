@@ -28,14 +28,18 @@ function ratInSight(world: World): { ratPos: number } {
 }
 
 describe('harmful potions', () => {
-  it('drunk, toxic gas poisons the drinker, and everyone learns what it was', () => {
+  it('drunk, toxic gas chokes the drinker, and everyone learns what it was', () => {
     const world = solo();
     const hero = heroById(world, 'p')!;
     hero.items = [createItem('potion.toxicGas')];
     const result = act(world, 'p', { type: 'use', item: 0 });
     expect(result.ok && result.effects.find((e) => e.type === 'used')).toMatchObject({ identified: true });
     expect(result.ok && result.effects.some((e) => e.type === 'burst' && e.kind === 'toxic')).toBe(true);
-    expect(hero.poison).toBeGreaterThan(0);
+    // The cloud lingers about the drinker, and hurts every turn spent in it.
+    expect(floorAt(world, 1).gas?.toxic?.length).toBeGreaterThan(0);
+    const before = hero.hp;
+    act(world, 'p', { type: 'wait' });
+    expect(hero.hp).toBeLessThan(before);
     expect(world.known).toContain('potion.toxicGas');
   });
 
