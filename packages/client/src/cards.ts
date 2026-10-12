@@ -200,3 +200,40 @@ export function floatNumber(
   }
   return t < TIMELINES.number.dur;
 }
+
+const PATRON_STAR = ['...w...', '..wo#..', 'wwoo###', '#oooo##', '.#oo##.', '.##.##.', '##...##'];
+const PATRON_COLORS: Record<string, string> = { '#': '#ffcc66', o: '#ffeba4', w: '#ffffff' };
+
+/** The patron's star (PD.fx.patronStar): seven pixels a side, a bronze outline; `s` is its pixel in device pixels. Returns its width. */
+export function patronStar(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): number {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  x = snap(x, s);
+  y = snap(y, s);
+  ctx.fillStyle = '#5a3d10';
+  PATRON_STAR.forEach((row, j) => {
+    for (let i = 0; i < 7; i++) if (row[i] !== '.') ctx.fillRect(x + i * s, y + j * s, 3 * s, 3 * s);
+  });
+  PATRON_STAR.forEach((row, j) => {
+    for (let i = 0; i < 7; i++) {
+      if (row[i] === '.') continue;
+      ctx.fillStyle = PATRON_COLORS[row[i]!]!;
+      ctx.fillRect(x + (i + 1) * s, y + (j + 1) * s, s, s);
+    }
+  });
+  ctx.restore();
+  return 9 * s;
+}
+
+/** A name over a head (PD.fx.nameplate): Galmuri9 at 15px, outlined, the patron's star before it. `x` the sprite's middle, `y` its top. */
+export function nameplate(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, px: number, o: { patron?: boolean; color?: string } = {}): void {
+  const star = o.patron ? (9 * 2 + 4) * px : 0;
+  ctx.save();
+  ctx.font = `${Math.round(15 * px)}px "Galmuri9"`;
+  const width = ctx.measureText(name).width;
+  ctx.restore();
+  const left = x - (width + star) / 2;
+  const base = y - 6 * px;
+  if (o.patron) patronStar(ctx, left, base - 16 * px, 2 * px);
+  fxText(ctx, name, left + star, base, px, { font: 'small', scale: 1.5, color: o.color ?? '#5ec8c0', align: 'left', shadow: 0 });
+}

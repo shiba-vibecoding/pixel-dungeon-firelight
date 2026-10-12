@@ -1,6 +1,6 @@
 import {
   act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, heroById, type HeroClass,
-  restartWorld, type ServerMessage, type World,
+  type Look, restartWorld, type ServerMessage, type World,
 } from '@pd/core';
 
 /*
@@ -28,6 +28,10 @@ export interface Session {
   /** Effects that happened since the last call, in order. */
   drain(): Effect[];
   close(): void;
+  /** What each player wears (Pixel-Mart), by hero id; outside the world. */
+  looks: Record<string, Look>;
+  /** Puts my look on, for the party to see. */
+  wear(look: Look): void;
 }
 
 const SAVE_VERSION = 30;
@@ -113,6 +117,10 @@ export function soloSession(key: string | null, heroClass: HeroClass, newSeed: (
     close() {
       clearTimeout(saveTimer);
     },
+    looks: {},
+    wear(look) {
+      session.looks = { me: look };
+    },
   };
   save();
   return session;
@@ -168,7 +176,14 @@ export function onlineSession(options: OnlineOptions): Session {
       closed = true;
       socket?.close();
     },
+    looks: {},
+    wear(look) {
+      myLook = look;
+      transmit({ type: 'look', look });
+    },
   };
+  /** My look, sent again whenever the connection is made anew. */
+  let myLook: Look | null = null;
 
   const receive = (message: ServerMessage): void => {
     switch (message.type) {
@@ -196,6 +211,9 @@ export function onlineSession(options: OnlineOptions): Session {
       case 'presence':
         session.online = message.online;
         break;
+      case 'looks':
+        session.looks = message.looks;
+        break;
       case 'rejected':
         inFlight = false;
         pending.push({ type: 'interrupted', hero: session.myId, reason: message.reason });
@@ -215,6 +233,7 @@ export function onlineSession(options: OnlineOptions): Session {
     socket = new WebSocket(url);
     socket.onopen = () => {
       session.status = '';
+      if (myLook) transmit({ type: 'look', look: myLook });
     };
     socket.onmessage = (event) => receive(JSON.parse(String(event.data)) as ServerMessage);
     socket.onclose = (event) => {

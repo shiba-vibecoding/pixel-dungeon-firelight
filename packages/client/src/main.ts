@@ -29,6 +29,8 @@ import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
   showHistory, showMenu, showRankings, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, slot, toast,
 } from './screens';
+import { mart } from './mart';
+import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
@@ -139,6 +141,14 @@ const hud = new Hud({
 });
 /** Something was picked up since the backpack was last opened. */
 let newLoot = false;
+
+// Pixel-Mart: what this player owns, from the server; what they wear goes to the party.
+void mart.refresh(SERVER);
+setBadgeImages(Object.fromEntries(BADGES.map((badge) => [badge.id, badge.image])));
+/** The class my hero plays in the current run. */
+const myClass = (): HeroClass => (session?.world && heroById(session.world, session.myId)?.heroClass) || heroClass;
+const putOnLook = (): void => session?.wear(mart.look(myClass()));
+mart.onChange(putOnLook);
 const camera: Camera = { x: 0, y: 0, zoom: 2 };
 
 /* Preferences */
@@ -221,6 +231,7 @@ function enterGame(next: Session, roomId: string | null): void {
   backButton(() => (overlayOpen() ? closeOverlay() : openMenu()));
   hud.show(true);
   newLoot = false;
+  putOnLook();
   view.log = [];
   view.say(t.welcome);
   hideOverlay();
@@ -327,6 +338,7 @@ function toTitle(): void {
     onDaily: () => startSolo('daily'),
     onDailyBoard: SERVER ? () => showDailyBoard(dailyBoard(), toTitle) : undefined,
     onRankings: () => showRankings(rankings(), toTitle),
+    onMart: () => showMart({ heroClass, onClose: toTitle }),
   });
 }
 
@@ -345,6 +357,8 @@ function openMenu(): void {
     },
     onHelp: () => showHelp(hideOverlay),
     onBadges: () => showBadges(hideOverlay),
+    onMart: () => showMart({ heroClass: myClass(), onClose: hideOverlay }),
+    onTreat: () => showTreat(hideOverlay),
     onEffects: (full) => {
       quality.setMode(full ? 'full' : 'light');
       resize();
@@ -781,7 +795,10 @@ function openHero(): void {
   if (!world || !me) return;
   walk.reset();
   aim = null;
-  showHero({ hero: me, buffs: heroBuffs(me), onClose: hideOverlay });
+  showHero({
+    hero: me, buffs: heroBuffs(me), onClose: hideOverlay, skin: session?.looks[me.id]?.skin,
+    looks: looksRows(me.heroClass, (shelf) => showMart({ heroClass: me.heroClass, shelf, onClose: openHero })),
+  });
 }
 
 function openBackpack(): void {
@@ -1004,7 +1021,7 @@ function tick(now: number): void {
       {
         me: placeholderHero, party: [], online: [], log: [], buffs: [], quick: null,
         status: session.status ? { kind: session.status === t.reconnecting ? 'reconnecting' : 'connecting', text: session.status } : null,
-        keys: 0, examining: false, newLoot: false,
+        keys: 0, examining: false, newLoot: false, looks: {},
       },
       false,
     );
@@ -1092,6 +1109,9 @@ function tick(now: number): void {
     for (const effect of effects) effectFx(effect, view, world, session.myId, vnow);
     handleMyEffects(effects, session.myId);
   }
+  // An online session learns my class with its first snapshot: wear the look for it.
+  if (!session.looks[session.myId] && session.mode === 'solo') putOnLook();
+  view.looks = session.looks;
   view.sync(world, vnow, session.myId);
   step(world, now, visible);
   fx.update(vnow, dt);
@@ -1164,6 +1184,7 @@ function tick(now: number): void {
       buffs: heroBuffs(me),
       examining,
       newLoot,
+      looks: session.looks,
       keys: me.items.filter((i) => (i.kind === 'key.iron' || i.kind === 'key.skeleton') && i.depth === me.depth).length,
       quick: quickItem
         ? {

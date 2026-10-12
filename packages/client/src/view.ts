@@ -1,11 +1,12 @@
 import {
   cellX, cellY, type Effect, type Enchantment, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind,
   WIDTH, type World,
+  type Look,
 } from '@pd/core';
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
 import { itemName } from './itemtext';
-import { type AnimName, type Assets, type CharSprite, duration } from './sprites';
+import { type AnimName, type Assets, type CharSprite, duration, heroSprite } from './sprites';
 import { haptic } from './telegram';
 
 /*
@@ -42,6 +43,8 @@ export const TILE = 16;
 
 export interface Puppet {
   id: string;
+  /** A hero's Pixel-Mart look (effect, the patron's star); undefined for monsters. */
+  look?: Look;
   /** Hero class or monster kind. */
   kind: string;
   sprite: CharSprite;
@@ -123,6 +126,8 @@ export class View {
   /** Cells lit up for a moment: discoveries and traps, or tinted clouds of gas and flame. */
   flashes: Array<{ cell: number; start: number; color?: string; duration?: number }> = [];
   log: LogLine[] = [];
+  /** What each player wears (Pixel-Mart), by hero id: their look, effect and frame, and the patron's star. */
+  looks: Record<string, Look> = {};
   depth = 0;
   /** When the "boss slain" banner appeared, or 0. */
   bannerStart = 0;
@@ -218,6 +223,9 @@ export class View {
           hero.invisible > 0,
         );
         const puppet = this.puppets.get(hero.id)!;
+        // Pixel-Mart: the hero's look, once its sheet has loaded.
+        puppet.sprite = heroSprite(this.assets, hero.heroClass, this.looks[hero.id]?.skin);
+        puppet.look = this.looks[hero.id];
         puppet.burning = hero.burning > 0;
         puppet.poisoned = hero.poison > 0;
         puppet.row = itemDef(hero.armor.kind).tier ?? 0;
@@ -229,6 +237,7 @@ export class View {
       const twin = mob.image && world.heroes.find((hero) => hero.id === mob.image!.owner);
       if (twin) {
         place(mob.id, 'mirror', this.assets.heroes[twin.heroClass], false, mob.pos, mob.hp, mob.ht, false, false, true);
+        this.puppets.get(mob.id)!.sprite = heroSprite(this.assets, twin.heroClass, this.looks[twin.id]?.skin);
         this.puppets.get(mob.id)!.row = itemDef(twin.armor.kind).tier ?? 0;
         continue;
       }

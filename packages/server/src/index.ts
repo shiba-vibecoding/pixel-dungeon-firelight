@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { type ClientMessage, emptyWallet, type HeroClass, isPatron, type PlayerInfo, type Wallet } from '@pd/core';
+import { allowedLook, type ClientMessage, emptyWallet, type HeroClass, isPatron, type Look, type PlayerInfo, type Wallet } from '@pd/core';
 import { botApi, createInvoice, handleUpdate, type Wallets } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { type DailyEntry, type DailyResult, Leaderboard, parseResult } from './leaderboard';
@@ -119,7 +119,26 @@ export class Room extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment(player);
     await this.apply(room.connect(player, Date.now()));
+    // What everyone already in the room wears.
+    this.deliver([{ to: [player.id], message: { type: 'looks', looks: await this.looks() } }]);
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** What the players of this room wear (Pixel-Mart), by player id; kept so a hibernated room remembers. */
+  private async looks(): Promise<Record<string, Look>> {
+    return (await this.ctx.storage.get<Record<string, Look>>('looks')) ?? {};
+  }
+
+  /** A player's look, checked against their wallet (a Telegram player's purchases), then shown to the room. */
+  private async wear(player: PlayerInfo, look: Look): Promise<void> {
+    const telegram = /^tg(\d+)$/.exec(player.id);
+    const wallet = telegram ? await wallets(this.env).get(Number(telegram[1])) : emptyWallet();
+    // In development (no bot token) the client is trusted, as it is with its identity.
+    const allowed = this.env.BOT_TOKEN ? allowedLook(look, wallet, player.heroClass, Date.now()) : look;
+    const looks = { ...(await this.looks()), [player.id]: allowed };
+    await this.ctx.storage.put('looks', looks);
+    const everyone = this.ctx.getWebSockets().map((ws) => this.playerOf(ws).id);
+    this.deliver([{ to: everyone, message: { type: 'looks', looks } }]);
   }
 
   override async webSocketMessage(ws: WebSocket, data: string | ArrayBuffer): Promise<void> {
@@ -127,6 +146,10 @@ export class Room extends DurableObject<Env> {
     try {
       message = JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data)) as ClientMessage;
     } catch {
+      return;
+    }
+    if (message.type === 'look') {
+      await this.wear(this.playerOf(ws), message.look ?? {});
       return;
     }
     const room = await this.room();

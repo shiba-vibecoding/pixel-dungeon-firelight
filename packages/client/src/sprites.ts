@@ -323,7 +323,30 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image, w, h, cols: Math.floor(image.width / w) });
 
 /** Loads every sprite sheet; `onProgress` hears the share done, from 0 to 1. */
+/** Where the sprite sheets are, for the looks loaded later. */
+let assetBase = '';
+
+/** Hero looks bought in Pixel-Mart (assets/skins/<sheet>-<variant>.png), loaded when first worn. */
+const looks = new Map<string, CharSprite | null>();
+
+/** The sheet a hero is drawn with: their look's, once loaded, or the original. */
+export function heroSprite(assets: Assets, heroClass: HeroClass, skin?: string): CharSprite {
+  if (!skin) return assets.heroes[heroClass];
+  const key = `${heroClass}-${skin}`;
+  const loaded = looks.get(key);
+  if (loaded) return loaded;
+  if (!looks.has(key)) {
+    looks.set(key, null);
+    const file = heroClass === 'huntress' ? 'ranger' : heroClass;
+    void loadImage(`${assetBase}skins/${file}-${skin}.png`)
+      .then((image) => looks.set(key, { sheet: sheet(image, 12, 15), anims: HERO_ANIMS }))
+      .catch(() => undefined);
+  }
+  return assets.heroes[heroClass];
+}
+
 export async function loadAssets(base: string, onProgress?: (done: number) => void): Promise<Assets> {
+  assetBase = base;
   const names = [
     'tiles0', 'water0', 'tiles1', 'water1', 'tiles2', 'water2', 'spinner', 'dm300', 'tiles3', 'water3',
     'elemental', 'monk', 'warlock', 'golem', 'king', 'undead', 'tiles4', 'water4',

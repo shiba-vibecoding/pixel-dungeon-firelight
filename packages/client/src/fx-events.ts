@@ -93,6 +93,10 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       const share = Math.min(1, effect.damage / Math.max(1, target.ht));
       const angle = from ? Math.atan2(to.y - from.y, to.x - from.x) : undefined;
       const { colors, glow } = material(target.kind);
+      // The «Sparks» effect: a hero's blows strike gold as well.
+      if (attacker?.look?.effect === 'sparks') {
+        burst(to, now, { count: 8 + Math.round(share * 12), colors: SPARKS, glow: true, speed: [40, 110], life: [180, 420], gravity: 140, drag: 0.1, size: [1, 2], angle, cone: 1.4 });
+      }
       burst(to, now, {
         count: 6 + Math.round(share * 30) + Math.min(10, effect.damage), colors, glow, speed: [35, 100 + share * 90], life: [280, 680],
         gravity: 260, drag: 0.12, size: [1, 3], angle, cone: 1.7, spread: 2,
@@ -412,6 +416,11 @@ export function lightsFor(level: Level, visible: readonly boolean[], view: View,
 }
 
 /** Every frame: embers off whoever burns, bubbles off the poisoned, sparkles behind bolts in flight. */
+/** Pixel-Mart effects' colours. */
+const SPARKS = ['#fff3b0', '#ffcc66', '#ffeba4', '#ffffff'];
+const FIREFLIES = ['#d8ff8a', '#fff7a0', '#b8ff6a'];
+const SNOW = ['#ffffff', '#e8f4ff', '#bfe3ff'];
+
 export function ambientFx(view: View, now: number, dt: number): void {
   const chance = (perSecond: number): boolean => Math.random() < (perSecond * dt) / 1000;
   for (const puppet of view.puppets.values()) {
@@ -422,6 +431,16 @@ export function ambientFx(view: View, now: number, dt: number): void {
     }
     if (puppet.poisoned && chance(3)) {
       fx.burst(x + 4 + Math.random() * 8, y + 6, now, { count: 1, colors: ICHOR, speed: [1, 4], life: [500, 900], rise: 10, drag: 0.5, size: [1, 1], spread: 0 });
+    }
+    // Pixel-Mart effects a hero wears, seen by the whole party.
+    const effect = puppet.look?.effect;
+    if (effect === 'fireflies' && chance(2.5)) {
+      // Fireflies drift about the hero, glowing.
+      fx.burst(x + Math.random() * 16, y + Math.random() * 14, now, { count: 1, colors: FIREFLIES, glow: true, speed: [3, 9], life: [900, 1600], rise: 4, drag: 0.4, size: [1, 1], spread: 0 });
+    }
+    if (effect === 'snow' && chance(6)) {
+      // Snow falls about the hero, from just above their head.
+      fx.burst(x - 8 + Math.random() * 32, y - 14, now, { count: 1, colors: SNOW, speed: [2, 6], life: [900, 1400], gravity: 18, drag: 0.6, size: [1, 1], spread: 0 });
     }
   }
   for (const p of view.projectiles) {

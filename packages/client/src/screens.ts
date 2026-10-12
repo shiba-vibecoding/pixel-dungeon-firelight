@@ -9,9 +9,10 @@ import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
 import { isKnown, itemInfo, itemName, plainName, wearOf } from './itemtext';
 import type { DailyBoard } from './leaderboard';
+import { mart } from './mart';
 import { quality } from './quality';
 import type { RunRecord } from './rankings';
-import type { Assets } from './sprites';
+import { type Assets, heroSprite } from './sprites';
 import type { LogLine } from './view';
 
 /*
@@ -32,9 +33,9 @@ export function setAssets(loaded: Assets): void {
   assets = loaded;
 }
 
-type Child = Node | string | null | undefined | false;
+export type Child = Node | string | null | undefined | false;
 
-function el<K extends keyof HTMLElementTagNameMap>(
+export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K, props: Partial<HTMLElementTagNameMap[K]> & { className?: string } = {}, ...children: Child[]
 ): HTMLElementTagNameMap[K] {
   const element = Object.assign(document.createElement(tag), props);
@@ -45,7 +46,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 /** A button of the design system: '' secondary, 'primary' (one per window), 'danger', 'quiet', 'ally'. */
-function button(label: string, onClick: () => void, className = ''): HTMLButtonElement {
+export function button(label: string, onClick: () => void, className = ''): HTMLButtonElement {
   const click = (): void => {
     audio.play('click');
     onClick();
@@ -85,7 +86,7 @@ root.addEventListener('pointerdown', (event) => {
   }
 });
 
-function show(content: HTMLElement, onClose: (() => void) | null, bare = false): void {
+export function show(content: HTMLElement, onClose: (() => void) | null, bare = false): void {
   closer = onClose;
   root.replaceChildren(content);
   root.classList.add('open');
@@ -149,7 +150,7 @@ interface WindowOptions {
 }
 
 /** A window: the head (icon, title, cross), then the body. */
-function windowOf(options: WindowOptions, ...body: Child[]): HTMLElement {
+export function windowOf(options: WindowOptions, ...body: Child[]): HTMLElement {
   const head =
     (options.title || options.icon || options.onClose) &&
     el(
@@ -174,7 +175,7 @@ function windowOf(options: WindowOptions, ...body: Child[]): HTMLElement {
   return box;
 }
 
-const info = (text: string, className = 'pd-info'): HTMLElement => el('p', { className, textContent: text });
+export const info = (text: string, className = 'pd-info'): HTMLElement => el('p', { className, textContent: text });
 
 /* Portraits */
 
@@ -182,9 +183,9 @@ const info = (text: string, className = 'pd-info'): HTMLElement => el('p', { cla
  * The first frame of a character's sprite, up to three times its size, on a
  * small canvas; for a hero, `row` is the armour's tier, as on the map.
  */
-export function portrait(kind: MobKind | HeroClass, row = 0): HTMLElement {
+export function portrait(kind: MobKind | HeroClass, row = 0, skin?: string): HTMLElement {
   const box = el('div', { className: 'pd-portrait' });
-  const sprite = assets && (kind in assets.heroes ? assets.heroes[kind as HeroClass] : assets.mobs[kind as MobKind]);
+  const sprite = assets && (kind in assets.heroes ? heroSprite(assets, kind as HeroClass, skin) : assets.mobs[kind as MobKind]);
   if (!sprite) return box;
   const { sheet } = sprite;
   const frame = sprite.anims.idle.frames[0] ?? 0;
@@ -354,6 +355,7 @@ export interface TitleOptions {
   /** Shows today's leaderboard; absent without a server. */
   onDailyBoard?: () => void;
   onRankings(): void;
+  onMart(): void;
 }
 
 export function showTitle(options: TitleOptions): void {
@@ -451,7 +453,7 @@ export function showTitle(options: TitleOptions): void {
           ...main,
           ...rest,
           options.coopAvailable ? button(t.coop, options.onCoop, 'ally') : info(t.coopUnavailable, 'pd-note center'),
-          button(t.rankings, options.onRankings, 'quiet'),
+          el('div', { className: 'pd-row' }, button(t.rankings, options.onRankings, 'quiet'), button(t.mart, options.onMart, 'quiet')),
         ),
         daily,
       ),
@@ -469,6 +471,8 @@ export interface MenuOptions {
   onInvite(): void;
   onHelp(): void;
   onBadges(): void;
+  onMart(): void;
+  onTreat(): void;
   /** Full effects or light ones (quality.ts). */
   onEffects(full: boolean): void;
   onExit(): void;
@@ -516,8 +520,10 @@ export function showMenu(options: MenuOptions): void {
         options.room && button(t.invite, options.onInvite, 'ally'),
         button(t.help, options.onHelp),
         button(t.badges, options.onBadges),
+        button(t.mart, options.onMart),
         sound,
         effects,
+        button(t.treat, options.onTreat, 'quiet'),
         button(t.toMenu, options.onExit, 'quiet'),
       ),
     ),
@@ -536,6 +542,7 @@ export function showBadges(onClose: () => void): void {
   const name = el('span', { className: 'pd-badge-name' });
   const detail = el('div', { className: 'pd-badge-detail' }, big, name);
   const select = (id: BadgeId, image: number, node: HTMLElement | null): void => {
+    big.className = 'pd-badge big';
     big.dataset.i = String(image);
     big.classList.toggle('dim', !earned.has(id));
     name.textContent = badgeText(id);
@@ -555,6 +562,19 @@ export function showBadges(onClose: () => void): void {
     };
     grid.append(node);
   }
+  // «Patron of the arts», outside the original's badges: for a tip or the patronage.
+  if (mart.maecenas) {
+    const node = el('button', { className: 'pd-slot', ariaLabel: t.maecenas }, el('i', { className: 'pd-offer-badge patron' }));
+    node.onclick = () => {
+      audio.play('click');
+      grid.querySelectorAll('.selected').forEach((n) => n.classList.remove('selected'));
+      node.classList.add('selected');
+      big.className = 'pd-offer-badge patron';
+      name.textContent = t.maecenas;
+      detail.classList.remove('locked');
+    };
+    grid.append(node);
+  }
   const first = BADGES.find((b) => fresh.has(b.id)) ?? BADGES.find((b) => earned.has(b.id)) ?? BADGES[0]!;
   show(
     windowOf(
@@ -571,6 +591,10 @@ export function showBadges(onClose: () => void): void {
 
 export interface HeroOptions {
   hero: Hero;
+  /** Pixel-Mart's «Look» rows, if the shop is there. */
+  looks?: HTMLElement;
+  /** The look the hero wears, for their portrait. */
+  skin?: string;
   buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
   onClose(): void;
 }
@@ -596,7 +620,7 @@ export function showHero(options: HeroOptions): void {
     windowOf(
       {
         title: t.heroTitle(hero.subclass ? capitalize(t.subclasses[hero.subclass]) : t.classes[hero.heroClass], hero.lvl),
-        icon: portrait(hero.heroClass, armorTier(hero)),
+        icon: portrait(hero.heroClass, armorTier(hero), options.skin),
         onClose: options.onClose,
       },
       stats([
@@ -608,6 +632,8 @@ export function showHero(options: HeroOptions): void {
       ]),
       el('h3', { className: 'pd-heading', textContent: t.conditions }),
       ...(buffs.length > 0 ? buffs : [info(t.noConditions, 'pd-note')]),
+      options.looks && el('h3', { className: 'pd-subhead', textContent: t.looksTitle }),
+      options.looks,
     ),
     options.onClose,
   );

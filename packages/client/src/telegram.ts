@@ -15,6 +15,7 @@ interface WebApp {
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
   openTelegramLink?(url: string): void;
+  openInvoice?(url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void): void;
   HapticFeedback?: {
     impactOccurred(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft'): void;
     notificationOccurred(type: 'error' | 'success' | 'warning'): void;
@@ -140,4 +141,24 @@ export function haptic(kind: 'hit' | 'hurt' | 'success' | 'error'): void {
       feedback.notificationOccurred('error');
       break;
   }
+}
+
+/**
+ * Opens a Stars invoice (WebApp.openInvoice) and resolves to how it ended:
+ * «paid», «cancelled», «failed» or «pending»; «failed» outside Telegram.
+ */
+export function openInvoice(link: string): Promise<'paid' | 'cancelled' | 'failed' | 'pending'> {
+  return new Promise((resolve) => {
+    if (!webApp?.openInvoice || !inTelegram || !(webApp.isVersionAtLeast?.('6.1') ?? false)) {
+      resolve('failed');
+      return;
+    }
+    webApp.openInvoice(link, (status) => resolve(status));
+  });
+}
+
+/** Opens a t.me link inside Telegram (a subscription's settings, a chat), or in a new tab elsewhere. */
+export function openLink(url: string): void {
+  if (webApp?.openTelegramLink && inTelegram) webApp.openTelegramLink(url);
+  else window.open(url, '_blank', 'noopener');
 }

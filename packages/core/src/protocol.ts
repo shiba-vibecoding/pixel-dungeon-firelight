@@ -1,4 +1,5 @@
 import type { PlayerInfo } from './actors';
+import type { Look } from './shop';
 import { act, type Action, type ActionResult, joinHero, restartWorld, type World } from './world';
 
 /*
@@ -20,12 +21,16 @@ export type WorldEvent =
 export type ClientMessage =
   | { type: 'act'; action: Action }
   | { type: 'restart' }
-  | { type: 'sync' };
+  | { type: 'sync' }
+  /** What my hero wears (Pixel-Mart); outside the world, so the core never sees it. */
+  | { type: 'look'; look: Look };
 
 export type ServerMessage =
   | { type: 'snapshot'; you: string; seq: number; world: World; online: string[] }
   | { type: 'event'; seq: number; event: WorldEvent }
   | { type: 'presence'; online: string[] }
+  /** What every player in the room wears, as the server allows it (see allowedLook). */
+  | { type: 'looks'; looks: Record<string, Look> }
   | { type: 'rejected'; reason: string };
 
 /** Applies an event; the server and every replica run exactly this. */

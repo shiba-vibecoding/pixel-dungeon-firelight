@@ -1,4 +1,4 @@
-import { FURY_LEVEL, type Hero, isAlive, isHungry, isStarving, maxExp, STARVING } from '@pd/core';
+import { FURY_LEVEL, type Hero, isAlive, isHungry, isStarving, type Look, maxExp, STARVING } from '@pd/core';
 import { audio } from './audio';
 import { t } from './i18n';
 import { AVATAR, durabilityBar, markWear, sprites } from './screens';
@@ -95,6 +95,8 @@ export interface HudState {
   examining: boolean;
   /** Something new in the backpack since it was last opened. */
   newLoot: boolean;
+  /** What each player wears (Pixel-Mart): my portrait's frame, the patron's star by companions' names. */
+  looks: Record<string, Look>;
 }
 
 /** How long a log line stays, and how many are shown at once (three on short screens). */
@@ -311,6 +313,12 @@ export class Hud {
     const { me } = state;
     const dead = !isAlive(me);
     if (this.changed('av', `${me.heroClass}`)) this.avatar.style.setProperty('--av', String(AVATAR[me.heroClass]));
+    // Pixel-Mart: the portrait's frame.
+    const frame = state.looks[me.id]?.frame ?? '';
+    if (this.changed('frame', frame)) {
+      const portrait = this.avatar.parentElement!;
+      portrait.className = `pd-avatar${frame ? ` framed frame-${frame}` : ''}`;
+    }
     if (this.changed('lvl', String(me.lvl))) this.level.textContent = String(me.lvl);
     const hp = Math.max(0, me.hp);
     if (this.changed('hp', `${hp}/${me.ht}/${me.poison > 0}`)) {
@@ -345,7 +353,7 @@ export class Hud {
     }
 
     const mateKey = state.party
-      .map((h) => `${h.id}:${h.name}:${h.heroClass}:${Math.max(0, h.hp)}/${h.ht}:${h.depth}:${state.online.includes(h.id)}`)
+      .map((h) => `${h.id}:${h.name}:${h.heroClass}:${Math.max(0, h.hp)}/${h.ht}:${h.depth}:${state.online.includes(h.id)}:${state.looks[h.id]?.patron ?? ''}`)
       .join('|') + `@${me.depth}`;
     if (this.changed('mates', mateKey)) {
       this.mates.hidden = state.party.length === 0;
@@ -360,7 +368,7 @@ export class Hud {
             'button',
             `pd-mate${!isAlive(hero) ? ' dead' : away ? ' away' : ''}`,
             face,
-            el('span', 'pd-mate-name', hero.name),
+            el('span', 'pd-mate-name', state.looks[hero.id]?.patron ? el('i', 'pd-patron-mark sm') : null, hero.name),
             bar,
             el('span', 'pd-mate-depth', String(hero.depth)),
           );

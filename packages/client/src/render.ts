@@ -1,7 +1,7 @@
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, regionOf } from './sprites';
 import { type Puppet, TILE, type View } from './view';
-import { bossCard, floatNumber, fxText, levelCard, slainCard } from './cards';
+import { bossCard, floatNumber, levelCard, nameplate, slainCard } from './cards';
 import { fx } from './fx';
 import { quality } from './quality';
 import { t } from './i18n';
@@ -275,8 +275,8 @@ export function render(
   for (const { puppet, x, y } of shown) {
     if (!puppet.label || !puppet.alive) continue;
     const sx = (x + TILE / 2 - camera.x) * camera.zoom;
-    const sy = (y + TILE - puppet.sprite.sheet.h - 2 - camera.y) * camera.zoom;
-    fxText(ctx, puppet.label, sx, sy, px, { font: 'small', scale: 1.5, color: '#5ec8c0', shadow: 0, alpha: 0.9 });
+    const top = (y + TILE - puppet.sprite.sheet.h - camera.y) * camera.zoom;
+    nameplate(ctx, puppet.label, sx, top, px, { patron: puppet.look?.patron });
   }
   ctx.globalAlpha = 1;
 

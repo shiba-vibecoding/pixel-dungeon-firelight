@@ -63,3 +63,6 @@ canvas#game {
 
 /* The day's ranks keep their own alignment inside the centred end-of-run window. */
 .pd-runend .pd-ranks { text-align: left; }
+
+/* An offer's armour tiers: seven equal columns, whatever the canvases ask for. */
+.pd-tiers > div { min-width: 0; }
