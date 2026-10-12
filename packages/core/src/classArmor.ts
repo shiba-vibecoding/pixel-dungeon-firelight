@@ -3,6 +3,7 @@ import { ballistica } from './ai';
 import { attack } from './combat';
 import { canEnter, charAt, type Ctx, enterCell, heroView, isHero, isWater, leaveCell } from './floor';
 import type { ItemKind } from './items';
+import { identify } from './ident';
 import { NEIGHBOURS8 } from './level/geometry';
 import { immuneTo, trapAt, triggerTrap } from './traps';
 import type { World } from './world';
@@ -25,11 +26,16 @@ const SHOCK_TURNS = 3;
 const ROOTED_TURNS = 3;
 const BURNING_TURNS = 8;
 
-/** ArmorKit.upgrade: the armour worn becomes the class armour, keeping its level, glyph and curse. */
+/**
+ * ArmorKit.upgrade: the armour worn becomes the class armour, keeping its
+ * level, glyph and curse; class armour hides nothing (ClassArmor: levelKnown
+ * and cursedKnown).
+ */
 export function applyArmorKit(ctx: Ctx, hero: Hero, index: number): void {
   hero.items.splice(index, 1);
   const old = hero.armor;
   hero.armor = { ...old, kind: CLASS_ARMOR_OF[hero.heroClass], base: old.base ?? old.kind };
+  identify(ctx.world, hero.armor);
   ctx.effects.push({ type: 'classArmor', hero: hero.id, item: hero.armor });
 }
 

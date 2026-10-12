@@ -7,6 +7,7 @@ import { canEnter, charAt, type Ctx, enterCell, type Floor, heroesOn, heroSight,
 import { isChallenged, SWARM_INTELLIGENCE } from './challenges';
 import { altarCallsMob } from './altar';
 import { type Item, itemDef, ItemGenerator, randomEnchantment } from './items';
+import { identify } from './ident';
 import { isBossDepth } from './level/builder';
 import { KING_PEDESTALS } from './level/city-boss';
 import type { Level, RoomInfo } from './level/generate';
@@ -883,6 +884,8 @@ function animatedStatue(world: World, level: Level, rng: Rng): Mob {
   do {
     weapon = generator.of('weapon');
   } while (itemDef(weapon.kind).category !== 'weapon' || weapon.level < 0);
+  // Statue: its weapon is known through and through, then enchanted.
+  identify(world, weapon);
   weapon.enchant = randomEnchantment(rng, weapon.enchant);
   const statue = createMob(nextMobId(world), 'statue', level.statue!, 'sleeping', 0);
   statue.level = level.depth;

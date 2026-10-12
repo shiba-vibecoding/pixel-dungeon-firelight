@@ -1,4 +1,5 @@
 import { wear } from './wear';
+import { identify, identifyBelongings, isIdentified, observeBelongings } from './ident';
 import { mobAct, populate, reinforce, respawn, TIME_TO_RESPAWN } from './ai';
 import {
   awareness, createHero, createMob, type Hero, heroAttackDelay, type HeroClass, heroSpeed, hungerGrowth, hungerStep, HUNGRY, isAlive,
@@ -11,7 +12,7 @@ import {
   swapsWithHero,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
-import { createItem, createItems, itemDef, ItemGenerator, type ItemKind, shareOfDepth, WAND_RECHARGE, wandMaxCharges } from './items';
+import { createItem, createItems, ItemGenerator, type ItemKind, shareOfDepth, WAND_RECHARGE, wandMaxCharges } from './items';
 import { staggerTarget, stepOnPlant, sungrassHeals } from './plants';
 import { discoverable } from './level/flags';
 import { faceCurse, faceCurseProblem, type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
@@ -607,16 +608,20 @@ function starve(ctx: Ctx, hero: Hero, time: number): void {
   }
 }
 
-/** Ring.Ticker: a ring wears with every turn it is worn, and worn long enough tells the party what it is. */
+/**
+ * RingBuff.act: a ring wears with every turn it is worn, and worn long enough
+ * is known through and through: its kind, for the whole party, and its level.
+ */
 function wearRings(ctx: Ctx, hero: Hero, time: number): void {
   for (const ring of hero.rings) {
-    wear(ctx, hero, ring, time);
-    if (ctx.world.known.includes(ring.kind)) continue;
-    ring.worn = (ring.worn ?? 0) + time;
-    if (ring.worn >= RING_TICKS_TO_KNOW) {
-      ctx.world.known.push(ring.kind);
-      ctx.effects.push({ type: 'identified', hero: hero.id, kind: ring.kind });
+    if (!isIdentified(ctx.world, ring)) {
+      ring.worn = (ring.worn ?? 0) + time;
+      if (ring.worn >= RING_TICKS_TO_KNOW) {
+        const learned = identify(ctx.world, ring);
+        ctx.effects.push({ type: 'familiar', hero: hero.id, item: ring, learned });
+      }
     }
+    wear(ctx, hero, ring, time);
   }
 }
 
@@ -808,7 +813,11 @@ function win(ctx: Ctx, hero: Hero, ending: 'amulet' | 'surface'): void {
   world.victory = true;
   world.over = true;
   world.ending = ending;
-  for (const other of world.heroes) other.intent = null;
+  for (const other of world.heroes) {
+    other.intent = null;
+    // Dungeon.win: everything the heroes carry is known for what it is.
+    identifyBelongings(world, other);
+  }
   ctx.effects.push({ type: 'victory', hero: hero.id, ending });
 }
 
@@ -978,7 +987,7 @@ function keyFor(hero: Hero, kind: 'key.iron' | 'key.skeleton' = 'key.iron'): num
 
 /**
  * WellWater: water of health heals and cures; water of awareness reveals the
- * level and what the hero carries. A well runs dry once drunk from.
+ * level and what the hero wears (see ident.ts). A well runs dry once drunk from.
  */
 function drinkFromWell(ctx: Ctx, hero: Hero): void {
   const { level, world } = ctx;
@@ -1001,10 +1010,8 @@ function drinkFromWell(ctx: Ctx, hero: Hero): void {
     hero.weakened = 0;
     hero.crippled = 0;
   } else {
-    for (const item of hero.items) {
-      const category = itemDef(item.kind).category;
-      if ((category === 'potion' || category === 'scroll') && !world.known.includes(item.kind)) world.known.push(item.kind);
-    }
+    // WaterOfAwareness: what the hero wears is known through and through, and the curses of all they carry (Belongings.observe).
+    for (const kind of observeBelongings(world, hero)) ctx.effects.push({ type: 'identified', hero: hero.id, kind });
     const explored = exploredCells(world, hero.depth);
     discoverable(level.map).forEach((open, i) => {
       if (!open) return;

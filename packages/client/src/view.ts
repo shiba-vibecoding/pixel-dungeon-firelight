@@ -5,7 +5,7 @@ import {
 } from '@pd/core';
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
-import { itemName } from './itemtext';
+import { itemName, plainName } from './itemtext';
 import { type AnimName, type Assets, type CharSprite, duration, heroSprite } from './sprites';
 import { haptic } from './telegram';
 
@@ -663,6 +663,25 @@ export class View {
         }
         case 'identified':
           if (effect.hero === myId) this.say(t.identifiedAs(t.items[effect.kind]), COLORS.highlight, now);
+          break;
+        case 'revealed':
+          // ScrollOfIdentify: "It is %s".
+          if (effect.hero === myId) this.say(t.identifiedAs(itemName(world, effect.item)), COLORS.highlight, now);
+          break;
+        case 'familiar': {
+          // Weapon.proc, Armor.proc, RingBuff.act: what it was called, and what it turns out to be; Wand.wandUsed: just its name.
+          if (effect.hero !== myId) break;
+          const item = effect.item;
+          if (item.kind.startsWith('wand.')) {
+            this.say(t.familiarWand(itemName(world, item)), COLORS.highlight, now);
+          } else {
+            const was = effect.learned ? t.unknownRing(t.gems[world.run.labels[item.kind] ?? 0]!) : plainName(world, item);
+            this.say(t.familiar(was, itemName(world, item)), COLORS.highlight, now);
+          }
+          break;
+        }
+        case 'fizzled':
+          if (effect.hero === myId) this.say(t.noCharges, COLORS.warning, now);
           break;
         case 'healed':
           if (effect.amount > 0) this.float(effect.hero, `+${effect.amount}`, COLORS.positive, now);

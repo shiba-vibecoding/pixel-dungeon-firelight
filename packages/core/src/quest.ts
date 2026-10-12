@@ -3,6 +3,7 @@ import { randomRespawnCell } from './ai';
 import { type Ctx, dropItem, enterCell } from './floor';
 import { collect } from './inventory';
 import { createItem, type Item, itemDef, ItemGenerator } from './items';
+import { identify } from './ident';
 import type { Level } from './level/generate';
 import { adjacent } from './level/geometry';
 import type { Rng } from './rng';
@@ -65,6 +66,9 @@ export function spawnGhost(world: World, level: Level, mobs: Mob[], rng: Rng): v
     const another = generator.of('armor');
     if (another.level > armor.level) armor = another;
   }
+  // Ghost.Quest.spawn: both are known through and through.
+  identify(world, weapon!);
+  identify(world, armor);
   world.quest = { depth: level.depth, type, given: false, dropped: false, killsLeft: 8, done: false, weapon: weapon!, armor };
 }
 

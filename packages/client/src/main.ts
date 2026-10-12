@@ -4,7 +4,7 @@ import {
   type Hero, type Item, type Level,
   hasAmulet, heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, PLANT_KINDS, type SmithLine, T,
-  visibleCells, wandMaxCharges, WIDTH,
+  visibleCells, chargesKnown, WIDTH,
   type World, charAt, swapsWithHero,
 } from '@pd/core';
 import * as core from '@pd/core';
@@ -22,7 +22,7 @@ import { BADGES, type BadgeId, badgeText, checkBadges, countGame, earnedBadges }
 import { audio } from './audio';
 import { heroBuffs, Hud, type HudStatus, type QuickState } from './hud';
 import { capitalize, t } from './i18n';
-import { itemInfo, itemName, wearOf } from './itemtext';
+import { chargesOf, itemInfo, itemName, wearOf } from './itemtext';
 import { bakeLevel, type Camera, patchLevel, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
@@ -588,7 +588,8 @@ function toggleQuickslot(slot = 0): void {
   const index = quickIndex(me, slot);
   if (index < 0) return;
   const item = me.items[index]!;
-  if (item.charges === 0) {
+  // Wand.actions: no zapping a wand known to be empty (one of unknown charges may be tried, and fizzle).
+  if (item.charges === 0 && chargesKnown(item)) {
     view.say(t.noCharges, '#cccccc');
     return;
   }
@@ -2172,7 +2173,7 @@ function tick(now: number): void {
     item
       ? {
           sprite: itemSprite(item, world.run.labels),
-          label: item.charges !== undefined ? `${item.charges}/${wandMaxCharges(item)}` : item.qty > 1 ? String(item.qty) : '',
+          label: chargesOf(item) ?? (item.qty > 1 ? String(item.qty) : ''),
           aiming,
           wear: wearOf(world, item),
         }

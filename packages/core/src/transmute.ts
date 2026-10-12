@@ -7,8 +7,8 @@ import type { Rng } from './rng';
  * of the same tier; rings, wands and seeds into some other ring, wand or
  * seed; a scroll of upgrade into one of enchantment and back; a potion of
  * strength into one of might and back; other scrolls and potions into
- * others. Levels, curses and stacks are kept; an enchantment comes out as a
- * new one.
+ * others. Levels, curses and stacks are kept, and as much as was known of
+ * them; an enchantment comes out as a new one.
  */
 
 const WEAPON_TWINS: Partial<Record<ItemKind, ItemKind>> = {
@@ -39,6 +39,9 @@ export function transmute(item: Item, rng: Rng, depth: number): Item | null {
   const keep = (kind: ItemKind): Item => {
     const changed: Item = { ...createItem(kind, item.qty, item.level) };
     if (item.cursed) changed.cursed = true;
+    // WaterOfTransmutation: n.levelKnown = w.levelKnown, n.cursedKnown = w.cursedKnown.
+    if (item.levelUnknown) changed.levelUnknown = true;
+    if (item.curseUnknown) changed.curseUnknown = true;
     return changed;
   };
   switch (category) {
@@ -55,6 +58,8 @@ export function transmute(item: Item, rng: Rng, depth: number): Item | null {
     case 'wand': {
       const changed = keep(other(() => generator.of('wand').kind));
       changed.charges = wandMaxCharges(changed);
+      // A new wand: how many charges it holds is not known (Wand.curChargeKnown).
+      changed.chargesUnknown = true;
       return changed;
     }
     case 'scroll':

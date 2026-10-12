@@ -142,6 +142,15 @@ export type Effect =
   /** A potion drunk or a scroll read; `identified` when this taught the party what it is. */
   | { type: 'used'; hero: string; kind: ItemKind; identified: boolean }
   | { type: 'identified'; hero: string; kind: ItemKind }
+  /** Everything about an item revealed: by a scroll of identify, or a well of awareness it was dropped into (ScrollOfIdentify: "It is %s"). */
+  | { type: 'revealed'; hero: string; item: Item }
+  /**
+   * An item used long enough to know it (see ident.ts): a weapon's or armour's level, a ring or a wand
+   * through and through; `learned` when this taught the party its kind as well.
+   */
+  | { type: 'familiar'; hero: string; item: Item; learned: boolean }
+  /** A wand of unknown charges zapped with none left (Wand.zapper): it fizzles, and its level is known. */
+  | { type: 'fizzled'; hero: string; item: Item }
   | { type: 'healed'; hero: string; amount: number }
   | { type: 'strength'; hero: string }
   | { type: 'upgraded'; hero: string; item: Item }

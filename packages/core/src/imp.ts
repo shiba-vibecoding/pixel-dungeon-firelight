@@ -3,6 +3,7 @@ import { randomRespawnCell } from './ai';
 import { type Ctx, dropItem } from './floor';
 import { collect } from './inventory';
 import { createItem, type Item, ItemGenerator } from './items';
+import { identify } from './ident';
 import type { Level } from './level/generate';
 import { adjacent } from './level/geometry';
 import type { Rng } from './rng';
@@ -76,7 +77,7 @@ export function ringFromImp(ctx: Ctx, hero: Hero): void {
   hero.items = hero.items.filter((item) => item.kind !== 'quest.token');
   const ring = quest.reward;
   // The imp tells what it is (WndImp.takeReward identifies the ring).
-  if (!ctx.world.known.includes(ring.kind)) ctx.world.known.push(ring.kind);
+  identify(ctx.world, ring);
   if (!collect(hero, ring)) dropItem(ctx.floor, hero.pos, ring);
   ctx.effects.push({ type: 'pickedUp', hero: hero.id, item: ring });
   quest.done = true;

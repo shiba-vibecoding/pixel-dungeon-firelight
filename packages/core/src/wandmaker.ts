@@ -3,6 +3,7 @@ import { randomRespawnCell } from './ai';
 import { type Ctx, dropItem } from './floor';
 import { collect } from './inventory';
 import { createItem, type Item, type ItemKind } from './items';
+import { identify } from './ident';
 import type { Level } from './level/generate';
 import { adjacent, cellX, cellY, LENGTH, WIDTH } from './level/geometry';
 import { RoomType } from './level/room';
@@ -146,7 +147,8 @@ export function wandFromWandmaker(ctx: Ctx, hero: Hero, choice: 'battle' | 'util
   const wanted = hero.items[wantedOf(ctx.world, hero)]!;
   if (--wanted.qty <= 0) hero.items.splice(hero.items.indexOf(wanted), 1);
   const wand = quest[choice];
-  if (!ctx.world.known.includes(wand.kind)) ctx.world.known.push(wand.kind);
+  // WndWandmaker: the wand given is known through and through.
+  identify(ctx.world, wand);
   if (!collect(hero, wand)) dropItem(ctx.floor, hero.pos, wand);
   ctx.effects.push({ type: 'pickedUp', hero: hero.id, item: wand });
   quest.done = true;

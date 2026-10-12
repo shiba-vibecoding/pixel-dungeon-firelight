@@ -1,4 +1,4 @@
-import { type Effect, type Hero, type Item, itemDef, ITEMS, type ItemKind, type World } from '@pd/core';
+import { type Effect, type Hero, type Item, itemDef, ITEMS, type ItemKind, levelKnown, type World } from '@pd/core';
 import { lang } from './i18n';
 
 /*
@@ -199,7 +199,8 @@ export function checkBadges(world: World, me: Hero, effects: readonly Effect[]):
   earn('piranhas', (me.stats?.piranhas ?? 0) >= 6);
 
   const belongings: Item[] = [...me.items, ...me.rings, me.armor, ...(me.weapon ? [me.weapon] : [])];
-  const best = Math.max(0, ...belongings.map((item) => item.level));
+  // Badges.validateItemLevelAquired: only a level that is known counts.
+  const best = Math.max(0, ...belongings.filter(levelKnown).map((item) => item.level));
   tiers(['item1', 'item2', 'item3', 'item4'], best, [3, 6, 9, 12]);
   earn('haggler', belongings.some((item) => item.kind === 'ring.haggler'));
   earn('thorns', belongings.some((item) => item.kind === 'ring.thorns'));

@@ -1,4 +1,5 @@
 import { mend, wear } from './wear';
+import { chargesKnown, identify, isIdentified, learn, WAND_USAGES_TO_KNOW } from './ident';
 import {
   BACKPACK_SIZE, beckon, createMob, isShopkeeper, statsOf, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
   SUBCLASSES,
@@ -191,7 +192,8 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
         return 'bad target';
       }
-      return action.type === 'zap' && (item.charges ?? 0) <= 0 ? 'the wand is out of charges' : null;
+      // Wand.actions: no zapping a wand known to be empty; one of unknown charges may be tried, and fizzle.
+      return action.type === 'zap' && (item.charges ?? 0) <= 0 && chargesKnown(item) ? 'the wand is out of charges' : null;
     }
   }
 }
@@ -284,7 +286,11 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         if (hero.rings.length >= 2) hero.items.push(hero.rings.splice(hero.rings.findIndex((ring) => !ring.cursed), 1)[0]!);
         hero.rings.push(item);
         ctx.effects.push({ type: 'equipped', hero: hero.id, item });
+        // Ring.doEquip: put on, a ring's curse is known (it binds itself at once, if it is cursed).
+        delete item.curseUnknown;
         if (item.cursed) ctx.effects.push({ type: 'cursedEquip', hero: hero.id, item });
+        // RingBuff.attachTo: a rogue knows a ring for what it is the moment it is on.
+        if (hero.heroClass === 'rogue' && learn(ctx.world, item.kind)) ctx.effects.push({ type: 'identified', hero: hero.id, kind: item.kind });
         return TIME_TO_EQUIP;
       }
       const slot = itemDef(item.kind).category as 'weapon' | 'armor';
@@ -294,6 +300,8 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       else hero.items.splice(action.item, 1);
       hero[slot] = item;
       ctx.effects.push({ type: 'equipped', hero: hero.id, item });
+      // KindOfWeapon.doEquip and Armor.doEquip: in hand or worn, its curse is known.
+      delete item.curseUnknown;
       if (item.cursed) ctx.effects.push({ type: 'cursedEquip', hero: hero.id, item });
       return TIME_TO_EQUIP;
     }
@@ -318,6 +326,16 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         ctx.level.map[hero.pos] = T.EMPTY_WELL;
         dropItem(ctx.floor, hero.pos, item);
         ctx.effects.push({ type: 'dewCollected', hero: hero.id, full: true });
+        return TIME_TO_DROP;
+      }
+      // Into a well of awareness, something not yet identified is revealed, and the well runs dry (WaterOfAwareness.affectItem).
+      const awareness = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'awareness');
+      if (awareness >= 0 && ctx.level.map[hero.pos] === T.WELL && !isIdentified(ctx.world, item)) {
+        identify(ctx.world, item);
+        ctx.level.wells.splice(awareness, 1);
+        ctx.level.map[hero.pos] = T.EMPTY_WELL;
+        dropItem(ctx.floor, hero.pos, item);
+        ctx.effects.push({ type: 'revealed', hero: hero.id, item });
         return TIME_TO_DROP;
       }
       // Floating over a chasm, it falls through.
@@ -522,7 +540,7 @@ function throwPotion(ctx: Ctx, hero: Hero, index: number, target: number): void 
   }
   const harmful = BURSTS[kind];
   ctx.effects.push({
-    type: 'shattered', hero: hero.id, depth: ctx.depth, pos: end, kind, identified: harmful ? identify(ctx.world, kind) : false,
+    type: 'shattered', hero: hero.id, depth: ctx.depth, pos: end, kind, identified: harmful ? learn(ctx.world, kind) : false,
   });
   if (harmful) burst(ctx, end, harmful.kind, harmful.radius);
 }
@@ -537,13 +555,27 @@ const BURSTS: Partial<Record<ItemKind, { kind: Burst; radius: number }>> = {
   'potion.purity': { kind: 'purity', radius: 2 },
 };
 
-/** Wand.zapper: a charge is spent, and using a wand tells the party what it is. */
+/**
+ * Wand.zapper: using a wand tells the party what it is, and a charge is spent;
+ * with none left (which only a wand of unknown charges lets one try) it
+ * fizzles, and its level is known.
+ */
 function zap(ctx: Ctx, hero: Hero, index: number, target: number): void {
   const wand = hero.items[index]!;
+  if (learn(ctx.world, wand.kind)) ctx.effects.push({ type: 'identified', hero: hero.id, kind: wand.kind });
+  if ((wand.charges ?? 0) <= 0) {
+    delete wand.levelUnknown;
+    ctx.effects.push({ type: 'fizzled', hero: hero.id, item: wand });
+    return;
+  }
   wand.charges = (wand.charges ?? 1) - 1;
   hero.invisible = 0;
-  if (identify(ctx.world, wand.kind)) ctx.effects.push({ type: 'identified', hero: hero.id, kind: wand.kind });
   zapWand(ctx, hero, wand, target);
+  // Wand.wandUsed: zapped often enough, a wand is known through and through.
+  if (!isIdentified(ctx.world, wand) && (wand.familiarity = (wand.familiarity ?? 0) + 1) >= WAND_USAGES_TO_KNOW) {
+    identify(ctx.world, wand);
+    ctx.effects.push({ type: 'familiar', hero: hero.id, item: wand, learned: false });
+  }
   // Wand.wandUsed: each zap wears the wand.
   wear(ctx, hero, wand);
 }
@@ -803,12 +835,6 @@ function drinkDew(ctx: Ctx, hero: Hero, dew: Item): void {
   ctx.effects.push({ type: 'dew', hero: hero.id, amount });
 }
 
-function identify(world: World, kind: ItemKind): boolean {
-  if (world.known.includes(kind)) return false;
-  world.known.push(kind);
-  return true;
-}
-
 /**
  * InventoryScroll: the item a scroll of upgrade, enchantment or identify was
  * read on, found before the scroll leaves the pack (which moves the slots
@@ -844,7 +870,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: Item | undefined): voi
   const item = hero.items[index]!;
   const kind = item.kind;
   if (--item.qty <= 0) hero.items.splice(index, 1);
-  ctx.effects.push({ type: 'used', hero: hero.id, kind, identified: identify(world, kind) });
+  ctx.effects.push({ type: 'used', hero: hero.id, kind, identified: learn(world, kind) });
 
   switch (kind) {
     case 'potion.healing': {
@@ -897,9 +923,10 @@ function use(ctx: Ctx, hero: Hero, index: number, target: Item | undefined): voi
     }
 
     case 'scroll.identify': {
-      // ScrollOfIdentify.onItemSelected: the chosen item (or the first unknown potion or scroll) is known for what it is.
-      if (target && identify(world, target.kind)) {
-        ctx.effects.push({ type: 'identified', hero: hero.id, kind: target.kind });
+      // ScrollOfIdentify.onItemSelected: all the secrets of the chosen item (or of the first unknown one, see defaultTarget) revealed.
+      if (target) {
+        identify(world, target);
+        ctx.effects.push({ type: 'revealed', hero: hero.id, item: target });
       }
       break;
     }
