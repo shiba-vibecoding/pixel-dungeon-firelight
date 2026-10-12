@@ -34,7 +34,7 @@ export type ItemSpec =
   /** A few loose coins (Gold(Random.IntRange(1, 3))). */
   | { roll: 'coins' }
   /** From one of the categories, keeping the best of `tries` rolls by upgrade level. */
-  | { roll: 'category'; categories: ReadonlyArray<'weapon' | 'armor' | 'potion' | 'scroll' | 'food' | 'gold'>; tries: number }
+  | { roll: 'category'; categories: ReadonlyArray<'weapon' | 'armor' | 'potion' | 'scroll' | 'food' | 'gold' | 'ring'>; tries: number }
   /** The iron key to this level's locked room. */
   | { roll: 'key' }
   /** A potion of liquid flame, to burn the way into a storage room. */

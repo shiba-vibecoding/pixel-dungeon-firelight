@@ -3,7 +3,7 @@ import {
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
 import { attack, earnExp, hurt } from './combat';
-import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, leaveCell } from './floor';
+import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, landItem, leaveCell } from './floor';
 import {
   buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
   magicMissileDamage, missileStats, wandMaxCharges,
@@ -222,10 +222,12 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     if (--item.qty <= 0) hero.items.splice(index, 1);
     const end = ballistica(ctx, hero.pos, target).at(-1)!;
     ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: kind });
-    // Into an alchemy pot, it goes into the brew instead.
+    // Into an alchemy pot, it goes into the brew instead; into a chasm, it falls.
     if (ctx.level.map[end] === T.ALCHEMY) {
       dropItem(ctx.floor, end, createItem(kind));
       brew(ctx, end);
+    } else if (hasFlag(ctx.level.map[end]!, F.PIT)) {
+      landItem(ctx, end, createItem(kind));
     } else {
       plant(ctx, end, SEED_PLANTS[kind]!);
     }
@@ -253,7 +255,7 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
       damage: [stats.min, stats.max],
     });
   }
-  if (!boomerang && !hit) dropItem(ctx.floor, end, thrown);
+  if (!boomerang && !hit) landItem(ctx, end, thrown);
 }
 
 /** Potion.shatter: a thrown potion breaks where it lands, letting out whatever is inside. */
@@ -263,6 +265,11 @@ function throwPotion(ctx: Ctx, hero: Hero, index: number, target: number): void 
   if (--item.qty <= 0) hero.items.splice(index, 1);
   const end = ballistica(ctx, hero.pos, target).at(-1)!;
   ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: kind });
+  // Over a chasm, it falls whole (Potion.onThrow).
+  if (hasFlag(ctx.level.map[end]!, F.PIT)) {
+    landItem(ctx, end, createItem(kind));
+    return;
+  }
   const harmful = BURSTS[kind];
   ctx.effects.push({
     type: 'shattered', hero: hero.id, depth: ctx.depth, pos: end, kind, identified: harmful ? identify(ctx.world, kind) : false,

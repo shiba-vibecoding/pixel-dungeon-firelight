@@ -28,6 +28,9 @@ Yendor on depth 26:
   their iron keys, magic wells, trap rooms, storage rooms behind barricades,
   gardens, laboratories with an alchemy pot (three seeds brew a potion),
   and the shops on depths 6, 11, 16 and 21.
+- Chasms you can jump into, landing hurt and crippled on the depth below
+  (with whatever was thrown in before you); a weak floor drops you into the
+  locked pit room beneath it, where an earlier victim's remains hold its key.
 - Monsters with the original stats and behaviour: rats, gnoll scouts, sewer
   crabs; skeletons that explode, thieves that steal and run, swarms of flies
   that split, gnoll shamans with lightning, vampire bats, gnoll brutes, cave
@@ -71,7 +74,7 @@ Not ported yet: weapon enchantments and
 armour glyphs; the ankh; the wands of amok, reach, flock and regrowth; the
 rotberry and the ring of herbalism; the blacksmith's and the imp's quests and
 the wandmaker's rotberry errand; the remaining special rooms (pool, statue,
-vault, weak floor) and chasms you can fall through; dwarf monks disarming; the
+vault); dwarf monks disarming; the
 rare monster variants (albino rats, bandits, fetid rats); and gas clouds (gas
 acts at once on everyone within reach instead).
 

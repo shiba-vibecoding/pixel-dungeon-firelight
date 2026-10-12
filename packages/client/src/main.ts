@@ -1,5 +1,6 @@
 import {
-  adjacent, blockers, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, findPath, HEAP_SPRITES,
+  adjacent, blockers, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
+  HEAP_SPRITES,
   type Hero, type Item,
   heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   PLANT_KINDS, T,
@@ -13,7 +14,7 @@ import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
-  hideOverlay, overlayOpen, showBackpack, showDailyBoard, showHelp, showHero, showMenu, showQuest, showRunEnd,
+  hideOverlay, overlayOpen, showBackpack, showConfirm, showDailyBoard, showHelp, showHero, showMenu, showQuest, showRunEnd,
   showSell, showSign, showTitle, showTrade, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
@@ -102,6 +103,8 @@ let session: Session | null = null;
 let room: string | null = null;
 let seenGeneration = -1;
 let deathShown = -1;
+/** My hero just jumped into a chasm: the next change of depth is a fall. */
+let justFell = false;
 
 function setRoomInUrl(id: string | null): void {
   const url = new URL(location.href);
@@ -439,6 +442,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line);
     if (effect.type === 'wandmaker' && effect.hero === myId) talkWithWandmaker(effect.line);
     if (effect.type === 'shop' && effect.hero === myId) openShop();
+    if (effect.type === 'fell' && effect.hero === myId) justFell = true;
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     const hurt =
       (effect.type === 'attack' && effect.target === myId) ||
@@ -525,6 +529,13 @@ function tapCell(cell: number): void {
     return;
   }
   if (!explored[cell]) return;
+  // Chasm.heroJump: a chasm right beside the hero asks whether to jump in.
+  if (hasFlag(level.map[cell]!, F.PIT)) {
+    if (adjacent(me.pos, cell)) {
+      showConfirm(t.chasm, t.jumpQuestion, t.jumpYes, t.jumpNo, () => send({ type: 'jump', to: cell }, performance.now()), hideOverlay);
+    }
+    return;
+  }
   if (level.map[cell] === T.LOCKED_DOOR && !me.items.some((i) => i.kind === 'key.iron' && i.depth === me.depth)) {
     view.say(t.locked, '#ff8800');
     return;
@@ -758,9 +769,10 @@ function tick(now: number): void {
   // Footsteps, doors and stairs of my own hero.
   if (lastPlace.generation === session.generation && isAlive(me)) {
     if (me.depth !== lastPlace.depth) {
-      audio.play('descend');
+      audio.play(justFell ? 'falling' : 'descend');
       // GameScene's greetings: the depth, a new region, and the level's feeling.
-      view.say(me.depth > lastPlace.depth ? t.descended(me.depth) : t.ascended(me.depth));
+      view.say(justFell ? t.fell(me.depth) : me.depth > lastPlace.depth ? t.descended(me.depth) : t.ascended(me.depth));
+      justFell = false;
       if (me.depth === 6 && lastPlace.depth === 5) view.say(t.enterPrison, '#ffff44');
       if (me.depth === 11 && lastPlace.depth === 10) view.say(t.enterCaves, '#ffff44');
       if (me.depth === 16 && lastPlace.depth === 15) view.say(t.enterCity, '#ffff44');

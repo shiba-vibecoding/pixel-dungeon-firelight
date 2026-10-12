@@ -605,7 +605,65 @@ function paintTraps(level: LevelBuilder, room: Room): void {
   }
 }
 
+/**
+ * WeakFloorPainter: a chasm with a ragged ledge along the door. Whoever
+ * jumps in lands in the pit room of the depth below.
+ */
+function paintWeakFloor(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.CHASM, 1);
+  const door = entranceOf(room);
+  door.set(DoorType.REGULAR);
+  if (door.x === room.left || door.x === room.right) {
+    for (let y = room.top + 1; y < room.bottom; y++) {
+      level.drawInside(room, { x: door.x, y }, rng.intRange(1, room.width() - 2), T.EMPTY_SP);
+    }
+  } else {
+    for (let x = room.left + 1; x < room.right; x++) {
+      level.drawInside(room, { x, y: door.y }, rng.intRange(1, room.height() - 2), T.EMPTY_SP);
+    }
+  }
+}
+
+/**
+ * PitPainter: under a weak floor, a locked room with a dry well and the
+ * remains of someone who fell before, the key to its door among them.
+ * The original sometimes moved another room's key down here as the prize;
+ * here the prize is always something of its own.
+ */
+function paintPit(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY, 1);
+  const door = entranceOf(room);
+  door.set(DoorType.LOCKED);
+  const side = rng.int(2) === 0;
+  const well =
+    door.x === room.left ? { x: room.right - 1, y: side ? room.top + 1 : room.bottom - 1 }
+    : door.x === room.right ? { x: room.left + 1, y: side ? room.top + 1 : room.bottom - 1 }
+    : door.y === room.top ? { x: side ? room.left + 1 : room.right - 1, y: room.bottom - 1 }
+    : { x: side ? room.left + 1 : room.right - 1, y: room.top + 1 };
+  level.setXY(well.x, well.y, T.EMPTY_WELL);
+  let remains: number;
+  do {
+    remains = room.random(rng);
+  } while (level.map[remains] === T.EMPTY_WELL);
+  level.dropItem(remains, HeapType.SKELETON, { roll: 'key' });
+  level.dropItem(remains, HeapType.SKELETON, rng.int(5) === 0
+    ? { roll: 'category', categories: ['ring'], tries: 1 }
+    : { roll: 'category', categories: [rng.oneOf(['weapon', 'armor'] as const)], tries: 1 });
+  const n = rng.intRange(1, 2);
+  for (let i = 0; i < n; i++) {
+    level.dropItem(remains, HeapType.SKELETON, {
+      roll: 'category', categories: [rng.oneOf(['potion', 'scroll', 'food', 'gold'] as const)], tries: 1,
+    });
+  }
+}
+
 export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painter>([
+  [RoomType.WEAK_FLOOR, paintWeakFloor],
+  [RoomType.PIT, paintPit],
   [RoomType.TREASURY, paintTreasury],
   [RoomType.ARMORY, paintArmory],
   [RoomType.LIBRARY, paintLibrary],

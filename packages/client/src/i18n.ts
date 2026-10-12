@@ -122,6 +122,11 @@ const en = {
   welcome: 'Welcome to the sewers. Find the stairs down!',
   descended: (depth: number) => `You descend to depth ${depth}.`,
   ascended: (depth: number) => `You climb back up to depth ${depth}.`,
+  fell: (depth: number) => `You fall through to depth ${depth} and land hard.`,
+  chasm: 'Chasm',
+  jumpQuestion: 'Do you really want to jump into the chasm? You can probably die.',
+  jumpYes: "Yes, I know what I'm doing",
+  jumpNo: 'No, I changed my mind',
   enterPrison: 'The sewers give way to an old prison. Its inmates have long since gone mad.',
   // Feeling: none, chasm, water, grass.
   feelings: [
@@ -405,7 +410,7 @@ const en = {
   } as Record<BuffName, string>,
   causes: {
     poison: 'poison', burning: 'fire', ooze: 'caustic ooze', lightning: 'lightning', gripping: 'a gripping trap', hunger: 'starvation',
-    bones: 'an explosion of bones', gas: 'toxic gas',
+    bones: 'an explosion of bones', gas: 'toxic gas', fall: 'a fall into the chasm',
   } as Record<string, string>,
   killedBy: (cause: string) => `Killed by ${cause}.`,
   runStats: (lvl: number, gold: number, kills: number) => `Level ${lvl} · ${gold} gold · ${kills} foes slain`,
@@ -558,6 +563,11 @@ const ru: Strings = {
   welcome: 'Добро пожаловать в канализацию. Найдите лестницу вниз!',
   descended: (depth) => `Вы спускаетесь на глубину ${depth}.`,
   ascended: (depth) => `Вы поднимаетесь на глубину ${depth}.`,
+  fell: (depth) => `Вы падаете на глубину ${depth} и больно ударяетесь.`,
+  chasm: 'Пропасть',
+  jumpQuestion: 'Вы действительно хотите прыгнуть в пропасть? Можно и разбиться насмерть.',
+  jumpYes: 'Да, я знаю, что делаю',
+  jumpNo: 'Нет, я передумал',
   enterPrison: 'Канализация сменяется старой тюрьмой. Её узники давно обезумели.',
   feelings: ['', 'Ваши шаги эхом разносятся по подземелью.', 'Вокруг слышен плеск воды.', 'В воздухе густо пахнет растительностью.'],
   room: (id) => `Отряд ${id}`,
@@ -838,7 +848,7 @@ const ru: Strings = {
   },
   causes: {
     poison: 'яд', burning: 'огонь', ooze: 'едкая слизь', lightning: 'молния', gripping: 'капкан', hunger: 'голод',
-    bones: 'взрыв костей', gas: 'ядовитый газ',
+    bones: 'взрыв костей', gas: 'ядовитый газ', fall: 'падение в пропасть',
   },
   killedBy: (cause) => `Причина гибели: ${cause}.`,
   runStats: (lvl, gold, kills) => `Уровень ${lvl} · золото ${gold} · побеждено врагов: ${kills}`,

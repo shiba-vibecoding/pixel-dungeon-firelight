@@ -165,7 +165,7 @@ function masteredBlow(ctx: Ctx, hero: Hero, mob: Mob, damage: number, thrown: bo
 }
 
 /** Cripple.DURATION. */
-const CRIPPLE_TURNS = 10;
+export const CRIPPLE_TURNS = 10;
 
 function spawnLarva(ctx: Ctx, yog: Mob): void {
   const { world, depth, level, rng, floor } = ctx;
@@ -208,7 +208,7 @@ function split(ctx: Ctx, swarm: Mob, damage: number): void {
 }
 
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;

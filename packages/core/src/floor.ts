@@ -34,6 +34,14 @@ export interface Floor {
   arenaEntered?: boolean;
   /** Plants growing here, set off by whoever steps on them. */
   plants?: PlantInfo[];
+  /** Items that fell into a chasm here, on their way to the depth below. */
+  falling?: Item[];
+}
+
+/** Level.drop: an item that comes down on a chasm falls through it, to land on the depth below. */
+export function landItem(ctx: Ctx, pos: number, item: Item): void {
+  if (hasFlag(ctx.level.map[pos]!, F.PIT)) (ctx.floor.falling ??= []).push(item);
+  else dropItem(ctx.floor, pos, item);
 }
 
 /** Puts an item on a cell, adding to whatever lies there already. */
@@ -58,6 +66,8 @@ export type Effect =
   | { type: 'exp'; hero: string; amount: number }
   | { type: 'levelUp'; hero: string; lvl: number }
   | { type: 'revived'; hero: string }
+  /** A hero jumped into a chasm on `depth` and landed on the depth below. */
+  | { type: 'fell'; hero: string; depth: number; pos: number }
   | { type: 'searched'; hero: string }
   | { type: 'discovered'; depth: number; cell: number }
   /** Damage that comes from no one, e.g. caustic ooze. */

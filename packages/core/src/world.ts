@@ -3,7 +3,7 @@ import {
   awareness, createHero, createMob, type Hero, heroAttackDelay, heroSpeed, hungerGrowth, hungerStep, HUNGRY, isAlive,
   isStarving, type Mob, type PlayerInfo, ringBonus, STARVING,
 } from './actors';
-import { attack, hurt } from './combat';
+import { attack, CRIPPLE_TURNS, hurt } from './combat';
 import {
   canEnter, charAt, type Ctx, dropItem, type Effect, enterCell, exploredCells, type Floor, freeCellNear, heroesOn,
   heroView, isPassable, isWater, leaveCell, observe,
@@ -42,6 +42,8 @@ export type Action =
   | { type: 'attack'; target: string }
   | { type: 'descend' }
   | { type: 'ascend' }
+  /** Into the chasm next to the hero, down to the depth below. */
+  | { type: 'jump'; to: number }
   | { type: 'wait' }
   | { type: 'search' }
   /** The sad ghost's reward, for its rose. */
@@ -205,6 +207,13 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
       return wandRewardProblem(world, hero, action.choice);
     case 'descend':
       return hero.pos === level.exit ? null : 'not on the stairs';
+    case 'jump':
+      if (hero.rooted > 0) return 'you are rooted';
+      if (!Number.isInteger(action.to) || !adjacent(hero.pos, action.to) || !hasFlag(level.map[action.to]!, F.PIT)) {
+        return 'no chasm there';
+      }
+      // Chasms never open above a boss's level, but should one, it holds.
+      return isBossDepth(hero.depth + 1) || hero.depth + 1 >= DEEPEST_AVAILABLE ? 'the chasm has a bottom' : null;
     case 'ascend':
       if (hero.pos !== level.entrance) return 'not on the stairs';
       if (level.map[hero.pos] !== T.ENTRANCE) return 'the way up is flooded';
@@ -316,6 +325,7 @@ function advance(world: World, depth: number, effects: Effect[]): void {
         effects.push({ type: 'interrupted', hero: hero.id, reason: problem });
       } else {
         perform(ctx, hero, action);
+        if (floor.falling) itemsFall(world, depth);
       }
       continue;
     }
@@ -534,6 +544,10 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       changeDepth(world, hero, hero.depth + 1, 'entrance');
       reviveFallen(world, hero.depth, ctx.effects);
       break;
+
+    case 'jump':
+      fall(ctx, hero, action.to);
+      return;
 
     case 'ascend':
       changeDepth(world, hero, hero.depth - 1, 'exit');
@@ -762,6 +776,63 @@ function changeDepth(world: World, hero: Hero, depth: number, arrival: 'entrance
   hero.depth = depth;
   leaveCell(world, fromLevel, fromDepth, from);
   place(world, hero, level, arrival === 'entrance' ? level.entrance : level.exit);
+}
+
+/**
+ * Chasm.heroFall and heroLand: down through the chasm to the depth below,
+ * landing hard and crippled. Under a weak floor lies that depth's pit room.
+ */
+function fall(ctx: Ctx, hero: Hero, into: number): void {
+  const { world, level, effects } = ctx;
+  const weakFloor = level.rooms.some((room) => room.type === RoomType.WEAK_FLOOR && within(room, into));
+  effects.push({ type: 'fell', hero: hero.id, depth: hero.depth, pos: into });
+  const depth = hero.depth + 1;
+  const below = levelAt(world, depth);
+  const floor = floorAt(world, depth);
+  const rng = new Rng(floor.rng);
+  leaveCell(world, level, hero.depth, hero.pos);
+  hero.depth = depth;
+  hero.pos = landingCell(world, depth, rng, weakFloor);
+  hero.time = floor.now;
+  enterCell(below, hero.pos);
+  hero.crippled = Math.max(hero.crippled, CRIPPLE_TURNS);
+  const damage = rng.intRange(Math.trunc(hero.ht / 3), Math.trunc(hero.ht / 2));
+  effects.push({ type: 'hurt', depth, who: hero.id, damage });
+  hurt({ world, depth, level: below, floor, rng, effects }, hero, damage, 'fall');
+  if (!isAlive(hero)) return;
+  observe(world, hero);
+  reviveFallen(world, depth, effects);
+}
+
+const within = (room: { left: number; top: number; right: number; bottom: number }, pos: number): boolean =>
+  cellX(pos) > room.left && cellX(pos) < room.right && cellY(pos) > room.top && cellY(pos) < room.bottom;
+
+/** Rooms something falling from above may land in; never into a locked one, or a shop. */
+const LANDING_ROOMS: ReadonlySet<RoomType> = new Set([
+  RoomType.STANDARD, RoomType.TUNNEL, RoomType.PASSAGE, RoomType.ENTRANCE, RoomType.EXIT,
+]);
+
+/** Level.randomRespawnCell, or RegularLevel.pitCell for what comes through a weak floor. */
+function landingCell(world: World, depth: number, rng: Rng, intoPit: boolean): number {
+  const level = levelAt(world, depth);
+  const pit = level.rooms.filter((room) => room.type === RoomType.PIT);
+  const rooms = intoPit && pit.length > 0 ? pit : level.rooms.filter((room) => LANDING_ROOMS.has(room.type));
+  for (let attempt = 0; attempt < 200 && rooms.length > 0; attempt++) {
+    const room = rng.element(rooms)!;
+    const pos = rng.intBetween(room.left + 1, room.right) + rng.intBetween(room.top + 1, room.bottom) * WIDTH;
+    if (isPassable(level, pos) && !charAt(world, depth, pos)) return pos;
+  }
+  return freeCellNear(world, level, depth, level.entrance);
+}
+
+/** Dungeon.dropToChasm: what fell into a chasm turns up somewhere on the depth below. */
+function itemsFall(world: World, depth: number): void {
+  const items = world.floors[depth]!.falling ?? [];
+  delete world.floors[depth]!.falling;
+  if (items.length === 0 || isBossDepth(depth + 1) || depth + 1 > DEEPEST_AVAILABLE) return;
+  const floor = floorAt(world, depth + 1);
+  const rng = new Rng(floor.rng);
+  for (const item of items) dropItem(floor, landingCell(world, depth + 1, rng, false), item);
 }
 
 function place(world: World, hero: Hero, level: Level, near: number): void {

@@ -323,6 +323,23 @@ export function showSign(text: string, onClose: () => void): void {
   );
 }
 
+/** Chasm.heroJump's WndOptions: a question with a yes and a no. */
+export function showConfirm(title: string, text: string, yes: string, no: string, onYes: () => void, onClose: () => void): void {
+  show(
+    el(
+      'div',
+      { className: 'pd-window' },
+      el('p', { className: 'pd-heading', textContent: title }),
+      el('p', { className: 'pd-info', textContent: text }),
+      button(yes, () => {
+        onClose();
+        onYes();
+      }),
+      button(no, onClose, 'primary'),
+    ),
+  );
+}
+
 export function showHelp(onClose: () => void): void {
   show(
     el(
