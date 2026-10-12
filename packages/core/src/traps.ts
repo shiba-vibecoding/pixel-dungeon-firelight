@@ -148,6 +148,16 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
 /** Hurt a monster's turn by the conditions traps leave behind; true if it loses the turn. */
 export function mobConditions(ctx: Ctx, mob: Mob): boolean {
   if ((mob.slowed ?? 0) > 0) mob.slowed!--;
+  if ((mob.crippled ?? 0) > 0) mob.crippled!--;
+  // Bleeding: it hurts every turn, and eases, until it stops.
+  if ((mob.bleeding ?? 0) > 0) {
+    mob.bleeding = ctx.rng.intRange(Math.trunc(mob.bleeding! / 2), mob.bleeding!);
+    if (mob.bleeding > 0) {
+      ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: mob.id, damage: mob.bleeding });
+      hurt(ctx, mob, mob.bleeding, 'bleeding');
+      if (!isAlive(mob)) return true;
+    }
+  }
   if ((mob.poison ?? 0) > 0) {
     mob.poison!--;
     ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: mob.id, damage: 1 });

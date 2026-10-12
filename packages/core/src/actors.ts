@@ -442,6 +442,9 @@ export interface Mob {
   amok?: number;
   /** A magic sheep: turns left before it fades away. */
   lifespan?: number;
+  /** Turns left of moving at half speed (a javelin's wound), and how hard it still bleeds (a tomahawk's). */
+  crippled?: number;
+  bleeding?: number;
   /** A mirror image: whose twin it is, and the skill and strength it took from them. */
   image?: { owner: string; attack: number; damage: number };
 }

@@ -64,7 +64,8 @@ Yendor on depth 26:
   knowledge in a party; all melee weapons and armour with upgrades and
   strength requirements, and the ten weapon enchantments (blazing, venomous,
   grim, stunning, vampiric, chilling, shocking, unstable, eldritch, lucky) and
-  ten armour glyphs of the original; darts and the boomerang; wands of
+  ten armour glyphs of the original; thrown weapons (darts, curare and
+  incendiary darts, javelins, shuriken, tomahawks) and the boomerang; wands of
   magic missile, firebolt, lightning, poison, slowness, teleportation, blink,
   disintegration, avalanche, amok, reach, flock (magic sheep) and regrowth,
   known by their wood until used; rings of mending, detection, shadows,
@@ -93,8 +94,7 @@ Clouds of toxic and paralytic gas (from traps, potions, DM-300, rotberries and
 armour of stench) spread through open cells, never through walls or closed
 doors, thin out a little every turn, and act on whoever breathes them.
 
-Not ported yet: the other thrown weapons (javelins, shuriken, tomahawks,
-curare and incendiary darts); the armour kit and class armour; bags (seed
+Not ported yet: the armour kit and class armour; bags (seed
 pouch, scroll holder, wand holster, keyring); the dew vial; the honeypot and
 its bees; wraiths rising from cursed remains; the ghost's other errand (the
 fetid rat); the Rat King; cooked mystery meat; Lloyd's beacon, the

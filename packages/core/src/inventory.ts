@@ -1,11 +1,12 @@
 import {
-  BACKPACK_SIZE, beckon, createMob, type Hero, heroRangedSkill, maxExp, mobStats, STARVING, type SubClass, SUBCLASSES,
+  BACKPACK_SIZE, beckon, createMob, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
+  SUBCLASSES,
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
-import { attack, earnExp, hurt } from './combat';
+import { attack, CRIPPLE_TURNS, earnExp, hurt } from './combat';
 import { fearless, TERROR_TURNS } from './enchant';
 import { conjureImages } from './allies';
-import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, landItem, leaveCell } from './floor';
+import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, isWater, landItem, leaveCell } from './floor';
 import {
   buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
   magicMissileDamage, missileStats, randomEnchantment, randomGlyph, wandMaxCharges,
@@ -13,7 +14,7 @@ import {
 import { discoverable } from './level/flags';
 import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
 import { discover, F, hasFlag, T } from './level/terrain';
-import { type Burst, burst } from './traps';
+import { type Burst, burst, immuneTo } from './traps';
 import { plant, SEED_PLANTS } from './plants';
 import { zapWand } from './wands';
 import { mine, mineProblem, TIME_TO_MINE } from './smith';
@@ -220,9 +221,13 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       if (ctx.level.map[hero.pos] === T.ALCHEMY) brew(ctx, hero.pos);
       return TIME_TO_DROP;
     }
-    case 'throw':
+    case 'throw': {
+      // Shuriken fly twice as fast as anything else (Shuriken.DLY).
+      const thrown = hero.items[action.item]!;
+      const delay = itemDef(thrown.kind).category === 'missile' ? missileStats(thrown).delay : 1;
       throwItem(ctx, hero, action.item, action.target);
-      return TIME_TO_THROW;
+      return TIME_TO_THROW * delay;
+    }
     case 'zap':
       zap(ctx, hero, action.item, action.target);
       return TIME_TO_ZAP;
@@ -301,8 +306,38 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
       attack: heroRangedSkill(hero, thrown, adjacent(hero.pos, end)),
       damage: [stats.min, stats.max],
     });
+    if (hit && isAlive(victim)) missileProc(ctx, thrown, victim);
+  }
+  // IncendiaryDart.onThrow: missing, it sets whatever can burn where it lands alight, and burns up with it.
+  if (!hit && thrown.kind === 'missile.incendiary' && hasFlag(ctx.level.map[end]!, F.FLAMABLE)) {
+    burst(ctx, end, 'fire', 0);
+    return;
   }
   if (!boomerang && !hit) landItem(ctx, end, thrown);
+}
+
+/** MissileWeapon.proc: what each kind of thrown weapon does besides its damage. */
+function missileProc(ctx: Ctx, thrown: Item, victim: Mob): void {
+  switch (thrown.kind) {
+    case 'missile.curare':
+      // CurareDart: the poison paralyses for a moment.
+      victim.paralysed = Math.max(victim.paralysed ?? 0, 3);
+      break;
+    case 'missile.incendiary':
+      if (!isWater(ctx.level.map[victim.pos]!) && !immuneTo(victim, 'burning')) victim.burning = Math.max(victim.burning ?? 0, 8);
+      break;
+    case 'missile.javelin':
+      // Javelin: a crippling wound.
+      victim.crippled = Math.max(victim.crippled ?? 0, CRIPPLE_TURNS);
+      break;
+    case 'missile.tomahawk': {
+      // Tamahawk: it bleeds as hard as it was struck.
+      const blow = [...ctx.effects].reverse().find((e) => e.type === 'attack' && e.target === victim.id);
+      const damage = blow?.type === 'attack' ? blow.damage : 0;
+      if (damage > 0) victim.bleeding = Math.max(victim.bleeding ?? 0, damage);
+      break;
+    }
+  }
 }
 
 /** Potion.shatter: a thrown potion breaks where it lands, letting out whatever is inside. */

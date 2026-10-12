@@ -620,6 +620,8 @@ function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean 
 }
 
 function moveMob(ctx: Ctx, mob: Mob, to: number): void {
+  // Crippled, every step takes twice as long.
+  if ((mob.crippled ?? 0) > 0) mob.time += 1 / MOBS[mob.kind].speed;
   const from = mob.pos;
   mob.pos = to;
   leaveCell(ctx.world, ctx.level, ctx.depth, from);

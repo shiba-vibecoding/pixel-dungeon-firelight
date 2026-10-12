@@ -91,6 +91,12 @@ export const ITEMS = {
   // Thrown: darts are lost when they hit and fall to the floor when they
   // miss; the boomerang always comes back.
   'missile.dart': { category: 'missile', sprite: 31 },
+  // The other thrown weapons (MissileWeapon): each does something more when it hits.
+  'missile.curare': { category: 'missile', sprite: 109 },
+  'missile.incendiary': { category: 'missile', sprite: 108 },
+  'missile.javelin': { category: 'missile', sprite: 110 },
+  'missile.shuriken': { category: 'missile', sprite: 15 },
+  'missile.tomahawk': { category: 'missile', sprite: 107 },
   'missile.boomerang': { category: 'missile', sprite: 106 },
   'wand.magicMissile': { category: 'wand', sprite: 3 },
   // The other wands go by the wood they are made of until used.
@@ -224,7 +230,7 @@ export const itemDef = (kind: ItemKind): ItemDef => ITEMS[kind];
 export const isStackable = (kind: ItemKind): boolean => {
   const category = itemDef(kind).category;
   return category === 'potion' || category === 'scroll' || category === 'gold' || category === 'food' || category === 'torch' ||
-    category === 'seed' || kind === 'missile.dart' || kind === 'quest.token' || kind === 'quest.ore';
+    category === 'seed' || (category === 'missile' && kind !== 'missile.boomerang') || kind === 'quest.token' || kind === 'quest.ore';
 };
 
 export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
@@ -246,6 +252,9 @@ const POTION_PRICES: Partial<Record<ItemKind, number>> = {
 const SCROLL_PRICES: Partial<Record<ItemKind, number>> = {
   'scroll.identify': 30, 'scroll.teleportation': 40, 'scroll.mapping': 25, 'scroll.lullaby': 50,
   'scroll.upgrade': 50, 'scroll.recharging': 40, 'scroll.enchantment': 60, 'scroll.terror': 50, 'scroll.psionicBlast': 80, 'scroll.mirrorImage': 40, 'scroll.removeCurse': 30,
+};
+const MISSILE_PRICES: Partial<Record<ItemKind, number>> = {
+  'missile.dart': 2, 'missile.curare': 12, 'missile.incendiary': 10, 'missile.javelin': 15, 'missile.shuriken': 15, 'missile.tomahawk': 20,
 };
 const FOOD_PRICES: Partial<Record<ItemKind, number>> = { 'food.ration': 10, 'food.pasty': 20, 'food.meat': 5 };
 
@@ -269,7 +278,7 @@ export function itemPrice(item: Item, known: boolean): number {
     case 'food':
       return (FOOD_PRICES[item.kind] ?? 10) * item.qty;
     case 'missile':
-      return item.kind === 'missile.dart' ? 2 * item.qty : 30;
+      return item.kind === 'missile.boomerang' ? 30 : (MISSILE_PRICES[item.kind] ?? 2) * item.qty;
     case 'wand':
       return levelled(50);
     case 'torch':
@@ -298,10 +307,25 @@ export const buyPrice = (item: Item, depth: number, known: boolean, haggling = f
 
 /* Thrown weapons (MissileWeapon) and the wand of magic missile */
 
-export function missileStats(item: Item): { min: number; max: number; str: number } {
-  return item.kind === 'missile.boomerang'
-    ? { min: 1 + item.level, max: 4 + 2 * item.level, str: 10 }
-    : { min: 1, max: 4, str: 10 };
+/** How many come in one find (Random.Int(from, to)). */
+const MISSILE_HANDFULS: Partial<Record<ItemKind, readonly [number, number]>> = {
+  'missile.dart': [5, 15], 'missile.curare': [2, 5], 'missile.incendiary': [3, 6], 'missile.javelin': [5, 15],
+  'missile.shuriken': [5, 15], 'missile.tomahawk': [5, 12],
+};
+
+const MISSILES: Partial<Record<ItemKind, { min: number; max: number; str: number; delay?: number }>> = {
+  'missile.dart': { min: 1, max: 4, str: 10 },
+  'missile.curare': { min: 1, max: 3, str: 14 },
+  'missile.incendiary': { min: 1, max: 2, str: 12 },
+  'missile.javelin': { min: 2, max: 15, str: 15 },
+  'missile.shuriken': { min: 2, max: 6, str: 13, delay: 0.5 },
+  'missile.tomahawk': { min: 4, max: 20, str: 17 },
+};
+
+export function missileStats(item: Item): { min: number; max: number; str: number; delay: number } {
+  if (item.kind === 'missile.boomerang') return { min: 1 + item.level, max: 4 + 2 * item.level, str: 10, delay: 1 };
+  const stats = MISSILES[item.kind] ?? MISSILES['missile.dart']!;
+  return { min: stats.min, max: stats.max, str: stats.str, delay: stats.delay ?? 1 };
 }
 
 /** One more charge every this many turns (Wand.Charger). */
@@ -417,7 +441,8 @@ const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>,
   weapon: [
     ['weapon.dagger', 1], ['weapon.knuckles', 1], ['weapon.quarterstaff', 1], ['weapon.spear', 1], ['weapon.mace', 1],
     ['weapon.sword', 1], ['weapon.longsword', 1], ['weapon.battleAxe', 1], ['weapon.warHammer', 1], ['weapon.glaive', 1],
-    ['missile.dart', 1],
+    ['missile.dart', 0], ['missile.javelin', 1], ['missile.incendiary', 1], ['missile.curare', 1], ['missile.shuriken', 1],
+    ['missile.tomahawk', 1],
   ],
   armor: [['armor.cloth', 1], ['armor.leather', 1], ['armor.mail', 1], ['armor.scale', 1], ['armor.plate', 1]],
   seed: [
@@ -483,7 +508,9 @@ export class ItemGenerator {
     const table = KIND_CHANCES[category];
     const kind = table[this.rng.chances(table.map(([, chance]) => chance))]![0];
     // Dart.random: a handful of them.
-    if (kind === 'missile.dart') return createItem(kind, this.rng.intBetween(5, 15));
+    // MissileWeapon.random: a handful of them.
+    const handful = MISSILE_HANDFULS[kind];
+    if (handful) return createItem(kind, this.rng.intBetween(handful[0], handful[1]));
     if (category === 'ring') return randomRing(this.rng, kind);
     if (category === 'wand') {
       // Wand.random: half of them a level better, a few two.
