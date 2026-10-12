@@ -11,7 +11,7 @@ import * as core from '@pd/core';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
-import { ambientFx, effectFx } from './fx-events';
+import { ambientFx, effectFx, lightsFor, regionFx } from './fx-events';
 /** The visual clock's last reading, for frame-to-frame particle steps. */
 let lastVisual = 0;
 import { type BadgeId, badgeText, checkBadges, countGame } from './badges';
@@ -990,6 +990,7 @@ function tick(now: number): void {
   step(world, now, visible);
   fx.update(vnow, dt);
   ambientFx(view, vnow, dt);
+  regionFx(level, visible, vnow, dt);
 
   const mine = view.puppets.get(me.id);
   const at = mine ? view.position(mine, vnow) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
@@ -1012,6 +1013,7 @@ function tick(now: number): void {
     level, baked: baked!, visible, explored: exploredCells(world, me.depth), heaps, plants, gas, seeAll: me.mindVision > 0,
       ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
     focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
+    lights: lightsFor(level, visible, view, vnow),
   };
   render(ctx, scene, view, session.myId, assets, camera, vnow);
 

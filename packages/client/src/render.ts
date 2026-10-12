@@ -111,6 +111,8 @@ export interface Scene {
   altar?: number;
   /** The hero's position in world pixels, around which the view is lit. */
   focus?: { x: number; y: number };
+  /** Pools of light: torches and whatever burns. */
+  lights?: ReadonlyArray<{ x: number; y: number; radius: number; color: string; strength: number }>;
 }
 
 export function render(
@@ -185,6 +187,17 @@ export function render(
     ctx.fillStyle = `rgba(${cloud.color}, ${Math.min(0.55, 0.12 + cloud.volume / 120) * swirl})`;
     ctx.fillRect((cloud.pos % WIDTH) * TILE, Math.trunc(cloud.pos / WIDTH) * TILE, TILE, TILE);
   }
+
+  // Pools of warm light, added onto what is lit (the dark then covers what is not in sight).
+  ctx.globalCompositeOperation = 'lighter';
+  for (const light of scene.lights ?? []) {
+    const glow = ctx.createRadialGradient(light.x, light.y, 0, light.x, light.y, light.radius);
+    glow.addColorStop(0, `rgba(${light.color}, ${light.strength})`);
+    glow.addColorStop(1, `rgba(${light.color}, 0)`);
+    ctx.fillStyle = glow;
+    ctx.fillRect(light.x - light.radius, light.y - light.radius, light.radius * 2, light.radius * 2);
+  }
+  ctx.globalCompositeOperation = 'source-over';
 
   // Fog of war: unexplored cells are black, remembered ones are dimmed.
   for (let i = 0; i < LENGTH; i++) {

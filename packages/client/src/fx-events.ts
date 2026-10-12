@@ -1,4 +1,4 @@
-import { type Effect, HEIGHT, type MobKind, WIDTH, type World } from '@pd/core';
+import { type Effect, HEIGHT, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
 import { type BurstOptions, fx } from './fx';
 import { TILE, type View } from './view';
 
@@ -325,6 +325,73 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     default:
       return;
   }
+}
+
+/** A pool of light, in world pixels. */
+export interface Light {
+  x: number;
+  y: number;
+  radius: number;
+  /** "r, g, b". */
+  color: string;
+  strength: number;
+}
+
+const region = (depth: number): number => Math.min(4, Math.floor((depth - 1) / 5));
+
+/**
+ * The regions' own life (SewerLevel.Sink, PrisonLevel.Torch, CavesLevel.Vein,
+ * CityLevel.Smoke, HallsLevel.Stream), on the decorated walls in sight:
+ * water dripping from the sewers' pipes, the prison's torches, glints in the
+ * caves' gold veins, smoke over the dwarven city, and embers rising from the
+ * demon halls' streams.
+ */
+export function regionFx(level: Level, visible: readonly boolean[], now: number, dt: number): void {
+  const r = region(level.depth);
+  const perCell = [0.6, 9, 0.5, 1.2, 2.5][r]! * (dt / 1000);
+  for (let cell = 0; cell < level.map.length; cell++) {
+    const terrain = level.map[cell]!;
+    const source = r === 4 ? terrain === T.WATER : terrain === T.WALL_DECO;
+    if (!source || !visible[cell] || Math.random() >= perCell) continue;
+    const x = (cell % WIDTH) * TILE;
+    const y = Math.trunc(cell / WIDTH) * TILE;
+    switch (r) {
+      case 0:
+        fx.burst(x + 7 + Math.random() * 2, y + TILE - 2, now, { count: 1, colors: ['#9fd0e8', '#d8f0ff'], speed: [0, 2], life: [500, 700], gravity: 120, size: [1, 1], spread: 0 });
+        break;
+      case 1:
+        fx.burst(x + 8, y + 5, now, { count: 1, colors: FIRE, glow: true, speed: [1, 5], life: [250, 500], rise: 14, drag: 0.5, size: [1, 2], spread: 1 });
+        break;
+      case 2:
+        fx.burst(x + 2 + Math.random() * 12, y + 2 + Math.random() * 12, now, { count: 1, colors: GOLD, glow: true, speed: [0, 1], life: [300, 600], size: [1, 1], spread: 0 });
+        break;
+      case 3:
+        fx.burst(x + 4 + Math.random() * 8, y + 4, now, { count: 1, colors: ['#5a5a5a', '#7a7a7a', '#4a4a4a'], speed: [1, 4], life: [1200, 2000], rise: 8, drag: 0.6, size: [2, 3], spread: 1 });
+        break;
+      default:
+        fx.burst(x + Math.random() * TILE, y + TILE - 3, now, { count: 1, colors: FIRE, glow: true, speed: [1, 4], life: [600, 1000], rise: 16, drag: 0.5, size: [1, 1], spread: 0 });
+    }
+  }
+}
+
+/** Light this frame: the prison's torches, whatever burns, fire elementals and fists. */
+export function lightsFor(level: Level, visible: readonly boolean[], view: View, now: number): Light[] {
+  const lights: Light[] = [];
+  const flicker = (seed: number): number => 0.85 + 0.15 * Math.sin(now / 70 + seed) * Math.sin(now / 23 + seed * 3);
+  if (region(level.depth) === 1) {
+    for (let cell = 0; cell < level.map.length; cell++) {
+      if (level.map[cell] !== T.WALL_DECO || !visible[cell]) continue;
+      lights.push({ x: (cell % WIDTH) * TILE + 8, y: Math.trunc(cell / WIDTH) * TILE + 6, radius: 38, color: '255, 150, 60', strength: 0.22 * flicker(cell) });
+    }
+  }
+  for (const puppet of view.puppets.values()) {
+    if (!puppet.alive) continue;
+    const fiery = puppet.burning || puppet.kind === 'elemental' || puppet.kind === 'burningFist';
+    if (!fiery) continue;
+    const { x, y } = view.position(puppet, now);
+    lights.push({ x: x + 8, y: y + 8, radius: 34, color: '255, 140, 50', strength: 0.25 * flicker(x + y) });
+  }
+  return lights;
 }
 
 /** Every frame: embers off whoever burns, bubbles off the poisoned, sparkles behind bolts in flight. */
