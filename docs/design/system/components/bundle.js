@@ -131,6 +131,23 @@
       slain: { hold: 2, dur: 2200, frames: [[0, { a: 1, flash: 1, rule: 0 }], [66, { a: 1, flash: 0, rule: .5 }], [133, { a: 1, flash: 0, rule: 1 }], [2000, { a: .66, flash: 0, rule: .66 }], [2066, { a: .33, flash: 0, rule: .33 }], [2133, { a: 0, flash: 0, rule: 0 }]] },
       number: { hold: 0, dur: 700, frames: [[0, { a: 1, dy: 0 }], [100, { a: 1, dy: -2 }], [200, { a: 1, dy: -4 }], [300, { a: 1, dy: -6 }], [400, { a: .66, dy: -8 }], [500, { a: .33, dy: -8 }], [600, { a: 0, dy: -8 }]] }
     },
+    /* звезда покровителя пикселями (7×7 + обводка), s — размер пикселя; x, y — левый верхний угол */
+    patronStar: function (ctx, x, y, s) {
+      var rows = ['...w...', '..wo#..', 'wwoo###', '#oooo##', '.#oo##.', '.##.##.', '##...##'], col = { '#': '#ffcc66', o: '#ffeba4', w: '#ffffff' };
+      x = snap(x, s); y = snap(y, s);
+      ctx.fillStyle = '#5a3d10';
+      rows.forEach(function (r, j) { for (var i = 0; i < 7; i++) if (r[i] !== '.') ctx.fillRect(x + i * s, y + j * s, 3 * s, 3 * s); });
+      rows.forEach(function (r, j) { for (var i = 0; i < 7; i++) if (r[i] !== '.') { ctx.fillStyle = col[r[i]]; ctx.fillRect(x + (i + 1) * s, y + (j + 1) * s, s, s); } });
+      return 9 * s;
+    },
+    /* имя над головой: Galmuri9 ×1.5 (15px) с обводкой; patron — звезда слева; ally — цвет товарища. x — центр, y — макушка спрайта */
+    nameplate: function (ctx, name, x, y, o) {
+      o = o || {}; var s = 1.5, star = o.patron ? 9 * 2 + 4 : 0;
+      ctx.save(); ctx.font = '15px "Galmuri9"'; var w = ctx.measureText(name).width; ctx.restore();
+      var left = x - (w + star) / 2, base = y - 6;
+      if (o.patron) PD.fx.patronStar(ctx, left, base - 16, 2);
+      PD.fx.text(ctx, name, left + star, base, { font: 'small', scale: s, color: o.color || (o.ally ? '#5ec8c0' : '#e8e2c8'), align: 'left', shadow: 0 });
+    },
     /* «Уровень 3!» — над героем, на 3 клетки выше; Galmuri11 ×3, gold, тень 1 */
     level: function (ctx, text, x, y, t) {
       var k = PD.fx.step(PD.fx.timelines.level, t), s = 3;
@@ -322,6 +339,27 @@
   };
 
   /* Игровой экран целиком: карта, HUD, лог, панель. opts: { mates: true, toast: html, log: [[text, type]], fy } */
+  /* превью товара: пол, герой из листа sheet (url) на уровне брони tier, эффект — 'sparks' | 'fireflies' | 'ash' | 'snow' */
+  PD.demo.offerArt = function (cv, o) {
+    o = o || {}; var W = o.w || 132, H = o.h || 96, k = o.scale || 4, d = window.devicePixelRatio || 1;
+    cv.width = W * d; cv.height = H * d; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    var g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.imageSmoothingEnabled = false;
+    var sheet = new Image();
+    function draw() {
+      ready(['tiles'], function () {
+        var t = img('tiles'), ts = 16 * 2;
+        for (var y = 0; y < Math.ceil(H / ts); y++) for (var x = 0; x < Math.ceil(W / ts); x++) g.drawImage(t, (y === 0 ? 4 : 1) * 16 % 256, 0, 16, 16, x * ts, y * ts, ts, ts);
+        g.fillStyle = 'rgba(11,11,9,.35)'; g.fillRect(0, 0, W, H);
+        var fx = Math.round(W / 2 - 6 * k), fy = H - 15 * k - 6, frame = o.frame || 0, tier = o.tier == null ? 2 : o.tier;
+        if (sheet.complete && sheet.naturalWidth) g.drawImage(sheet, frame * 12, tier * 15, 12, 15, fx, fy, 12 * k, 15 * k);
+        var P = { sparks: ['#ffcc66', '#ff9933', '#fff480'], fireflies: ['#c6ff7a', '#8fe05a'], ash: ['#9fa896', '#62665b', '#cccccc'], snow: ['#ffffff', '#bfe3ff'] }[o.effect];
+        if (P) { var seed = 3; for (var i = 0; i < (o.effect === 'snow' ? 26 : 14); i++) { seed = (seed * 9301 + 49297) % 233280; var r = seed / 233280; seed = (seed * 9301 + 49297) % 233280; var r2 = seed / 233280;
+          var px = Math.round((o.effect === 'snow' ? r * W : fx - 10 + r * (12 * k + 20)) / 2) * 2, py = Math.round((o.effect === 'snow' ? r2 * H : fy - 8 + r2 * 15 * k) / 2) * 2;
+          g.fillStyle = P[i % P.length]; g.fillRect(px, py, o.effect === 'fireflies' && i % 3 === 0 ? 4 : 2, 2); } }
+      });
+    }
+    if (o.sheet) { sheet.onload = draw; sheet.onerror = draw; sheet.src = o.sheet; } else draw();
+  };
   PD.demo.game = function (el, o) {
     o = o || {};
     var tool = function (n, w, h, label) { return '<button class="pd-tool" aria-label="' + label + '"><i class="pd-icon" style="--w:' + w + ';--h:' + h + ';background-image:var(--spr-tool-' + n + ')"></i></button>'; };

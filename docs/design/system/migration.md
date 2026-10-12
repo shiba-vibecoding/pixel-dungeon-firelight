@@ -395,6 +395,107 @@
 | `.pd-durability`, `.low` | строка «Прочность: …» с полоской в окне предмета |
 | `.pd-callout.broken` | плашка «Сломано: …» |
 
+### Пиксель-Март
+
+```html
+<section class="pd-window" role="dialog" aria-label="Пиксель-Март">
+  <header class="pd-window-head">
+    <div class="pd-portrait"><i class="keeper" style="--keeper:url(shopkeeper.png)"></i></div>
+    <div class="pd-titles"><h2 class="pd-heading">Пиксель-Март</h2><span class="pd-note">Безопасная жизнь в подземелье.</span></div>
+    <button class="pd-close" aria-label="Закрыть"></button>
+  </header>
+  <div class="pd-tabs compact" role="tablist">
+    <button class="pd-tab" role="tab" aria-selected="true">Облики</button>
+    <button class="pd-tab" role="tab" aria-selected="false">Эффекты</button>
+    <button class="pd-tab" role="tab" aria-selected="false">Рамки</button>
+    <button class="pd-tab" role="tab" aria-selected="false"><i class="pd-icon" style="background-image:var(--spr-patron)"></i>Покровитель</button>
+  </div>
+  <div class="pd-scroll" style="max-height:min(560px, 70vh)">
+    <div class="pd-shop-grid">
+      <article class="pd-offer">                      <!-- .owned / .worn / .badge / .offseason -->
+        <div class="pd-offer-art"><canvas></canvas></div>  <!-- превью; чип .pd-chip / .pd-chip.season и замок .pd-offer-lock — тоже сюда -->
+        <h3 class="pd-offer-name">Королевский</h3>
+        <p class="pd-offer-meta"><span class="pd-stars small">75</span></p>
+        <button class="pd-button small">Купить</button>
+      </article>
+    </div>
+  </div>
+</section>
+```
+
+| Состояние | `.pd-offer-meta` | Кнопка |
+| --- | --- | --- |
+| можно купить | `<span class="pd-stars small">75</span>` | `.pd-button.small` «Купить» |
+| `.owned` | «Куплено» | «Надеть» |
+| `.worn` + чип «Надето» | класс героя | `.quiet` «Снять» |
+| `.badge` + `.pd-offer-lock` | `<i class="pd-offer-badge" data-i="22"></i>За значок «…»` | нет; вместо неё `<p class="pd-offer-cond">условие</p>` |
+| в сезон | цена; чип `<span class="pd-chip season">до 31 дек.</span>` | «Купить» |
+| `.offseason` | «Вернётся зимой»; чип `.pd-chip.season` «Зима» | `disabled` «Не в сезон» |
+
+Окно товара: шапка с названием и «Облик воина», `.pd-offer-hero` с canvas бега, `.pd-tiers` — семь canvas уровней брони с подписями, описание, `.pd-actions` с основной «Купить за <span class="pd-stars">75</span>» и `.pd-note` «Оплата звёздами Telegram».
+
+### Покровитель
+
+```html
+<section class="pd-window" role="dialog" aria-labelledby="pt">
+  <header class="pd-window-head">
+    <i class="pd-patron-big"></i>
+    <div class="pd-titles"><h2 class="pd-heading" id="pt">Покровитель</h2><span class="pd-note">Подписка на месяц</span></div>   <!-- активна: <span class="pd-chip active">Активна до 12 ноября</span> -->
+    <button class="pd-close" aria-label="Закрыть"></button>
+  </header>
+  <ul class="pd-perks">
+    <li class="pd-perk"><span class="pd-perk-ico"><i class="pd-patron-mark"></i></span><p class="pd-info">Звезда у имени…</p></li>
+    <li class="pd-perk"><span class="pd-perk-ico"><i class="pd-perk-frame"></i></span><p class="pd-info">Рамка портрета «Покровитель»</p></li>
+    <li class="pd-perk"><span class="pd-perk-ico"><i class="pd-offer-badge patron"></i></span><p class="pd-info">Значок «Меценат» в коллекции</p></li>
+  </ul>
+  <div class="pd-price-row"><span class="pd-stars">99</span><span class="pd-note">в месяц</span></div>
+  <div class="pd-actions"><button class="pd-button primary">Оформить за <span class="pd-stars">99</span></button></div>
+  <p class="pd-note center">Оплата звёздами Telegram…</p>
+</section>
+```
+
+В активном состоянии уберите `.pd-price-row` и `.pd-actions`, вместо них — `.pd-note` с датой продления и `.pd-button.quiet` «Управлять подпиской».
+
+### Звезда, рамки, облик
+
+```html
+<!-- рекорды -->  <span class="pd-rank-name">Ёжик<i class="pd-patron-mark"></i><small>…</small></span>   <!-- строке — .pd-rank.patron -->
+<!-- отряд -->    <span class="pd-mate-name"><i class="pd-patron-mark sm"></i>Лиса</span>
+<!-- рамка -->    <div class="pd-avatar framed frame-gold"><i style="--av:0"></i></div>   <!-- frame-bronze | frame-gold | frame-shadow | frame-patron -->
+```
+
+Над головой на карте: `PD.fx.nameplate(ctx, 'Лиса', spriteCenterX, spriteTopY, { ally: true, patron: true })` — имя Galmuri9 15px с обводкой, звезда слева. Своему герою имя не рисуйте.
+
+Облик героя: загрузите лист `warrior-royal.png` (и т. п.) вместо `warrior.png`; кадры и уровни брони те же, менять код анимации не нужно.
+
+Ряд «Облик» в окне героя:
+
+```html
+<h3 class="pd-subhead">Облик</h3>
+<div class="pd-looks">
+  <button class="pd-look" aria-expanded="true"><span class="pd-look-art">…</span><span class="pd-look-label">Облик</span><span class="pd-look-value">Королевский</span></button>
+  <div class="pd-look-picker">
+    <button class="pd-look-opt" aria-label="Обычный">…</button>
+    <button class="pd-look-opt on" aria-label="Королевский, надет">…</button>
+    <button class="pd-look-opt shop" aria-label="Теневой, купить за 75 звёзд">…<span class="pd-stars small">75</span></button>
+  </div>
+  <button class="pd-look"><span class="pd-look-art">…</span><span class="pd-look-label">Эффект</span><span class="pd-look-value">Светлячки</span></button>
+  <button class="pd-look"><span class="pd-look-art">…</span><span class="pd-look-label">Рамка</span><span class="pd-look-value">Золото</span></button>
+</div>
+```
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-tabs.compact` | вкладки с подписями 15px — четыре помещаются на 360 |
+| `.pd-shop-grid`, `.pd-offer` + `.owned` / `.worn` / `.badge` / `.offseason`, `.pd-offer-art`, `-name`, `-meta`, `-cond`, `-lock`, `-badge` | карточка товара |
+| `.pd-stars`, `.small` | цена в звёздах |
+| `.pd-chip.season`, `.pd-chip.active` | сезон, активная подписка |
+| `.pd-offer-hero`, `.pd-tiers` | окно товара |
+| `.pd-patron-big`, `.pd-patron-mark`, `.sm`, `.pd-perks`, `.pd-perk`, `.pd-perk-ico`, `.pd-perk-frame`, `.pd-price-row` | подписка и звезда |
+| `.pd-avatar.framed.frame-*` | рамки портрета |
+| `.pd-subhead`, `.pd-looks`, `.pd-look`, `.pd-look-picker`, `.pd-look-opt` + `.on` / `.shop` | ряд «Облик» |
+| `.keeper` | портрет лавочника из `shopkeeper.png` |
+
 ## Игровой экран
 
 ### HUD

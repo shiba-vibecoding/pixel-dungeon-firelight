@@ -20,3 +20,4 @@ export * from './world';
 export { castShadow, LIGHT_DISTANCE, MAX_VIEW_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 export * from './protocol';
 export { durabilityOf, effectiveLevel, isBroken, maxDurability } from './wear';
+export * from './shop';
