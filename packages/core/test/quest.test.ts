@@ -45,6 +45,18 @@ describe('the sad ghost', () => {
     expect(seen).toBeGreaterThan(30);
   });
 
+  it('drifts about the level', () => {
+    const { world, ghostId } = withGhost();
+    const hero = heroById(world, 'p')!;
+    const ghost = floorAt(world, hero.depth).mobs.find((m) => m.id === ghostId)!;
+    const cells = new Set([ghost.pos]);
+    for (let i = 0; i < 60; i++) {
+      act(world, 'p', { type: 'search' });
+      cells.add(ghost.pos);
+    }
+    expect(cells.size).toBeGreaterThan(3);
+  });
+
   it('cannot be hurt, is no threat, and talking to it gives the quest', () => {
     const { world, ghostId } = withGhost();
     const hero = heroById(world, 'p')!;
@@ -77,10 +89,13 @@ describe('the sad ghost', () => {
     }
     expect(quest.dropped).toBe(true);
     const rose = floor.heaps.find((h) => h.items.some((item) => item.kind === 'quest.rose'))!;
-    const back = hero.pos;
     hero.pos = rose.pos;
     expect(act(world, 'p', { type: 'pickup' }).ok).toBe(true);
-    hero.pos = back;
+    // The ghost has drifted off meanwhile: catch up with it.
+    const ghost = floor.mobs.find((m) => m.id === ghostId)!;
+    hero.pos = NEIGHBOURS8.map((n) => ghost.pos + n).find(
+      (c) => canEnter(level, c) && hasFlag(level.map[c]!, F.PASSABLE) && !charAt(world, quest.depth, c),
+    )!;
     expect(act(world, 'p', { type: 'attack', target: ghostId }).ok).toBe(true);
     const reward = act(world, 'p', { type: 'reward', choice: 'armor' });
     expect(reward.ok && reward.effects.at(-1)).toEqual({ type: 'ghost', hero: 'p', line: 'farewell' });

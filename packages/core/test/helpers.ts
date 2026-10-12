@@ -1,5 +1,5 @@
 import {
-  type Action, adjacent, blockers, F, findPath, floorAt, hasFlag, heroById, isAlive, levelAt, NEIGHBOURS8, T,
+  type Action, adjacent, blockers, F, findPath, floorAt, hasFlag, heroById, HUNGRY, isAlive, levelAt, NEIGHBOURS8, T,
   type World,
 } from '../src/index';
 
@@ -27,6 +27,8 @@ export function botAction(world: World, id: string): Action {
   const healing = hero.items.findIndex((item) => item.kind === 'potion.healing');
   if (hero.hp < hero.ht / 3 && healing >= 0) return { type: 'use', item: healing };
   if (enemy) return { type: 'attack', target: enemy.id };
+  const food = hero.items.findIndex((item) => item.kind.startsWith('food.'));
+  if (hero.hunger >= HUNGRY && food >= 0) return { type: 'use', item: food };
   if (floor.heaps.some((heap) => heap.pos === hero.pos) && hero.items.length < 20) return { type: 'pickup' };
   if (hero.pos === level.exit && hero.depth < 4) return { type: 'descend' };
   if (hero.hp < hero.ht / 2) return { type: 'wait' };

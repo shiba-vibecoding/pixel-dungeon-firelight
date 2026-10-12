@@ -49,9 +49,15 @@ function chooseEnemy(ctx: Ctx, mob: Mob, fov: boolean[]): Hero | undefined {
 }
 
 export function mobAct(ctx: Ctx, mob: Mob): void {
-  // The sad ghost lingers where it is.
+  // The sad ghost drifts about the level at half speed, never after anyone.
   if (mob.state === 'passive') {
-    spend(mob, TICK);
+    const fov = castShadow(mob.pos, terrainBlocksSight(ctx.level.map));
+    if (mob.target !== -1 && mob.target !== mob.pos && getCloser(ctx, mob, mob.target, fov)) {
+      spend(mob, 1 / MOBS[mob.kind].speed);
+    } else {
+      mob.target = randomDestination(ctx.rng, ctx.level);
+      spend(mob, TICK);
+    }
     return;
   }
   // Poisoned or paralysed by a trap's gas.
