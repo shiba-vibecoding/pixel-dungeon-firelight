@@ -14,6 +14,8 @@ import { step } from '../../core/test/runner';
  */
 
 const SERVER = process.env.PD_SIM;
+/** The first bot's hero, whom the others follow. */
+let leaderHero = 'bot0';
 const BOTS = Number(process.env.PD_SIM_BOTS ?? 4);
 const SECONDS = Number(process.env.PD_SIM_SECONDS ?? 60);
 /** One way, in ms; a little jitter is added. */
@@ -50,10 +52,15 @@ class Bot {
   private socket!: WebSocket;
   private open = false;
 
-  constructor(readonly id: string, private readonly room: string, private readonly heroClass: string) {}
+  /** The hero this bot plays: the room names it (a guest's id is derived from its secret), so it is learnt from the snapshot. */
+  hero: string;
+
+  constructor(readonly id: string, private readonly room: string, private readonly heroClass: string) {
+    this.hero = id;
+  }
 
   connect(): Promise<void> {
-    const url = `${SERVER}/room/${this.room}?hero=${this.heroClass}&v=${RULES_VERSION}&id=${this.id}&name=${this.id}`;
+    const url = `${SERVER}/room/${this.room}?hero=${this.heroClass}&v=${RULES_VERSION}&id=${this.id}&name=${this.id}&gs=${this.id}-sim-secret-0000`;
     this.socket = new WebSocket(url);
     return new Promise((resolve, reject) => {
       this.socket.onopen = () => {
@@ -92,6 +99,8 @@ class Bot {
         this.world = message.world;
         this.seq = message.seq;
         this.inFlight = null;
+        this.hero = message.you;
+        if (this.id === 'bot0') leaderHero = message.you;
         this.stats.snapshots++;
         break;
       case 'event': {
@@ -106,7 +115,7 @@ class Bot {
           this.send(JSON.stringify({ type: 'sync' }));
           return;
         }
-        if (message.event.type === 'act' && message.event.heroId === this.id && this.inFlight) {
+        if (message.event.type === 'act' && message.event.heroId === this.hero && this.inFlight) {
           this.stats.rtt.push(performance.now() - this.inFlight.at);
           this.inFlight = null;
         }
@@ -127,7 +136,7 @@ class Bot {
     while (performance.now() < until) {
       await sleep(between(THINK_MS));
       const world = this.world;
-      const me = world && heroById(world, this.id);
+      const me = world && heroById(world, this.hero);
       if (!world || !me || this.inFlight || world.over) continue;
       if (!isAlive(me)) {
         if (wasAlive) this.stats.deaths++;
@@ -143,7 +152,7 @@ class Bot {
       }
       let action: Action;
       try {
-        action = this.follow(world) ?? step(world, this.id);
+        action = this.follow(world) ?? step(world, this.hero);
       } catch {
         action = { type: 'wait' };
       }
@@ -155,8 +164,8 @@ class Bot {
 
   /** A step towards the leader when too far behind (with no fight at hand); null otherwise. */
   private follow(world: World): Action | null {
-    const leader = heroById(world, 'bot0');
-    const me = heroById(world, this.id)!;
+    const leader = heroById(world, leaderHero);
+    const me = heroById(world, this.hero)!;
     if (!TOGETHER || this.id === 'bot0' || !leader || !isAlive(leader) || leader.depth !== me.depth) return null;
     if (distance(leader.pos, me.pos) <= 3) return null;
     const floor = world.floors[me.depth];
@@ -214,7 +223,7 @@ describe.skipIf(!SERVER)('co-op party against a live server', () => {
     const lines = bots.map((bot) => {
       const s = bot.stats;
       const slow = s.rtt.filter((t) => t > 1000).length;
-      const me = bot.world && heroById(bot.world, bot.id);
+      const me = bot.world && heroById(bot.world, bot.hero);
       return `${bot.id}: acts ${s.acts}, rtt p50 ${quantile(s.rtt, 0.5)} p90 ${quantile(s.rtt, 0.9)} p99 ${quantile(s.rtt, 0.99)} max ${quantile(s.rtt, 1)} ms, `
         + `>1s ${slow} (${Math.round((100 * slow) / Math.max(1, s.rtt.length))}%), idle ${Math.round(s.idleMs / 1000)} s, depth ${me?.depth}, `
         + `deaths ${s.deaths}, desyncs ${s.desyncs}, rejected ${JSON.stringify(s.rejected)}${bot.firstDiff ? `

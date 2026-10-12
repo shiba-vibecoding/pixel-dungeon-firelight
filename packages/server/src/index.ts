@@ -57,6 +57,8 @@ export interface Env {
 
 /** A room left without players this long is deleted, dungeon and all. */
 const ROOM_TTL_MS = 30 * 24 * 3600_000;
+/** How long a room waits after a move before saving, to save a burst of moves as one write. */
+const SAVE_DELAY_MS = 5000;
 /** A day's leaderboard is kept this long after its day. */
 const BOARD_TTL_MS = 60 * 24 * 3600_000;
 
@@ -182,6 +184,10 @@ export class Room extends DurableObject<Env> {
   private readonly limiter = new MessageLimiter();
   /** True once 'idleSince' is known to be gone from storage while players are here. */
   private idleCleared = false;
+  /** A save waiting for the moves to settle (see apply). */
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The alarm as last set, null for none; undefined until known since the room woke. */
+  private alarmAt: number | null | undefined = undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -208,11 +214,41 @@ export class Room extends DurableObject<Env> {
     return this.ctx.getWebSockets().some((ws) => ws !== leaving && !this.playerOf(ws).id.endsWith(REPLACED));
   }
 
-  /** Sends what the room produced, saves it and sets the alarm. */
+  /**
+   * Sends what the room produced, saves it and sets the alarm. Storage rows written are what
+   * Cloudflare counts (100,000 a day on the free plan), and a party makes a couple of moves a
+   * second: so a room is saved SAVE_DELAY_MS after a move, with every other move made meanwhile,
+   * and at once when someone leaves or the run ends. A room lost between (a deploy, a crash) is
+   * back a moment earlier; the players' clients take its snapshot on reconnecting.
+   */
   private async apply(deliveries: Delivery[], leaving?: WebSocket): Promise<void> {
     this.deliver(deliveries);
-    await this.persist();
+    if (leaving || this.logic?.state().world.over) await this.flush();
+    else this.saveSoon();
     await this.schedule(leaving);
+  }
+
+  private saveSoon(): void {
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      this.persist().catch((error: unknown) => this.failed(error, 'save'));
+    }, SAVE_DELAY_MS);
+  }
+
+  /** Saves now what is waiting. */
+  private async flush(): Promise<void> {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    await this.persist();
+  }
+
+  /** Sets the alarm (null: none), writing only when it changes. */
+  private async setAlarmAt(at: number | null): Promise<void> {
+    if (at === this.alarmAt) return;
+    this.alarmAt = at;
+    if (at === null) await this.ctx.storage.deleteAlarm();
+    else await this.ctx.storage.setAlarm(at);
   }
 
   /**
@@ -233,18 +269,16 @@ export class Room extends DurableObject<Env> {
         await this.ctx.storage.put('idleSince', idleSince);
       }
       if (!deadline) {
-        await this.ctx.storage.setAlarm(idleSince + ROOM_TTL_MS);
+        await this.setAlarmAt(idleSince + ROOM_TTL_MS);
         return;
       }
     }
-    if (deadline) {
-      await this.ctx.storage.setAlarm(deadline);
-    } else {
-      await this.ctx.storage.deleteAlarm();
-    }
+    await this.setAlarmAt(deadline ?? null);
   }
 
   override async alarm(): Promise<void> {
+    // The alarm that woke the room is spent.
+    this.alarmAt = null;
     try {
       if (!this.occupied()) {
         const idleSince = await this.ctx.storage.get<number>('idleSince');
@@ -264,6 +298,7 @@ export class Room extends DurableObject<Env> {
   private async expire(): Promise<void> {
     this.logic = null;
     this.writer.reset();
+    this.alarmAt = null;
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
   }
