@@ -85,6 +85,8 @@ export type Effect =
   | { type: 'hunger'; hero: string; state: 'hungry' | 'starving' }
   /** Gas or flames released at a cell, reaching `radius` cells around. */
   | { type: 'burst'; depth: number; pos: number; kind: Burst; radius: number }
+  /** A dewdrop picked up, and the health it gave. */
+  | { type: 'dew'; hero: string; amount: number }
   /** Terrain burnt down to embers, opening what it blocked. */
   | { type: 'burnt'; depth: number; pos: number }
   /** A thrown potion breaking; `identified` when what came out taught the party what it was. */

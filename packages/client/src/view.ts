@@ -447,6 +447,10 @@ export class View {
             if (effect.state === 'starving') haptic('error');
           }
           break;
+        case 'dew':
+          audio.play('dewdrop');
+          if (effect.amount > 0) this.float(effect.hero, `+${effect.amount}`, COLORS.positive, now);
+          break;
         case 'burnt':
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.pos, start: now });
           break;

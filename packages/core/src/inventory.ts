@@ -209,7 +209,9 @@ function pickUp(ctx: Ctx, hero: Hero): void {
   }
   const left: Item[] = [];
   for (const item of heap.items) {
-    if (collect(hero, item)) {
+    if (item.kind === 'dew') {
+      drinkDew(ctx, hero, item);
+    } else if (collect(hero, item)) {
       ctx.effects.push({ type: 'pickedUp', hero: hero.id, item });
     } else {
       left.push(item);
@@ -259,6 +261,14 @@ function eat(ctx: Ctx, hero: Hero, index: number): void {
 const MEAT_BURNING_TURNS = 8;
 const ROOTED_TURNS = 10;
 const SLOWED_TURNS = 10;
+
+/** Dewdrop.doPickUp: a little health, more for the huntress; wasted on the unhurt. */
+function drinkDew(ctx: Ctx, hero: Hero, dew: Item): void {
+  const value = 1 + Math.trunc((ctx.depth - 1) / 5) + (hero.heroClass === 'huntress' ? 1 : 0);
+  const amount = Math.max(0, Math.min(hero.ht - hero.hp, value * dew.qty));
+  hero.hp += amount;
+  ctx.effects.push({ type: 'dew', hero: hero.id, amount });
+}
 
 function identify(world: World, kind: ItemKind): boolean {
   if (world.known.includes(kind)) return false;

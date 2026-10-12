@@ -5,11 +5,11 @@ import {
 } from './actors';
 import { attack, hurt } from './combat';
 import {
-  canEnter, charAt, type Ctx, type Effect, enterCell, exploredCells, type Floor, freeCellNear, heroesOn, heroView,
-  isWater, leaveCell, observe,
+  canEnter, charAt, type Ctx, dropItem, type Effect, enterCell, exploredCells, type Floor, freeCellNear, heroesOn,
+  heroView, isWater, leaveCell, observe,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
-import { createItems, itemDef, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
+import { createItem, createItems, itemDef, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
 import { discoverable } from './level/flags';
 import { type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
@@ -429,6 +429,7 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       // The step is done, then the trap goes off.
       if (trapAt(level.map[hero.pos]!)) triggerTrap(ctx, hero, hero.pos);
       if (level.map[hero.pos] === T.WELL) drinkFromWell(ctx, hero);
+      if (level.map[hero.pos] === T.HIGH_GRASS) trample(ctx, hero.pos);
       search(ctx, hero, false);
       break;
     }
@@ -467,6 +468,12 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
       break;
   }
   if (isAlive(hero)) observe(world, hero);
+}
+
+/** HighGrass.trample: walked through, tall grass is flattened and sometimes sheds a dewdrop. */
+function trample(ctx: Ctx, pos: number): void {
+  ctx.level.map[pos] = T.GRASS;
+  if (ctx.rng.int(6) === 0) dropItem(ctx.floor, pos, createItem('dew'));
 }
 
 /** The backpack slot of an iron key for the hero's current depth, or -1. */

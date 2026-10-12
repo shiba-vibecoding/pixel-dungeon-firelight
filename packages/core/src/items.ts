@@ -14,7 +14,8 @@ import type { RunState } from './run';
  * seeds and the other wands come later.
  */
 
-export type ItemCategory = 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'food' | 'key' | 'quest';
+export type ItemCategory =
+  | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'food' | 'dew' | 'key' | 'quest';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -83,6 +84,8 @@ export const ITEMS = {
   'food.ration': { category: 'food', sprite: 4, energy: 260 },
   'food.pasty': { category: 'food', sprite: 112, energy: 360 },
   'food.meat': { category: 'food', sprite: 113, energy: 100 },
+  /** Shaken from tall grass; heals whoever picks it up. */
+  dew: { category: 'dew', sprite: 81 },
   /** Opens the locked room of the level it was found on. */
   'key.iron': { category: 'key', sprite: 9 },
   /** The sad ghost's dried rose. */

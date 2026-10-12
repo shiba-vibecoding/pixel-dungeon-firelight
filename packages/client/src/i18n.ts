@@ -114,6 +114,7 @@ const en = {
     'food.ration': 'ration of food',
     'food.pasty': 'pasty',
     'food.meat': 'mystery meat',
+    dew: 'dewdrop',
   } as Record<ItemKind, string>,
   itemInfo: {
     'potion.healing': 'Restores all health and washes off ooze.',
@@ -359,6 +360,7 @@ const ru: Strings = {
     'food.ration': 'паёк',
     'food.pasty': 'пирожок',
     'food.meat': 'странное мясо',
+    dew: 'капля росы',
   },
   itemInfo: {
     'potion.healing': 'Полностью восстанавливает здоровье и смывает слизь.',

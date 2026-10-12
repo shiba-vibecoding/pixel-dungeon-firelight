@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   act, addHero, canEnter, createItem, createWorld, floorAt, heroById, HUNGRY, isStarving, levelAt, NEIGHBOURS8,
-  STARVING, type World,
+  STARVING, T, type World,
 } from '../src/index';
 import { pacify } from './helpers';
 
@@ -117,6 +117,33 @@ describe('eating', () => {
       }
     }
     expect([...outcomes].sort()).toEqual(['hot', 'legs', 'stuffed', 'unwell', null].sort());
+  });
+});
+
+describe('tall grass', () => {
+  it('is trampled flat, sometimes shedding a dewdrop that heals', () => {
+    const world = solo();
+    const hero = heroById(world, 'p')!;
+    const level = levelAt(world, 1);
+    const home = hero.pos;
+    const grass = NEIGHBOURS8.map((n) => home + n).find((c) => canEnter(level, c) && level.map[c] !== T.DOOR)!;
+    let dew = 0;
+    for (let i = 0; i < 60; i++) {
+      level.map[grass] = T.HIGH_GRASS;
+      act(world, 'p', { type: 'move', to: grass });
+      expect(level.map[grass]).toBe(T.GRASS);
+      const heap = floorAt(world, 1).heaps.find((h) => h.pos === grass);
+      if (heap?.items.some((item) => item.kind === 'dew')) {
+        dew++;
+        hero.hp = hero.ht - 5;
+        const result = act(world, 'p', { type: 'pickup' });
+        expect(result.ok && result.effects.find((e) => e.type === 'dew')).toEqual({ type: 'dew', hero: 'p', amount: 1 });
+        expect(hero.hp).toBe(hero.ht - 4);
+        expect(hero.items.some((item) => item.kind === 'dew')).toBe(false);
+      }
+      act(world, 'p', { type: 'move', to: home });
+    }
+    expect(dew).toBeGreaterThan(3);
   });
 });
 
