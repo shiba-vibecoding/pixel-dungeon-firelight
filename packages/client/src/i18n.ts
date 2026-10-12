@@ -27,6 +27,14 @@ const RU_ENCHANTMENTS: Record<Enchantment, readonly [string, string, string]> = 
   tempering: ['закалённый', 'закалённая', 'закалённое'],
 };
 const RU_GENDERS: Partial<Record<ItemKind, 1 | 2>> = { 'weapon.mace': 1, 'weapon.glaive': 1, 'weapon.spear': 2 };
+
+/** The Russian gender of a wearable's name, plural included: «палочка», «кольцо», «доспехи воина». */
+function brokenGender(kind: ItemKind): 0 | 1 | 2 | 3 {
+  if (kind.startsWith('wand.') || kind === 'armor.mage') return 1;
+  if (kind.startsWith('ring.') || kind === 'armor.rogue') return 2;
+  if (kind === 'armor.warrior') return 3;
+  return RU_GENDERS[kind] ?? 0;
+}
 const RU_GLYPHS: Record<Glyph, string> = {
   bounce: 'отскока', affection: 'привязанности', antiEntropy: 'антиэнтропии', multiplicity: 'множественности', potential: 'потенциала',
   metabolism: 'метаболизма',
@@ -57,6 +65,11 @@ const en = {
   actionsLabel: 'Actions',
   cancel: 'Cancel',
   rankings: 'Rankings',
+  goingToBreak: (name: string) => `Because of frequent use, your ${name} is going to break soon.`,
+  hasBroken: (name: string) => `Because of frequent use, your ${name} has broken.`,
+  mended: (name: string) => `Your ${name} looks as good as new.`,
+  durability: (left: number, max: number) => `Wear: ${left} of ${max} uses left.`,
+  brokenInfo: 'Broken: it works as if it had never been upgraded. A scroll of upgrade or enchantment, or a weightstone, mends it.',
   trapInTheWay: 'A trap bars the way. Tap it to step onto it anyway.',
   loadingSprites: (percent: number) => `Loading sprites… ${percent}%`,
   tip: 'Tip:',
@@ -726,6 +739,7 @@ const en = {
   } as Record<string, string>,
   // Weapon.Enchantment and Armor.Glyph: what they are called and what they do.
   enchantName: (name: string, enchant: Enchantment, _kind: ItemKind): string => `${EN_ENCHANTMENTS[enchant]} ${name}`,
+  brokenName: (name: string, _kind: ItemKind): string => `broken ${name}`,
   glyphName: (name: string, glyph: Glyph): string => `${name} of ${EN_GLYPHS[glyph]}`,
   enchantInfo: {
     fire: 'Its blows may set the foe alight.',
@@ -813,6 +827,11 @@ const ru: Strings = {
   actionsLabel: 'Действия',
   cancel: 'Отмена',
   rankings: 'Рекорды',
+  goingToBreak: (name) => `От частого использования скоро сломается: ${name}.`,
+  hasBroken: (name) => `От частого использования сломалось: ${name}.`,
+  mended: (name) => `Как новое: ${name}.`,
+  durability: (left, max) => `Прочность: ${left} из ${max}.`,
+  brokenInfo: 'Сломано: работает, как будто его не улучшали. Починят свиток улучшения, свиток зачарования или точильный камень.',
   trapInTheWay: 'Путь преграждает ловушка. Коснитесь её, чтобы всё-таки наступить.',
   loadingSprites: (percent) => `Загрузка спрайтов… ${percent}%`,
   tip: 'Совет:',
@@ -1474,6 +1493,7 @@ const ru: Strings = {
     bones: 'взрыв костей', gas: 'ядовитый газ', fall: 'падение в пропасть', deferred: 'отложенный урон', bleeding: 'кровотечение', multiplicity: 'доспех множественности', bomb: 'взрыв бомбы',
   },
   enchantName: (name, enchant, kind) => `${RU_ENCHANTMENTS[enchant][RU_GENDERS[kind] ?? 0]} ${name}`,
+  brokenName: (name, kind) => `${['сломанный', 'сломанная', 'сломанное', 'сломанные'][brokenGender(kind)]} ${name}`,
   glyphName: (name, glyph) => `${name} ${RU_GLYPHS[glyph]}`,
   enchantInfo: {
     fire: 'Удары этим оружием могут поджечь врага.',

@@ -1,5 +1,5 @@
 import {
-  type Action, armorStats, BACKPACK_SIZE, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
+  type Action, armorStats, BACKPACK_SIZE, isBroken, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
   itemSprite, maxExp, type MobKind, SUBCLASSES, wandMaxCharges, weaponStats, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
@@ -7,7 +7,7 @@ import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
-import { isKnown, itemInfo, itemName } from './itemtext';
+import { isKnown, itemInfo, itemName, wearShare } from './itemtext';
 import type { DailyBoard } from './leaderboard';
 import type { RunRecord } from './rankings';
 import type { Assets } from './sprites';
@@ -262,7 +262,16 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
     node.append(el('span', { className: 'pd-qty', textContent: String(item.qty) }));
   }
   if (item.level !== 0 && known) {
-    node.append(el('span', { className: `pd-lvl ${item.level > 0 ? 'up' : 'down'}`, textContent: `${item.level > 0 ? '+' : '−'}${Math.abs(item.level)}` }));
+    // ItemSlot: a broken item's level shows in the warning colour (it works as +0).
+    const tone = item.level < 0 ? 'down' : isBroken(item) ? 'broken' : 'up';
+    node.append(el('span', { className: `pd-lvl ${tone}`, textContent: `${item.level > 0 ? '+' : '−'}${Math.abs(item.level)}` }));
+  }
+  // WndBag's durability bars: how worn an upgraded item is.
+  const worn = wearShare(world, item);
+  if (worn !== null && worn < 1) {
+    const bar = el('span', { className: `pd-wear${worn <= 0 ? ' broken' : worn < 1 / 6 ? ' low' : ''}` });
+    bar.style.setProperty('--v', String(worn));
+    node.append(bar);
   }
   // ItemSlot's top right: the strength it wants, with a «?» while its level is unknown.
   const category = itemDef(item.kind).category;

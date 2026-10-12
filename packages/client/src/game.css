@@ -63,3 +63,16 @@ canvas#game {
 
 /* The day's ranks keep their own alignment inside the centred end-of-run window. */
 .pd-runend .pd-ranks { text-align: left; }
+
+/* Wear (WndBag's durability bars): a thin bar along the slot's foot, and a broken item's level in the warning colour. */
+.pd-lvl.broken { color: var(--warn); }
+.pd-wear {
+  position: absolute; z-index: 1; left: 6px; right: 6px; bottom: 2px;
+  height: calc(var(--u) * 1.5);
+  background: var(--stone-900);
+  box-shadow: 0 0 0 1px var(--void);
+  pointer-events: none;
+}
+.pd-wear::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--v) * 100%); background: var(--good); }
+.pd-wear.low::before { background: var(--warn); }
+.pd-wear.broken { background: var(--bad); }

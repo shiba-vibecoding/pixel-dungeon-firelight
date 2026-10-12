@@ -1,3 +1,4 @@
+import { wear } from './wear';
 import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
 import {
   awareness, createHero, createMob, type Hero, heroAttackDelay, heroSpeed, hungerGrowth, hungerStep, HUNGRY, isAlive,
@@ -504,9 +505,10 @@ function starve(ctx: Ctx, hero: Hero, time: number): void {
   }
 }
 
-/** Ring.Ticker: a ring worn long enough tells the party what it is. */
+/** Ring.Ticker: a ring wears with every turn it is worn, and worn long enough tells the party what it is. */
 function wearRings(ctx: Ctx, hero: Hero, time: number): void {
   for (const ring of hero.rings) {
+    wear(ctx, hero, ring, time);
     if (ctx.world.known.includes(ring.kind)) continue;
     ring.worn = (ring.worn ?? 0) + time;
     if (ring.worn >= RING_TICKS_TO_KNOW) {

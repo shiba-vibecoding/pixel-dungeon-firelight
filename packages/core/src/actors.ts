@@ -1,3 +1,4 @@
+import { effectiveLevel } from './wear';
 import { armorStats, createItem, type Item, type ItemKind, missileStats, type WeaponStats, weaponStats } from './items';
 import type { Rng } from './rng';
 import type { Action } from './world';
@@ -195,7 +196,7 @@ export const isAlive = (char: { hp: number }): boolean => char.hp > 0;
 
 /** The levels of every worn ring of a kind, added up (several buffs of a kind stack in the original). */
 export const ringBonus = (hero: Hero, kind: ItemKind): number =>
-  (hero.rings ?? []).reduce((sum, ring) => (ring.kind === kind ? sum + ring.level : sum), 0);
+  (hero.rings ?? []).reduce((sum, ring) => (ring.kind === kind ? sum + effectiveLevel(ring) : sum), 0);
 
 /** Hero.STR: weakness takes two points of strength away while it lasts. */
 export const heroStr = (hero: Hero): number => hero.str - (hero.weakened > 0 ? 2 : 0);

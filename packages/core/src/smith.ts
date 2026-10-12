@@ -1,3 +1,4 @@
+import { mend } from './wear';
 import { createMob, type Hero, type Mob, STARVING, isStarving } from './actors';
 import { type Ctx, dropItem } from './floor';
 import { collect } from './inventory';
@@ -141,6 +142,7 @@ export function reforge(ctx: Ctx, hero: Hero, first: ItemRef, second: ItemRef): 
   const better = itemAt(hero, betterRef)!;
   const worse = itemAt(hero, worseRef)!;
   better.level++;
+  mend(better);
   if (better.charges !== undefined) better.charges = Math.min(better.charges + 1, wandMaxCharges(better));
   // The enchantment of the one melted down is not lost, if the better one had none.
   if (!better.enchant && worse.enchant) better.enchant = worse.enchant;

@@ -565,6 +565,8 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'smith' && effect.hero === myId) talkWithSmith(effect.line);
     if (effect.type === 'shop' && effect.hero === myId) openShop();
     if (effect.type === 'fell' && effect.hero === myId) justFell = true;
+    // Hero.interrupt: an item breaking stops whatever the hero was doing.
+    if (effect.type === 'worn' && effect.hero === myId && effect.state === 'broken') walk.reset();
     if (effect.type === 'pickedUp' && effect.hero === myId && effect.item.kind !== 'gold') newLoot = true;
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     const hurt =

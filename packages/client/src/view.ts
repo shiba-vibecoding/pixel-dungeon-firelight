@@ -466,6 +466,20 @@ export class View {
         case 'upgraded':
           if (effect.hero === myId) this.say(t.upgradedItem(itemName(world, effect.item)), COLORS.highlight, now);
           break;
+        case 'worn':
+          // Item.use: the bearer hears of it, if they know the item's level; breaking is loud.
+          if (effect.hero !== myId) break;
+          if (effect.state === 'warning') {
+            this.say(t.goingToBreak(itemName(world, { ...effect.item, durability: undefined })), COLORS.warning, now);
+          } else {
+            this.say(t.hasBroken(itemName(world, { ...effect.item, durability: undefined })), COLORS.negative, now);
+            audio.play('degrade');
+            haptic('error');
+          }
+          break;
+        case 'mended':
+          if (effect.hero === myId) this.say(t.mended(itemName(world, effect.item)), COLORS.positive, now);
+          break;
         case 'teleported':
           // Appear at once in the new place rather than sliding across the map.
           this.puppets.delete(effect.hero);

@@ -120,6 +120,10 @@ export type Effect =
   | { type: 'victory'; hero: string }
   | { type: 'opened'; depth: number; pos: number; heap: HeapKind }
   | { type: 'pickedUp'; hero: string; item: Item }
+  /** Item.use: an upgraded item is about to break, or broke, from use (see wear.ts). */
+  | { type: 'worn'; hero: string; item: Item; state: 'warning' | 'broken' }
+  /** A scroll of upgrade read on a broken item mends it instead. */
+  | { type: 'mended'; hero: string; item: Item }
   | { type: 'packFull'; hero: string }
   | { type: 'dropped'; hero: string; item: Item }
   | { type: 'equipped'; hero: string; item: Item }

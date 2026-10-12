@@ -1,3 +1,4 @@
+import { isBroken, mend, wear } from './wear';
 import {
   BACKPACK_SIZE, beckon, createMob, isShopkeeper, statsOf, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
   SUBCLASSES,
@@ -192,6 +193,8 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       const weapon = action.weapon === undefined ? hero.weapon! : hero.items[action.weapon]!;
       const stone = hero.items[action.item]!;
       weapon.imbue = action.imbue;
+      // Weightstone.apply: the weapon comes out mended, too.
+      mend(weapon);
       if (--stone.qty <= 0) hero.items.splice(action.item, 1);
       ctx.effects.push({ type: 'balanced', hero: hero.id, item: weapon });
       return TIME_TO_BALANCE;
@@ -399,6 +402,8 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
       damage: [stats.min, stats.max],
     });
     if (hit && isAlive(victim)) missileProc(ctx, thrown, victim);
+    // The boomerang wears with every hit, as a melee weapon does.
+    if (hit && boomerang) wear(ctx, hero, item);
   }
   // IncendiaryDart.onThrow: missing, it sets whatever can burn where it lands alight, and burns up with it.
   if (!hit && thrown.kind === 'missile.incendiary' && hasFlag(ctx.level.map[end]!, F.FLAMABLE)) {
@@ -501,6 +506,8 @@ function zap(ctx: Ctx, hero: Hero, index: number, target: number): void {
   hero.invisible = 0;
   if (identify(ctx.world, wand.kind)) ctx.effects.push({ type: 'identified', hero: hero.id, kind: wand.kind });
   zapWand(ctx, hero, wand, target);
+  // Wand.wandUsed: each zap wears the wand.
+  wear(ctx, hero, wand);
 }
 
 /** Adds an item to the backpack, stacking where possible; false if there is no room. */
@@ -872,6 +879,13 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
     case 'scroll.upgrade': {
       const upgraded = hero[target];
       if (!upgraded) break;
+      // ScrollOfUpgrade: a broken item is only mended (and its curse lifted), not upgraded.
+      if (isBroken(upgraded)) {
+        mend(upgraded);
+        delete upgraded.cursed;
+        ctx.effects.push({ type: 'mended', hero: hero.id, item: upgraded });
+        break;
+      }
       // Weapon.upgrade(false): the clash of magics may drive an enchantment out of a well-upgraded item.
       if ((upgraded.enchant || upgraded.glyph) && upgraded.level > 0 && ctx.rng.int(upgraded.level) > 0) {
         delete upgraded.enchant;
@@ -879,6 +893,7 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
         ctx.effects.push({ type: 'disenchanted', hero: hero.id, item: upgraded });
       }
       upgraded.level++;
+      mend(upgraded);
       // Item.upgrade: an upgrade lifts any curse.
       delete upgraded.cursed;
       ctx.effects.push({ type: 'upgraded', hero: hero.id, item: upgraded });
@@ -889,6 +904,8 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
       const imbued = hero[target];
       if (!imbued) break;
       delete imbued.cursed;
+      // ScrollOfEnchantment: the item comes out mended.
+      mend(imbued);
       if (target === 'weapon') imbued.enchant = randomEnchantment(ctx.rng, imbued.enchant);
       else imbued.glyph = randomGlyph(ctx.rng, imbued.glyph);
       ctx.effects.push({ type: 'imbued', hero: hero.id, item: imbued });

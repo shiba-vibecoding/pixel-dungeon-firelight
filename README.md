@@ -136,10 +136,18 @@ every monster on a level but its boss (and frees a shop's wares).
 Every item, monster, quest and room of the original is now in (the boss
 levels' skeleton keys aside: slaying the boss opens the way down directly).
 
+Upgraded weapons, armour, wands, rings and the boomerang wear with use, as
+in the original: worn out, an item is "broken" and works as if it had never
+been upgraded (a ring as +1) until a scroll of upgrade (which then only
+mends it), a scroll of enchantment, a weightstone or the blacksmith mends
+it. Tempering and auto-repair (a coin per tier a blow) keep their item
+whole; the backpack shows how worn each upgraded item is.
+
 Where this port differs on purpose: co-op throughout; Lloyd's beacon is not
-blocked by companions standing next to its bearer; nothing wears out, so
-tempered weapons and armour of auto-repair are as good as plain ones (and
-auto-repair costs no gold).
+blocked by companions standing next to its bearer; heroes swap places with
+the sad ghost, magic sheep and quest givers rather than being walled in by
+them (as later versions do); a tap past a known trap that bars the only way
+walks up to it and says so.
 
 ## How co-op works
 

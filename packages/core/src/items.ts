@@ -1,3 +1,4 @@
+import { effectiveLevel } from './wear';
 import { HeapType, type ItemSpec } from './level/builder';
 import type { Level, RoomInfo } from './level/generate';
 import { LENGTH, WIDTH } from './level/geometry';
@@ -227,6 +228,8 @@ export interface Item {
   returnTo?: { depth: number; pos: number };
   /** Melee weapons: balanced with a weightstone, for speed or for accuracy (Weapon.imbue). */
   imbue?: 'speed' | 'accuracy';
+  /** Uses left before an upgraded item breaks (Item.durability); absent while whole. See wear.ts. */
+  durability?: number;
 }
 
 /* Enchantments and glyphs (Weapon.Enchantment, Armor.Glyph) */
@@ -377,7 +380,10 @@ const MISSILES: Partial<Record<ItemKind, { min: number; max: number; str: number
 };
 
 export function missileStats(item: Item): { min: number; max: number; str: number; delay: number } {
-  if (item.kind === 'missile.boomerang') return { min: 1 + item.level, max: 4 + 2 * item.level, str: 10, delay: 1 };
+  if (item.kind === 'missile.boomerang') {
+    const level = effectiveLevel(item);
+    return { min: 1 + level, max: 4 + 2 * level, str: 10, delay: 1 };
+  }
   const stats = MISSILES[item.kind] ?? MISSILES['missile.dart']!;
   return { min: stats.min, max: stats.max, str: stats.str, delay: stats.delay ?? 1 };
 }
@@ -389,7 +395,7 @@ export const WAND_RECHARGE = 40;
 export const wandMaxCharges = (item: Item): number => Math.min((item.kind === 'wand.magicMissile' ? 3 : 2) + item.level, 9);
 
 /** WandOfMagicMissile: Random.Int(1, 6 + level * 2), so 1-5 for a plain wand. */
-export const magicMissileDamage = (item: Item): readonly [number, number] => [1, 5 + item.level * 2];
+export const magicMissileDamage = (item: Item): readonly [number, number] => [1, 5 + effectiveLevel(item) * 2];
 
 /* Weapon and armour numbers (MeleeWeapon, Armor) */
 
@@ -410,9 +416,11 @@ export function weaponStats(item: Item): WeaponStats {
   const tier = def.tier!;
   const accuracy = def.accuracy!;
   const delay = def.delay!;
+  // MeleeWeapon.min/max: a broken weapon strikes as an unupgraded one; its strength stays as it was.
+  const level = effectiveLevel(item);
   return {
-    min: tier + item.level,
-    max: Math.trunc(f32(f32((tier * tier - tier + 10) / f32(accuracy)) * f32(delay))) + item.level * tier,
+    min: tier + level,
+    max: Math.trunc(f32(f32((tier * tier - tier + 10) / f32(accuracy)) * f32(delay))) + level * tier,
     str: (def.str ?? 8 + tier * 2) - item.level,
     // Weapon.imbue: balanced for accuracy, half as accurate again; for speed, it strikes in six tenths of the time.
     accuracy: item.imbue === 'accuracy' ? f32(accuracy * 1.5) : accuracy,
@@ -424,7 +432,7 @@ export function armorStats(item: Item): { dr: number; str: number } {
   // Class armour protects as the armour it was made from.
   const tier = itemDef(item.base ?? item.kind).tier!;
   // Armor.DR: a glyph adds a level's worth of protection.
-  return { dr: Math.max(tier * (2 + item.level + (item.glyph ? 1 : 0)), 0), str: 7 + tier * 2 - item.level };
+  return { dr: Math.max(tier * (2 + effectiveLevel(item) + (item.glyph ? 1 : 0)), 0), str: 7 + tier * 2 - item.level };
 }
 
 /* Labels: the run's potion colours and scroll runes */

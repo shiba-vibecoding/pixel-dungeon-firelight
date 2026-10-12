@@ -1,3 +1,4 @@
+import { wear } from './wear';
 import {
   baseKind, BRUTE_ENRAGED_DAMAGE, isShopkeeper, statsOf, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
   maxExp, type Mob, MOBS, mobStats, ringBonus,
@@ -130,10 +131,16 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     }
   }
   // Hero.attackProc and defenseProc: an enchanted weapon's blow, an inscribed armour's answer.
-  if (isHero(attacker) && !isHero(defender) && !thrown) weaponProc(ctx, attacker, defender, damage);
+  if (isHero(attacker) && !isHero(defender) && !thrown) {
+    weaponProc(ctx, attacker, defender, damage);
+    // Weapon.proc: every blow that lands wears the weapon a little.
+    if (attacker.weapon) wear(ctx, attacker, attacker.weapon);
+  }
   if (isHero(defender) && !isHero(attacker)) {
     const mark = ctx.effects.length;
     damage = armorProc(ctx, attacker, defender, damage);
+    // Armor.proc: and every blow taken wears the armour.
+    wear(ctx, defender, defender.armor);
     // The glyph's backlash may have felled its wearer, or an ankh raised them anew: the blow is spent.
     if (!isAlive(defender) || ctx.effects.slice(mark).some((e) => e.type === 'resurrected')) return true;
   }

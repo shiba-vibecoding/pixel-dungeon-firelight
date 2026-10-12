@@ -1,5 +1,5 @@
 import {
-  armorStats, CLASS_ARMOR, CLASS_ARMOR_OF, type Hero, type HeroClass, type Item, itemDef, type ItemKind, itemSprite, magicMissileDamage, missileStats, SCROLL_RUNES, wandMaxCharges,
+  armorStats, durabilityOf, isBroken, maxDurability, CLASS_ARMOR, CLASS_ARMOR_OF, type Hero, type HeroClass, type Item, itemDef, type ItemKind, itemSprite, magicMissileDamage, missileStats, SCROLL_RUNES, wandMaxCharges,
   weaponStats, type World,
 } from '@pd/core';
 import { t } from './i18n';
@@ -28,13 +28,35 @@ export function itemName(world: World, item: Item): string {
   // Weapon.name and Armor.name: the enchantment or glyph is part of the name.
   if (item.enchant) name = t.enchantName(name, item.enchant, item.kind);
   if (item.glyph) name = t.glyphName(name, item.glyph);
-  if (category === 'weapon' || category === 'armor' || category === 'wand' || category === 'ring') {
+  if (category === 'weapon' || category === 'armor' || category === 'wand' || category === 'ring' || item.kind === 'missile.boomerang') {
+    // Weapon.toString: a worn-out item says so.
+    if (isBroken(item)) name = t.brokenName(name, item.kind);
     return item.level === 0 ? name : `${name} ${item.level > 0 ? '+' : ''}${item.level}`;
   }
   return name;
 }
 
 export function itemInfo(world: World, hero: Hero, item: Item): string[] {
+  return [...describe(world, hero, item), ...wearInfo(world, item)];
+}
+
+/** How worn an upgraded item is, once its level is known (WndBag's durability bars, in words). */
+function wearInfo(world: World, item: Item): string[] {
+  if (item.level <= 0 || !isKnown(world, item)) return [];
+  const max = maxDurability(item);
+  if (!Number.isFinite(max)) return [];
+  if (isBroken(item)) return [t.brokenInfo];
+  return [t.durability(Math.ceil(durabilityOf(item)), max)];
+}
+
+/** Share of an upgraded item's uses left, 0 to 1, or null for items that do not wear. */
+export function wearShare(world: World, item: Item): number | null {
+  if (item.level <= 0 || !isKnown(world, item)) return null;
+  const max = maxDurability(item);
+  return Number.isFinite(max) ? Math.max(0, durabilityOf(item) / max) : null;
+}
+
+function describe(world: World, hero: Hero, item: Item): string[] {
   const category = itemDef(item.kind).category;
   if (category === 'weapon') {
     const stats = weaponStats(item);
