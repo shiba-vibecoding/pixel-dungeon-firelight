@@ -123,7 +123,7 @@ export interface OnlineOptions {
   heroClass: HeroClass;
   /** Telegram.WebApp.initData when running inside Telegram. */
   initData?: string;
-  text: { connecting: string; reconnecting: string; replaced: string };
+  text: { connecting: string; reconnecting: string; replaced: string; full: string };
 }
 
 export function onlineSession(options: OnlineOptions): Session {
@@ -218,6 +218,10 @@ export function onlineSession(options: OnlineOptions): Session {
       if (closed) return;
       if (event.code === 4000) {
         session.status = options.text.replaced;
+        return;
+      }
+      if (event.code === 4001) {
+        session.status = options.text.full;
         return;
       }
       session.status = options.text.reconnecting;

@@ -33,6 +33,9 @@ export interface RoomState {
 
 export const TURN_TIMEOUT = 12_000;
 
+/** Heroes per party; a shared invite link in a big chat must not flood one dungeon. */
+export const PARTY_SIZE = 4;
+
 export class RoomLogic {
   private readonly online = new Set<string>();
 
@@ -61,6 +64,12 @@ export class RoomLogic {
   /** Restores who is connected after the object woke up from hibernation. */
   restoreOnline(ids: Iterable<string>): void {
     for (const id of ids) this.online.add(id);
+  }
+
+  /** True if a newcomer cannot join: the party is complete (members may always come back). */
+  isFull(playerId: string): boolean {
+    const heroes = this.saved.world.heroes;
+    return heroes.length >= PARTY_SIZE && !heroes.some((hero) => hero.id === playerId);
   }
 
   connect(player: PlayerInfo, now: number): Delivery[] {

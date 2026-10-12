@@ -101,10 +101,15 @@ export class Room extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
+    const room = await this.room();
+    if (room.isFull(player.id)) {
+      // Accept just to say why, then close: a failed upgrade would look like a network error.
+      server.accept();
+      server.close(4001, 'the party is full');
+      return new Response(null, { status: 101, webSocket: client });
+    }
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment(player);
-
-    const room = await this.room();
     await this.apply(room.connect(player, Date.now()));
     return new Response(null, { status: 101, webSocket: client });
   }

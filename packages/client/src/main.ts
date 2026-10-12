@@ -166,7 +166,7 @@ function startOnline(roomId: string): void {
       name: playerName.trim() || telegramName() || 'Hero',
       heroClass,
       initData: initData(),
-      text: { connecting: t.connecting, reconnecting: t.reconnecting, replaced: t.replaced },
+      text: { connecting: t.connecting, reconnecting: t.reconnecting, replaced: t.replaced, full: t.partyFull },
     }),
     roomId,
   );

@@ -103,6 +103,16 @@ describe('co-op room', () => {
     }
   });
 
+  it('takes at most four heroes, though members can always come back', () => {
+    const room = RoomLogic.create(12);
+    for (const id of ['a', 'b', 'c', 'd']) {
+      expect(room.isFull(id)).toBe(false);
+      room.connect({ id, name: id, heroClass: 'rogue' }, 0);
+    }
+    expect(room.isFull('e')).toBe(true);
+    expect(room.isFull('a')).toBe(false);
+  });
+
   it('rejects invalid actions to the sender only, without advancing the sequence', () => {
     const room = RoomLogic.create(1);
     const replicas = { alice: new Replica(), bob: new Replica() };
