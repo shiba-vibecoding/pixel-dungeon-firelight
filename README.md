@@ -105,10 +105,12 @@ armour of stench) spread through open cells, never through walls or closed
 doors, thin out a little every turn, and act on whoever breathes them.
 
 The Rat King keeps a hidden treasury of chests (one of them a mimic) beside
-Goo's lair.
+Goo's lair. Opening a tomb raises wraiths around the hero; a skeleton with
+something cursed among its belongings takes half the health of whoever
+disturbs it.
 
 Not ported yet: bags (seed pouch, scroll holder, wand holster, keyring); the
-dew vial; the honeypot and its bees; wraiths rising from cursed remains.
+dew vial; the honeypot and its bees.
 
 ## How co-op works
 

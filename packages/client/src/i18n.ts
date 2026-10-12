@@ -51,7 +51,7 @@ const en = {
     rottingFist: 'rotting fist', burningFist: 'burning fist', larva: "god's larva", mimic: 'mimic',
     statue: 'animated statue', piranha: 'giant piranha', imp: 'ambitious imp', sheep: 'sheep', blacksmith: 'troll blacksmith', mirror: 'mirror image',
     albino: 'albino rat', bandit: 'crazy bandit', shielded: 'shielded brute', senior: 'senior monk', acidic: 'acidic scorpio',
-    fetidRat: 'fetid rat', curse: 'curse personification', ratKing: 'rat king',
+    fetidRat: 'fetid rat', curse: 'curse personification', ratKing: 'rat king', wraith: 'wraith',
   } as Record<MobKind, string>,
   isMimic: 'This is a mimic!',
   yogNotice: 'Hope is an illusion...',
@@ -388,6 +388,7 @@ const en = {
     no: 'No, I can\'t help you',
   },
   cursed: 'The curse takes shape!',
+  wraiths: 'You disturbed the cursed remains!',
   ratKing: {
     notSleeping: 'I\'m not sleeping!',
     busy: 'What is it? I have no time for this nonsense. My kingdom won\'t rule itself!',
@@ -726,7 +727,7 @@ const ru: Strings = {
     statue: 'ожившая статуя', piranha: 'гигантская пиранья', imp: 'амбициозный бес', sheep: 'овца', blacksmith: 'тролль-кузнец', mirror: 'зеркальный образ',
     albino: 'крыса-альбинос', bandit: 'безумный бандит', shielded: 'гнолл-громила со щитом', senior: 'старший монах',
     acidic: 'кислотный скорпион',
-    fetidRat: 'зловонная крыса', curse: 'олицетворение проклятия', ratKing: 'крысиный король',
+    fetidRat: 'зловонная крыса', curse: 'олицетворение проклятия', ratKing: 'крысиный король', wraith: 'призрак',
   },
   isMimic: 'Это мимик!',
   yogNotice: 'Надежда — это иллюзия...',
@@ -1058,6 +1059,7 @@ const ru: Strings = {
     no: 'Нет, я не могу помочь',
   },
   cursed: 'Проклятие обретает облик!',
+  wraiths: 'Вы потревожили проклятые останки!',
   ratKing: {
     notSleeping: 'Я не сплю!',
     busy: 'Ну что ещё? Мне некогда заниматься всякой ерундой. Моё королевство само собой не управится!',

@@ -191,6 +191,8 @@ export type Effect =
   | { type: 'burntUp'; hero: string; kind: ItemKind }
   /** Lloyd's beacon set, or used to return. */
   | { type: 'beacon'; hero: string; mode: 'set' | 'return' }
+  /** Disturbed remains: wraiths rose, or the curse fell on whoever disturbed them. */
+  | { type: 'wraiths'; depth: number; pos: number }
   /** A bomb went off. */
   | { type: 'exploded'; depth: number; pos: number }
   /** A weapon balanced with a weightstone. */

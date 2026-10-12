@@ -701,6 +701,13 @@ export class View {
             this.flashes.push({ cell: effect.pos, start: now, duration: 400 });
           }
           break;
+        case 'wraiths':
+          audio.play('cursed');
+          if (effect.depth === this.depth) {
+            this.flashes.push({ cell: effect.pos, start: now, duration: 500 });
+            this.say(t.wraiths, COLORS.negative, now);
+          }
+          break;
         case 'cursed':
           audio.play('ghost');
           if (effect.depth === this.depth) this.say(t.cursed, COLORS.negative, now);

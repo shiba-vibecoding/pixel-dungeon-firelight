@@ -6,13 +6,15 @@ import { ballistica, randomRespawnCell } from './ai';
 import { attack, charArmor, CRIPPLE_TURNS, earnExp, hurt } from './combat';
 import { fearless, TERROR_TURNS } from './enchant';
 import { conjureImages } from './allies';
-import { canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, isWater, landItem, leaveCell } from './floor';
+import {
+  canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, isPassable, isWater, landItem, leaveCell,
+} from './floor';
 import {
   buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
   magicMissileDamage, missileStats, randomEnchantment, randomGlyph, wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
-import { adjacent, LENGTH, NEIGHBOURS8, NEIGHBOURS9 } from './level/geometry';
+import { adjacent, LENGTH, NEIGHBOURS4, NEIGHBOURS8, NEIGHBOURS9 } from './level/geometry';
 import { discover, F, hasFlag, T } from './level/terrain';
 import { type Burst, burst, immuneTo } from './traps';
 import { plant, SEED_PLANTS } from './plants';
@@ -478,6 +480,7 @@ function pickUp(ctx: Ctx, hero: Hero): void {
   if (heap.kind === 'lockedChest' || heap.kind === 'crystalChest') hero.items.splice(goldenKeyFor(hero), 1);
   if (heap.kind !== 'heap') {
     ctx.effects.push({ type: 'opened', depth: ctx.depth, pos: heap.pos, heap: heap.kind });
+    disturb(ctx, hero, heap);
     heap.kind = 'heap';
   }
   const left: Item[] = [];
@@ -502,6 +505,38 @@ function pickUp(ctx: Ctx, hero: Hero): void {
   heap.items = left;
   if (left.length === 0) ctx.floor.heaps.splice(ctx.floor.heaps.indexOf(heap), 1);
 }
+
+/**
+ * Heap.open on remains: a tomb's sinners rise as wraiths all around; a
+ * skeleton with something cursed among its belongings would too, but with
+ * the hero standing on it the curse falls on them instead, for half their health.
+ */
+function disturb(ctx: Ctx, hero: Hero, heap: Heap): void {
+  if (heap.kind === 'tomb') {
+    const risen = NEIGHBOURS4.filter((n) => spawnWraith(ctx, hero.pos + n)).length;
+    if (risen > 0) ctx.effects.push({ type: 'wraiths', depth: ctx.depth, pos: heap.pos });
+  }
+  if (heap.kind === 'skeleton' && heap.items.some((item) => item.cursed) && !spawnWraith(ctx, heap.pos)) {
+    const damage = Math.trunc(hero.hp / 2);
+    ctx.effects.push({ type: 'wraiths', depth: ctx.depth, pos: heap.pos });
+    ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: hero.id, damage });
+    hurt(ctx, hero, damage, 'bones');
+  }
+}
+
+/** Wraith.spawnAt: a wraith rises on a free open cell, already after the hero, and acts a little later. */
+function spawnWraith(ctx: Ctx, pos: number): boolean {
+  if (!isPassable(ctx.level, pos) || charAt(ctx.world, ctx.depth, pos)) return false;
+  const wraith = createMob(`#${++ctx.world.nextId}`, 'wraith', pos, 'hunting', ctx.floor.now + WRAITH_SPAWN_DELAY);
+  wraith.level = ctx.depth;
+  wraith.enemySeen = true;
+  ctx.floor.mobs.push(wraith);
+  enterCell(ctx.level, pos);
+  return true;
+}
+
+/** Wraith.SPAWN_DELAY. */
+const WRAITH_SPAWN_DELAY = 2;
 
 /** The potion each seed brews into (Plant.Seed.alchemyClass). */
 const ALCHEMY: Partial<Record<ItemKind, ItemKind>> = {
