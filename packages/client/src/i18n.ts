@@ -243,6 +243,7 @@ const en = {
     'quest.rose': 'dried rose',
     'quest.skull': 'giant rat skull',
     'quest.dust': 'corpse dust',
+    'quest.fish': 'phantom fish',
     'quest.token': 'dwarf token',
     'quest.ore': 'dark gold ore',
     torch: 'torch',
@@ -334,6 +335,7 @@ const en = {
     'wand.regrowth': 'Grass springs up along the bolt, and grows tall where it lands.',
     'quest.rose': 'The rose has dried long ago, but it has kept all its petals somehow.',
     'quest.skull': 'It could be a nice hunting trophy, but it smells too bad to place it on a wall.',
+    'quest.fish': 'You can barely see this tiny translucent fish in the air. In the water it becomes effectively invisible. Eaten, it makes you so too, for a while.',
     'quest.dust': "The ball of corpse dust doesn't differ outwardly from a regular dust ball. However, you know somehow that it's better to get rid of it as soon as possible.",
     'quest.ore': 'Dark gold ore, mined from the veins of the caves. The troll blacksmith wants it.',
     'quest.token': 'Many dwarves and some of their larger creations carry these small pieces of metal of unknown purpose. Maybe they are jewelry, or maybe some kind of ID. The ambitious imp wants them.',
@@ -412,6 +414,9 @@ const en = {
     introBerry:
       'Oh, what a pleasant surprise to meet a decent person in such place! I came here for a rare ingredient - a Rotberry seed. Being a magic user, I am quite able to defend myself against local monsters, but I am getting lost in no time, it is very embarrassing. Probably you could help me? The shrub grows somewhere on this level. I would be happy to pay for your service with one of my best wands.',
     remindBerry: 'Any luck with a Rotberry seed? No? Do not worry, I am not in a hurry.',
+    introFish:
+      'Oh, what a pleasant surprise to meet a decent person in such place! I came here for a rare ingredient - a phantom fish. You can catch it with your bare hands, but it is very hard to notice in the water. Being a magic user, I am quite able to defend myself against local monsters, but I am getting lost in no time, it is very embarrassing. Probably you could help me? I would be happy to pay for your service with one of my best wands.',
+    remindFish: 'Any luck with a phantom fish? You may want to try searching for it in one of the local pools.',
     reward: 'Oh, I see you have succeeded! I do hope it has not troubled you too much. As I promised, you can choose one of my high quality wands.',
     farewell: 'Good luck in your quest!',
   },
@@ -934,6 +939,7 @@ const ru: Strings = {
     'quest.rose': 'сухая роза',
     'quest.skull': 'череп гигантской крысы',
     'quest.dust': 'трупная пыль',
+    'quest.fish': 'призрачная рыба',
     'quest.token': 'жетон гнома',
     'quest.ore': 'тёмное золото',
     torch: 'факел',
@@ -1025,6 +1031,7 @@ const ru: Strings = {
     'wand.regrowth': 'Вдоль заряда прорастает трава, а там, куда он попадёт, она вырастает высокой.',
     'quest.rose': 'Эта роза иссохла много лет тому назад, но, не смотря на это, сохранила каждый лепесток.',
     'quest.skull': 'Неплохой охотничий трофей, но пахнет слишком скверно, чтобы вешать его на стену.',
+    'quest.fish': 'Эту крошечную прозрачную рыбку едва видно и на воздухе, а в воде она и вовсе невидима. Съевший её на время становится таким же.',
     'quest.dust': 'С виду этот комок трупной пыли ничем не отличается от обычной пыли. Но почему-то вы чувствуете, что от него лучше избавиться как можно скорее.',
     'quest.ore': 'Тёмное золото, добытое из жил в пещерах. Его ждёт тролль-кузнец.',
     'quest.token': 'Многие гномы и некоторые их творения покрупнее носят эти кусочки металла неизвестного назначения. Может, это украшения, а может, что-то вроде удостоверений. Они нужны амбициозному бесу.',
@@ -1101,6 +1108,9 @@ const ru: Strings = {
     introBerry:
       'О, какой приятный сюрприз — встретить порядочного человека в таком месте! Я пришёл сюда за редким ингредиентом — семенем гнилоягодника. Как волшебник, я вполне могу постоять за себя перед местными чудищами, но я тут же теряю дорогу, это так неловко. Может, вы мне поможете? Куст растёт где-то на этом уровне. Я с радостью заплачу за услугу одной из своих лучших палочек.',
     remindBerry: 'Есть успехи с семенем гнилоягодника? Нет? Не волнуйтесь, я не тороплюсь.',
+    introFish:
+      'О, какой приятный сюрприз — встретить порядочного человека в таком месте! Я пришёл сюда за редким ингредиентом — призрачной рыбой. Её можно поймать голыми руками, но в воде её очень трудно заметить. Как волшебник, я вполне могу постоять за себя перед местными чудищами, но я тут же теряю дорогу, это так неловко. Может, вы мне поможете? Я с радостью заплачу за услугу одной из своих лучших палочек.',
+    remindFish: 'Есть успехи с призрачной рыбой? Попробуйте поискать её в здешних водоёмах.',
     reward: 'О, я вижу, у вас получилось! Надеюсь, это не доставило вам много хлопот. Как я и обещал, выберите одну из моих превосходных палочек.',
     farewell: 'Удачи в ваших поисках!',
   },

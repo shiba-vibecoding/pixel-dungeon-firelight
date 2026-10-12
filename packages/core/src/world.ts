@@ -894,6 +894,13 @@ function search(ctx: Ctx, hero: Hero, intentional: boolean): boolean {
         ctx.effects.push({ type: 'discovered', depth: hero.depth, cell: p });
         found = true;
       }
+      // Only a deliberate search turns up what lies hidden (the phantom fish).
+      const hidden = intentional ? ctx.floor.heaps.find((heap) => heap.pos === p && heap.kind === 'hidden') : undefined;
+      if (hidden) {
+        hidden.kind = 'heap';
+        ctx.effects.push({ type: 'opened', depth: hero.depth, pos: p, heap: 'hidden' });
+        found = true;
+      }
     }
   }
   return found;

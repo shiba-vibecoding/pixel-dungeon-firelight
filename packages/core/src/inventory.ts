@@ -74,6 +74,8 @@ const TIME_TO_DROP = 1;
 const TIME_TO_THROW = 1;
 const TIME_TO_ZAP = 1;
 const TIME_TO_EAT = 3;
+/** PhantomFish.TIME_TO_EAT. */
+const TIME_TO_EAT_FISH = 2;
 /** Weightstone.TIME_TO_APPLY. */
 const TIME_TO_BALANCE = 2;
 /** TomeOfMastery.TIME_TO_READ. */
@@ -100,6 +102,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     const heap = heapAt(world, hero);
     if (!heap) return 'nothing here';
     if ((heap.kind === 'lockedChest' || heap.kind === 'crystalChest') && goldenKeyFor(hero) < 0) return 'the chest is locked';
+    if (heap.kind === 'hidden') return 'nothing here';
     return heap.kind === 'forSale' ? 'that is for sale' : null;
   }
   if (action.type === 'mine') return mineProblem(world, hero);
@@ -121,7 +124,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial'].includes(category)) {
+      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial'].includes(category) && item.kind !== 'quest.fish') {
         return 'that cannot be used';
       }
       if (category === 'kit' && CLASS_ARMOR.includes(hero.armor.kind)) return 'your armour is already a class armour';
@@ -195,6 +198,13 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       if (itemDef(hero.items[action.item]!.kind).category === 'food') {
         eat(ctx, hero, action.item);
         return TIME_TO_EAT;
+      }
+      if (hero.items[action.item]!.kind === 'quest.fish') {
+        // PhantomFish.execute: eaten, it leaves the hero unseen for a while.
+        hero.items.splice(action.item, 1);
+        hero.invisible = Math.max(hero.invisible, INVISIBILITY_DURATION);
+        ctx.effects.push({ type: 'ate', hero: hero.id, kind: 'quest.fish', outcome: 'invisible' });
+        return TIME_TO_EAT_FISH;
       }
       if (itemDef(hero.items[action.item]!.kind).category === 'vial') {
         drinkFromVial(ctx, hero, hero.items[action.item]!);

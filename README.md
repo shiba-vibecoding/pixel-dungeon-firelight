@@ -51,7 +51,8 @@ Yendor on depth 26:
   Picking up the Amulet of Yendor below wins the run.
 - The sad ghost's quest on depths 2–4 (its dried rose, revenge on the fetid
   rat, or freedom from the curse that binds it), the old wandmaker's
-  (corpse dust or a rotberry seed, for a choice of two wands) on depths 7–9,
+  (corpse dust, a rotberry seed or a phantom fish hidden in the water, for a
+  choice of two wands) on depths 7–9,
   the troll blacksmith's on depths 12–14 (dark gold mined with his pickaxe, or a
   bat's blood on it, for reforging two items into one), and the ambitious
   imp's on depths 17–19 (tokens from slain monks or golems, for a ring).
@@ -119,8 +120,7 @@ Bags from the shops (a seed pouch, a scroll holder, a wand holster) hold
 their kind without taking room in the backpack, out of reach of fire and
 thieves; keys never take room, as every hero carries a key ring.
 
-Not ported yet: the wandmaker's third errand (the phantom fish); the altar
-room's sacrificial fire and the scroll of wipe out.
+Not ported yet: the altar room's sacrificial fire and the scroll of wipe out.
 
 Where this port differs on purpose: co-op throughout; golden bees and mirror
 images are ignored by monsters rather than fought; Lloyd's beacon is not

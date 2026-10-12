@@ -179,8 +179,9 @@ export const ITEMS = {
   'quest.ore': { category: 'quest', sprite: 102 },
   /** Left by the monks or golems the ambitious imp wants gone. */
   'quest.token': { category: 'quest', sprite: 122 },
-  /** What the old wandmaker is after. */
+  /** What the old wandmaker is after: corpse dust, or a phantom fish (which can be eaten, for a moment unseen). */
   'quest.dust': { category: 'quest', sprite: 121 },
+  'quest.fish': { category: 'quest', sprite: 118 },
   /** Tengu's legacy: reading it, a hero masters one of two ways. */
   'tome.mastery': { category: 'tome', sprite: 82 },
   /** Lit, it lets one see further in the dark halls for a while. */
@@ -588,7 +589,8 @@ export class ItemGenerator {
 /* What lies around on a new level */
 
 /** `forSale`: a shop's wares, bought rather than picked up. */
-export type HeapKind = 'heap' | 'chest' | 'skeleton' | 'tomb' | 'forSale' | 'mimic' | 'lockedChest' | 'crystalChest';
+/** hidden: unseen until a hero searches right next to it. */
+export type HeapKind = 'heap' | 'chest' | 'skeleton' | 'tomb' | 'forSale' | 'mimic' | 'lockedChest' | 'crystalChest' | 'hidden';
 
 export interface Heap {
   pos: number;
@@ -599,7 +601,7 @@ export interface Heap {
 /** Sprites of closed containers in items.png. */
 /** A mimic looks just like a chest. */
 export const HEAP_SPRITES: Readonly<Record<Exclude<HeapKind, 'heap' | 'forSale'>, number>> = {
-  chest: 11, skeleton: 0, tomb: 13, mimic: 11, lockedChest: 12, crystalChest: 105,
+  chest: 11, skeleton: 0, tomb: 13, mimic: 11, lockedChest: 12, crystalChest: 105, hidden: 119,
 };
 
 /** Dungeon.posNeeded / souNeeded: guaranteed strength and upgrades, spread over the floors. */

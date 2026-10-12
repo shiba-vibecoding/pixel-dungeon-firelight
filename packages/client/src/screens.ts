@@ -594,7 +594,7 @@ function showItem(options: ItemOptions): void {
         }),
       );
     }
-    if (category === 'food') actions.push(button(t.eat, () => act({ type: 'use', item: index }), 'primary'));
+    if (category === 'food' || item.kind === 'quest.fish') actions.push(button(t.eat, () => act({ type: 'use', item: index }), 'primary'));
     if (category === 'torch') actions.push(button(t.light, () => act({ type: 'use', item: index }), 'primary'));
     if (category === 'tome') {
       actions.push(

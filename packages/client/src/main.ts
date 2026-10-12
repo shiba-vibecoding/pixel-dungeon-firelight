@@ -271,7 +271,7 @@ const walk = {
 };
 
 const heapAt = (world: World, depth: number, pos: number): boolean =>
-  (world.floors[depth]?.heaps ?? []).some((heap) => heap.pos === pos);
+  (world.floors[depth]?.heaps ?? []).some((heap) => heap.pos === pos && heap.kind !== 'hidden');
 
 /** Aiming a thrown weapon or a wand: the next tap on the map picks the target. */
 let aim: { index: number; kind: 'throw' | 'zap' | 'special' } | null = null;
@@ -391,7 +391,7 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
 /** Picks up what lies here, or offers a shop's ware for sale. */
 function takeHere(world: World, me: Hero, now: number): void {
   const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === me.pos);
-  if (!heap) return;
+  if (!heap || heap.kind === 'hidden') return;
   // A locked or crystal chest wants the level's golden key; through crystal one sees what it holds.
   const locked = heap.kind === 'lockedChest' || heap.kind === 'crystalChest';
   if (locked && !me.items.some((i) => i.kind === 'key.golden' && i.depth === me.depth)) {
@@ -523,6 +523,8 @@ function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): vo
     // He may be after a rotberry seed rather than corpse dust.
     text: quest?.wants === 'berry' && line === 'intro' ? t.wandmaker.introBerry
       : quest?.wants === 'berry' && line === 'remind' ? t.wandmaker.remindBerry
+      : quest?.wants === 'fish' && line === 'intro' ? t.wandmaker.introFish
+      : quest?.wants === 'fish' && line === 'remind' ? t.wandmaker.remindFish
       : t.wandmaker[line],
     offers: line === 'reward' && quest ? [quest.battle, quest.utility] : [],
     onChoose: (index) => send({ type: 'wandReward', choice: index === 0 ? 'battle' : 'utility' }, performance.now()),
@@ -917,7 +919,8 @@ function tick(now: number): void {
   const at = mine ? view.position(mine, now) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
   camera.x = Math.round(at.x + TILE / 2 - canvas.width / camera.zoom / 2);
   camera.y = Math.round(at.y + TILE / 2 - canvas.height / camera.zoom / 2);
-  const heaps = (world.floors[me.depth]?.heaps ?? []).map((heap) => ({
+  // What lies hidden (the phantom fish) is not drawn until found.
+  const heaps = (world.floors[me.depth]?.heaps ?? []).filter((heap) => heap.kind !== 'hidden').map((heap) => ({
     pos: heap.pos,
     sprite: heap.kind === 'heap' || heap.kind === 'forSale' ? itemSprite(heap.items[0]!, world.run.labels) : HEAP_SPRITES[heap.kind],
   }));

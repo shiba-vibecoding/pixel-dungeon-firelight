@@ -4,7 +4,7 @@ import { type Ctx, dropItem } from './floor';
 import { collect } from './inventory';
 import { createItem, type Item, type ItemKind } from './items';
 import type { Level } from './level/generate';
-import { adjacent, cellX, cellY, WIDTH } from './level/geometry';
+import { adjacent, cellX, cellY, LENGTH, WIDTH } from './level/geometry';
 import { RoomType } from './level/room';
 import { F, hasFlag, T } from './level/terrain';
 import type { Rng } from './rng';
@@ -15,7 +15,8 @@ import type { World } from './world';
  * entrance of one of depths 7-9, lost on his way to some corpse dust. Fetch
  * it from a pile of bones on his level and he gives one of two wands: a
  * battle wand or a useful one. Or else he is after a rotberry seed, from a
- * shrub that grows somewhere on his level.
+ * shrub that grows somewhere on his level; or, on a level with little water,
+ * a phantom fish, all but invisible in it until a hero searches right beside.
  */
 
 export interface WandQuest {
@@ -24,14 +25,14 @@ export interface WandQuest {
   done: boolean;
   battle: Item;
   utility: Item;
-  /** What he is after: corpse dust (also when absent, in older saves) or a rotberry seed. */
-  wants?: 'dust' | 'berry';
+  /** What he is after: corpse dust (also when absent, in older saves), a rotberry seed or a phantom fish. */
+  wants?: 'dust' | 'berry' | 'fish';
 }
 
 export type WandmakerLine = 'intro' | 'remind' | 'reward' | 'farewell';
 
 const BATTLE_WANDS: readonly ItemKind[] = ['wand.avalanche', 'wand.disintegration', 'wand.firebolt', 'wand.lightning', 'wand.poison'];
-const UTILITY_WANDS: readonly ItemKind[] = ['wand.amok', 'wand.blink', 'wand.regrowth', 'wand.slowness', 'wand.teleportation'];
+const UTILITY_WANDS: readonly ItemKind[] = ['wand.amok', 'wand.blink', 'wand.regrowth', 'wand.slowness', 'wand.reach'];
 
 /** Wand.random, then upgraded once more: a wand worth the trouble. */
 function rewardWand(rng: Rng, kinds: readonly ItemKind[]): Item {
@@ -59,13 +60,35 @@ export function spawnWandmaker(world: World, level: Level, mobs: Mob[], rng: Rng
   world.wandQuest = {
     depth: level.depth, given: false, done: false,
     battle: rewardWand(rng, BATTLE_WANDS), utility: rewardWand(rng, UTILITY_WANDS),
-    wants: rng.int(2) === 0 ? 'dust' : 'berry',
+    wants: errand(rng, level),
   };
 }
 
+/** Wandmaker.Quest.spawn: the fish only where there is little water; otherwise the dust or the berry. */
+function errand(rng: Rng, level: Level): 'dust' | 'berry' | 'fish' {
+  const pick = (['berry', 'dust', 'fish'] as const)[rng.int(3)]!;
+  if (pick !== 'fish') return pick;
+  const water = level.map.filter((terrain) => hasFlag(terrain, F.LIQUID)).length;
+  return water > LENGTH / 16 ? (rng.int(2) === 0 ? 'berry' : 'dust') : 'fish';
+}
+
+const WANTED: Readonly<Record<'dust' | 'berry' | 'fish', ItemKind>> = { dust: 'quest.dust', berry: 'seed.rotberry', fish: 'quest.fish' };
+
 /** The backpack slot of what the wandmaker is after, or -1. */
-const wantedOf = (world: World, hero: Hero): number =>
-  hero.items.findIndex((item) => item.kind === (world.wandQuest?.wants === 'berry' ? 'seed.rotberry' : 'quest.dust'));
+const wantedOf = (world: World, hero: Hero): number => hero.items.findIndex((item) => item.kind === WANTED[world.wandQuest?.wants ?? 'dust']);
+
+/** Wandmaker.fishQuest.placeItem: the fish hides in some water, or failing that lies in plain sight. */
+function placeFish(ctx: Ctx): void {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const pos = ctx.rng.int(LENGTH);
+    if (hasFlag(ctx.level.map[pos]!, F.LIQUID) && !ctx.floor.heaps.some((h) => h.pos === pos)) {
+      ctx.floor.heaps.push({ pos, kind: 'hidden', items: [createItem('quest.fish')] });
+      return;
+    }
+  }
+  const pos = randomRespawnCell(ctx.rng, ctx.world, ctx.level, (cell) => !ctx.floor.heaps.some((h) => h.pos === cell));
+  if (pos !== -1) dropItem(ctx.floor, pos, createItem('quest.fish'));
+}
 
 /** Wandmaker.Quest: the rotberry grows somewhere on his level, out of the hero's sight if it can. */
 function plantRotberry(ctx: Ctx, hero: Hero): void {
@@ -100,6 +123,7 @@ export function talkToWandmaker(ctx: Ctx, hero: Hero): void {
   if (!quest.given) {
     quest.given = true;
     if (quest.wants === 'berry') plantRotberry(ctx, hero);
+    else if (quest.wants === 'fish') placeFish(ctx);
     else placeDust(ctx, hero);
     line = 'intro';
   } else {

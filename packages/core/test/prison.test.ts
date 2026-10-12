@@ -148,8 +148,9 @@ describe('the prison', () => {
 });
 
 describe('the old wandmaker', () => {
-  it('waits by the entrance of one of depths 7-9 and trades a wand for corpse dust', () => {
+  it('waits by the entrance of one of depths 7-9 and trades a wand for what he is after', () => {
     let met = 0;
+    let fish = 0;
     for (let seed = 1; seed <= 20; seed++) {
       const world = createWorld(seed);
       for (let d = 1; d <= 9; d++) levelAt(world, d);
@@ -181,6 +182,19 @@ describe('the old wandmaker', () => {
         expect(act(world, 'p', { type: 'move', to: shrub.pos }).ok).toBe(true);
         expect(act(world, 'p', { type: 'pickup' }).ok).toBe(true);
         expect(hero.items.some((i) => i.kind === 'seed.rotberry')).toBe(true);
+      } else if (quest.wants === 'fish') {
+        // The phantom fish hides in the water: only a search right beside it turns it up.
+        fish++;
+        const pond = floor.heaps.find((h) => h.items.some((i) => i.kind === 'quest.fish'))!;
+        if (pond.kind === 'hidden') {
+          hero.pos = pond.pos;
+          expect(act(world, 'p', { type: 'pickup' })).toEqual({ ok: false, reason: 'nothing here' });
+          hero.pos = NEIGHBOURS8.map((n) => pond.pos + n).find((c) => canEnter(level, c) && !charAt(world, quest.depth, c))!;
+          act(world, 'p', { type: 'search' });
+          expect(pond.kind).toBe('heap');
+        }
+        hero.pos = pond.pos;
+        expect(act(world, 'p', { type: 'pickup' }).ok).toBe(true);
       } else {
         // Fetch the dust (the walk itself is not the point here).
         const pile = floor.heaps.find((h) => h.items.some((i) => i.kind === 'quest.dust'));
@@ -199,6 +213,7 @@ describe('the old wandmaker', () => {
       expect(floor.mobs.some((m) => m.kind === 'wandmaker')).toBe(false);
     }
     expect(met).toBeGreaterThan(15);
+    expect(fish).toBeGreaterThan(0);
   });
 });
 
