@@ -27,6 +27,7 @@ import { hasRoom } from './bags';
 import { wipeOut } from './altar';
 import { applyArmorKit, CLASS_ARMOR, CLASS_ARMOR_OF, classSpecial, specialProblem, TIME_TO_APPLY_KIT } from './classArmor';
 import type { World } from './world';
+import { scaleMob } from './party';
 
 /*
  * Picking things up, drinking, reading, equipping and dropping. Dropping is
@@ -723,7 +724,7 @@ function springMimic(ctx: Ctx, hero: Hero, heap: Heap): boolean {
   leaveCell(world, level, depth, pos);
   enterCell(level, to);
   floor.heaps.splice(floor.heaps.indexOf(heap), 1);
-  const mimic = createMob(`#${++world.nextId}`, 'mimic', pos, 'hunting', floor.now + 1);
+  const mimic = scaleMob(world, createMob(`#${++world.nextId}`, 'mimic', pos, 'hunting', floor.now + 1));
   mimic.level = depth;
   mimic.ht = mimic.hp = mobStats(mimic).ht;
   Object.assign(mimic, { enemy: hero.id, target: hero.pos, enemySeen: true, loot: heap.items });

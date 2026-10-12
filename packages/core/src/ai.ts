@@ -3,7 +3,7 @@ import {
 } from './actors';
 import { attack, hurt } from './combat';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
-import { canEnter, charAt, type Ctx, enterCell, heroesOn, heroView, isPassable, isWater, leaveCell } from './floor';
+import { canEnter, charAt, type Ctx, enterCell, type Floor, heroesOn, heroView, isPassable, isWater, leaveCell } from './floor';
 import { altarCallsMob } from './altar';
 import { type Item, itemDef, ItemGenerator, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
@@ -17,6 +17,7 @@ import { seedGas } from './gas';
 import { staggerTarget, stepOnPlant } from './plants';
 import type { Rng } from './rng';
 import type { World } from './world';
+import { mobCount, partySize, respawnTime, scaleMob } from './party';
 
 /*
  * Monster behaviour, ported from Mob: sleeping monsters may notice a hero in
@@ -827,7 +828,7 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
     // Goo sleeps in its lair; Tengu and DM-300 only appear when someone enters their arena.
     if (level.depth !== 5) return [];
     const arena = level.rooms.find((room) => room.type === RoomType.BOSS_EXIT)!;
-    const goo = createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0);
+    const goo = scaleMob(world, createMob(nextMobId(world), rollMob(rng, level.depth), randomCellIn(rng, arena), 'sleeping', 0));
     // The Rat King, in his hidden treasury next door.
     return level.ratKing === undefined ? [goo] : [goo, createMob(nextMobId(world), 'ratKing', level.ratKing, 'passive', 0)];
   }
@@ -842,14 +843,14 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
     piranha.ht = piranha.hp = mobStats(piranha).ht;
     mobs.push(piranha);
   }
-  const count = nMobs(rng, level.depth);
+  const count = mobCount(nMobs(rng, level.depth), partySize(world));
   // Not yet registered in world.floors, so placement checks this list itself.
   const hidden = (cell: number): boolean => !mobs.some((mob) => mob.pos === cell);
   for (let i = 0; i < count; i++) {
     const kind = rollMob(rng, level.depth);
     const pos = randomRespawnCell(rng, world, level, hidden);
     if (pos === -1) break;
-    mobs.push(createMob(nextMobId(world), kind, pos, 'sleeping', 0));
+    mobs.push(scaleMob(world, createMob(nextMobId(world), kind, pos, 'sleeping', 0)));
   }
   return mobs;
 }
@@ -869,16 +870,33 @@ function animatedStatue(world: World, level: Level, rng: Rng): Mob {
   return statue;
 }
 
+/**
+ * A hero who joins the party after a depth was made: the depth gains the
+ * monsters a party that size calls for (party.ts), asleep, out of sight.
+ */
+export function reinforce(world: World, level: Level, floor: Floor, rng: Rng, party: number): void {
+  if (level.depth >= 26 || isBossDepth(level.depth)) return;
+  const base = nMobs(rng, level.depth);
+  const extra = mobCount(base, party) - mobCount(base, party - 1);
+  const seen = heroesOn(world, level.depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map), viewDistance(level.depth)));
+  for (let i = 0; i < extra; i++) {
+    const kind = rollMob(rng, level.depth);
+    const pos = randomRespawnCell(rng, world, level, (cell) => !seen.some((fov) => fov[cell]));
+    if (pos === -1) break;
+    floor.mobs.push(scaleMob(world, createMob(nextMobId(world), kind, pos, 'sleeping', floor.now)));
+  }
+}
+
 /** Level.respawner: tops the depth up with a wandering monster now and then. */
 export function respawn(ctx: Ctx): void {
   const { world, depth, level, floor, rng } = ctx;
-  if (floor.mobs.length < nMobs(rng, depth)) {
+  if (floor.mobs.length < mobCount(nMobs(rng, depth), partySize(world))) {
     const kind = rollMob(rng, depth);
     const seen = heroesOn(world, depth).map((hero) => castShadow(hero.pos, terrainBlocksSight(level.map), viewDistance(depth)));
     const pos = randomRespawnCell(rng, world, level, (cell) => !seen.some((fov) => fov[cell]));
     if (pos !== -1) {
-      floor.mobs.push(createMob(nextMobId(world), kind, pos, 'wandering', floor.now));
+      floor.mobs.push(scaleMob(world, createMob(nextMobId(world), kind, pos, 'wandering', floor.now)));
     }
   }
-  floor.respawn += TIME_TO_RESPAWN;
+  floor.respawn += respawnTime(TIME_TO_RESPAWN, partySize(world));
 }

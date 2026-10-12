@@ -5,6 +5,7 @@ import { distance, NEIGHBOURS8 } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
 import { clearGas, seedGas } from './gas';
 import { burnHeaps, chillPack, freezeHeaps } from './cooking';
+import { scaleMob } from './party';
 
 /*
  * Traps (levels/traps): set off by stepping on them, visible or hidden; then
@@ -139,7 +140,7 @@ export function triggerTrap(ctx: Ctx, hero: Hero, pos: number): void {
       const cells = NEIGHBOURS8.map((n) => pos + n).filter((c) => isPassable(level, c) && !charAt(ctx.world, depth, c));
       for (let i = 0; i < count && cells.length > 0; i++) {
         const cell = cells.splice(rng.index(cells.length), 1)[0]!;
-        const mob: Mob = createMob(`#${++ctx.world.nextId}`, rollMob(rng, depth), cell, 'wandering', ctx.floor.now + 1);
+        const mob: Mob = scaleMob(ctx.world, createMob(`#${++ctx.world.nextId}`, rollMob(rng, depth), cell, 'wandering', ctx.floor.now + 1));
         mob.target = pos;
         ctx.floor.mobs.push(mob);
       }

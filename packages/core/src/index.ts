@@ -19,5 +19,6 @@ export { BAGS, hasRoom, inBag, slotsUsed } from './bags';
 export * from './world';
 export { castShadow, LIGHT_DISTANCE, MAX_VIEW_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 export * from './protocol';
+export * from './version';
 export { durabilityOf, effectiveLevel, isBroken, maxDurability } from './wear';
 export * from './shop';

@@ -1,6 +1,6 @@
 import {
   act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, heroById, type HeroClass,
-  type Look, restartWorld, type ServerMessage, type World,
+  type Look, restartWorld, RULES_VERSION, type ServerMessage, type World,
 } from '@pd/core';
 import { report } from './report';
 
@@ -135,7 +135,7 @@ export interface OnlineOptions {
   heroClass: HeroClass;
   /** Telegram.WebApp.initData when running inside Telegram. */
   initData?: string;
-  text: { connecting: string; reconnecting: string; replaced: string; full: string };
+  text: { connecting: string; reconnecting: string; replaced: string; full: string; updating: string };
 }
 
 export function onlineSession(options: OnlineOptions): Session {
@@ -235,6 +235,7 @@ export function onlineSession(options: OnlineOptions): Session {
   const connect = (): void => {
     const url = new URL(`/room/${encodeURIComponent(options.room)}`, options.server);
     url.searchParams.set('hero', options.heroClass);
+    url.searchParams.set('v', String(RULES_VERSION));
     if (options.initData) {
       url.searchParams.set('initData', options.initData);
     } else {
@@ -270,6 +271,12 @@ export function onlineSession(options: OnlineOptions): Session {
       }
       if (event.code === 4001) {
         session.status = options.text.full;
+        return;
+      }
+      if (event.code === 4002) {
+        // The room runs newer rules than this page: load the new build, straight back into the room.
+        session.status = options.text.updating;
+        setTimeout(() => location.reload(), 900);
         return;
       }
       session.status = options.text.reconnecting;

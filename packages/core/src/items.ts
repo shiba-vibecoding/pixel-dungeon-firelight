@@ -6,6 +6,7 @@ import { RoomType } from './level/room';
 import { F, hasFlag } from './level/terrain';
 import { deriveSeed, Rng } from './rng';
 import type { RunState } from './run';
+import { lootCount } from './party';
 
 /*
  * Items, as data. A port of the original's item families that matter in the
@@ -730,6 +731,8 @@ export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean
 
   let count = 3;
   while (rng.float() < 0.4) count++;
+  // A party finds more lying about (party.ts).
+  count = lootCount(count, party);
   for (let i = 0; i < count; i++) {
     const roll = rng.int(20);
     // RegularLevel.createItems: one chest in five below the first depth is a mimic.
@@ -740,11 +743,12 @@ export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean
   for (let i = 0; i < Math.max(1, party); i++) drop(randomDropCell(rng, level), 'heap', rollFood(rng));
   if (quotaReached(rng, level.depth, [4, 2, 9, 4, 14, 6, 19, 8, 24, 9], run.strengthFound)) {
     run.strengthFound++;
-    drop(randomDropCell(rng, level), 'heap', createItem('potion.strength'));
+    // What makes a hero stronger, once for every hero.
+    for (let i = 0; i < Math.max(1, party); i++) drop(randomDropCell(rng, level), 'heap', createItem('potion.strength'));
   }
   if (quotaReached(rng, level.depth, [5, 3, 10, 6, 15, 9, 20, 12, 25, 13], run.upgradesFound)) {
     run.upgradesFound++;
-    drop(randomDropCell(rng, level), 'heap', createItem('scroll.upgrade'));
+    for (let i = 0; i < Math.max(1, party); i++) drop(randomDropCell(rng, level), 'heap', createItem('scroll.upgrade'));
   }
 
   for (const spec of level.toSpawn) {
@@ -754,4 +758,28 @@ export function createItems(run: RunState, level: Level, rng: Rng, boss: boolean
     drop(spawn.pos, HEAP_KINDS[spawn.heap] ?? 'heap', rollSpec(spawn.item, generator, rng, level.depth));
   }
   return heaps;
+}
+
+/**
+ * A hero who joins the party after a depth was made: their share of it, as if
+ * they had been there from the start (party.ts) — the things that make a hero
+ * stronger that the depth gave each hero (`perHero`), a helping of food, and
+ * more lying about. Laid into `heaps`.
+ */
+export function shareOfDepth(level: Level, rng: Rng, perHero: readonly ItemKind[], party: number, heaps: Heap[]): void {
+  const drop = (pos: number, kind: HeapKind, item: Item): void => {
+    if (pos < 0) return;
+    const heap = heaps.find((h) => h.pos === pos);
+    if (heap) heap.items.push(item);
+    else heaps.push({ pos, kind, items: [item] });
+  };
+  const generator = new ItemGenerator(rng, level.depth);
+  const extra = lootCount(3, party) - lootCount(3, party - 1);
+  for (let i = 0; i < extra; i++) {
+    const roll = rng.int(20);
+    const kind: HeapKind = roll <= 5 && roll > 0 ? 'chest' : 'heap';
+    drop(randomDropCell(rng, level), kind, generator.random());
+  }
+  drop(randomDropCell(rng, level), 'heap', rollFood(rng));
+  for (const kind of perHero) drop(randomDropCell(rng, level), 'heap', createItem(kind));
 }

@@ -1,5 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
-import { allowedLook, type ClientMessage, emptyWallet, type HeroClass, isPatron, type Look, type PlayerInfo, type Wallet } from '@pd/core';
+import {
+  allowedLook, type ClientMessage, emptyWallet, type HeroClass, isPatron, type Look, type PlayerInfo, RULES_VERSION, type Wallet,
+} from '@pd/core';
 import { botApi, createInvoice, handleUpdate, type Wallets } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { type DailyEntry, type DailyResult, Leaderboard, parseResult } from './leaderboard';
@@ -174,6 +176,14 @@ export class Room extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
+    // A client on other rules would drift from the room: it reloads into the current build.
+    // (A build from before the check sends no version: it is turned away too, and loads the new one when reopened.)
+    const rules = new URL(request.url).searchParams.get('v');
+    if (rules !== String(RULES_VERSION)) {
+      server.accept();
+      server.close(4002, 'the game has been updated');
+      return new Response(null, { status: 101, webSocket: client });
+    }
     const room = await this.room();
     if (room.isFull(player.id)) {
       // Accept just to say why, then close: a failed upgrade would look like a network error.

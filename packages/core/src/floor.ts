@@ -44,6 +44,8 @@ export interface Floor {
   gasAt?: number;
   /** An altar room's sacrificial fire: where it burns, and how much more it hungers for (0 once it has gone out). */
   altar?: { pos: number; volume: number };
+  /** What this depth gave every hero (strength, upgrades): a hero who joins later gets theirs too (party.ts). */
+  perHero?: ItemKind[];
 }
 
 /** Level.drop: an item that comes down on a chasm falls through it, to land on the depth below. */

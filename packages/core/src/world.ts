@@ -1,5 +1,5 @@
 import { wear } from './wear';
-import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
+import { mobAct, populate, reinforce, respawn, TIME_TO_RESPAWN } from './ai';
 import {
   awareness, createHero, createMob, type Hero, heroAttackDelay, heroSpeed, hungerGrowth, hungerStep, HUNGRY, isAlive,
   isShopkeeper, isStarving, type Mob, type PlayerInfo, ringBonus, STARVING,
@@ -11,12 +11,13 @@ import {
   swapsWithHero,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
-import { createItem, createItems, itemDef, ItemGenerator, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
+import { createItem, createItems, itemDef, ItemGenerator, type ItemKind, shareOfDepth, WAND_RECHARGE, wandMaxCharges } from './items';
 import { staggerTarget, stepOnPlant, sungrassHeals } from './plants';
 import { discoverable } from './level/flags';
 import { faceCurse, faceCurseProblem, type GhostQuest, rewardFromGhost, rewardProblem, spawnGhost, talkToGhost } from './quest';
 import { trapAt, triggerTrap } from './traps';
 import { evolveGas } from './gas';
+import { regrowBoss, scaleMob } from './party';
 import { scorchPack } from './cooking';
 import { altarMarksHero } from './altar';
 import { type ImpQuest, impRewardProblem, ringFromImp, spawnImp, talkToImp } from './imp';
@@ -114,6 +115,8 @@ const GHOST_STREAM = 1;
 const WANDMAKER_STREAM = 2;
 const IMP_STREAM = 3;
 const BLACKSMITH_STREAM = 4;
+/** Sub-streams of a depth's streams for a hero joining the party, by party size. */
+const JOIN_STREAM = 100;
 
 export function createWorld(seed: number): World {
   return {
@@ -135,6 +138,8 @@ export function levelAt(world: World, depth: number): Level {
       const level = generateLevel(world.run, d);
       world.levels[d] = level;
       const mobs = populate(world, level, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d)));
+      // What the depth gives every hero, so that a hero who joins later gets theirs (party.ts).
+      const found = { strength: world.run.strengthFound, upgrades: world.run.upgradesFound };
       spawnGhost(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, GHOST_STREAM)));
       spawnWandmaker(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, WANDMAKER_STREAM)));
       spawnImp(world, level, mobs, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, IMP_STREAM)));
@@ -151,6 +156,11 @@ export function levelAt(world: World, depth: number): Level {
           world.run, level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d)), isBossDepth(d) || d >= 26, world.heroes.length,
         ),
       };
+      const perHero: ItemKind[] = [
+        ...(world.run.strengthFound > found.strength ? ['potion.strength' as const] : []),
+        ...(world.run.upgradesFound > found.upgrades ? ['scroll.upgrade' as const] : []),
+      ];
+      if (perHero.length > 0) world.floors[d]!.perHero = perHero;
     }
   }
   return world.levels[depth]!;
@@ -161,10 +171,30 @@ export function floorAt(world: World, depth: number): Floor {
   return world.floors[depth]!;
 }
 
+/**
+ * The party has grown: every depth already made grows with it (party.ts) — the new hero's share
+ * of what lies about and of the monsters, and bosses waiting in their lairs grow sturdier.
+ * Seeded by depth and party size, so the room and every client grow it alike.
+ */
+function welcome(world: World): void {
+  const party = world.heroes.length;
+  for (const key of Object.keys(world.floors)) {
+    const d = Number(key);
+    const level = world.levels[d]!;
+    const floor = world.floors[d]!;
+    if (!isBossDepth(d) && d < 26) {
+      shareOfDepth(level, Rng.seeded(deriveSeed(world.run.seed, Stream.ITEMS, d, JOIN_STREAM + party)), floor.perHero ?? [], party, floor.heaps);
+    }
+    reinforce(world, level, floor, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d, JOIN_STREAM + party)), party);
+    for (const mob of floor.mobs) regrowBoss(world, mob);
+  }
+}
+
 export function addHero(world: World, player: PlayerInfo): Hero {
   const level = levelAt(world, 1);
   const hero = createHero(player, 1, freeCellNear(world, level, 1, level.entrance), floorAt(world, 1).now);
   world.heroes.push(hero);
+  if (world.heroes.length > 1) welcome(world);
   // Heroes know what they set out with.
   for (const item of [...hero.items, ...hero.rings]) {
     if (!world.known.includes(item.kind)) world.known.push(item.kind);
@@ -720,7 +750,7 @@ function enterArena(ctx: Ctx, hero: Hero): void {
       if (cell !== hero.pos && isPassable(level, cell) && !charAt(world, depth, cell)) pos = cell;
     }
     if (pos === -1) return;
-    const tengu = createMob(`#${++world.nextId}`, 'tengu', pos, 'hunting', floor.now);
+    const tengu = scaleMob(world, createMob(`#${++world.nextId}`, 'tengu', pos, 'hunting', floor.now));
     Object.assign(tengu, { enemy: hero.id, target: hero.pos, enemySeen: true });
     floor.mobs.push(tengu);
     enterCell(level, pos);
@@ -756,7 +786,7 @@ function enterLair(ctx: Ctx, hero: Hero): void {
       if (isPassable(level, cell) && outside(cell) && !seen[cell] && !charAt(world, depth, cell)) pos = cell;
     }
     if (pos === -1) return;
-    const dm300 = createMob(`#${++world.nextId}`, 'dm300', pos, 'hunting', floor.now);
+    const dm300 = scaleMob(world, createMob(`#${++world.nextId}`, 'dm300', pos, 'hunting', floor.now));
     Object.assign(dm300, { enemy: hero.id, target: hero.pos });
     floor.mobs.push(dm300);
     enterCell(level, pos);
@@ -789,7 +819,7 @@ function enterThroneHall(ctx: Ctx, hero: Hero): void {
       if (isPassable(level, cell) && inHall(cell) && !charAt(world, depth, cell) && (!seen[cell] || attempt > 20)) pos = cell;
     }
     if (pos === -1) return;
-    const king = createMob(`#${++world.nextId}`, 'king', pos, 'hunting', floor.now);
+    const king = scaleMob(world, createMob(`#${++world.nextId}`, 'king', pos, 'hunting', floor.now));
     Object.assign(king, { enemy: hero.id, target: hero.pos, enemySeen: true });
     floor.mobs.push(king);
     enterCell(level, pos);
@@ -822,7 +852,7 @@ function awakenYog(ctx: Ctx, hero: Hero): void {
     if (isPassable(level, cell) && !seen[cell] && !charAt(world, depth, cell)) pos = cell;
   }
   if (pos === -1) return;
-  const yog = createMob(`#${++world.nextId}`, 'yog', pos, 'hunting', floor.now);
+  const yog = scaleMob(world, createMob(`#${++world.nextId}`, 'yog', pos, 'hunting', floor.now));
   Object.assign(yog, { enemy: hero.id, target: hero.pos });
   floor.mobs.push(yog);
   enterCell(level, pos);
@@ -831,7 +861,7 @@ function awakenYog(ctx: Ctx, hero: Hero): void {
   for (const kind of ['rottingFist', 'burningFist'] as const) {
     if (around.length === 0) break;
     const cell = around.splice(rng.index(around.length), 1)[0]!;
-    const fist = createMob(`#${++world.nextId}`, kind, cell, 'wandering', floor.now + 1);
+    const fist = scaleMob(world, createMob(`#${++world.nextId}`, kind, cell, 'wandering', floor.now + 1));
     fist.target = hero.pos;
     floor.mobs.push(fist);
     enterCell(level, cell);
