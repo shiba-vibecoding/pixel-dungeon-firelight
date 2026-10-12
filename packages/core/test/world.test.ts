@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { act, addHero, createWorld, findPath, heroById, levelAt, type World } from '../src/index';
+import { pacify } from './helpers';
 
 function twoHeroes(seed = 2026): World {
-  const world = createWorld(seed);
+  const world = pacify(createWorld(seed));
   addHero(world, { id: 'a', name: 'Alice', heroClass: 'warrior' });
   addHero(world, { id: 'b', name: 'Bob', heroClass: 'mage' });
   return world;
@@ -15,7 +16,8 @@ function walk(world: World, id: string, to: number): void {
   const path = findPath(levelAt(world, hero.depth), hero.pos, to, others);
   expect(path, `path to ${to}`).not.toBeNull();
   for (const step of path!) {
-    expect(act(world, id, { type: 'move', to: step })).toEqual({ ok: true });
+    expect(act(world, id, { type: 'move', to: step }).ok).toBe(true);
+    expect(hero.pos).toBe(step);
   }
 }
 
@@ -44,16 +46,22 @@ describe('shared world', () => {
     const exit = levelAt(world, 1).exit;
     expect(act(world, 'a', { type: 'descend' }).ok).toBe(false);
     walk(world, 'a', exit);
-    expect(act(world, 'a', { type: 'descend' })).toEqual({ ok: true });
+    expect(act(world, 'a', { type: 'descend' }).ok).toBe(true);
     const a = heroById(world, 'a')!;
     expect(a.depth).toBe(2);
     expect(heroById(world, 'b')!.depth).toBe(1);
     // Bob follows down the same stairs into the same level.
     walk(world, 'b', exit);
-    expect(act(world, 'b', { type: 'descend' })).toEqual({ ok: true });
+    expect(act(world, 'b', { type: 'descend' }).ok).toBe(true);
     const b = heroById(world, 'b')!;
     expect(b.depth).toBe(2);
     expect(b.pos).not.toBe(a.pos);
+    // Alice arrived first and still stands on the stairs up; they lead to
+    // the exit of the level above.
+    expect(a.pos).toBe(levelAt(world, 2).entrance);
+    expect(act(world, 'a', { type: 'ascend' }).ok).toBe(true);
+    expect(a.depth).toBe(1);
+    expect(a.pos).toBe(exit);
   });
 
   it('serialises: a JSON copy of the world continues identically', () => {

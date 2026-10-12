@@ -1,4 +1,5 @@
-import { act, type Action, type ActionResult, type HeroClass, joinHero, type World } from './world';
+import type { PlayerInfo } from './actors';
+import { act, type Action, type ActionResult, joinHero, restartWorld, type World } from './world';
 
 /*
  * Co-op wire protocol. The server owns the authoritative world and broadcasts
@@ -7,19 +8,18 @@ import { act, type Action, type ActionResult, type HeroClass, joinHero, type Wor
  * carries a sequence number so a client that misses one can ask for a snapshot.
  */
 
-export interface PlayerInfo {
-  id: string;
-  name: string;
-  heroClass: HeroClass;
-}
+export type { PlayerInfo };
 
 /** A change to the world, replayed identically by the server and every client. */
 export type WorldEvent =
   | { type: 'join'; player: PlayerInfo }
-  | { type: 'act'; heroId: string; action: Action };
+  | { type: 'act'; heroId: string; action: Action }
+  /** A new run for the same party; the server picks the seed. */
+  | { type: 'restart'; seed: number };
 
 export type ClientMessage =
   | { type: 'act'; action: Action }
+  | { type: 'restart' }
   | { type: 'sync' };
 
 export type ServerMessage =
@@ -33,8 +33,11 @@ export function applyEvent(world: World, event: WorldEvent): ActionResult {
   switch (event.type) {
     case 'join':
       joinHero(world, event.player);
-      return { ok: true };
+      return { ok: true, effects: [] };
     case 'act':
       return act(world, event.heroId, event.action);
+    case 'restart':
+      restartWorld(world, event.seed);
+      return { ok: true, effects: [] };
   }
 }

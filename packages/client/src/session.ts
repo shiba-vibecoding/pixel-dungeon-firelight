@@ -1,37 +1,118 @@
 import {
-  act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type HeroClass, type ServerMessage, type World,
+  act, type Action, addHero, applyEvent, type ClientMessage, createWorld, type Effect, heroById, type HeroClass,
+  restartWorld, type ServerMessage, type World,
 } from '@pd/core';
 
 /*
- * Where the world comes from. A local session runs the core directly; an
- * online session keeps a replica of the room's world, applying the ordered
- * events the server broadcasts, and only sends intentions.
+ * Where the world comes from. A solo session runs the core directly and keeps
+ * the run in local storage; an online session keeps a replica of the room's
+ * world, applying the ordered events the server broadcasts, and only sends
+ * intentions.
  */
 
 export interface Session {
+  readonly mode: 'solo' | 'online';
   /** Null until an online session receives its first snapshot. */
   world: World | null;
   myId: string;
   online: string[];
+  /** Connection state for the HUD; empty when all is well. */
   status: string;
-  /** True while an action waits for the server's confirmation. */
-  waiting: boolean;
+  /** Bumped whenever the world is replaced wholesale, so views reset. */
+  generation: number;
+  /** True while my last action is in flight or queued behind companions. */
+  readonly busy: boolean;
   send(action: Action): void;
+  /** A new run after the party has fallen. */
+  restart(): void;
+  /** Effects that happened since the last call, in order. */
+  drain(): Effect[];
+  close(): void;
 }
 
-export function localSession(seed: number, heroClass: HeroClass): Session {
-  const world = createWorld(seed);
-  addHero(world, { id: 'me', name: 'You', heroClass });
-  return {
-    world,
+const SAVE_VERSION = 2;
+
+interface SoloSave {
+  version: number;
+  world: World;
+}
+
+export function loadSolo(key: string): World | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const save = JSON.parse(raw) as SoloSave;
+    return save.version === SAVE_VERSION && !save.world.over ? save.world : null;
+  } catch {
+    return null;
+  }
+}
+
+export function forgetSolo(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Storage is unavailable; nothing was saved either.
+  }
+}
+
+/**
+ * @param key local storage slot, or null not to save
+ * @param newSeed seed for a fresh run (also used by restart)
+ */
+export function soloSession(key: string | null, heroClass: HeroClass, newSeed: () => number): Session {
+  const fresh = (): World => {
+    const world = createWorld(newSeed());
+    addHero(world, { id: 'me', name: 'You', heroClass });
+    return world;
+  };
+  let pending: Effect[] = [];
+  let saveTimer = 0;
+  const save = (): void => {
+    if (!key) return;
+    clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      try {
+        const world = session.world!;
+        if (world.over) localStorage.removeItem(key);
+        else localStorage.setItem(key, JSON.stringify({ version: SAVE_VERSION, world } satisfies SoloSave));
+      } catch {
+        // Out of space or storage blocked: the run simply is not kept.
+      }
+    }, 300);
+  };
+
+  const session: Session = {
+    mode: 'solo',
+    world: (key && loadSolo(key)) || fresh(),
     myId: 'me',
     online: ['me'],
-    status: `offline · seed ${seed}`,
-    waiting: false,
+    status: '',
+    generation: 0,
+    busy: false,
     send(action) {
-      act(world, 'me', action);
+      const result = act(session.world!, 'me', action);
+      if (result.ok) {
+        pending.push(...result.effects);
+        save();
+      }
+    },
+    restart() {
+      restartWorld(session.world!, newSeed());
+      session.generation++;
+      save();
+    },
+    drain() {
+      const effects = pending;
+      pending = [];
+      return effects;
+    },
+    close() {
+      clearTimeout(saveTimer);
     },
   };
+  save();
+  return session;
 }
 
 export interface OnlineOptions {
@@ -42,27 +123,48 @@ export interface OnlineOptions {
   heroClass: HeroClass;
   /** Telegram.WebApp.initData when running inside Telegram. */
   initData?: string;
+  text: { connecting: string; reconnecting: string; replaced: string };
 }
 
 export function onlineSession(options: OnlineOptions): Session {
   let seq = 0;
   let socket: WebSocket | null = null;
+  let inFlight = false;
+  let closed = false;
+  let pending: Effect[] = [];
+
+  const transmit = (message: ClientMessage): void => {
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  };
 
   const session: Session = {
+    mode: 'online',
     world: null,
     myId: options.playerId,
     online: [],
-    status: 'connecting…',
-    waiting: false,
+    status: options.text.connecting,
+    generation: 0,
+    get busy() {
+      const me = session.world && heroById(session.world, session.myId);
+      return inFlight || Boolean(me?.intent);
+    },
     send(action) {
-      if (!socket || socket.readyState !== WebSocket.OPEN || session.waiting) return;
-      session.waiting = true;
+      if (socket?.readyState !== WebSocket.OPEN || session.busy) return;
+      inFlight = true;
       transmit({ type: 'act', action });
     },
-  };
-
-  const transmit = (message: ClientMessage): void => {
-    socket?.send(JSON.stringify(message));
+    restart() {
+      transmit({ type: 'restart' });
+    },
+    drain() {
+      const effects = pending;
+      pending = [];
+      return effects;
+    },
+    close() {
+      closed = true;
+      socket?.close();
+    },
   };
 
   const receive = (message: ServerMessage): void => {
@@ -72,25 +174,27 @@ export function onlineSession(options: OnlineOptions): Session {
         session.myId = message.you;
         session.online = message.online;
         seq = message.seq;
-        session.waiting = false;
+        inFlight = false;
+        session.generation++;
         break;
-      case 'event':
+      case 'event': {
         if (!session.world || message.seq !== seq + 1) {
           // Missed an event: start over from a fresh snapshot.
           transmit({ type: 'sync' });
           return;
         }
-        applyEvent(session.world, message.event);
+        const result = applyEvent(session.world, message.event);
         seq = message.seq;
-        if (message.event.type === 'act' && message.event.heroId === session.myId) {
-          session.waiting = false;
-        }
+        if (result.ok) pending.push(...result.effects);
+        if (message.event.type === 'restart') session.generation++;
+        if (message.event.type === 'act' && message.event.heroId === session.myId) inFlight = false;
         break;
+      }
       case 'presence':
         session.online = message.online;
         break;
       case 'rejected':
-        session.waiting = false;
+        inFlight = false;
         break;
     }
   };
@@ -106,16 +210,17 @@ export function onlineSession(options: OnlineOptions): Session {
     }
     socket = new WebSocket(url);
     socket.onopen = () => {
-      session.status = `room ${options.room}`;
+      session.status = '';
     };
     socket.onmessage = (event) => receive(JSON.parse(String(event.data)) as ServerMessage);
     socket.onclose = (event) => {
-      session.waiting = false;
+      inFlight = false;
+      if (closed) return;
       if (event.code === 4000) {
-        session.status = 'opened in another tab';
+        session.status = options.text.replaced;
         return;
       }
-      session.status = 'reconnecting…';
+      session.status = options.text.reconnecting;
       setTimeout(connect, 1500);
     };
   };

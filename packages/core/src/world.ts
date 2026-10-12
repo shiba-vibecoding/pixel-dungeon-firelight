@@ -1,80 +1,130 @@
+import { mobAct, populate, respawn, TIME_TO_RESPAWN } from './ai';
+import { awareness, createHero, type Hero, heroAttackDelay, isAlive, type Mob, type PlayerInfo } from './actors';
+import { attack } from './combat';
+import {
+  canEnter, charAt, type Ctx, type Effect, enterCell, type Floor, freeCellNear, heroesOn, leaveCell,
+} from './floor';
 import { castShadow, terrainBlocksSight } from './fov';
-import { adjacent, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
 import { generateLevel, type Level } from './level/generate';
-import { F, hasFlag, T } from './level/terrain';
+import { adjacent, cellX, cellY, HEIGHT, LENGTH, NEIGHBOURS8, WIDTH } from './level/geometry';
+import { discover, F, hasFlag } from './level/terrain';
+import { deriveSeed, Rng, seedRng, Stream } from './rng';
 import { createRun, type RunState } from './run';
 
 /*
- * The shared game world. Several heroes explore the same run; every change
- * goes through act(), so a server can run the authoritative copy and clients
- * only send intentions.
+ * The shared game world. Every change goes through act(), so a server can run
+ * the authoritative copy while clients replay the same calls.
+ *
+ * Time works as in the original's Actor queue, with one clock per depth:
+ * whoever is due next acts. A player's action is stored as the hero's intent
+ * and performed when that hero's turn comes; monsters act on their own. When
+ * the hero who is due has no intent but a companion on the same depth is
+ * waiting, a hero with no awake monster in sight simply rests, so exploring
+ * never stalls. A hero in danger does hold the others up; the server decides
+ * how long to wait for them (see blockers()).
  */
 
-export type HeroClass = 'warrior' | 'mage' | 'rogue' | 'huntress';
+export type Action =
+  | { type: 'move'; to: number }
+  | { type: 'attack'; target: string }
+  | { type: 'descend' }
+  | { type: 'ascend' }
+  | { type: 'wait' }
+  | { type: 'search' };
 
-export interface Hero {
-  id: string;
-  name: string;
-  heroClass: HeroClass;
-  depth: number;
-  pos: number;
-}
+export type ActionResult = { ok: true; effects: Effect[] } | { ok: false; reason: string };
 
 export interface World {
   run: RunState;
   /** Generated levels by depth; depths are always generated in order. */
   levels: Record<number, Level>;
+  /** The live state of every generated depth. */
+  floors: Record<number, Floor>;
   heroes: Hero[];
   /** Cells the party has seen, per depth; shared by all heroes. */
   explored: Record<number, boolean[]>;
+  /** Accepted actions so far. */
   turn: number;
+  /** Last monster id handed out. */
+  nextId: number;
+  /** Set when every hero has fallen. */
+  over: boolean;
 }
 
-export type Action =
-  | { type: 'move'; to: number }
-  | { type: 'descend' }
-  | { type: 'wait' };
-
-export type ActionResult = { ok: true } | { ok: false; reason: string };
-
 export const DEEPEST_AVAILABLE = 4;
+const TIME_TO_REST = 1;
+const TIME_TO_SEARCH = 2;
+/** How far a deliberate search reaches; the original only checked adjacent cells. */
+const SEARCH_RADIUS = 2;
+const REGENERATION_DELAY = 10;
 
 export function createWorld(seed: number): World {
-  return { run: createRun(seed), levels: {}, heroes: [], explored: {}, turn: 0 };
+  return { run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false };
+}
+
+/** Starts a new run in place for the same party. */
+export function restartWorld(world: World, seed: number): void {
+  const party = world.heroes.map(({ id, name, heroClass }) => ({ id, name, heroClass }));
+  Object.assign(world, createWorld(seed));
+  for (const player of party) addHero(world, player);
 }
 
 export function levelAt(world: World, depth: number): Level {
   for (let d = 1; d <= depth; d++) {
     if (!world.levels[d]) {
-      world.levels[d] = generateLevel(world.run, d);
+      const level = generateLevel(world.run, d);
+      world.levels[d] = level;
+      world.floors[d] = {
+        mobs: populate(world, level, Rng.seeded(deriveSeed(world.run.seed, Stream.MOBS, d))),
+        rng: seedRng(deriveSeed(world.run.seed, Stream.PLAY, d)),
+        now: 0,
+        respawn: TIME_TO_RESPAWN,
+      };
     }
   }
   return world.levels[depth]!;
 }
 
-export function addHero(world: World, hero: Omit<Hero, 'depth' | 'pos'>): Hero {
-  const level = levelAt(world, 1);
-  const added: Hero = { ...hero, depth: 1, pos: freeCellNear(world, level, 1, level.entrance) };
-  world.heroes.push(added);
-  observe(world, 1);
-  return added;
+export function floorAt(world: World, depth: number): Floor {
+  levelAt(world, depth);
+  return world.floors[depth]!;
 }
+
+export function addHero(world: World, player: PlayerInfo): Hero {
+  const level = levelAt(world, 1);
+  const hero = createHero(player, 1, freeCellNear(world, level, 1, level.entrance), floorAt(world, 1).now);
+  world.heroes.push(hero);
+  observe(world, hero);
+  return hero;
+}
+
+/** Adds a hero once; joining again (e.g. after a reconnect) keeps the existing one. */
+export function joinHero(world: World, player: PlayerInfo): Hero {
+  return heroById(world, player.id) ?? addHero(world, player);
+}
+
+export function heroById(world: World, id: string): Hero | undefined {
+  return world.heroes.find((hero) => hero.id === id);
+}
+
+export function mobById(world: World, depth: number, id: string): Mob | undefined {
+  return world.floors[depth]?.mobs.find((mob) => mob.id === id);
+}
+
+export { canEnter };
 
 /** Field of view of one hero. */
 export function heroView(world: World, hero: Hero): boolean[] {
-  const level = levelAt(world, hero.depth);
-  return castShadow(hero.pos, terrainBlocksSight(level.map));
+  return castShadow(hero.pos, terrainBlocksSight(levelAt(world, hero.depth).map));
 }
 
 /** Everything the party currently sees on a depth. */
 export function visibleCells(world: World, depth: number): boolean[] {
   const visible = new Array<boolean>(LENGTH).fill(false);
-  for (const hero of world.heroes) {
-    if (hero.depth === depth) {
-      heroView(world, hero).forEach((seen, i) => {
-        if (seen) visible[i] = true;
-      });
-    }
+  for (const hero of heroesOn(world, depth)) {
+    heroView(world, hero).forEach((seen, i) => {
+      if (seen) visible[i] = true;
+    });
   }
   return visible;
 }
@@ -83,114 +133,260 @@ export function exploredCells(world: World, depth: number): boolean[] {
   return (world.explored[depth] ??= new Array<boolean>(LENGTH).fill(false));
 }
 
-/** Adds what the party sees on a depth to its shared map. */
-function observe(world: World, depth: number): void {
-  const explored = exploredCells(world, depth);
-  visibleCells(world, depth).forEach((seen, i) => {
+/** Adds what a hero sees to the party's shared map. */
+function observe(world: World, hero: Hero): void {
+  const explored = exploredCells(world, hero.depth);
+  heroView(world, hero).forEach((seen, i) => {
     if (seen) explored[i] = true;
   });
 }
 
-/* A door is open while someone stands in it, so it no longer blocks sight. */
-
-function enterCell(level: Level, pos: number): void {
-  if (level.map[pos] === T.DOOR) {
-    level.map[pos] = T.OPEN_DOOR;
-  }
+/** True when no awake monster is in the hero's sight. */
+export function isSafe(world: World, hero: Hero): boolean {
+  const fov = heroView(world, hero);
+  return !floorAt(world, hero.depth).mobs.some((mob) => mob.state !== 'sleeping' && fov[mob.pos]);
 }
 
-function leaveCell(world: World, level: Level, depth: number, pos: number): void {
-  if (level.map[pos] === T.OPEN_DOOR && !occupied(world, depth, pos)) {
-    level.map[pos] = T.DOOR;
-  }
-}
-
-/** Adds a hero once; joining again (e.g. after a reconnect) keeps the existing one. */
-export function joinHero(world: World, hero: Omit<Hero, 'depth' | 'pos'>): Hero {
-  return heroById(world, hero.id) ?? addHero(world, hero);
-}
-
-export function heroById(world: World, id: string): Hero | undefined {
-  return world.heroes.find((hero) => hero.id === id);
-}
-
-/** Cells a hero may step on: open ground, doors and visible traps. */
-export function canEnter(level: Level, pos: number): boolean {
-  if (pos < 0 || pos >= LENGTH) return false;
-  const x = pos % WIDTH;
-  if (pos < WIDTH || pos >= LENGTH - WIDTH || x === 0 || x === WIDTH - 1) return false;
-  const terrain = level.map[pos]!;
-  return hasFlag(terrain, F.PASSABLE) || (hasFlag(terrain, F.AVOID) && !hasFlag(terrain, F.PIT) && terrain !== T.WELL);
-}
-
-function occupied(world: World, depth: number, pos: number, except?: Hero): boolean {
-  return world.heroes.some((h) => h !== except && h.depth === depth && h.pos === pos);
-}
-
-/** The cell itself if free, otherwise the nearest free walkable cell. */
-function freeCellNear(world: World, level: Level, depth: number, pos: number): number {
-  const seen = new Set([pos]);
-  const queue = [pos];
-  for (let head = 0; head < queue.length; head++) {
-    const cell = queue[head]!;
-    if (canEnter(level, cell) && !occupied(world, depth, cell)) {
-      return cell;
+/** Why an action is impossible right now, or null if it is fine. */
+function problemWith(world: World, hero: Hero, action: Action): string | null {
+  if (!isAlive(hero)) return 'you are dead';
+  const level = levelAt(world, hero.depth);
+  switch (action.type) {
+    case 'wait':
+    case 'search':
+      return null;
+    case 'move':
+      if (!canEnter(level, action.to) || !adjacent(hero.pos, action.to)) return 'cannot move there';
+      return charAt(world, hero.depth, action.to) ? 'cell is occupied' : null;
+    case 'attack': {
+      const mob = mobById(world, hero.depth, action.target);
+      if (!mob) return 'no such enemy';
+      return adjacent(hero.pos, mob.pos) ? null : 'too far away';
     }
-    for (const n of NEIGHBOURS8) {
-      const next = cell + n;
-      if (next >= 0 && next < LENGTH && !seen.has(next) && canEnter(level, next)) {
-        seen.add(next);
-        queue.push(next);
-      }
-    }
+    case 'descend':
+      if (hero.pos !== level.exit) return 'not on the stairs';
+      return hero.depth >= DEEPEST_AVAILABLE ? 'deeper levels are not ported yet' : null;
+    case 'ascend':
+      if (hero.pos !== level.entrance) return 'not on the stairs';
+      return hero.depth <= 1 ? 'the way up is sealed' : null;
+    default:
+      return 'unknown action';
   }
-  return pos;
 }
 
+/** Queues a player's action and lets the world run until someone must decide. */
 export function act(world: World, heroId: string, action: Action): ActionResult {
   const hero = heroById(world, heroId);
   if (!hero) {
     return { ok: false, reason: 'unknown hero' };
   }
-  const level = levelAt(world, hero.depth);
+  const problem = problemWith(world, hero, action);
+  if (problem) {
+    return { ok: false, reason: problem };
+  }
+  hero.intent = action;
+  const effects: Effect[] = [];
+  settle(world, effects);
+  world.turn++;
+  return { ok: true, effects };
+}
 
+/* Scheduling */
+
+type Turn = { kind: 'hero'; hero: Hero } | { kind: 'mob'; mob: Mob } | { kind: 'respawn' };
+
+/** Who is due next on a depth; nothing happens on a depth without living heroes. */
+function nextTurn(world: World, depth: number): Turn | undefined {
+  const heroes = heroesOn(world, depth);
+  if (heroes.length === 0) return undefined;
+  const floor = floorAt(world, depth);
+  // Ties go to heroes, then monsters, in a fixed order.
+  let turn: Turn = { kind: 'hero', hero: heroes[0]! };
+  let time = heroes[0]!.time;
+  for (const hero of heroes) {
+    if (hero.time < time) [turn, time] = [{ kind: 'hero', hero }, hero.time];
+  }
+  for (const mob of floor.mobs) {
+    if (mob.time < time) [turn, time] = [{ kind: 'mob', mob }, mob.time];
+  }
+  if (floor.respawn < time) turn = { kind: 'respawn' };
+  return turn;
+}
+
+function companionWaiting(world: World, hero: Hero): boolean {
+  return world.heroes.some((other) => other !== hero && other.depth === hero.depth && isAlive(other) && other.intent);
+}
+
+/** Heroes everyone else on their depth is waiting for. */
+export function blockers(world: World): string[] {
+  const depths = new Set(world.heroes.filter(isAlive).map((hero) => hero.depth));
+  const result: string[] = [];
+  for (const depth of [...depths].sort((a, b) => a - b)) {
+    const turn = nextTurn(world, depth);
+    if (turn?.kind === 'hero' && !turn.hero.intent && companionWaiting(world, turn.hero)) {
+      result.push(turn.hero.id);
+    }
+  }
+  return result;
+}
+
+/** Runs every occupied depth until each waits for a player's decision. */
+function settle(world: World, effects: Effect[]): void {
+  for (let pass = 0; pass < 8; pass++) {
+    const where = (): string => world.heroes.map((hero) => `${hero.depth}:${hero.hp > 0}`).join();
+    const before = where();
+    const depths = [...new Set(world.heroes.filter(isAlive).map((hero) => hero.depth))].sort((a, b) => a - b);
+    for (const depth of depths) advance(world, depth, effects);
+    // Someone changed depth: the depth they arrived on may now be able to move.
+    if (where() === before) return;
+  }
+}
+
+function advance(world: World, depth: number, effects: Effect[]): void {
+  const floor = floorAt(world, depth);
+  const ctx: Ctx = { world, depth, level: levelAt(world, depth), floor, rng: new Rng(floor.rng), effects };
+
+  for (let guard = 0; guard < 100_000; guard++) {
+    const turn = nextTurn(world, depth);
+    if (!turn) return;
+
+    if (turn.kind === 'mob') {
+      floor.now = Math.max(floor.now, turn.mob.time);
+      mobAct(ctx, turn.mob);
+      continue;
+    }
+    if (turn.kind === 'respawn') {
+      floor.now = Math.max(floor.now, floor.respawn);
+      respawn(ctx);
+      continue;
+    }
+
+    const hero = turn.hero;
+    floor.now = Math.max(floor.now, hero.time);
+    if (hero.intent) {
+      const action = hero.intent;
+      hero.intent = null;
+      const problem = problemWith(world, hero, action);
+      if (problem) {
+        effects.push({ type: 'interrupted', hero: hero.id, reason: problem });
+      } else {
+        perform(ctx, hero, action);
+      }
+      continue;
+    }
+    if (companionWaiting(world, hero) && isSafe(world, hero)) {
+      spend(hero, TIME_TO_REST);
+      continue;
+    }
+    return;
+  }
+}
+
+function spend(hero: Hero, time: number): void {
+  hero.time += time;
+  hero.regen += time;
+  while (hero.regen >= REGENERATION_DELAY) {
+    hero.regen -= REGENERATION_DELAY;
+    if (isAlive(hero) && hero.hp < hero.ht) hero.hp++;
+  }
+}
+
+function perform(ctx: Ctx, hero: Hero, action: Action): void {
+  const { world, level } = ctx;
   switch (action.type) {
     case 'wait':
+      spend(hero, TIME_TO_REST);
       break;
 
+    case 'search': {
+      const found = search(ctx, hero, true);
+      const skill = awareness(hero);
+      ctx.effects.push({ type: 'searched', hero: hero.id });
+      spend(hero, found && ctx.rng.float() >= 2 * skill - skill * skill ? TIME_TO_SEARCH * 2 : TIME_TO_SEARCH);
+      break;
+    }
+
     case 'move': {
-      if (!adjacent(hero.pos, action.to) || !canEnter(level, action.to)) {
-        return { ok: false, reason: 'cannot move there' };
-      }
-      if (occupied(world, hero.depth, action.to, hero)) {
-        return { ok: false, reason: 'cell is occupied' };
-      }
       const from = hero.pos;
       hero.pos = action.to;
       leaveCell(world, level, hero.depth, from);
       enterCell(level, hero.pos);
+      spend(hero, 1);
+      search(ctx, hero, false);
       break;
     }
 
-    case 'descend': {
-      if (hero.pos !== level.exit) {
-        return { ok: false, reason: 'not on the stairs' };
-      }
-      if (hero.depth >= DEEPEST_AVAILABLE) {
-        return { ok: false, reason: 'deeper levels are not ported yet' };
-      }
-      const next = levelAt(world, hero.depth + 1);
-      const from = hero.pos;
-      hero.depth++;
-      leaveCell(world, level, hero.depth - 1, from);
-      hero.pos = freeCellNear(world, next, hero.depth, next.entrance);
-      enterCell(next, hero.pos);
+    case 'attack':
+      attack(ctx, hero, mobById(world, hero.depth, action.target)!);
+      spend(hero, heroAttackDelay(hero));
       break;
+
+    case 'descend':
+      changeDepth(world, hero, hero.depth + 1, 'entrance');
+      reviveFallen(world, hero.depth, ctx.effects);
+      break;
+
+    case 'ascend':
+      changeDepth(world, hero, hero.depth - 1, 'exit');
+      break;
+  }
+  if (isAlive(hero)) observe(world, hero);
+}
+
+/**
+ * Hero.search: hidden doors and traps around the hero may be noticed in
+ * passing after every step, and are always found by a deliberate search.
+ */
+function search(ctx: Ctx, hero: Hero, intentional: boolean): boolean {
+  const radius = intentional ? SEARCH_RADIUS : 1;
+  const fov = heroView(ctx.world, hero);
+  const chance = awareness(hero);
+  const cx = cellX(hero.pos);
+  const cy = cellY(hero.pos);
+  let found = false;
+  for (let y = Math.max(cy - radius, 0); y <= Math.min(cy + radius, HEIGHT - 1); y++) {
+    for (let x = Math.max(cx - radius, 0); x <= Math.min(cx + radius, WIDTH - 1); x++) {
+      const p = x + y * WIDTH;
+      if (fov[p] && hasFlag(ctx.level.map[p]!, F.SECRET) && (intentional || ctx.rng.float() < chance)) {
+        ctx.level.map[p] = discover(ctx.level.map[p]!);
+        exploredCells(ctx.world, hero.depth)[p] = true;
+        ctx.effects.push({ type: 'discovered', depth: hero.depth, cell: p });
+        found = true;
+      }
     }
   }
-  observe(world, hero.depth);
-  world.turn++;
-  return { ok: true };
+  return found;
+}
+
+function changeDepth(world: World, hero: Hero, depth: number, arrival: 'entrance' | 'exit'): void {
+  const fromLevel = levelAt(world, hero.depth);
+  const fromDepth = hero.depth;
+  const from = hero.pos;
+  const level = levelAt(world, depth);
+  hero.depth = depth;
+  leaveCell(world, fromLevel, fromDepth, from);
+  place(world, hero, level, arrival === 'entrance' ? level.entrance : level.exit);
+}
+
+function place(world: World, hero: Hero, level: Level, near: number): void {
+  hero.pos = freeCellNear(world, level, hero.depth, near);
+  hero.time = floorAt(world, hero.depth).now;
+  enterCell(level, hero.pos);
+  observe(world, hero);
+}
+
+/** Fallen heroes get back up at the stairs whenever a companion goes deeper. */
+function reviveFallen(world: World, depth: number, effects: Effect[]): void {
+  const level = levelAt(world, depth);
+  for (const fallen of world.heroes) {
+    if (isAlive(fallen)) continue;
+    fallen.hp = Math.max(1, Math.floor(fallen.ht / 2));
+    fallen.depth = depth;
+    fallen.intent = null;
+    fallen.regen = 0;
+    place(world, fallen, level, level.entrance);
+    effects.push({ type: 'revived', hero: fallen.id });
+  }
 }
 
 /**

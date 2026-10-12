@@ -3,20 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1f1d1d" />
     <title>Pixel Dungeon</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
+      :root {
+        /* CSS pixels per pixel of the original art; set from the game. */
+        --px: 1.5;
+        --bg: #1f1d1d;
+        --text: #e8e2c8;
+      }
       html, body {
         margin: 0;
         height: 100%;
-        background: #1f1d1d;
+        background: var(--bg);
         overflow: hidden;
         overscroll-behavior: none;
         touch-action: none;
         user-select: none;
         -webkit-user-select: none;
         -webkit-tap-highlight-color: transparent;
-        font: 14px/1.3 ui-monospace, Menlo, Consolas, monospace;
-        color: #e8e2c8;
+        font: 16px/1.3 'Pixelify Sans', ui-monospace, monospace;
+        color: var(--text);
       }
       canvas {
         display: block;
@@ -24,21 +35,180 @@
         height: 100%;
         image-rendering: pixelated;
       }
-      #hud {
+      #overlay {
         position: fixed;
-        left: 8px;
-        top: 8px;
-        padding: 6px 8px;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        overflow-y: auto;
+        touch-action: pan-y;
+      }
+      #overlay.dim {
         background: rgba(0, 0, 0, 0.55);
-        border-radius: 4px;
+      }
+      #overlay[hidden], #toast[hidden] {
+        display: none;
+      }
+      .pd-title {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        max-width: 380px;
+        margin: auto;
+      }
+      .pd-banner {
+        width: min(calc(128px * var(--px) * 2), 100%);
+        aspect-ratio: 128 / 70;
+        background: url(assets/banner-title.png) 0 0 / 100% 100% no-repeat;
+        image-rendering: pixelated;
+      }
+      .pd-gameover {
+        width: min(calc(128px * var(--px) * 1.5), 100%);
+        aspect-ratio: 128 / 35;
+        margin: 0 auto 4px;
+        background: url(assets/banner-gameover.png) 0 0 / 100% 100% no-repeat;
+        image-rendering: pixelated;
+      }
+      .pd-subtitle {
+        margin: 2px 0 12px;
+        color: #cacfc2;
+        letter-spacing: 0.04em;
+      }
+      .pd-window {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 380px;
+        padding: calc(7px * var(--px) + 4px);
+        border-style: solid;
+        border-width: calc(7px * var(--px));
+        border-image: url(assets/ui-window.png) 7 fill / calc(7px * var(--px)) stretch;
+        image-rendering: pixelated;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin: auto;
+      }
+      .pd-button {
+        font: inherit;
+        color: #fff;
+        background: none;
+        border-style: solid;
+        border-width: calc(2px * var(--px));
+        border-image: url(assets/ui-button.png) 2 fill / calc(2px * var(--px)) stretch;
+        image-rendering: pixelated;
+        padding: 9px 10px;
+        min-height: 44px;
+        cursor: pointer;
+        text-shadow: 0 1px 0 #000;
+      }
+      .pd-button:active {
+        filter: brightness(1.3);
+      }
+      .pd-button.primary {
+        font-weight: 600;
+        color: #ffeba4;
+      }
+      .pd-heading {
+        margin: 0;
+        text-align: center;
+        font-size: 1.15em;
+        color: #ffeba4;
+      }
+      .pd-info, .pd-note {
+        margin: 0;
+        text-align: center;
+        font-size: 0.9em;
+      }
+      .pd-note {
+        color: #9a9a8a;
+        font-size: 0.8em;
+        margin-top: -4px;
+      }
+      .pd-classes {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+      }
+      .pd-class {
+        font: inherit;
+        font-size: 0.8em;
+        color: #cacfc2;
+        background: rgba(0, 0, 0, 0.25);
+        border: 2px solid transparent;
+        border-radius: 3px;
+        padding: 6px 2px 4px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+      }
+      .pd-class.selected {
+        border-color: #ffeba4;
+        color: #ffeba4;
+        background: rgba(255, 235, 164, 0.08);
+      }
+      .pd-class-icon {
+        --s: calc(var(--px) * 2);
+        width: calc(16px * var(--s));
+        height: calc(16px * var(--s));
+        background-image: url(assets/icons.png);
+        background-size: calc(128px * var(--s)) calc(64px * var(--s));
+        image-rendering: pixelated;
+      }
+      .icon-warrior { background-position: 0 calc(-29px * var(--s)); }
+      .icon-mage { background-position: calc(-16px * var(--s)) calc(-29px * var(--s)); }
+      .icon-rogue { background-position: calc(-32px * var(--s)) calc(-29px * var(--s)); }
+      .icon-huntress { background-position: calc(-48px * var(--s)) calc(-29px * var(--s)); }
+      .pd-input {
+        font: inherit;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid #5c5a50;
+        border-radius: 3px;
+        padding: 8px 10px;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+      .pd-help {
+        margin: 0;
+        padding-left: 1.1em;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.9em;
+      }
+      #toast {
+        position: fixed;
+        left: 50%;
+        top: calc(48px * var(--px) + env(safe-area-inset-top));
+        transform: translateX(-50%);
+        padding: 8px 14px;
+        border-style: solid;
+        border-width: calc(5px * var(--px));
+        border-image: url(assets/ui-toast.png) 5 fill / calc(5px * var(--px)) stretch;
+        image-rendering: pixelated;
+        white-space: nowrap;
         pointer-events: none;
-        white-space: pre;
+      }
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #9a9a8a;
       }
     </style>
   </head>
   <body>
     <canvas id="game"></canvas>
-    <div id="hud"></div>
+    <div id="overlay" hidden></div>
+    <div id="toast" hidden></div>
+    <div id="loading">…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

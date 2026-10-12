@@ -64,6 +64,8 @@ export const Stream = {
   LAYOUT: 2,
   ITEMS: 3,
   MOBS: 4,
+  /** Everything that happens on a depth during play: combat, monster AI. */
+  PLAY: 5,
 } as const;
 
 /** Next value in [0, 1) with 24 bits of precision (exact in float and double). */

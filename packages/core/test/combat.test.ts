@@ -1,0 +1,201 @@
+import { describe, expect, it } from 'vitest';
+import {
+  act, type Action, addHero, blockers, canEnter, charAt, createMob, createWorld, type Effect, F, floorAt, hasFlag,
+  heroById, isAlive, levelAt, MOBS, NEIGHBOURS8, RoomType, T, WEAPONS, type World,
+} from '../src/index';
+import { botAction, checkInvariants, pacify, unblock } from './helpers';
+
+/** Plays one hero with the bot until it reaches depth 4, dies or runs out of moves. */
+function playSolo(seed: number, heroClass: 'warrior' | 'mage' | 'rogue' | 'huntress', limit = 3000) {
+  const world = createWorld(seed);
+  addHero(world, { id: 'p', name: 'P', heroClass });
+  const effects: Effect[] = [];
+  let actions = 0;
+  for (; actions < limit; actions++) {
+    const hero = heroById(world, 'p')!;
+    if (!isAlive(hero) || hero.depth === 4) break;
+    const result = act(world, 'p', botAction(world, 'p'));
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (result.ok) effects.push(...result.effects);
+    checkInvariants(world);
+  }
+  return { world, effects, actions };
+}
+
+/** A free cell next to `pos` that a monster could stand on. */
+function freeNeighbour(world: World, depth: number, pos: number): number {
+  const level = levelAt(world, depth);
+  return NEIGHBOURS8.map((n) => pos + n).find(
+    (cell) => canEnter(level, cell) && hasFlag(level.map[cell]!, F.PASSABLE) && !charAt(world, depth, cell),
+  )!;
+}
+
+describe('monsters', () => {
+  it('populate sewer levels as the bestiary says, asleep in standard rooms', () => {
+    const allowed: Record<number, string[]> = { 1: ['rat'], 2: ['rat', 'gnoll'], 3: ['rat', 'gnoll', 'crab'], 4: ['rat', 'gnoll', 'crab'] };
+    for (let seed = 1; seed <= 25; seed++) {
+      const world = createWorld(seed);
+      for (let depth = 1; depth <= 4; depth++) {
+        const level = levelAt(world, depth);
+        const mobs = floorAt(world, depth).mobs;
+        const base = 2 + (depth % 5);
+        expect(mobs.length).toBeGreaterThanOrEqual(base);
+        expect(mobs.length).toBeLessThanOrEqual(base + 2);
+        expect(new Set(mobs.map((m) => m.pos)).size).toBe(mobs.length);
+        for (const mob of mobs) {
+          expect(allowed[depth]).toContain(mob.kind);
+          expect(mob.state).toBe('sleeping');
+          expect(hasFlag(level.map[mob.pos]!, F.PASSABLE)).toBe(true);
+          const entrance = level.rooms.find((r) => r.type === RoomType.ENTRANCE)!;
+          const x = mob.pos % 32;
+          const y = Math.trunc(mob.pos / 32);
+          const inEntrance = x > entrance.left && x < entrance.right && y > entrance.top && y < entrance.bottom;
+          expect(inEntrance).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('use the original weapons and stats', () => {
+    expect(WEAPONS.shortSword).toMatchObject({ min: 1, max: 10, str: 11 });
+    expect(WEAPONS.dagger).toMatchObject({ min: 1, max: 8, str: 10 });
+    expect(WEAPONS.knuckles).toMatchObject({ min: 1, max: 5, delay: 0.5 });
+    expect(MOBS.crab).toMatchObject({ ht: 15, speed: 2, dr: 4 });
+  });
+});
+
+describe('fighting through the sewers', () => {
+  it('a bot hero kills monsters, levels up and goes deep, keeping every invariant', () => {
+    let deep = 0;
+    let kills = 0;
+    for (const [seed, heroClass] of [[11, 'warrior'], [12, 'mage'], [13, 'rogue'], [14, 'huntress'], [15, 'warrior'], [16, 'warrior']] as const) {
+      const { world, effects } = playSolo(seed, heroClass);
+      const hero = heroById(world, 'p')!;
+      if (hero.depth >= 3) deep++;
+      kills += effects.filter((e) => e.type === 'died' && e.who.startsWith('#')).length;
+      if (effects.some((e) => e.type === 'levelUp')) {
+        expect(hero.lvl).toBeGreaterThan(1);
+        expect(hero.ht).toBe((heroClass === 'huntress' ? 15 : 20) + (hero.lvl - 1) * 5);
+      }
+      if (!isAlive(hero)) {
+        expect(world.over).toBe(true);
+        expect(effects.at(-1)).toMatchObject({ type: 'died', who: 'p' });
+      }
+    }
+    expect(kills).toBeGreaterThan(5);
+    expect(deep).toBeGreaterThan(2);
+  });
+
+  it('is deterministic and survives a JSON round trip mid-fight', () => {
+    const a = playSolo(2024, 'warrior', 400).world;
+    const b = playSolo(2024, 'warrior', 400).world;
+    expect(b).toEqual(a);
+
+    const copy: World = JSON.parse(JSON.stringify(a));
+    for (let i = 0; i < 300 && isAlive(heroById(a, 'p')!); i++) {
+      const action = botAction(a, 'p');
+      expect(act(copy, 'p', action)).toEqual(act(a, 'p', action));
+    }
+    expect(copy).toEqual(a);
+  });
+
+  it('finds hidden doors by searching next to them', () => {
+    let checked = 0;
+    for (let seed = 1; seed <= 40 && checked < 3; seed++) {
+      const world = pacify(createWorld(seed));
+      const depth = [2, 3, 4].find((d) => levelAt(world, d).map.includes(T.SECRET_DOOR));
+      if (!depth) continue;
+      const level = levelAt(world, depth);
+      const door = level.map.indexOf(T.SECRET_DOOR);
+      addHero(world, { id: 'p', name: 'P', heroClass: 'warrior' });
+      const hero = heroById(world, 'p')!;
+      hero.depth = depth;
+      hero.pos = NEIGHBOURS8.map((n) => door + n).find((cell) => canEnter(level, cell))!;
+      const result = act(world, 'p', { type: 'search' });
+      expect(level.map[door]).toBe(T.DOOR);
+      expect(result.ok && result.effects).toContainEqual({ type: 'discovered', depth, cell: door });
+      expect([2, 4]).toContain(hero.time);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('rejects attacks on monsters out of reach and moves into them', () => {
+    const world = createWorld(5);
+    addHero(world, { id: 'p', name: 'P', heroClass: 'warrior' });
+    const mob = floorAt(world, 1).mobs[0]!;
+    expect(act(world, 'p', { type: 'attack', target: mob.id })).toEqual({ ok: false, reason: 'too far away' });
+    expect(act(world, 'p', { type: 'attack', target: '#999' })).toEqual({ ok: false, reason: 'no such enemy' });
+    const hero = heroById(world, 'p')!;
+    mob.pos = freeNeighbour(world, 1, hero.pos);
+    expect(act(world, 'p', { type: 'move', to: mob.pos })).toEqual({ ok: false, reason: 'cell is occupied' });
+  });
+});
+
+describe('co-op turns', () => {
+  function partyWithRat(): { world: World; rat: ReturnType<typeof createMob> } {
+    const world = pacify(createWorld(3));
+    addHero(world, { id: 'alice', name: 'Alice', heroClass: 'warrior' });
+    addHero(world, { id: 'bob', name: 'Bob', heroClass: 'mage' });
+    const bob = heroById(world, 'bob')!;
+    const rat = createMob('#100', 'rat', freeNeighbour(world, 1, bob.pos), 'hunting', 0);
+    rat.enemy = 'bob';
+    floorAt(world, 1).mobs.push(rat);
+    return { world, rat };
+  }
+
+  it('a hero in danger holds the others up until they act', () => {
+    const { world } = partyWithRat();
+    const alice = heroById(world, 'alice')!;
+    const bob = heroById(world, 'bob')!;
+    // Alice goes first; then it is Bob's turn and he sees the rat.
+    expect(act(world, 'alice', { type: 'wait' }).ok).toBe(true);
+    expect(alice.time).toBe(1);
+    expect(act(world, 'alice', { type: 'wait' }).ok).toBe(true);
+    expect(alice.intent).toEqual({ type: 'wait' });
+    expect(blockers(world)).toEqual(['bob']);
+
+    // Bob acts: the rat takes its turn and Alice's queued action happens.
+    const result = act(world, 'bob', { type: 'wait' });
+    expect(result.ok).toBe(true);
+    expect(alice.intent).toBeNull();
+    expect(alice.time).toBe(2);
+    expect(bob.time).toBe(1);
+    expect(result.ok && result.effects.some((e) => e.type === 'attack' && e.attacker === '#100')).toBe(true);
+    expect(blockers(world)).toEqual([]);
+  });
+
+  it('an idle hero out of danger rests while a companion explores', () => {
+    const world = pacify(createWorld(4));
+    addHero(world, { id: 'alice', name: 'Alice', heroClass: 'warrior' });
+    addHero(world, { id: 'bob', name: 'Bob', heroClass: 'rogue' });
+    for (let i = 0; i < 5; i++) expect(act(world, 'alice', { type: 'wait' }).ok).toBe(true);
+    expect(heroById(world, 'alice')!.time).toBe(5);
+    expect(heroById(world, 'bob')!.time).toBe(4);
+    expect(blockers(world)).toEqual([]);
+  });
+
+  it('fallen heroes get back up when a companion goes deeper', () => {
+    const { world, rat } = partyWithRat();
+    const bob = heroById(world, 'bob')!;
+    bob.hp = 1;
+    const play = (id: string, action: Action) => act(world, id, action);
+    for (let i = 0; i < 500 && isAlive(bob); i++) {
+      play('bob', { type: 'wait' });
+      unblock(world, play);
+    }
+    expect(isAlive(bob)).toBe(false);
+    expect(world.over).toBe(false);
+    expect(act(world, 'bob', { type: 'wait' })).toEqual({ ok: false, reason: 'you are dead' });
+
+    // Alice deals with the rat, then takes the stairs.
+    for (let i = 0; i < 2000 && heroById(world, 'alice')!.depth === 1; i++) {
+      expect(play('alice', botAction(world, 'alice')).ok).toBe(true);
+      checkInvariants(world);
+    }
+    expect(floorAt(world, 1).mobs).not.toContain(rat);
+    expect(heroById(world, 'alice')!.depth).toBe(2);
+    expect(bob).toMatchObject({ depth: 2, hp: 10 });
+    expect(bob.pos).not.toBe(heroById(world, 'alice')!.pos);
+  });
+});

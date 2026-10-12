@@ -33,8 +33,9 @@ async function authenticate(request: Request, env: Env): Promise<PlayerInfo | nu
     if (!user) return null;
     return { id: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32), heroClass: heroClassOf(url) };
   }
-  // Development only: without a bot token the client is trusted.
-  const id = url.searchParams.get('id') ?? crypto.randomUUID();
+  // Development only: without a bot token the client is trusted. Monster ids
+  // start with '#', so player ids never do.
+  const id = (url.searchParams.get('id') || crypto.randomUUID()).replace(/^#+/, '') || 'anon';
   return { id: id.slice(0, 64), name: (url.searchParams.get('name') || 'Hero').slice(0, 32), heroClass: heroClassOf(url) };
 }
 
@@ -48,10 +49,27 @@ export class Room extends DurableObject<Env> {
   private async room(): Promise<RoomLogic> {
     if (!this.logic) {
       const saved = await this.ctx.storage.get<RoomState>('state');
-      this.logic = saved ? new RoomLogic(saved) : RoomLogic.create(Math.floor(Math.random() * 2 ** 31));
+      this.logic = RoomLogic.restore(saved, Math.floor(Math.random() * 2 ** 31));
       this.logic.restoreOnline(this.ctx.getWebSockets().map((ws) => this.playerOf(ws).id));
     }
     return this.logic;
+  }
+
+  /** Sends what the room produced, saves it and sets the turn-timeout alarm. */
+  private async apply(deliveries: Delivery[]): Promise<void> {
+    this.deliver(deliveries);
+    await this.persist();
+    const deadline = this.logic?.deadline();
+    if (deadline) {
+      await this.ctx.storage.setAlarm(deadline);
+    } else {
+      await this.ctx.storage.deleteAlarm();
+    }
+  }
+
+  override async alarm(): Promise<void> {
+    const room = await this.room();
+    await this.apply(room.tick(Date.now()));
   }
 
   override async fetch(request: Request): Promise<Response> {
@@ -75,8 +93,7 @@ export class Room extends DurableObject<Env> {
     server.serializeAttachment(player);
 
     const room = await this.room();
-    this.deliver(room.connect(player));
-    await this.persist();
+    await this.apply(room.connect(player, Date.now()));
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -88,9 +105,11 @@ export class Room extends DurableObject<Env> {
       return;
     }
     const room = await this.room();
-    this.deliver(room.receive(this.playerOf(ws).id, message));
-    if (message.type === 'act') {
-      await this.persist();
+    const deliveries = room.receive(this.playerOf(ws).id, message, Date.now());
+    if (message.type === 'sync') {
+      this.deliver(deliveries);
+    } else {
+      await this.apply(deliveries);
     }
   }
 
@@ -107,7 +126,7 @@ export class Room extends DurableObject<Env> {
     const stillConnected = this.ctx.getWebSockets().some((other) => other !== ws && this.playerOf(other).id === id);
     if (!stillConnected && !id.endsWith('#replaced')) {
       const room = await this.room();
-      this.deliver(room.disconnect(id));
+      await this.apply(room.disconnect(id, Date.now()));
     }
   }
 
