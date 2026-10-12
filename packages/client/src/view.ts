@@ -1,6 +1,6 @@
 import {
   adjacent, cellX, cellY, type Effect, F, terrainFlags, type Enchantment, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind,
-  WIDTH, type World,
+  visibleCells, WIDTH, type World,
   type Look,
 } from '@pd/core';
 import { audio } from './audio';
@@ -109,7 +109,12 @@ export interface Puppet {
   poisoned?: boolean;
   /** Floating (a potion of levitation): it hovers over the floor, its shadow below. */
   levitating?: boolean;
+  /** Fallen into a chasm (a monster): when it began to drop out of sight, spinning and shrinking. */
+  fallStart?: number;
 }
+
+/** MobSprite.FALL_TIME: how long a monster takes to drop out of sight into a chasm. */
+export const FALL_MS = 1000;
 
 export interface Floater {
   text: string;
@@ -498,6 +503,9 @@ export class View {
     let trapped = false;
     const mobKind = (depth: number, id: string, fallback: MobKind): MobKind =>
       world.floors[depth]?.mobs.find((mob) => mob.id === id)?.kind ?? fallback;
+    // What the party sees on the depth shown, worked out only if something needs it.
+    let sight: boolean[] | undefined;
+    const seen = (cell: number): boolean => (sight ??= visibleCells(world, this.depth))[cell] === true;
     for (const effect of effects) {
       switch (effect.type) {
         case 'attack': {
@@ -727,6 +735,21 @@ export class View {
         case 'disenchanted':
           if (effect.hero === myId) this.say(t.disenchanted(itemName(world, effect.item)), COLORS.warning, now);
           break;
+        case 'mobFell': {
+          // Chasm.mobFall: the monster drops out of sight, spinning and shrinking (MobSprite.fall).
+          if (effect.depth !== this.depth) break;
+          const puppet = this.puppets.get(effect.mob);
+          if (puppet) {
+            puppet.alive = false;
+            puppet.fallStart = now;
+            puppet.removeAt = now + FALL_MS;
+          }
+          if (seen(effect.pos)) {
+            audio.play('falling', 1, 1, { x: cellX(effect.pos) * TILE + TILE / 2, y: cellY(effect.pos) * TILE + TILE / 2 });
+            this.say(t.mobFell(t.mobs[effect.kind]), COLORS.neutral, now);
+          }
+          break;
+        }
         case 'fell':
           if (effect.hero !== myId && effect.depth === this.depth) {
             this.puppets.delete(effect.hero);
@@ -927,6 +950,25 @@ export class View {
           break;
         case 'trap':
           trapped = true;
+          if (effect.mob) {
+            // Level.mobPress: a monster sets off a trap; heard and seen only where the party can see it
+            // (but an alarm rings throughout the dungeon).
+            const here = effect.depth === this.depth && seen(effect.pos);
+            if (!here) {
+              if (effect.kind === 'alarm' && effect.depth === this.depth) audio.play('alert');
+              break;
+            }
+            this.flashes.push({ cell: effect.pos, start: now });
+            const at = { x: cellX(effect.pos) * TILE + TILE / 2, y: cellY(effect.pos) * TILE + TILE / 2 };
+            audio.play(effect.kind === 'lightning' ? 'lightning' : effect.kind === 'fire' ? 'burning' : 'trap', 1, 1, at);
+            const kind = this.puppets.get(effect.mob)?.kind as MobKind | undefined;
+            if (kind) this.say(t.mobTrap(t.mobs[kind]), COLORS.warning, now);
+            if (effect.kind === 'alarm') {
+              audio.play('alert');
+              this.say(t.traps.alarm, COLORS.warning, now);
+            }
+            break;
+          }
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.pos, start: now });
           audio.play(effect.kind === 'lightning' ? 'lightning' : effect.kind === 'fire' ? 'burning' : 'trap');
           if (effect.hero === myId) {

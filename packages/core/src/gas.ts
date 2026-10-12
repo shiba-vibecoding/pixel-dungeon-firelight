@@ -1,4 +1,4 @@
-import { isAlive } from './actors';
+import { isAlive, MOBS } from './actors';
 import { hurt } from './combat';
 import { type Char, type Ctx, type Floor, heroesOn } from './floor';
 import { distance, HEIGHT, LENGTH, WIDTH } from './level/geometry';
@@ -11,10 +11,16 @@ import { immuneTo } from './traps';
  * walls or closed doors) and thins out, and whoever stands in it breathes it:
  * toxic gas hurts, paralytic gas paralyses. Kept sparse, as [cell, volume]
  * pairs in cell order, since most of a level has none.
+ *
+ * A spinner's cobweb (Web) is kept the same way, though it is no gas: it
+ * never spreads, only wears away a little every turn, and holds fast whoever
+ * stands in it.
  */
 
-export type GasKind = 'toxic' | 'paralytic';
-export const GAS_KINDS: readonly GasKind[] = ['toxic', 'paralytic'];
+export type GasKind = 'toxic' | 'paralytic' | 'web';
+export const GAS_KINDS: readonly GasKind[] = ['toxic', 'paralytic', 'web'];
+/** What is breathed, and what a cleansing cloud clears away. */
+const AIRBORNE: readonly GasKind[] = ['toxic', 'paralytic'];
 
 /** How long paralytic gas holds whoever breathes it, after the last breath. */
 const PARALYSIS_TURNS = 5;
@@ -38,10 +44,20 @@ export function seedGas(ctx: Ctx, pos: number, kind: GasKind, amount: number): v
   floor.gasAt ??= floor.now;
 }
 
+/** Web.seed: a web is spun on a cell; it is as thick as the thickest spun there, never thicker. */
+export function seedWeb(ctx: Ctx, pos: number, amount: number): void {
+  const floor = ctx.floor;
+  const web = new Map((floor.gas?.web ?? []).map(([cell, volume]) => [cell, volume]));
+  if ((web.get(pos) ?? 0) >= amount) return;
+  web.set(pos, amount);
+  (floor.gas ??= {}).web = [...web].sort((a, b) => a[0] - b[0]);
+  floor.gasAt ??= floor.now;
+}
+
 /** PotionOfPurity.shatter: the air within reach of a cell is cleared of every gas. */
 export function clearGas(ctx: Ctx, pos: number, radius: number): boolean {
   let cleared = false;
-  for (const kind of GAS_KINDS) {
+  for (const kind of AIRBORNE) {
     const cloud = ctx.floor.gas?.[kind];
     if (!cloud) continue;
     const left = cloud.filter(([cell]) => distance(cell, pos) > radius);
@@ -59,6 +75,10 @@ export function evolveGas(ctx: Ctx): void {
   for (const kind of GAS_KINDS) {
     const cloud = floor.gas?.[kind];
     if (!cloud || cloud.length === 0) continue;
+    if (kind === 'web') {
+      evolveWeb(ctx, cloud);
+      continue;
+    }
     const cur = new Int32Array(LENGTH);
     for (const [cell, volume] of cloud) cur[cell] = volume;
     const next: Array<[number, number]> = [];
@@ -86,6 +106,27 @@ export function evolveGas(ctx: Ctx): void {
   }
   tidy(floor);
 }
+
+/**
+ * Web.evolve: every web wears a little thinner; whoever stands in one that is left is held fast
+ * (Roots, prolonged a turn), but not a flier, nor those Roots cannot hold (Spinner, Piranha, the
+ * sad ghost and the curse: IMMUNITIES).
+ */
+function evolveWeb(ctx: Ctx, web: Array<[number, number]>): void {
+  const next = web.map(([cell, volume]): [number, number] => [cell, volume - 1]).filter(([, volume]) => volume > 0);
+  ctx.floor.gas!.web = next;
+  const inside = new Set(next.map(([cell]) => cell));
+  for (const hero of heroesOn(ctx.world, ctx.depth)) {
+    if (inside.has(hero.pos) && !(hero.levitating ?? 0)) hero.rooted = Math.max(hero.rooted, 1);
+  }
+  for (const mob of ctx.floor.mobs) {
+    if (!inside.has(mob.pos) || MOBS[mob.kind].flying || ROOTS_IMMUNE.has(mob.kind)) continue;
+    // A monster's own turn wears a turn of it off first (mobConditions): two, to be held on that turn.
+    mob.rooted = Math.max(mob.rooted ?? 0, 2);
+  }
+}
+
+const ROOTS_IMMUNE: ReadonlySet<string> = new Set(['spinner', 'piranha', 'ghost', 'curse']);
 
 /** Everyone on the depth who breathes: heroes, and monsters other than the harmless. */
 function breathers(ctx: Ctx): Char[] {

@@ -6,8 +6,8 @@ import { charAt, type Ctx, enterCell, heroView, isPassable, isWater, leaveCell, 
 import { type Glyph, type Item, itemDef, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
 import { adjacent, LENGTH, NEIGHBOURS8 } from './level/geometry';
-import { stepOnPlant } from './plants';
-import { burst } from './traps';
+import { F, hasFlag } from './level/terrain';
+import { burst, mobPress } from './traps';
 
 /*
  * Enchanted weapons and inscribed armour (Weapon.Enchantment, Armor.Glyph).
@@ -151,10 +151,11 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
 
   switch (glyph) {
     case 'bounce': {
-      // The attacker is thrown back a step.
+      // The attacker is thrown back a step: onto a trap or over a chasm as well (Level.passable or avoid).
       if (!near || rng.int(level + 5) < 4) return damage;
       const to = mob.pos + (mob.pos - hero.pos);
-      if (to < 0 || to >= LENGTH || !adjacent(mob.pos, to) || charAt(world, depth, to) || !isPassable(ctx.level, to)) return damage;
+      if (to < 0 || to >= LENGTH || !adjacent(mob.pos, to) || charAt(world, depth, to)) return damage;
+      if (!isPassable(ctx.level, to) && !hasFlag(ctx.level.map[to]!, F.AVOID)) return damage;
       if (mob.kind === 'piranha' && !isWater(ctx.level.map[to]!)) return damage;
       shown();
       const from = mob.pos;
@@ -162,7 +163,8 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
       leaveCell(world, ctx.level, depth, from);
       enterCell(ctx.level, to);
       ctx.effects.push({ type: 'pushed', depth, mob: mob.id, from, to });
-      stepOnPlant(ctx, mob, to);
+      // Bounce: where it lands, it presses (Level.mobPress), flier or not.
+      mobPress(ctx, mob);
       return damage;
     }
     case 'affection': {

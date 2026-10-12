@@ -17,7 +17,8 @@ import { seedGas } from './gas';
 import { DEW_VIAL_VOLUME, drinkFromVial } from './vial';
 import { looseItems } from './bags';
 import { sacrifice } from './altar';
-import { T } from './level/terrain';
+import { F, hasFlag, T } from './level/terrain';
+import { mobPress } from './traps';
 import { isBossDepth } from './level/builder';
 import { underChallenges } from './challenges';
 
@@ -220,17 +221,22 @@ function masteredBlow(ctx: Ctx, hero: Hero, mob: Mob, damage: number, thrown: bo
   }
 }
 
-/** CursePersonification.attackProc: the victim is pushed one step straight away from the curse. */
+/**
+ * CursePersonification.attackProc: the victim is pushed one step straight away from the curse.
+ * A monster may be pushed onto a trap or over a chasm too, and presses where it lands (Level.mobPress).
+ */
 function shove(ctx: Ctx, curse: Mob, victim: Char): void {
   const offset = victim.pos - curse.pos;
   if (!NEIGHBOURS8.includes(offset)) return;
   const to = victim.pos + offset;
-  if (!isPassable(ctx.level, to) || charAt(ctx.world, ctx.depth, to)) return;
+  const room = isPassable(ctx.level, to) || (!isHero(victim) && hasFlag(ctx.level.map[to]!, F.AVOID));
+  if (!room || charAt(ctx.world, ctx.depth, to)) return;
   const from = victim.pos;
   victim.pos = to;
   leaveCell(ctx.world, ctx.level, ctx.depth, from);
   enterCell(ctx.level, to);
   ctx.effects.push({ type: 'pushed', depth: ctx.depth, mob: victim.id, from, to });
+  if (!isHero(victim)) mobPress(ctx, victim);
 }
 
 /** Cripple.DURATION. */
@@ -364,16 +370,17 @@ function mobDied(ctx: Ctx, mob: Mob, by?: string): void {
   questKill(ctx, mob);
   impQuestKill(ctx, mob);
 
-  // A thief's stolen goods fall where it dies, and a mimic's treasure (Level.drop: as the challenges allow).
-  if (mob.item) dropItem(ctx.floor, mob.pos, underChallenges(ctx.world, mob.item));
+  // A thief's stolen goods fall where it dies, and a mimic's treasure (Level.drop: as the challenges allow;
+  // a flier slain over a chasm drops them through it).
+  if (mob.item) landItem(ctx, mob.pos, mob.item);
   // FetidRat.die: its skull, for the sad ghost.
   if (mob.kind === 'fetidRat') dropItem(ctx.floor, mob.pos, createItem('quest.skull'));
-  for (const item of mob.loot ?? []) dropItem(ctx.floor, mob.pos, underChallenges(ctx.world, item));
+  for (const item of mob.loot ?? []) landItem(ctx, mob.pos, item);
 
   // Mob.dropLoot, unless the party has outgrown the monster.
   if (heroes.some((h) => h.lvl <= stats.maxLvl + 2)) {
     const loot = dropLoot(ctx, mob);
-    if (loot) dropItem(ctx.floor, mob.pos, underChallenges(ctx.world, loot));
+    if (loot) landItem(ctx, mob.pos, loot);
   }
 
 

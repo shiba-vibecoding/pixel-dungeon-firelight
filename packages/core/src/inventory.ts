@@ -15,7 +15,7 @@ import {
   magicMissileDamage, missileStats, wandMaxCharges,
 } from './items';
 import { discoverable } from './level/flags';
-import { adjacent, LENGTH, NEIGHBOURS4, NEIGHBOURS8, NEIGHBOURS9 } from './level/geometry';
+import { adjacent, distance, LENGTH, NEIGHBOURS4, NEIGHBOURS8, NEIGHBOURS9 } from './level/geometry';
 import { discover, F, hasFlag, T } from './level/terrain';
 import { type Burst, burst, immuneTo, trapAt, triggerTrap } from './traps';
 import { plant, SEED_PLANTS, stepOnPlant } from './plants';
@@ -927,8 +927,13 @@ function use(ctx: Ctx, hero: Hero, index: number, target: Item | undefined): voi
       break;
     }
     case 'scroll.challenge': {
-      // Every monster on the level comes for the reader.
-      for (const mob of ctx.floor.mobs) beckon(mob, hero.pos);
+      // Every monster on the level comes for the reader; those in sight blinded with rage (Rage), for as many
+      // turns as they stand cells away, heedless of the traps in their way.
+      const fov = heroView(world, hero);
+      for (const mob of ctx.floor.mobs) {
+        beckon(mob, hero.pos);
+        if (fov[mob.pos] && mob.state !== 'passive') mob.rage = Math.max(mob.rage ?? 0, distance(hero.pos, mob.pos));
+      }
       ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'challenge', count: ctx.floor.mobs.length });
       break;
     }

@@ -7,7 +7,7 @@ import { collect } from './inventory';
 import { type Item, magicMissileDamage } from './items';
 import { distance, LENGTH, NEIGHBOURS8 } from './level/geometry';
 import { F, hasFlag, T } from './level/terrain';
-import { burst } from './traps';
+import { burst, mobPress } from './traps';
 import { unshakeable } from './enchant';
 
 /*
@@ -200,6 +200,8 @@ export function zapWand(ctx: Ctx, hero: Hero, wand: Item, target: number): void 
         if (isAlive(victim) && rng.int(power + 2 + d) < power + 1) {
           victim.paralysed = Math.max(victim.paralysed ?? 0, rng.intRange(2, 6));
         }
+        // The rocks press whoever survives them where they stand (Level.mobPress).
+        if (isAlive(victim)) mobPress(ctx, victim);
       }
       return;
     }
@@ -260,7 +262,8 @@ export function zapWand(ctx: Ctx, hero: Hero, wand: Item, target: number): void 
       if (charAt(world, depth, cell) && trace.length > 2) cell = trace[trace.length - 2]!;
       fx(cell, 'flock');
       const n = Math.trunc((power + 5) / 2);
-      const free = (c: number): boolean => isPassable(level, c) && !charAt(world, depth, c);
+      // Level.passable or avoid: sheep may land on a trap, or over a chasm.
+      const free = (c: number): boolean => (isPassable(level, c) || hasFlag(level.map[c]!, F.AVOID)) && !charAt(world, depth, c);
       const dist = new Int32Array(LENGTH).fill(-1);
       dist[cell] = 0;
       const queue = [cell];
@@ -274,13 +277,17 @@ export function zapWand(ctx: Ctx, hero: Hero, wand: Item, target: number): void 
         }
       }
       const spots = queue.filter(free).slice(0, n);
+      const flock: Mob[] = [];
       for (const spot of spots) {
         const sheep = createMob(`#${++world.nextId}`, 'sheep', spot, 'passive', ctx.floor.now + 1);
         sheep.lifespan = power + 4;
         ctx.floor.mobs.push(sheep);
         enterCell(level, spot);
+        flock.push(sheep);
       }
       ctx.effects.push({ type: 'flock', depth, cells: spots });
+      // WandOfFlock: each sheep presses the cell it appears on (Level.mobPress).
+      for (const sheep of flock) mobPress(ctx, sheep);
       return;
     }
 

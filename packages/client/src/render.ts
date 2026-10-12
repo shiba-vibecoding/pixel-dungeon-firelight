@@ -1,6 +1,6 @@
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, regionOf } from './sprites';
-import { type Puppet, TILE, type View } from './view';
+import { FALL_MS, type Puppet, TILE, type View } from './view';
 import { bossCard, depthCard, floatNumber, levelCard, nameplate, slainCard } from './cards';
 import { fx } from './fx';
 import { CHEST_ANIMS, type HeapLook } from './motion';
@@ -109,6 +109,28 @@ function drawFog(ctx: CanvasRenderingContext2D, level: Level, visible: readonly 
 let fine = 1;
 const snap = (v: number): number => Math.round(v / fine) * fine;
 
+/** A spinner's cobweb over a cell, 16×16: pale threads from a hub out to the edges, and two rings (made once). */
+let web: HTMLCanvasElement | undefined;
+function webImage(): HTMLCanvasElement {
+  if (web) return web;
+  web = document.createElement('canvas');
+  web.width = web.height = 16;
+  const g = web.getContext('2d')!;
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const dx = x - 7;
+      const dy = y - 7;
+      const d = Math.hypot(dx, dy);
+      const spoke = dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy);
+      const ring = (Math.round(d) === 3 || Math.round(d) === 6) && (x * 3 + y) % 4 !== 0;
+      if (!spoke && !ring) continue;
+      g.fillStyle = `rgba(232, 232, 222, ${spoke ? (d < 2 ? 0.95 : 0.7) : 0.5})`;
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+  return web;
+}
+
 /** A soft pixel puff of gas, 12×12, in a colour (made once per colour). */
 const puffs = new Map<string, HTMLCanvasElement>();
 function puffImage(color: string): HTMLCanvasElement {
@@ -153,7 +175,19 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
 
   ctx.save();
   if (puppet.invisible) ctx.globalAlpha = 0.4;
-  if (!puppet.alive) {
+  if (puppet.fallStart !== undefined) {
+    // MobSprite.fall: into a chasm, spinning (720 degrees a second, one way or the other) and
+    // shrinking away to nothing about the middle of its feet' cell, fading as it goes.
+    const k = Math.min(1, Math.max(0, (now - puppet.fallStart) / FALL_MS));
+    const cx = x + TILE / 2;
+    const cy = y + TILE / 2;
+    const turn = (puppet.id.charCodeAt(puppet.id.length - 1) % 2 === 0 ? -1 : 1) * 4 * Math.PI * ((now - puppet.fallStart) / 1000);
+    ctx.globalAlpha = 1 - k;
+    ctx.translate(cx, cy);
+    ctx.rotate(quality.reducedMotion ? 0 : turn);
+    ctx.scale(1 - k, 1 - k);
+    ctx.translate(-cx, -cy);
+  } else if (!puppet.alive) {
     if (puppet.isHero) {
       ctx.globalAlpha = 0.75;
     } else if (!puppet.laid) {
@@ -223,6 +257,8 @@ export interface Scene {
   plants?: ReadonlyArray<{ pos: number; index: number }>;
   /** Clouds of gas: how much is in each cell, and its colour. */
   gas?: ReadonlyArray<{ pos: number; volume: number; color: string }>;
+  /** Spinners' webs, and how much is left of each. */
+  webs?: ReadonlyArray<{ pos: number; volume: number }>;
   /** Mind vision: every monster on the level shows. */
   seeAll: boolean;
   /** Where an altar's sacrificial fire burns, while it does. */
@@ -342,6 +378,26 @@ export function render(
     ctx.fillStyle = `rgba(${flash.color ?? '255, 255, 200'}, ${0.6 * fade})`;
     ctx.fillRect((flash.cell % WIDTH) * TILE, Math.trunc(flash.cell / WIDTH) * TILE, TILE, TILE);
   }
+
+  // Spinners' webs where they can be seen (Web, a WebParticle in the original): a pale cobweb over
+  // the cell, fading as it wears away.
+  for (const strand of scene.webs ?? []) {
+    if (!visible[strand.pos]) continue;
+    ctx.globalAlpha = Math.min(0.85, 0.3 + strand.volume * 0.1);
+    const flip = strand.pos % 2 === 0;
+    const wx = (strand.pos % WIDTH) * TILE;
+    const wy = Math.trunc(strand.pos / WIDTH) * TILE;
+    if (flip) {
+      ctx.save();
+      ctx.translate(wx + TILE, wy);
+      ctx.scale(-1, 1);
+      ctx.drawImage(webImage(), 0, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(webImage(), wx, wy);
+    }
+  }
+  ctx.globalAlpha = 1;
 
   // Gas where it can be seen: a faint haze over the cell and puffs drifting in it, thicker where
   // there is more (the original's Speck clouds), never flat squares.

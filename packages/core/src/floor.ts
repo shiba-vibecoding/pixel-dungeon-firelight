@@ -150,7 +150,10 @@ export type Effect =
   | { type: 'scroll'; hero: string; kind: 'challenge' | 'lullaby' | 'recharging' | 'terror' | 'psionic' | 'removeCurse'; count: number }
   /** A hero put on something cursed: it will not come off. */
   | { type: 'cursedEquip'; hero: string; item: Item }
-  | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string }
+  /** A trap went off: under a hero (`hero`), a monster (`mob`, with `hero` empty) or nothing (an item landing on it). */
+  | { type: 'trap'; depth: number; pos: number; kind: TrapKind; hero: string; mob?: string }
+  /** Chasm.mobFall: a monster stepped (or was thrown) over a chasm and fell out of the level. */
+  | { type: 'mobFell'; depth: number; mob: string; pos: number; kind: MobKind }
   | { type: 'thrown'; depth: number; from: number; to: number; item: ItemKind }
   /** A magic bolt: the mage's wand, or a shaman's lightning. */
   | { type: 'zapped'; depth: number; from: number; to: number; bolt?: Bolt }
