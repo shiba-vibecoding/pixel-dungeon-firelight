@@ -19,6 +19,8 @@ interface WebApp {
     impactOccurred(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft'): void;
     notificationOccurred(type: 'error' | 'success' | 'warning'): void;
   };
+  BackButton?: { show(): void; hide(): void; onClick(callback: () => void): void };
+  onEvent?(event: string, callback: () => void): void;
 }
 
 const webApp = (globalThis as { Telegram?: { WebApp?: WebApp } }).Telegram?.WebApp;
@@ -40,6 +42,26 @@ export function initTelegram(background: string): void {
     webApp.setBackgroundColor?.(background);
   }
   if (at('7.10')) webApp.setBottomBarColor?.(background);
+}
+
+let onBack: (() => void) | null = null;
+
+/** Shows Telegram's back button with a handler, or hides it with null. */
+export function backButton(handler: (() => void) | null): void {
+  const button = webApp?.BackButton;
+  if (!button || !inTelegram || !(webApp!.isVersionAtLeast?.('6.1') ?? false)) return;
+  if (!onBack && handler) button.onClick(() => onBack?.());
+  onBack = handler;
+  if (handler) button.show();
+  else button.hide();
+}
+
+/** Calls back when Telegram changes the safe areas or the viewport. */
+export function onLayoutChange(callback: () => void): void {
+  if (!webApp?.onEvent || !inTelegram) return;
+  for (const event of ['viewportChanged', 'safeAreaChanged', 'contentSafeAreaChanged', 'fullscreenChanged']) {
+    webApp.onEvent(event, callback);
+  }
 }
 
 export function initData(): string | undefined {

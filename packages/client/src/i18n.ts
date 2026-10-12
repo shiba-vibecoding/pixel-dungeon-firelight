@@ -26,6 +26,8 @@ const en = {
   linkCopied: 'Invite link copied',
   toMenu: 'Main menu',
   resume: 'Back to the game',
+  soundOn: 'Sound: on',
+  soundOff: 'Sound: off',
   help: 'How to play',
   helpText: [
     'Tap a cell to walk there, tap a monster to attack it.',
@@ -87,6 +89,8 @@ const ru: Strings = {
   linkCopied: 'Ссылка-приглашение скопирована',
   toMenu: 'Главное меню',
   resume: 'Вернуться в игру',
+  soundOn: 'Звук: включён',
+  soundOff: 'Звук: выключен',
   help: 'Как играть',
   helpText: [
     'Нажмите на клетку, чтобы идти туда, на монстра — чтобы атаковать.',

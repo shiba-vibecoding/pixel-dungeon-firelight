@@ -1,4 +1,5 @@
 import type { HeroClass } from '@pd/core';
+import { audio } from './audio';
 import { t } from './i18n';
 
 /*
@@ -22,7 +23,11 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 function button(label: string, onClick: () => void, className = ''): HTMLButtonElement {
-  return el('button', { className: `pd-button ${className}`.trim(), textContent: label, onclick: onClick });
+  const click = (): void => {
+    audio.play('click');
+    onClick();
+  };
+  return el('button', { className: `pd-button ${className}`.trim(), textContent: label, onclick: click });
 }
 
 function show(content: HTMLElement, dim = true): void {
@@ -127,6 +132,10 @@ export interface MenuOptions {
 }
 
 export function showMenu(options: MenuOptions): void {
+  const sound = button(audio.enabled ? t.soundOn : t.soundOff, () => {
+    audio.setEnabled(!audio.enabled);
+    sound.textContent = audio.enabled ? t.soundOn : t.soundOff;
+  });
   show(
     el(
       'div',
@@ -135,6 +144,7 @@ export function showMenu(options: MenuOptions): void {
       button(t.resume, options.onResume, 'primary'),
       options.room && button(t.invite, options.onInvite),
       button(t.help, options.onHelp),
+      sound,
       button(t.toMenu, options.onExit),
     ),
   );

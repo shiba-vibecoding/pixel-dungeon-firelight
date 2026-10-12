@@ -1,4 +1,5 @@
 import { cellX, cellY, type Effect, heroById, isAlive, type MobKind, type World } from '@pd/core';
+import { audio } from './audio';
 import { capitalize, t } from './i18n';
 import { type AnimName, type Assets, type CharSprite, duration } from './sprites';
 import { haptic } from './telegram';
@@ -199,10 +200,12 @@ export class View {
             if (target) target.flashUntil = now + 160;
             const toHero = !effect.target.startsWith('#');
             this.float(effect.target, String(effect.damage), toHero ? COLORS.negative : COLORS.warning, now);
+            audio.play('hit', 0.8 + Math.random() * 0.45);
             if (effect.target === myId) haptic('hurt');
             else if (effect.attacker === myId) haptic('hit');
           } else {
             this.float(effect.target, t.miss, COLORS.neutral, now);
+            audio.play('miss');
           }
           break;
         }
@@ -219,8 +222,9 @@ export class View {
           if (effect.who.startsWith('#')) {
             const kind = this.puppets.get(effect.who)?.kind as MobKind | undefined;
             if (kind && effect.depth === this.depth) this.say(t.killed(t.mobs[kind]), COLORS.neutral, now);
-          } else if (effect.who !== myId) {
-            this.say(t.heroDied(this.name(world, effect.who)), COLORS.negative, now);
+          } else {
+            audio.play('death');
+            if (effect.who !== myId) this.say(t.heroDied(this.name(world, effect.who)), COLORS.negative, now);
           }
           break;
         }
@@ -239,6 +243,7 @@ export class View {
           this.float(effect.hero, t.levelUpFloat, COLORS.highlight, now);
           if (effect.hero === myId) {
             this.say(t.myLevelUp(effect.lvl), COLORS.highlight, now);
+            audio.play('levelup');
             haptic('success');
           } else {
             this.say(t.levelUp(this.name(world, effect.hero), effect.lvl), COLORS.highlight, now);
@@ -246,7 +251,10 @@ export class View {
           break;
         case 'discovered':
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.cell, start: now });
-          if (!discovered) this.say(t.found, COLORS.highlight, now);
+          if (!discovered) {
+            this.say(t.found, COLORS.highlight, now);
+            audio.play('secret');
+          }
           discovered = true;
           break;
         case 'searched': {

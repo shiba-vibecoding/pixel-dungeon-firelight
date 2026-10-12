@@ -47,18 +47,24 @@ export class Hud {
 
   constructor(private readonly assets: Assets) {}
 
-  layout(deviceWidth: number, deviceHeight: number): void {
+  /** HUD pixels kept clear at the top (notch, Telegram's buttons) and bottom (home indicator). */
+  private top = 0;
+  private bottom = 0;
+
+  layout(deviceWidth: number, deviceHeight: number, insetTop = 0, insetBottom = 0): void {
     // Roughly the original's proportions: a phone is about 240 HUD pixels wide.
     this.ui = Math.max(2, Math.round(Math.min(deviceWidth, deviceHeight * 0.75) / 240));
     this.width = Math.floor(deviceWidth / this.ui);
     this.height = Math.floor(deviceHeight / this.ui);
+    this.top = Math.ceil(insetTop / this.ui);
+    this.bottom = Math.ceil(insetBottom / this.ui);
     let x = 0;
     this.areas = TOOLS.map((tool) => {
-      const area = { id: tool.id, x, y: this.height - 25, w: tool.w, h: 25 };
+      const area = { id: tool.id, x, y: this.height - this.bottom - 25, w: tool.w, h: 25 };
       x += tool.w;
       return area;
     });
-    this.areas.push({ id: 'menu', x: this.width - 20, y: 0, w: 20, h: 20 });
+    this.areas.push({ id: 'menu', x: this.width - 20, y: this.top, w: 20, h: 20 });
   }
 
   /** The button under a point in device pixels, if any. */
@@ -73,18 +79,24 @@ export class Hud {
   /** True if a point (device pixels) is covered by the HUD, so taps there do not walk. */
   covers(px: number, py: number): boolean {
     const y = py / this.ui;
-    return y < 34 || y >= this.height - 25;
+    return y < this.top + 34 || y >= this.height - this.bottom - 25;
   }
 
   draw(ctx: CanvasRenderingContext2D, state: HudState, now: number): void {
     const { assets, ui } = this;
     const W = this.width;
-    const H = this.height;
+    const T = this.top;
+    const B = this.height - this.bottom;
     ctx.imageSmoothingEnabled = false;
-    ctx.setTransform(ui, 0, 0, ui, 0, 0);
     ctx.globalAlpha = 1;
+    if (T > 0) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W * ui + ui, T * ui);
+    }
 
     // Status pane: a nine-patch whose middle column stretches.
+    ctx.setTransform(ui, 0, 0, ui, 0, T * ui);
     const status = assets.status;
     ctx.drawImage(status, 0, 0, 80, 64, 0, 0, 80, 64);
     if (W > 128) ctx.drawImage(status, 80, 0, 1, 64, 80, 0, W - 128, 64);
@@ -107,6 +119,7 @@ export class Hud {
     ctx.drawImage(assets.hpBar, 0, 0, Math.ceil(64 * hp), 4, 30, 3, Math.ceil(64 * hp), 4);
     const exp = me.exp / maxExp(me);
     if (exp > 0) ctx.drawImage(assets.expBar, 0, 0, 16, 1, 0, 0, W * exp, 1);
+    ctx.setTransform(ui, 0, 0, ui, 0, 0);
 
     // Pressed toolbar buttons light up briefly.
     for (const area of this.areas) {
@@ -120,11 +133,11 @@ export class Hud {
     }
 
     // Text at device resolution.
-    this.text(ctx, String(me.lvl), 27.5, 31, 8, '#ffeba4', 'center');
-    this.text(ctx, String(me.depth), W - 42, 11.5, 8, '#cacfc2', 'right');
-    this.text(ctx, `${Math.max(0, me.hp)}/${me.ht}`, 34, 15.5, 7, '#ffffff', 'left');
+    this.text(ctx, String(me.lvl), 27.5, T + 31, 8, '#ffeba4', 'center');
+    this.text(ctx, String(me.depth), W - 42, T + 11.5, 8, '#cacfc2', 'right');
+    this.text(ctx, `${Math.max(0, me.hp)}/${me.ht}`, 34, T + 15.5, 7, '#ffffff', 'left');
 
-    let y = 40;
+    let y = T + 40;
     for (const hero of state.party) {
       const online = state.online.includes(hero.id);
       const color = !isAlive(hero) ? '#888888' : online ? '#ffffff' : '#aaaaaa';
@@ -142,11 +155,11 @@ export class Hud {
       const [sx, sy, w, h] = ICONS.busy;
       ctx.setTransform(ui, 0, 0, ui, 0, 0);
       ctx.save();
-      ctx.translate(W / 2 - 4 - notice.length * 1.6, 42);
+      ctx.translate(W / 2 - 4 - notice.length * 1.6, T + 42 + state.party.length * 10);
       ctx.rotate(now / 300);
       ctx.drawImage(assets.icons, sx, sy, w, h, -w / 2, -h / 2, w, h);
       ctx.restore();
-      this.text(ctx, notice, W / 2 + 2, 44, 7, COLORS.highlight, 'center');
+      this.text(ctx, notice, W / 2 + 2, T + 44 + state.party.length * 10, 7, COLORS.highlight, 'center');
     }
 
     // Message log above the toolbar; old lines fade away.
@@ -154,8 +167,13 @@ export class Hud {
     lines.forEach((line, i) => {
       const age = now - line.time;
       const alpha = age < 6000 ? 1 : 1 - (age - 6000) / 2000;
-      this.text(ctx, line.text, 3, H - 29 - (lines.length - 1 - i) * 10, 8, line.color, 'left', alpha);
+      this.text(ctx, line.text, 3, B - 29 - (lines.length - 1 - i) * 10, 8, line.color, 'left', alpha);
     });
+    if (this.bottom > 0) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, B * ui, W * ui + ui, this.bottom * ui + ui);
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 

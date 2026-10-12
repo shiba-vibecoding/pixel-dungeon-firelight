@@ -1,14 +1,17 @@
 import {
   adjacent, blockers, cellX, cellY, createWorld, DEEPEST_AVAILABLE, type Effect, exploredCells, findPath, type Hero,
-  heroById, type HeroClass, HEIGHT, isAlive, levelAt, mobById, visibleCells, WIDTH, type World,
+  heroById, type HeroClass, HEIGHT, isAlive, levelAt, mobById, T, visibleCells, WIDTH, type World,
 } from '@pd/core';
+import { audio } from './audio';
 import { Hud } from './hud';
 import { t } from './i18n';
 import { bakeLevel, type Camera, render } from './render';
 import { hideOverlay, overlayOpen, showDeath, showHelp, showMenu, showTitle, toast } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
-import { haptic, initData, initTelegram, inTelegram, invitedRoom, shareInvite, telegramName } from './telegram';
+import {
+  backButton, haptic, initData, initTelegram, inTelegram, invitedRoom, onLayoutChange, shareInvite, telegramName,
+} from './telegram';
 import { STEP_MS, TILE, View } from './view';
 
 /*
@@ -105,6 +108,9 @@ function enterGame(next: Session, roomId: string | null): void {
   seenGeneration = -1;
   deathShown = -1;
   walk.reset();
+  audio.playMusic('game');
+  // Telegram's back button opens the menu, or closes whatever window is open.
+  backButton(() => (overlayOpen() ? hideOverlay() : openMenu()));
   view.log = [];
   view.say(t.welcome);
   hideOverlay();
@@ -137,6 +143,8 @@ function toTitle(): void {
   session = null;
   room = null;
   setRoomInUrl(null);
+  audio.playMusic('theme');
+  backButton(null);
   const invited = invitedRoom();
   showTitle({
     heroClass,
@@ -318,6 +326,7 @@ canvas.addEventListener('pointerdown', (event) => {
   const px = (event.clientX - rect.left) * (canvas.width / rect.width);
   const py = (event.clientY - rect.top) * (canvas.height / rect.height);
   const button = hud.hit(px, py);
+  if (button) audio.play('click');
   if (button === 'wait' || button === 'search') act(button);
   else if (button === 'help') showHelp(hideOverlay);
   else if (button === 'menu') openMenu();
@@ -368,10 +377,12 @@ function resize(): void {
   canvas.height = Math.round(canvas.clientHeight * dpr);
   // About 12 tiles across the narrow side, at an integer zoom for crisp pixels.
   camera.zoom = Math.max(1, Math.round(Math.min(canvas.width, canvas.height) / (TILE * 12)));
-  hud.layout(canvas.width, canvas.height);
+  const safe = getComputedStyle(document.getElementById('safe-area')!);
+  hud.layout(canvas.width, canvas.height, parseFloat(safe.paddingTop) * dpr || 0, parseFloat(safe.paddingBottom) * dpr || 0);
   document.documentElement.style.setProperty('--px', String(hud.ui / dpr));
 }
 addEventListener('resize', resize);
+onLayoutChange(() => requestAnimationFrame(resize));
 resize();
 
 /* Frame loop */
@@ -391,17 +402,19 @@ let busySince = 0;
 const backdrop = (() => {
   const world = createWorld(20240501);
   const level = levelAt(world, 1);
-  return { level, baked: bakeLevel(level, assets) };
+  const all = new Array<boolean>(level.map.length).fill(true);
+  return { level, baked: bakeLevel(level, assets), all, view: new View(assets) };
 })();
 
+/** Where my hero was last frame, for footstep and stairs sounds. */
+let lastPlace = { generation: -1, depth: 0, pos: -1 };
+
 function drawBackdrop(now: number): void {
-  const { level } = backdrop;
+  const { level, all } = backdrop;
   const span = WIDTH * TILE;
   camera.x = Math.round(span / 2 - canvas.width / camera.zoom / 2 + Math.sin(now / 9000) * 60);
   camera.y = Math.round(span / 2 - canvas.height / camera.zoom / 2 + Math.cos(now / 11000) * 40);
-  const all = new Array<boolean>(level.map.length).fill(true);
-  const none = new View(assets);
-  render(ctx, level, backdrop.baked, all, all, none, '', assets, camera, now);
+  render(ctx, level, backdrop.baked, all, all, backdrop.view, '', assets, camera, now);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = 'rgba(15, 13, 13, 0.6)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -435,6 +448,19 @@ function tick(now: number): void {
   }
 
   const level = levelAt(world, me.depth);
+
+  // Footsteps, doors and stairs of my own hero.
+  if (lastPlace.generation === session.generation && isAlive(me)) {
+    if (me.depth !== lastPlace.depth) {
+      audio.play('descend');
+    } else if (me.pos !== lastPlace.pos) {
+      const terrain = level.map[me.pos]!;
+      audio.play(terrain >= T.WATER_TILES && terrain <= T.WATER ? 'water' : 'step', 1, 0.5);
+      if (terrain === T.OPEN_DOOR) audio.play('door_open', 1, 0.6);
+    }
+  }
+  lastPlace = { generation: session.generation, depth: me.depth, pos: me.pos };
+
   const key = `${me.depth}:${world.turn}:${session.generation}`;
   if (key !== bakedKey) {
     baked = bakeLevel(level, assets);
