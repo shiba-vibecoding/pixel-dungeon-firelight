@@ -1,5 +1,5 @@
 import {
-  BRUTE_ENRAGED_DAMAGE, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
+  baseKind, BRUTE_ENRAGED_DAMAGE, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
   maxExp, type Mob, MOBS, mobStats, ringBonus,
 } from './actors';
 import {
@@ -35,7 +35,7 @@ function armor(char: Char): number {
 function damageRoll(ctx: Ctx, char: Char, range?: readonly [number, number]): number {
   if (range) return ctx.rng.normalIntRange(range[0], range[1]);
   if (isHero(char)) return heroDamageRoll(char, ctx.rng);
-  const [min, max] = char.kind === 'brute' && char.enraged ? BRUTE_ENRAGED_DAMAGE : mobStats(char).damage;
+  const [min, max] = baseKind(char.kind) === 'brute' && char.enraged ? BRUTE_ENRAGED_DAMAGE : mobStats(char).damage;
   return ctx.rng.normalIntRange(min, max);
 }
 
@@ -70,7 +70,7 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   if (!isHero(attacker)) {
     // The vampire bat drinks what it draws.
     if (attacker.kind === 'bat') attacker.hp += Math.min(damage, attacker.ht - attacker.hp);
-    if (attacker.kind === 'thief' && !attacker.item && isHero(defender)) steal(ctx, attacker, defender);
+    if (baseKind(attacker.kind) === 'thief' && !attacker.item && isHero(defender)) steal(ctx, attacker, defender);
     // Elemental.attackProc: half its blows set their target alight.
     if (attacker.kind === 'elemental' && ctx.rng.int(2) === 0 && !isWater(ctx.level.map[defender.pos]!)) {
       defender.burning = Math.max(defender.burning ?? 0, ELEMENTAL_BURNING);
@@ -83,7 +83,11 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
         ctx.effects.push({ type: 'charmed', hero: defender.id });
       }
       // Scorpio.attackProc: half its stings cripple.
-      if (attacker.kind === 'scorpio' && ctx.rng.int(2) === 0) {
+      // Albino.attackProc: half its bites leave the hero bleeding.
+      if (attacker.kind === 'albino' && ctx.rng.int(2) === 0 && damage > 0) defender.bleeding = Math.max(defender.bleeding ?? 0, damage);
+      // Senior.attackProc: now and then a blow stuns.
+      if (attacker.kind === 'senior' && ctx.rng.int(10) === 0) defender.paralysed = Math.max(defender.paralysed, 1);
+      if (baseKind(attacker.kind) === 'scorpio' && ctx.rng.int(2) === 0) {
         if (defender.crippled <= 0) ctx.effects.push({ type: 'crippled', hero: defender.id });
         defender.crippled = Math.max(defender.crippled, CRIPPLE_TURNS);
       }
@@ -114,6 +118,14 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
   if (isHero(attacker) && !isHero(defender) && !thrown) weaponProc(ctx, attacker, defender, damage);
   if (isHero(defender) && !isHero(attacker)) damage = armorProc(ctx, attacker, defender, damage);
   if (!isHero(defender) && defender.kind === 'swarm') split(ctx, defender, damage);
+  // Acidic.defenseProc: striking it splashes acid back on the striker.
+  if (!isHero(defender) && defender.kind === 'acidic' && isHero(attacker) && damage > 0) {
+    const acid = ctx.rng.intRange(0, damage);
+    if (acid > 0) {
+      ctx.effects.push({ type: 'hurt', depth: ctx.depth, who: attacker.id, damage: acid });
+      hurt(ctx, attacker, acid, defender);
+    }
+  }
   // Yog.defenseProc: struck, Yog-Dzewa spawns a larva next to it.
   if (!isHero(defender) && defender.kind === 'yog') spawnLarva(ctx, defender);
   ctx.effects.push({ type: 'attack', depth: ctx.depth, attacker: attacker.id, target: defender.id, hit, damage });
@@ -194,6 +206,8 @@ function steal(ctx: Ctx, thief: Mob, hero: Hero): void {
   hero.items.splice(hero.items.indexOf(item), 1);
   thief.item = item;
   thief.state = 'fleeing';
+  // Bandit.steal: a crazy bandit throws something in the hero's eyes as well.
+  if (thief.kind === 'bandit') hero.blind = Math.max(hero.blind ?? 0, ctx.rng.intBetween(5, 12));
   ctx.effects.push({ type: 'stole', depth: ctx.depth, mob: thief.id, hero: hero.id, item });
 }
 
@@ -215,7 +229,7 @@ function split(ctx: Ctx, swarm: Mob, damage: number): void {
 }
 
 /** What hurts without being a character. */
-export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred';
+export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 'hunger' | 'bones' | 'gas' | 'fall' | 'deferred' | 'bleeding';
 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
@@ -252,7 +266,7 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
   }
   victim.hp -= damage;
   // Brute.damage: below a quarter of its health, the brute flies into a rage.
-  if (!isHero(victim) && victim.kind === 'brute' && isAlive(victim) && !victim.enraged && victim.hp < victim.ht / 4) {
+  if (!isHero(victim) && baseKind(victim.kind) === 'brute' && isAlive(victim) && !victim.enraged && victim.hp < victim.ht / 4) {
     victim.enraged = true;
     victim.time += 1;
     ctx.effects.push({ type: 'enraged', depth: ctx.depth, mob: victim.id });
@@ -334,7 +348,7 @@ function mobDied(ctx: Ctx, mob: Mob): void {
 function dropLoot(ctx: Ctx, mob: Mob): Item | null {
   const { rng } = ctx;
   const generator = (): ItemGenerator => new ItemGenerator(rng, ctx.depth);
-  switch (mob.kind) {
+  switch (baseKind(mob.kind)) {
     case 'gnoll':
       return rng.float() < 0.5 ? rollGold(rng, ctx.depth) : null;
     case 'crab':
@@ -418,7 +432,7 @@ function resurrect(ctx: Ctx, hero: Hero): void {
   hero.items = hero.items.filter((item) => ['key', 'quest', 'tome'].includes(itemDef(item.kind).category));
   Object.assign(hero, {
     hp: hero.ht, gold: 0, exp: 0, killedBy: null, intent: null, ooze: -1, poison: 0, burning: 0, paralysed: 0, rooted: 0,
-    slowed: 0, weakened: 0, crippled: 0, charmed: 0, charmedBy: null, hunger: 0, deferred: 0, blind: 0,
+    slowed: 0, weakened: 0, crippled: 0, charmed: 0, charmedBy: null, hunger: 0, deferred: 0, blind: 0, bleeding: 0,
   });
   leaveCell(world, level, depth, hero.pos);
   hero.pos = freeCellNear(world, level, depth, level.entrance);

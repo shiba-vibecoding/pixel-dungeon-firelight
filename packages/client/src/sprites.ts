@@ -1,4 +1,4 @@
-import type { HeroClass, MobKind } from '@pd/core';
+import { baseKind, type HeroClass, type MobKind } from '@pd/core';
 
 /* Sprite sheets and animations of the original (HeroSprite, RatSprite, …). */
 
@@ -221,6 +221,32 @@ const MOB_SPRITES: Record<MobKind, { w: number; h: number; anims: Record<AnimNam
       anim(20, [0], true), anim(10, [0]), anim(10, [0, 3, 2, 1, 0, 3, 2, 1, 0]),
     ),
   },
+  // The rare variants share their kind's sheet, further along it.
+  albino: {
+    w: 16,
+    h: 15,
+    anims: basic(anim(2, [16, 16, 16, 17], true), anim(10, [22, 23, 24, 25, 26], true), anim(15, [18, 19, 20, 21]), anim(10, [27, 28, 29, 30])),
+  },
+  bandit: {
+    w: 12,
+    h: 13,
+    anims: basic(anim(1, [21, 21, 21, 22, 21, 21, 21, 21, 22], true), anim(15, [21, 21, 23, 24, 24, 25], true), anim(12, [31, 32, 33]), anim(10, [25, 27, 28, 29, 30])),
+  },
+  shielded: {
+    w: 12,
+    h: 16,
+    anims: basic(anim(2, [21, 21, 21, 22, 21, 21, 22, 22], true), anim(12, [25, 26, 27, 28], true), anim(12, [23, 24]), anim(12, [29, 30, 31])),
+  },
+  senior: {
+    w: 15,
+    h: 14,
+    anims: basic(anim(6, [18, 17, 18, 19], true), anim(15, [28, 29, 30, 31, 32, 33], true), anim(12, [20, 21, 20, 21]), anim(15, [18, 24, 25, 25, 26, 27])),
+  },
+  acidic: {
+    w: 18,
+    h: 17,
+    anims: basic(anim(12, [14, 14, 14, 14, 14, 14, 14, 14, 15, 16, 15, 16, 15, 16], true), anim(4, [19, 20], true), anim(15, [14, 17, 18]), anim(12, [14, 21, 22, 23, 24])),
+  },
   sheep: {
     w: 16,
     h: 15,
@@ -283,7 +309,7 @@ export async function loadAssets(base: string): Promise<Assets> {
   const hero = (image: HTMLImageElement): CharSprite => ({ sheet: sheet(image, 12, 15), anims: HERO_ANIMS });
   const mob = (kind: MobKind): CharSprite => {
     const spec = MOB_SPRITES[kind];
-    return { sheet: sheet(images[kind], spec.w, spec.h), anims: spec.anims };
+    return { sheet: sheet(images[baseKind(kind) as (typeof names)[number]], spec.w, spec.h), anims: spec.anims };
   };
   return {
     tiles: [images.tiles0, images.tiles1, images.tiles2, images.tiles3, images.tiles4],

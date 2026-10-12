@@ -420,6 +420,13 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
     }
   }
   if (hero.blind) hero.blind = Math.max(0, hero.blind - time);
+  // Bleeding: every turn it hurts, and eases, until it stops (Bleeding.act).
+  for (let i = Math.floor(hero.time) - Math.floor(hero.time - time); i > 0 && (hero.bleeding ?? 0) > 0 && isAlive(hero); i--) {
+    hero.bleeding = ctx.rng.intRange(Math.trunc(hero.bleeding! / 2), hero.bleeding!);
+    if (hero.bleeding <= 0) break;
+    ctx.effects.push({ type: 'hurt', depth: hero.depth, who: hero.id, damage: hero.bleeding });
+    hurt(ctx, hero, hero.bleeding, 'bleeding');
+  }
   if (hero.levitating) hero.levitating = Math.max(0, hero.levitating - time);
   if (hero.gasImmune) hero.gasImmune = Math.max(0, hero.gasImmune - time);
   if (hero.burning > 0) {
@@ -907,7 +914,7 @@ function reviveFallen(world: World, depth: number, effects: Effect[]): void {
     Object.assign(fallen, {
       hp: Math.max(1, Math.floor(fallen.ht / 2)), depth, intent: null, regen: 0, ooze: -1,
       poison: 0, burning: 0, paralysed: 0, rooted: 0, slowed: 0, hunger: 0, weakened: 0, crippled: 0, charmed: 0,
-      charmedBy: null, deferred: 0, blind: 0,
+      charmedBy: null, deferred: 0, blind: 0, bleeding: 0,
     });
     place(world, fallen, level, level.entrance);
     effects.push({ type: 'revived', hero: fallen.id });

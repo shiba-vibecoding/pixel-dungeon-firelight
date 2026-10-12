@@ -248,6 +248,8 @@ export class View {
     let discovered = false;
     // Traps announce their own gas and flames.
     let trapped = false;
+    const mobKind = (depth: number, id: string, fallback: MobKind): MobKind =>
+      world.floors[depth]?.mobs.find((mob) => mob.id === id)?.kind ?? fallback;
     for (const effect of effects) {
       switch (effect.type) {
         case 'attack': {
@@ -524,7 +526,7 @@ export class View {
           audio.play('puff');
           break;
         case 'stole':
-          if (effect.hero === myId) this.say(t.stole(t.mobs.thief, itemName(world, effect.item)), COLORS.warning, now);
+          if (effect.hero === myId) this.say(t.stole(t.mobs[mobKind(effect.depth, effect.mob, 'thief')], itemName(world, effect.item)), COLORS.warning, now);
           else if (effect.depth === this.depth) this.say(t.robbed(this.name(world, effect.hero)), COLORS.warning, now);
           break;
         case 'cornered':
@@ -533,7 +535,7 @@ export class View {
         case 'enraged':
           if (effect.depth !== this.depth) break;
           this.float(effect.mob, '!!!', COLORS.negative, now);
-          this.say(t.enraged(t.mobs.brute), COLORS.warning, now);
+          this.say(t.enraged(t.mobs[mobKind(effect.depth, effect.mob, 'brute')]), COLORS.warning, now);
           break;
         case 'bones':
           if (effect.depth !== this.depth) break;

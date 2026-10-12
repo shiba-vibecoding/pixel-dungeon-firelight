@@ -1,4 +1,4 @@
-import { createMob, type Hero, type Mob } from './actors';
+import { baseKind, createMob, type Hero, type Mob } from './actors';
 import { randomRespawnCell } from './ai';
 import { type Ctx, dropItem } from './floor';
 import { collect } from './inventory';
@@ -46,7 +46,7 @@ const tokensOf = (hero: Hero): number => hero.items.find((item) => item.kind ===
 /** Imp.Quest.process: while the errand stands, each of the imp's targets slain leaves a token. */
 export function impQuestKill(ctx: Ctx, mob: Mob): void {
   const quest = ctx.world.impQuest;
-  if (quest?.given && !quest.done && mob.kind === quest.prey) dropItem(ctx.floor, mob.pos, createItem('quest.token'));
+  if (quest?.given && !quest.done && baseKind(mob.kind) === quest.prey) dropItem(ctx.floor, mob.pos, createItem('quest.token'));
 }
 
 /** Talking to the imp: the errand, a reminder, or the ring on offer. */

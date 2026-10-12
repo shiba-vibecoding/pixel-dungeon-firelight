@@ -107,6 +107,8 @@ export interface Hero {
   deferred?: number;
   /** Turns left of being blinded (a scroll of psionic blast): the hero sees nothing beyond arm's reach. */
   blind?: number;
+  /** Bleeding (an albino rat's bite): how hard it still bleeds; it hurts every turn, less and less. */
+  bleeding?: number;
   /** Turns left of floating above traps and chasms (a potion of levitation). */
   levitating?: number;
   /** Turns left of breathing no gas (a potion of purity). */
@@ -281,7 +283,8 @@ export type MobKind =
   | 'spinner' | 'dm300'
   | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead'
   | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva' | 'mimic'
-  | 'statue' | 'piranha' | 'imp' | 'sheep';
+  | 'statue' | 'piranha' | 'imp' | 'sheep'
+  | 'albino' | 'bandit' | 'shielded' | 'senior' | 'acidic';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -341,6 +344,12 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   // Guardians of special rooms, as strong as their depth (see mobStats): a statue that comes alive, armed;
   // piranhas that never leave their pool.
   statue: { name: 'animated statue', ht: 20, attack: 10, defense: 5, damage: [1, 4], dr: 1, exp: 0, maxLvl: 30, speed: 1 },
+  // Rare variants (Bestiary.mutable): one monster in thirty of these kinds is something worse.
+  albino: { name: 'albino rat', ht: 15, attack: 8, defense: 3, damage: [1, 5], dr: 1, exp: 2, maxLvl: 5, speed: 1 },
+  bandit: { name: 'crazy bandit', ht: 20, attack: 12, defense: 12, damage: [1, 7], dr: 3, exp: 5, maxLvl: 10, speed: 1, attackDelay: 0.5 },
+  shielded: { name: 'shielded brute', ht: 40, attack: 20, defense: 20, damage: [8, 18], dr: 10, exp: 8, maxLvl: 15, speed: 1 },
+  senior: { name: 'senior monk', ht: 70, attack: 30, defense: 30, damage: [12, 20], dr: 2, exp: 11, maxLvl: 21, speed: 1, attackDelay: 0.5 },
+  acidic: { name: 'acidic scorpio', ht: 95, attack: 36, defense: 24, damage: [20, 32], dr: 16, exp: 14, maxLvl: 25, speed: 1 },
   sheep: { name: 'sheep', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   imp: { name: 'ambitious imp', ht: 1, attack: 0, defense: 1000, damage: [0, 0], dr: 0, exp: 0, maxLvl: 0, speed: 1 },
   piranha: { name: 'giant piranha', ht: 15, attack: 22, defense: 12, damage: [1, 6], dr: 1, exp: 0, maxLvl: 30, speed: 2 },
@@ -468,5 +477,14 @@ const BESTIARY: Readonly<Record<number, ReadonlyArray<readonly [MobKind, number]
 
 export function rollMob(rng: Rng, depth: number): MobKind {
   const table = BESTIARY[depth] ?? BESTIARY[4]!;
-  return table[rng.chances(table.map(([, chance]) => chance))]![0];
+  const kind = table[rng.chances(table.map(([, chance]) => chance))]![0];
+  const variant = VARIANTS[kind];
+  return variant && rng.int(30) === 0 ? variant : kind;
 }
+
+/** Bestiary.mutable: the rare variant of a kind, which behaves like it in most respects. */
+const VARIANTS: Partial<Record<MobKind, MobKind>> = { rat: 'albino', thief: 'bandit', brute: 'shielded', monk: 'senior', scorpio: 'acidic' };
+const BASE_KINDS: Partial<Record<MobKind, MobKind>> = Object.fromEntries(Object.entries(VARIANTS).map(([base, variant]) => [variant, base]));
+
+/** The ordinary kind a rare variant is a version of (an albino rat is a rat). */
+export const baseKind = (kind: MobKind): MobKind => BASE_KINDS[kind] ?? kind;

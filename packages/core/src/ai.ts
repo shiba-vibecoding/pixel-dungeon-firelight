@@ -1,5 +1,5 @@
 import {
-  createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, isAlive, type Mob, type MobState, MOBS, mobStats, rollMob,
+  baseKind, createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, isAlive, type Mob, type MobState, MOBS, mobStats, rollMob,
 } from './actors';
 import { attack, hurt } from './combat';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
@@ -29,7 +29,7 @@ export const TIME_TO_RESPAWN = 50;
 
 /** How far a monster sees: the level's distance, but the demons of the halls see as if by torchlight. */
 function mobSight(mob: Mob, depth: number): number {
-  const demon = mob.kind === 'succubus' || mob.kind === 'eye' || mob.kind === 'scorpio';
+  const demon = mob.kind === 'succubus' || mob.kind === 'eye' || baseKind(mob.kind) === 'scorpio';
   return demon ? Math.max(viewDistance(depth), LIGHT_DISTANCE) : viewDistance(depth);
 }
 
@@ -317,7 +317,7 @@ function canAttack(ctx: Ctx, mob: Mob, enemy: Hero): boolean {
   }
   // The evil eye's gaze goes through anyone in the way; the scorpio only stings from afar.
   if (mob.kind === 'eye') return ballistica(ctx, mob.pos, enemy.pos, false).includes(enemy.pos);
-  if (mob.kind === 'scorpio') return !adjacent(mob.pos, enemy.pos) && ballistica(ctx, mob.pos, enemy.pos).at(-1) === enemy.pos;
+  if (baseKind(mob.kind) === 'scorpio') return !adjacent(mob.pos, enemy.pos) && ballistica(ctx, mob.pos, enemy.pos).at(-1) === enemy.pos;
   // The King goes to a pedestal to raise his undead while his court is short.
   if (mob.kind === 'king' && kingCanSummon(ctx, mob)) return mob.pos === kingPedestal(mob);
   return mob.pumped ? distance(mob.pos, enemy.pos) <= 2 : adjacent(mob.pos, enemy.pos);
@@ -472,7 +472,7 @@ function doAttack(ctx: Ctx, mob: Mob, enemy: Hero): void {
     if (hit) hurt(ctx, enemy, damage, mob);
     return;
   }
-  if (mob.kind === 'scorpio') {
+  if (baseKind(mob.kind) === 'scorpio') {
     ctx.effects.push({ type: 'zapped', depth: ctx.depth, from: mob.pos, to: enemy.pos, bolt: 'poison' });
   }
   if (mob.kind === 'king') {
@@ -567,7 +567,7 @@ export function ballistica(ctx: Ctx, from: number, to: number, hitChars = true):
 function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean {
   if (mob.kind === 'goo') mob.pumped = false;
   // Scorpio.getCloser: a hunting scorpio keeps its distance, to sting from afar.
-  if (mob.kind === 'scorpio' && mob.state === 'hunting') return mob.enemySeen && getFurther(ctx, mob, target) === 'moved';
+  if (baseKind(mob.kind) === 'scorpio' && mob.state === 'hunting') return mob.enemySeen && getFurther(ctx, mob, target) === 'moved';
   // Succubus.getCloser: she blinks up to her prey, now and then, at no cost in time.
   if (mob.kind === 'succubus' && fov[target] && distance(mob.pos, target) > 2 && (mob.jumpIn ?? 0) <= 0) {
     const trace = ballistica(ctx, mob.pos, target);

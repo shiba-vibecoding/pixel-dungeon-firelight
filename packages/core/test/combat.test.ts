@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  act, type Action, addHero, armorStats, blockers, canEnter, charAt, createItem, createMob, createWorld, type Effect,
-  F, floorAt, hasFlag, heroById, isAlive, type ItemKind, levelAt, MOBS, NEIGHBOURS8, RoomType, T, weaponStats,
+  act, type Action, addHero, armorStats, baseKind, blockers, canEnter, charAt, createItem, createMob, createWorld, type Effect,
+  F, floorAt, hasFlag, heroById, isAlive, type ItemKind, levelAt, MOBS, NEIGHBOURS8, Rng, rollMob, RoomType, T, weaponStats,
   type World,
 } from '../src/index';
 import { botAction, checkInvariants, pacify, unblock } from './helpers';
@@ -33,7 +33,10 @@ function freeNeighbour(world: World, depth: number, pos: number): number {
 
 describe('monsters', () => {
   it('populate sewer levels as the bestiary says, asleep in standard rooms', () => {
-    const allowed: Record<number, string[]> = { 1: ['rat'], 2: ['rat', 'gnoll'], 3: ['rat', 'gnoll', 'crab'], 4: ['rat', 'gnoll', 'crab'] };
+    // Now and then an albino rat instead of a rat.
+    const allowed: Record<number, string[]> = {
+      1: ['rat', 'albino'], 2: ['rat', 'albino', 'gnoll'], 3: ['rat', 'albino', 'gnoll', 'crab'], 4: ['rat', 'albino', 'gnoll', 'crab'],
+    };
     for (let seed = 1; seed <= 25; seed++) {
       const world = createWorld(seed);
       for (let depth = 1; depth <= 4; depth++) {
@@ -209,5 +212,46 @@ describe('co-op turns', () => {
     expect(heroById(world, 'alice')!.depth).toBe(2);
     expect(bob).toMatchObject({ depth: 2, hp: 10 });
     expect(bob.pos).not.toBe(heroById(world, 'alice')!.pos);
+  });
+});
+
+describe('rare variants', () => {
+  it('one monster in thirty of some kinds is a worse version of it', () => {
+    const rng = Rng.seeded(7);
+    let rats = 0;
+    let albinos = 0;
+    for (let i = 0; i < 6000; i++) {
+      const kind = rollMob(rng, 1);
+      if (kind === 'rat') rats++;
+      if (kind === 'albino') albinos++;
+    }
+    expect(albinos / (rats + albinos)).toBeGreaterThan(0.02);
+    expect(albinos / (rats + albinos)).toBeLessThan(0.05);
+    expect(baseKind('bandit')).toBe('thief');
+    expect(baseKind('rat')).toBe('rat');
+  });
+
+  it('an albino rat leaves its victim bleeding; an acidic scorpio burns whoever strikes it', () => {
+    const world = pacify(createWorld(3));
+    addHero(world, { id: 'p', name: 'P', heroClass: 'warrior' });
+    const hero = heroById(world, 'p')!;
+    Object.assign(hero, { hp: 1000, ht: 1000, defenseSkill: 0, attackSkill: 1000 });
+    const albino = createMob('#albino', 'albino', freeNeighbour(world, 1, hero.pos), 'hunting', floorAt(world, 1).now);
+    Object.assign(albino, { enemy: 'p', target: hero.pos, enemySeen: true, hp: 1000, ht: 1000 });
+    floorAt(world, 1).mobs.push(albino);
+    let bled = false;
+    for (let i = 0; i < 40 && !bled; i++) {
+      act(world, 'p', { type: 'wait' });
+      bled = (hero.bleeding ?? 0) > 0;
+    }
+    expect(bled).toBe(true);
+
+    floorAt(world, 1).mobs = [];
+    const acidic = createMob('#acidic', 'acidic', freeNeighbour(world, 1, hero.pos), 'sleeping', floorAt(world, 1).now);
+    Object.assign(acidic, { hp: 100000, ht: 100000 });
+    floorAt(world, 1).mobs.push(acidic);
+    const before = hero.hp;
+    for (let i = 0; i < 10; i++) act(world, 'p', { type: 'attack', target: '#acidic' });
+    expect(hero.hp).toBeLessThan(before);
   });
 });

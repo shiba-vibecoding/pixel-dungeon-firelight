@@ -40,7 +40,9 @@ Yendor on depth 26:
   spinners with their venom; fire elementals, dwarf monks, dwarf warlocks whose
   shadow bolts weaken, and golems; succubi that charm and blink, evil eyes whose
   gaze pierces, and scorpios that sting from afar and cripple; and mimics,
-  chests that bite.
+  chests that bite. One in thirty rats, thieves, brutes, monks and scorpios is a
+  rare, nastier variant: albino rats that make you bleed, crazy bandits that
+  blind, shielded brutes, senior monks and acidic scorpios.
 - Bosses: Goo on depth 5; Tengu in its locked arena on depth 10; DM-300 on
   depth 15, leaking gas and repairing itself; the King of Dwarves on depth 20,
   raising his undead court; Yog-Dzewa on depth 25 with its fists and larvae.
@@ -82,9 +84,8 @@ Yendor on depth 26:
 
 Not ported yet: cursed items and the scroll of remove curse; the scroll of
 mirror image and the glyph of multiplicity (there are no allies yet); the
-potion of might; the blacksmith's quest; dwarf monks disarming; the rare
-monster variants (albino rats, bandits, fetid rats); and gas clouds (gas acts
-at once on everyone within reach instead).
+potion of might; the blacksmith's quest; dwarf monks disarming; and gas clouds
+(gas acts at once on everyone within reach instead).
 
 ## How co-op works
 
