@@ -9,9 +9,10 @@ import {
  * only moves bytes, persists `state()` and wakes the room up at `deadline()`.
  *
  * Turns: a hero in danger who has not decided yet holds up companions on the
- * same depth (see blockers() in the core). The room gives them TURN_TIMEOUT
- * to act, then makes them wait a turn. Disconnected heroes never hold anyone
- * up: they wait at once.
+ * same depth (see blockers() in the core). Only a player who is playing holds
+ * the party: one who has done nothing for IDLE_TIMEOUT (reading the chat,
+ * looking away) waits at once, turn after turn, until they act again, as a
+ * disconnected one does. A player at the controls gets TURN_TIMEOUT at most.
  */
 
 export interface Delivery {
@@ -37,9 +38,18 @@ export interface RoomState {
   seats?: Record<string, string>;
   /** Since when each hero's player has been away (ms), by hero id. */
   offlineSince?: Record<string, number>;
+  /** When each hero's player last did something (ms), by hero id. */
+  activeAt?: Record<string, number>;
 }
 
-export const TURN_TIMEOUT = 12_000;
+/** The longest a party waits for a companion's move. */
+export const TURN_TIMEOUT = 8000;
+/**
+ * A player who has not acted for this long is not at the controls: the party does not wait
+ * for them (in play, a turn in a fight comes within a second or two; a party held up by a
+ * friend who had looked away, every turn, was the co-op's worst trouble).
+ */
+export const IDLE_TIMEOUT = 4000;
 
 /** Heroes per party; a shared invite link in a big chat must not flood one dungeon. */
 export const PARTY_SIZE = 4;
@@ -136,6 +146,7 @@ export class RoomLogic {
     const others = this.onlinePlayers().filter((id) => id !== player.id);
     this.online.add(player.id);
     if (this.saved.offlineSince) delete this.saved.offlineSince[player.id];
+    (this.saved.activeAt ??= {})[player.id] = now;
 
     if (!this.saved.world.heroes.some((hero) => hero.id === player.id)) {
       // Everyone already here learns about the newcomer as a regular event;
@@ -159,6 +170,7 @@ export class RoomLogic {
       case 'sync':
         return [{ to: [playerId], message: this.snapshot(playerId) }];
       case 'act': {
+        (this.saved.activeAt ??= {})[playerId] = now;
         const event: WorldEvent = { type: 'act', heroId: playerId, action: message.action };
         const result = applyEvent(this.saved.world, event);
         if (!result.ok) {
@@ -179,15 +191,20 @@ export class RoomLogic {
 
   /** When the room next needs to act on its own, if ever. */
   deadline(): number | null {
-    const times = Object.values(this.saved.holdingSince);
-    return times.length > 0 ? Math.min(...times) + TURN_TIMEOUT : null;
+    const times = Object.entries(this.saved.holdingSince).map(([id, since]) => Math.min(since + TURN_TIMEOUT, this.idleAt(id, since)));
+    return times.length > 0 ? Math.min(...times) : null;
+  }
+
+  /** When a hero's player counts as idle: IDLE_TIMEOUT after they last acted. */
+  private idleAt(heroId: string, fallback: number): number {
+    return (this.saved.activeAt?.[heroId] ?? fallback) + IDLE_TIMEOUT;
   }
 
   /** Makes heroes who ran out of time wait a turn. */
   tick(now: number): Delivery[] {
     const deliveries: Delivery[] = [];
     for (const [id, since] of Object.entries(this.saved.holdingSince)) {
-      if (now >= since + TURN_TIMEOUT) {
+      if (now >= since + TURN_TIMEOUT || now >= this.idleAt(id, since)) {
         delete this.saved.holdingSince[id];
         deliveries.push(...this.autoWait(id));
       }
@@ -200,7 +217,8 @@ export class RoomLogic {
     const deliveries: Delivery[] = [];
     for (let i = 0; i < 1000; i++) {
       const holding = blockers(this.saved.world);
-      const absent = holding.filter((id) => !this.online.has(id));
+      // Away, or not at the controls: they wait, and the party goes on.
+      const absent = holding.filter((id) => !this.online.has(id) || now >= this.idleAt(id, this.saved.holdingSince[id] ?? now));
       if (absent.length === 0) {
         const next: Record<string, number> = {};
         for (const id of holding) next[id] = this.saved.holdingSince[id] ?? now;

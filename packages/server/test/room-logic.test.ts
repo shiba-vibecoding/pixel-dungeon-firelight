@@ -4,7 +4,7 @@ import {
   type ServerMessage, type World,
 } from '@pd/core';
 import { botAction, pacify } from '../../core/test/helpers';
-import { type Delivery, RoomLogic, SEAT_TIMEOUT, STATE_FORMAT, TURN_TIMEOUT } from '../src/room-logic';
+import { type Delivery, IDLE_TIMEOUT, RoomLogic, SEAT_TIMEOUT, STATE_FORMAT, TURN_TIMEOUT } from '../src/room-logic';
 
 const alice = { id: 'alice', name: 'Alice', heroClass: 'warrior' as const };
 const bob = { id: 'bob', name: 'Bob', heroClass: 'mage' as const };
@@ -182,21 +182,38 @@ describe('co-op turns on the server', () => {
     return { room, replicas };
   }
 
-  it('gives a hero in danger a time limit, then makes them wait', () => {
+  it('waits for a hero in danger while their player is at the controls, then makes them wait', () => {
     const { room, replicas } = standoff();
     const world = room.state().world;
-    route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, 1000), replicas);
+    // Bob has just played: the party waits for him, as long as he could be thinking.
+    route(room.receive('bob', { type: 'act', action: { type: 'wait' } }, 1000), replicas);
+    route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, 1500), replicas);
+    route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, 1800), replicas);
     route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, 2000), replicas);
     expect(heroById(world, 'alice')!.intent).not.toBeNull();
-    expect(room.deadline()).toBe(2000 + TURN_TIMEOUT);
+    const deadline = room.deadline()!;
+    expect(deadline).toBeLessThanOrEqual(2000 + TURN_TIMEOUT);
+    expect(deadline).toBeGreaterThan(2000);
 
     // Too early: nothing happens.
-    route(room.tick(2000 + TURN_TIMEOUT - 1), replicas);
+    route(room.tick(deadline - 1), replicas);
     expect(heroById(world, 'alice')!.intent).not.toBeNull();
 
-    route(room.tick(2000 + TURN_TIMEOUT), replicas);
+    route(room.tick(deadline), replicas);
     expect(heroById(world, 'alice')!.intent).toBeNull();
-    expect(heroById(world, 'bob')!.time).toBe(1);
+    expect(room.deadline()).toBeNull();
+    expect(replicas.alice.world).toEqual(world);
+    expect(replicas.bob.world).toEqual(world);
+  });
+
+  it('does not wait for a player who has looked away', () => {
+    const { room, replicas } = standoff();
+    const world = room.state().world;
+    // Bob has done nothing since he came in: Alice plays on without waiting.
+    route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, IDLE_TIMEOUT + 1), replicas);
+    route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, IDLE_TIMEOUT + 2), replicas);
+    expect(heroById(world, 'alice')!.intent).toBeNull();
+    expect(heroById(world, 'alice')!.time).toBe(2);
     expect(room.deadline()).toBeNull();
     expect(replicas.alice.world).toEqual(world);
     expect(replicas.bob.world).toEqual(world);

@@ -1419,6 +1419,9 @@ const CAMERA_LAG_MS = 85;
 
 /** When the last game frame was drawn, for telling a phone that struggles. */
 let lastFrame = 0;
+/** Since when the party has been waiting for my move (0: it is not), and whether I have been told. */
+let holdingSince = 0;
+let holdingFelt = false;
 
 /** The middle of the free band, in device pixels, eased from frame to frame; -1 until known. */
 let freeMiddle = -1;
@@ -1761,6 +1764,18 @@ function tick(now: number): void {
     busySince && now - busySince > 400
       ? blockers(world).filter((id) => id !== me.id).map((id) => heroById(world, id)?.name ?? '?')
       : [];
+  // The other way round: the party is held up by me. Said (and felt) once it lasts a moment.
+  const holdingUp = session.mode === 'online' && isAlive(me) && !session.busy && blockers(world).includes(me.id);
+  if (holdingUp) {
+    if (!holdingSince) holdingSince = now;
+    else if (!holdingFelt && now - holdingSince > 700) {
+      holdingFelt = true;
+      haptic('hit');
+    }
+  } else {
+    holdingSince = 0;
+    holdingFelt = false;
+  }
   const quick = quickIndex(me);
   const quickItem = me.items[quick];
   const cancelChoice = (): void => {
@@ -1775,6 +1790,7 @@ function tick(now: number): void {
     : aim ? { kind: 'target', text: t.chooseTarget, cancel: { label: t.cancel, onClick: cancelChoice }, ...(aimed ? { item: itemSprite(aimed, world.run.labels) } : {}) }
     : examining ? { kind: 'examine', text: t.examinePrompt, cancel: { label: t.cancel, onClick: cancelChoice } }
     : waitingFor.length > 0 ? { kind: 'waiting', text: t.waitingShort, names: waitingFor }
+    : holdingFelt ? { kind: 'waiting', text: t.partyWaitsForYou }
     : null;
   hud.update(
     {
