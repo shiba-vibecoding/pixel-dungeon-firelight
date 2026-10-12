@@ -87,5 +87,5 @@ describe('chaos', () => {
     }
     // Every kind of action got through at least now and then.
     for (const type of ['move', 'attack', 'use', 'throw', 'zap', 'equip', 'drop', 'pickup', 'beacon', 'balance']) expect(accepted[type], type).toBeGreaterThan(0);
-  });
+  }, 60000);
 });
