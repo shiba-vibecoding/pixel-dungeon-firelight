@@ -90,6 +90,12 @@ export interface Puppet {
   lungeStart?: number;
   lungeX?: number;
   lungeY?: number;
+  /** Knocked back by a blow: when, and how far (world pixels, along the blow); it springs back at once. */
+  knockStart?: number;
+  knockX?: number;
+  knockY?: number;
+  /** Slain and leaving a body: its sprite stays whole to the end of its death, then lies as a corpse (fx.ts). */
+  laid?: boolean;
   /** Burning or poisoned: embers or bubbles rise off it. */
   burning?: boolean;
   poisoned?: boolean;
@@ -314,6 +320,7 @@ export class View {
       if (hp > 0 && !puppet.alive) {
         // Revived.
         puppet.alive = true;
+        puppet.laid = false;
         puppet.anim = 'idle';
         puppet.animStart = now;
       }

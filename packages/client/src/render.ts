@@ -117,15 +117,16 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   const sy = (Math.floor(frame / sheet.cols) + puppet.row) * sheet.h;
   // A melee lunge: forward and back again in a blink.
   const lunge = puppet.lungeStart !== undefined && now - puppet.lungeStart < LUNGE_MS ? Math.sin((Math.PI * (now - puppet.lungeStart)) / LUNGE_MS) : 0;
-  const dx = snap(x + (TILE - sheet.w) / 2 + lunge * (puppet.lungeX ?? 0));
-  const dy = snap(y + TILE - sheet.h + lunge * (puppet.lungeY ?? 0));
+  const knock = knockback(puppet, now);
+  const dx = snap(x + (TILE - sheet.w) / 2 + lunge * (puppet.lungeX ?? 0)) + knock * (puppet.knockX ?? 0);
+  const dy = snap(y + TILE - sheet.h + lunge * (puppet.lungeY ?? 0)) + knock * (puppet.knockY ?? 0);
 
   ctx.save();
   if (puppet.invisible) ctx.globalAlpha = 0.4;
   if (!puppet.alive) {
     if (puppet.isHero) {
       ctx.globalAlpha = 0.75;
-    } else {
+    } else if (!puppet.laid) {
       const left = puppet.removeAt - now;
       ctx.globalAlpha = Math.max(0, Math.min(1, left / 700));
     }
@@ -152,6 +153,22 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
 }
 
 const LUNGE_MS = 150;
+/** A blow knocks the struck back and they spring back in this long. */
+const KNOCK_MS = 120;
+
+/**
+ * How far along its knock-back a struck character is, 1 to 0: thrown the whole
+ * way at once, held a moment, then back in whole steps (knockX and knockY are
+ * whole pixels), as pixel art moves.
+ */
+function knockback(puppet: Puppet, now: number): number {
+  if (puppet.knockStart === undefined) return 0;
+  const k = (now - puppet.knockStart) / KNOCK_MS;
+  if (k < 0 || k >= 1) return 0;
+  const back = k < 0.25 ? 1 : 1 - (k - 0.25) / 0.75;
+  const reach = Math.max(Math.abs(puppet.knockX ?? 0), Math.abs(puppet.knockY ?? 0)) || 1;
+  return Math.round(back * reach) / reach;
+}
 
 function drawHealth(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y: number): void {
   const top = snap(y + TILE - puppet.sprite.sheet.h - 3);
@@ -235,6 +252,9 @@ export function render(
     if (!explored[plant.pos]) continue;
     ctx.drawImage(assets.plants, plant.index * 16, 0, 16, 16, (plant.pos % WIDTH) * TILE, Math.trunc(plant.pos / WIDTH) * TILE, 16, 16);
   }
+  // What fights left on the floor (blood, chunks, bodies), under what lies there: remembered
+  // where the party has been, and dimmed with the rest of it by the fog.
+  fx.drawDecals(ctx, now, (x, y) => explored[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true);
   scene.under?.(ctx);
   for (const heap of scene.heaps) {
     if (!explored[heap.pos]) continue;
@@ -343,9 +363,7 @@ export function render(
   // so what comes into sight surfaces quickly and what leaves it sinks slowly.
   drawFog(ctx, level, visible, explored, now);
 
-  // Splats on the floor, where it can be seen.
   const seen = (x: number, y: number): boolean => visible[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true;
-  fx.drawDecals(ctx, now, seen);
 
   // Characters, back to front. Monsters only show where the party can see.
   const shown = [...view.puppets.values()]
@@ -424,7 +442,8 @@ export function render(
     const sx = (floater.x - camera.x) * camera.zoom;
     const sy = (floater.y - camera.y) * camera.zoom;
     const numeric = /^\d+$/.test(floater.text);
-    const kind = floater.word ? 'word' : numeric ? ((floater.scale ?? 1) > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
+    const scale = floater.scale ?? 1;
+    const kind = floater.word ? 'word' : numeric ? (scale >= 2 ? 'kill' : scale > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
     floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px);
   }
   ctx.globalAlpha = 1;

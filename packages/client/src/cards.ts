@@ -299,10 +299,11 @@ export function slainCard(ctx: CanvasRenderingContext2D, text: string, x: number
  * 'big' is a blow of a quarter of its health or more; words rise the same way.
  */
 export function floatNumber(
-  ctx: CanvasRenderingContext2D, text: string, kind: 'damage' | 'heal' | 'big' | 'word', color: string, x: number, y: number, t: number, px: number,
+  ctx: CanvasRenderingContext2D, text: string, kind: 'damage' | 'heal' | 'big' | 'kill' | 'word', color: string, x: number, y: number, t: number, px: number,
 ): boolean {
   const k = step(TIMELINES.number, t);
-  const scale = kind === 'big' ? 3 : 2;
+  // A heavy blow's number lands big, a killing blow's bigger still.
+  const scale = kind === 'kill' ? 4 : kind === 'big' ? 3 : 2;
   if (k.a > 0) {
     fxText(ctx, text, x, y - 2 * scale * px + k.dy * scale * px, px, {
       font: 'small', scale, alpha: k.a, shadow: 0,
