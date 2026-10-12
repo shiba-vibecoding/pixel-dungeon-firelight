@@ -114,6 +114,8 @@ export class View {
   bannerStart = 0;
   /** A boss's title card: who, and when it appeared. */
   bossIntro: { kind: MobKind; start: number } | null = null;
+  /** My level-up card: the new level, and when it appeared. */
+  levelCard: { lvl: number; start: number } | null = null;
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
   projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string }> = [];
 
@@ -127,6 +129,7 @@ export class View {
     this.flashes = [];
     this.bannerStart = 0;
     this.bossIntro = null;
+    this.levelCard = null;
     this.projectiles = [];
   }
 

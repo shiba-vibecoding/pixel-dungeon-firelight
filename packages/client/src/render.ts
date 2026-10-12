@@ -9,6 +9,7 @@ import { t } from './i18n';
 export const FONT = '"Pixelify Sans", ui-monospace, monospace';
 /** How long a boss's title card stays up. */
 const BOSS_CARD_MS = 3200;
+const LEVEL_CARD_MS = 1800;
 
 export interface Camera {
   /** World pixel shown at the canvas's top-left corner. */
@@ -313,6 +314,27 @@ export function render(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   fx.drawScreen(ctx, canvas.width, canvas.height, now);
+
+  // My level-up: the new level, golden, for a moment.
+  const card = view.levelCard;
+  if (card && now - card.start < LEVEL_CARD_MS) {
+    const t0 = now - card.start;
+    const size = Math.round(Math.min(canvas.width / 11, 10 * camera.zoom));
+    const swell = 1 + Math.max(0, 1 - t0 / 250) * 0.4;
+    ctx.globalAlpha = Math.max(0, Math.min(1, t0 / 200, (LEVEL_CARD_MS - t0) / 500));
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height * 0.36 - (t0 / LEVEL_CARD_MS) * size * 0.6);
+    ctx.scale(swell, swell);
+    ctx.font = `${size}px ${FONT}`;
+    ctx.lineWidth = Math.max(3, size / 6);
+    ctx.strokeStyle = '#000';
+    const text = t.levelCard(card.lvl);
+    ctx.strokeText(text, 0, 0);
+    ctx.fillStyle = '#ffe070';
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
 
   // A boss's title card: its name and epithet, large, as it notices the party.
   const intro = view.bossIntro;

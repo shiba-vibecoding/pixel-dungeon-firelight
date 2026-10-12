@@ -481,6 +481,7 @@ const en = {
   mobStates: { sleeping: 'It is asleep.', wandering: 'It is wandering about.', hunting: 'It is hunting.', fleeing: 'It is fleeing.' } as Record<string, string>,
   heapNames: { chest: 'chest', mimic: 'chest', lockedChest: 'locked chest', crystalChest: 'crystal chest', skeleton: 'skeletal remains', tomb: 'tomb' } as Record<string, string>,
   impGreeting: 'Hello, friend!',
+  levelCard: (lvl: number) => `Level ${lvl}!`,
   bossEpithets: {
     goo: 'master of the sewers', tengu: 'the assassin of the prison', dm300: 'the guardian machine', king: 'lord of the undead court',
     yog: 'the Old God',
@@ -1195,6 +1196,7 @@ const ru: Strings = {
   mobStates: { sleeping: 'Спит.', wandering: 'Бродит.', hunting: 'Охотится.', fleeing: 'Убегает.' },
   heapNames: { chest: 'сундук', mimic: 'сундук', lockedChest: 'запертый сундук', crystalChest: 'хрустальный сундук', skeleton: 'останки скелета', tomb: 'гробница' },
   impGreeting: 'Привет, друг!',
+  levelCard: (lvl) => `Уровень ${lvl}!`,
   bossEpithets: {
     goo: 'владыка сточных вод', tengu: 'убийца из тюрьмы', dm300: 'машина-страж', king: 'владыка мёртвого двора', yog: 'Древний бог',
   },

@@ -149,6 +149,17 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     case 'bossSlain':
       fx.shake(6, 1200, now);
       return;
+    case 'victory': {
+      // The Amulet of Yendor: a shower of gold over everything in sight.
+      const at = centreOf(view, effect.hero, now);
+      if (!at) return;
+      for (let i = 0; i < 6; i++) {
+        fx.burst(at.x + (Math.random() - 0.5) * 120, at.y - 60 - Math.random() * 40, now + i * 120, { count: 30, colors: GOLD, glow: true, speed: [10, 50], life: [1200, 2200], gravity: 40, drag: 0.5, size: [1, 2], spread: 30 });
+      }
+      fx.flash('255, 240, 160', 0.6, 1200, now);
+      fx.shake(3, 600, now);
+      return;
+    }
     case 'yell':
       // A boss that notices the heroes: the ground trembles.
       if (here(effect.depth) && effect.line === 'notice' && BOSSES.has(effect.kind)) {
@@ -160,7 +171,10 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     case 'levelUp': {
       const at = centreOf(view, effect.hero, now);
       burst(at, now, { count: 46, colors: GOLD, glow: true, speed: [20, 70], life: [700, 1400], rise: 40, drag: 0.4, size: [1, 2], spread: 4 });
-      if (effect.hero === myId) fx.flash('255, 230, 120', 0.25, 500, now);
+      if (effect.hero === myId) {
+        fx.flash('255, 230, 120', 0.25, 500, now);
+        view.levelCard = { lvl: effect.lvl, start: now };
+      }
       return;
     }
     case 'healed': case 'dew': case 'vial': {
