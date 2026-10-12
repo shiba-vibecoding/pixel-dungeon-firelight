@@ -88,4 +88,35 @@ describe('chaos', () => {
     // Every kind of action got through at least now and then.
     for (const type of ['move', 'attack', 'use', 'throw', 'zap', 'equip', 'drop', 'pickup', 'beacon', 'balance']) expect(accepted[type], type).toBeGreaterThan(0);
   }, 60000);
+
+  it('a world saved as JSON in the middle of chaos carries on exactly like the original', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const rng = Rng.seeded(seed * 104729);
+      const world = createWorld(seed);
+      addHero(world, { id: 'a', name: 'A', heroClass: (['warrior', 'mage', 'rogue', 'huntress'] as const)[seed % 4]! });
+      addHero(world, { id: 'b', name: 'B', heroClass: (['mage', 'huntress', 'warrior', 'rogue'] as const)[seed % 4]! });
+      const depth = 1 + (seed % 6) * 4;
+      for (const id of ['a', 'b']) {
+        const hero = heroById(world, id)!;
+        hero.depth = depth;
+        const entrance = levelAt(world, depth).entrance;
+        hero.pos = id === 'a' ? entrance : NEIGHBOURS8.map((n) => entrance + n).find((c) => canEnter(levelAt(world, depth), c) && !charAt(world, depth, c))!;
+        hero.time = floorAt(world, depth).now;
+        stock(world, id, rng);
+      }
+      let copy: World | null = null;
+      for (let step = 0; step < 500 && !world.over; step++) {
+        // Halfway through, the world goes through a save and a load (or over the wire, to a co-op replica).
+        if (step === 250) copy = JSON.parse(JSON.stringify(world)) as World;
+        const id = step % 2 === 0 ? 'a' : 'b';
+        if (!isAlive(heroById(world, id)!)) continue;
+        const action = randomAction(world, id, rng);
+        for (const w of copy ? [world, copy] : [world]) {
+          act(w, id, action);
+          unblock(w, (who, a) => act(w, who, a as Action));
+        }
+      }
+      if (copy) expect(JSON.stringify(copy), `seed ${seed}`).toBe(JSON.stringify(world));
+    }
+  }, 60000);
 });
