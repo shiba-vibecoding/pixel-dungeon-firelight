@@ -10,6 +10,7 @@ import {
 import * as core from '@pd/core';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
+import { type BadgeId, badgeText, checkBadges, countGame } from './badges';
 import { audio } from './audio';
 import { BUFF_ICONS, heroBuffs, Hud } from './hud';
 import { capitalize, t } from './i18n';
@@ -18,7 +19,7 @@ import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
   hideOverlay, overlayOpen, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero, showMenu, showQuest, showRunEnd,
-  showInfo, showSell, showSign, showTitle, showTrade, toast,
+  showBadges, showInfo, showSell, showSign, showTitle, showTrade, toast,
 } from './screens';
 import { forgetSolo, loadSolo, onlineSession, type Session, soloSession } from './session';
 import { loadAssets } from './sprites';
@@ -247,6 +248,7 @@ function openMenu(): void {
       if (room) void invite(room);
     },
     onHelp: () => showHelp(hideOverlay),
+    onBadges: () => showBadges(hideOverlay),
     onExit: toTitle,
   });
 }
@@ -448,7 +450,18 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
   return cells;
 }
 
+/** Badges earned just now: a toast and the original's fanfare for each. */
+function announceBadges(ids: readonly BadgeId[]): void {
+  for (const id of ids) {
+    audio.play('badge');
+    toast(t.badgeEarned(badgeText(id)));
+  }
+}
+
 function handleMyEffects(effects: readonly Effect[], myId: string): void {
+  const world = session?.world;
+  const me = world && heroById(world, myId);
+  if (world && me) announceBadges([...countGame(world.run.seed), ...checkBadges(world, me, effects)]);
   for (const effect of effects) {
     if (effect.type === 'ghost' && effect.hero === myId) talkWithGhost(effect.line, effect.errand);
     if (effect.type === 'ratKing' && effect.hero === myId) talkWithRatKing(effect.line);

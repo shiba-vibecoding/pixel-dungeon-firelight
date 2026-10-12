@@ -1,5 +1,5 @@
 import {
-  baseKind, BRUTE_ENRAGED_DAMAGE, isShopkeeper, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
+  baseKind, BRUTE_ENRAGED_DAMAGE, isShopkeeper, statsOf, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
   maxExp, type Mob, MOBS, mobStats, ringBonus,
 } from './actors';
 import {
@@ -315,8 +315,11 @@ export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Haza
       victim.killedBy = typeof source === 'string' ? source : isHero(source) ? source.heroClass : source.kind;
       heroDied(ctx, victim);
     } else {
-      if (by && isHero(by)) by.kills++;
-      mobDied(ctx, victim);
+      if (by && isHero(by)) {
+        by.kills++;
+        if (victim.kind === 'piranha') statsOf(by).piranhas++;
+      }
+      mobDied(ctx, victim, by && isHero(by) ? by.id : undefined);
     }
   }
 }
@@ -327,11 +330,11 @@ const ELEMENTAL_BURNING = 8;
 /** Crab.lootChance. */
 const CRAB_MEAT_CHANCE = 0.167;
 
-function mobDied(ctx: Ctx, mob: Mob): void {
+function mobDied(ctx: Ctx, mob: Mob, by?: string): void {
   mob.hp = 0;
   ctx.floor.mobs.splice(ctx.floor.mobs.indexOf(mob), 1);
   leaveCell(ctx.world, ctx.level, ctx.depth, mob.pos);
-  ctx.effects.push({ type: 'died', depth: ctx.depth, who: mob.id, pos: mob.pos });
+  ctx.effects.push({ type: 'died', depth: ctx.depth, who: mob.id, pos: mob.pos, kind: mob.kind, ...(by ? { by } : {}) });
   // The curse, broken, is the ghost again: nothing to learn from it, nothing left behind.
   if (mob.kind === 'curse') {
     curseBroken(ctx, mob);

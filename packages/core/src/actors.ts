@@ -119,10 +119,22 @@ export interface Hero {
   /** Hunger.level: 0 when fed, hungry from HUNGRY, starving at STARVING; and time towards its next step. */
   hunger: number;
   hungerTime: number;
+  /** For the badges (Statistics): gold picked up, food eaten, potions brewed and piranhas slain this run. */
+  stats?: RunStats;
   /** For the end of the run: monsters slain, and what dealt the killing blow. */
   kills: number;
   killedBy: string | null;
 }
+
+export interface RunStats {
+  gold: number;
+  food: number;
+  brewed: number;
+  piranhas: number;
+}
+
+/** A hero's run statistics, started on first use (older saves have none). */
+export const statsOf = (hero: Hero): RunStats => (hero.stats ??= { gold: 0, food: 0, brewed: 0, piranhas: 0 });
 
 export interface PlayerInfo {
   id: string;

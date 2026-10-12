@@ -88,7 +88,7 @@ Yendor on depth 26:
   health: the warrior's heroic leap, the mage's molten earth, the rogue's
   smoke bomb, the huntress's spectral blades.
 - Solo runs saved on the device; a daily dungeon with a global leaderboard and
-  shareable results.
+  shareable results; the original's badges (59 of them), kept on the device.
 - Co-op: invite friends by a Telegram link; everyone plays in the same dungeon.
   Time flows freely while the party explores; in a fight the dungeon waits for
   each hero in turn (with a timeout, and never for someone who left). A fallen

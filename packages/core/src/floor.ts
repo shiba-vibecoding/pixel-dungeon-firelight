@@ -69,7 +69,8 @@ export const isWater = (terrain: number): boolean => terrain >= T.WATER_TILES &&
 /** What players should see happen; returned by every accepted action. */
 export type Effect =
   | { type: 'attack'; depth: number; attacker: string; target: string; hit: boolean; damage: number }
-  | { type: 'died'; depth: number; who: string; pos: number }
+  /** Someone died; for a monster, what it was and which hero (if any) slew it. */
+  | { type: 'died'; depth: number; who: string; pos: number; kind?: MobKind; by?: string }
   | { type: 'noticed'; depth: number; mob: string }
   | { type: 'exp'; hero: string; amount: number }
   | { type: 'levelUp'; hero: string; lvl: number }
@@ -108,7 +109,7 @@ export type Effect =
   | { type: 'combo'; hero: string; count: number }
   | { type: 'mastered'; hero: string; subclass: SubClass }
   /** Seeds in an alchemy pot brewed into a potion. */
-  | { type: 'brewed'; depth: number; pos: number }
+  | { type: 'brewed'; depth: number; pos: number; hero?: string }
   /** A chest that was a mimic springs at the hero. */
   | { type: 'mimic'; depth: number; mob: string; hero: string }
   /** A torch lit; a succubus's charm; a scorpio's crippling sting. */

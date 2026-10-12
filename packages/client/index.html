@@ -269,6 +269,27 @@
         background-size: calc(128px * var(--s)) calc(16px * var(--s));
         image-rendering: pixelated;
       }
+      .pd-badges {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(calc(16px * var(--px) * 1.75 + 8px), 1fr));
+        gap: 4px;
+        max-height: 50vh;
+        overflow-y: auto;
+      }
+      .pd-badge {
+        --s: calc(var(--px) * 1.75);
+        justify-self: center;
+        width: calc(16px * var(--s));
+        height: calc(16px * var(--s));
+        padding: 0;
+        border: none;
+        background: url(assets/badges.png) 0 0 / calc(128px * var(--s)) calc(128px * var(--s)) no-repeat;
+        image-rendering: pixelated;
+        cursor: pointer;
+      }
+      .pd-badge.locked {
+        filter: grayscale(1) brightness(0.45);
+      }
       .pd-board {
         margin: 0;
         padding-left: 1.6em;

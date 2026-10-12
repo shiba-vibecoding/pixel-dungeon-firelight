@@ -1,5 +1,5 @@
 import {
-  BACKPACK_SIZE, beckon, createMob, isShopkeeper, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
+  BACKPACK_SIZE, beckon, createMob, isShopkeeper, statsOf, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
   SUBCLASSES,
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
@@ -297,7 +297,7 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       // Floating over a chasm, it falls through.
       landItem(ctx, hero.pos, item);
       ctx.effects.push({ type: 'dropped', hero: hero.id, item });
-      if (ctx.level.map[hero.pos] === T.ALCHEMY) brew(ctx, hero.pos);
+      if (ctx.level.map[hero.pos] === T.ALCHEMY) brew(ctx, hero.pos, hero);
       return TIME_TO_DROP;
     }
     case 'throw': {
@@ -369,7 +369,7 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     // Into an alchemy pot, it goes into the brew instead; into a chasm, it falls.
     if (ctx.level.map[end] === T.ALCHEMY) {
       dropItem(ctx.floor, end, createItem(kind));
-      brew(ctx, end);
+      brew(ctx, end, hero);
     } else if (hasFlag(ctx.level.map[end]!, F.PIT)) {
       landItem(ctx, end, createItem(kind));
     } else {
@@ -507,6 +507,7 @@ function zap(ctx: Ctx, hero: Hero, index: number, target: number): void {
 export function collect(hero: Hero, item: Item): boolean {
   if (item.kind === 'gold') {
     hero.gold += item.qty;
+    statsOf(hero).gold += item.qty;
     return true;
   }
   if (isStackable(item.kind)) {
@@ -626,7 +627,7 @@ const SEEDS_TO_POTION = 3;
  * often the one the seeds are good for, now and then a random one. Anything
  * but seeds spoils the brew.
  */
-function brew(ctx: Ctx, pos: number): void {
+function brew(ctx: Ctx, pos: number, hero: Hero): void {
   const heap = ctx.floor.heaps.find((h) => h.pos === pos);
   if (!heap || !heap.items.every((item) => itemDef(item.kind).category === 'seed')) return;
   const count = heap.items.reduce((n, item) => n + item.qty, 0);
@@ -641,7 +642,8 @@ function brew(ctx: Ctx, pos: number): void {
     potion = kind ? createItem(kind) : new ItemGenerator(rng, ctx.depth).of('potion');
   }
   heap.items = [potion];
-  ctx.effects.push({ type: 'brewed', depth: ctx.depth, pos });
+  statsOf(hero).brewed++;
+  ctx.effects.push({ type: 'brewed', depth: ctx.depth, pos, hero: hero.id });
 }
 
 /** What mystery meat can do to whoever eats it, and what frozen carpaccio can. */
@@ -657,6 +659,7 @@ function eat(ctx: Ctx, hero: Hero, index: number): void {
   const kind = item.kind;
   if (--item.qty <= 0) hero.items.splice(index, 1);
   hero.hunger = Math.min(Math.max(0, hero.hunger - itemDef(kind).energy!), STARVING);
+  statsOf(hero).food++;
   if (hero.heroClass === 'warrior' && hero.hp < hero.ht) {
     const amount = Math.min(5, hero.ht - hero.hp);
     hero.hp += amount;

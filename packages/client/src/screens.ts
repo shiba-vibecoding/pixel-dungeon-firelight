@@ -4,6 +4,7 @@ import {
 } from '@pd/core';
 import { audio } from './audio';
 import { chooseQuickslot, isQuickslotted, quickUse } from './quickslot';
+import { BADGES, badgeText, earnedBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, t } from './i18n';
 import { isKnown, itemInfo, itemName, spriteOffset } from './itemtext';
@@ -138,6 +139,7 @@ export interface MenuOptions {
   onResume(): void;
   onInvite(): void;
   onHelp(): void;
+  onBadges(): void;
   onExit(): void;
 }
 
@@ -154,10 +156,31 @@ export function showMenu(options: MenuOptions): void {
       button(t.resume, options.onResume, 'primary'),
       options.room && button(t.invite, options.onInvite),
       button(t.help, options.onHelp),
+      button(t.badges, options.onBadges),
       sound,
       button(t.toMenu, options.onExit),
     ),
   );
+}
+
+/** WndBadges: every badge, the ones earned bright; a tap tells what each is for. */
+export function showBadges(onClose: () => void): void {
+  const earned = earnedBadges();
+  const about = el('p', { className: 'pd-info', textContent: t.badgesCount(earned.size, BADGES.length) });
+  const grid = el(
+    'div',
+    { className: 'pd-badges' },
+    ...BADGES.map((badge) => {
+      const icon = el('button', { className: `pd-badge${earned.has(badge.id) ? '' : ' locked'}` });
+      icon.style.backgroundPosition = `calc(${-(badge.image % 8) * 16}px * var(--s)) calc(${-Math.floor(badge.image / 8) * 16}px * var(--s))`;
+      icon.onclick = () => {
+        audio.play('click');
+        about.textContent = badgeText(badge.id);
+      };
+      return icon;
+    }),
+  );
+  show(el('div', { className: 'pd-window' }, el('p', { className: 'pd-heading', textContent: t.badges }), grid, about, button(t.close, onClose)));
 }
 
 export interface HeroOptions {

@@ -8,14 +8,14 @@ export type Sound =
   | 'hit' | 'miss' | 'step' | 'water' | 'death' | 'levelup' | 'descend' | 'door_open' | 'secret' | 'alert'
   | 'click' | 'boss' | 'gold' | 'item' | 'drink' | 'bones' | 'read' | 'teleport' | 'trap' | 'lightning' | 'burning'
   | 'zap' | 'unlock' | 'ghost' | 'eat' | 'shatter' | 'dewdrop' | 'puff' | 'rocks' | 'falling' | 'blast' | 'evoke'
-  | 'beacon' | 'bee' | 'cursed';
+  | 'beacon' | 'bee' | 'cursed' | 'badge';
 
 type Track = 'theme' | 'game';
 
 const SOUNDS: readonly Sound[] = [
   'hit', 'miss', 'step', 'water', 'death', 'levelup', 'descend', 'door_open', 'secret', 'alert',
   'click', 'boss', 'gold', 'item', 'drink', 'bones', 'read', 'teleport', 'trap', 'lightning', 'burning', 'zap', 'unlock', 'ghost',
-  'eat', 'shatter', 'dewdrop', 'puff', 'rocks', 'falling', 'blast', 'evoke', 'beacon', 'bee', 'cursed',
+  'eat', 'shatter', 'dewdrop', 'puff', 'rocks', 'falling', 'blast', 'evoke', 'beacon', 'bee', 'cursed', 'badge',
 ];
 
 class Audio {
