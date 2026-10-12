@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act, addHero, createWorld, findPath, heroById, levelAt, type World } from '../src/index';
+import { act, addHero, canEnter, charAt, createMob, createWorld, findPath, floorAt, heroById, levelAt, NEIGHBOURS8, type World } from '../src/index';
 import { pacify } from './helpers';
 
 function twoHeroes(seed = 2026): World {
@@ -71,5 +71,30 @@ describe('shared world', () => {
     walk(copy, 'a', levelAt(copy, 1).exit);
     expect(act(world, 'a', { type: 'descend' })).toEqual(act(copy, 'a', { type: 'descend' }));
     expect(copy).toEqual(world);
+  });
+});
+
+describe('harmless wanderers', () => {
+  it('a hero swaps places with the sad ghost or a sheep instead of being stopped', () => {
+    const world = pacify(createWorld(77));
+    addHero(world, { id: 'a', name: 'Alice', heroClass: 'warrior' });
+    const hero = heroById(world, 'a')!;
+    const level = levelAt(world, 1);
+    const floor = floorAt(world, 1);
+    const next = NEIGHBOURS8.map((n) => hero.pos + n).find((c) => canEnter(level, c) && !charAt(world, 1, c))!;
+    for (const kind of ['ghost', 'sheep'] as const) {
+      const from = hero.pos;
+      const there = from === next ? NEIGHBOURS8.map((n) => from + n).find((c) => canEnter(level, c))! : next;
+      const wanderer = createMob(`#${kind}`, kind, there, 'passive', floor.now);
+      floor.mobs.push(wanderer);
+      expect(act(world, 'a', { type: 'move', to: there }).ok, kind).toBe(true);
+      expect(hero.pos, kind).toBe(there);
+      expect(wanderer.pos, kind).toBe(from);
+      floor.mobs = floor.mobs.filter((m) => m !== wanderer);
+    }
+    // Monsters still stand their ground.
+    const rat = createMob('#rat', 'rat', next === hero.pos ? NEIGHBOURS8.map((n) => hero.pos + n).find((c) => canEnter(level, c))! : next, 'sleeping', floor.now);
+    floor.mobs.push(rat);
+    expect(act(world, 'a', { type: 'move', to: rat.pos })).toEqual({ ok: false, reason: 'cell is occupied' });
   });
 });

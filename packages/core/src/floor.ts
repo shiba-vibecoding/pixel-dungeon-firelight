@@ -245,6 +245,19 @@ export function charAt(world: World, depth: number, cell: number): Char | undefi
   );
 }
 
+/** Who a hero swaps places with: the quest givers and harmless wanderers, never a shopkeeper. */
+const SWAPPERS: ReadonlySet<string> = new Set(['ghost', 'sheep', 'wandmaker', 'imp', 'blacksmith', 'ratKing']);
+
+/**
+ * Harmless folk a hero swaps places with rather than being stopped by (as in
+ * later versions of the game): the sad ghost, magic sheep and the quest
+ * givers, so that none of them can wall a hero into a corridor. Talking to
+ * them is still a bump into them; walking past simply trades cells.
+ */
+export function swapsWithHero(char: Char | undefined): boolean {
+  return char !== undefined && 'kind' in char && char.state === 'passive' && SWAPPERS.has(char.kind);
+}
+
 /** Field of view of one hero. */
 export function heroView(world: World, hero: Hero): boolean[] {
   // Blinded, a hero sees no further than arm's reach.

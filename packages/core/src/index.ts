@@ -11,7 +11,7 @@ export * from './items';
 export { type InventoryAction, isInventoryAction, shopkeeperBeside } from './inventory';
 export { trapAt, type TrapKind } from './traps';
 export { PLANT_KINDS, type PlantInfo, type PlantKind, SEED_PLANTS } from './plants';
-export { charAt, type Effect, type Floor, heroesOn, isWater } from './floor';
+export { charAt, type Effect, type Floor, heroesOn, isWater, swapsWithHero } from './floor';
 export { type ItemRef, ORE_WANTED, type SmithLine, type SmithQuest } from './smith';
 export { type ImpQuest, TOKENS_WANTED } from './imp';
 export { CLASS_ARMOR, CLASS_ARMOR_OF } from './classArmor';

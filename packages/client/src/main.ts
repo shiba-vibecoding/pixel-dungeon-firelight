@@ -5,7 +5,7 @@ import {
   heroById, type HeroClass, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, PLANT_KINDS, type SmithLine, T,
   visibleCells, wandMaxCharges, WIDTH,
-  type World, charAt,
+  type World, charAt, swapsWithHero,
 } from '@pd/core';
 import * as core from '@pd/core';
 import './ui.css';
@@ -539,7 +539,8 @@ function occupiedCells(world: World, depth: number, except = -1): Set<number> {
   for (const hero of world.heroes) {
     if (hero.depth === depth && isAlive(hero) && hero.id !== session!.myId) cells.add(hero.pos);
   }
-  for (const mob of world.floors[depth]?.mobs ?? []) cells.add(mob.pos);
+  // The ghost and magic sheep step aside: the hero swaps places with them.
+  for (const mob of world.floors[depth]?.mobs ?? []) if (!swapsWithHero(mob)) cells.add(mob.pos);
   cells.delete(except);
   return cells;
 }
@@ -746,7 +747,16 @@ function tapCell(cell: number): void {
   // The alchemy pot: what it is for, then walk up to it as usual.
   if (level.map[cell] === T.ALCHEMY) view.say(t.alchemyPot, '#ffff44');
   walk.queue = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating) ?? [];
-  if (walk.queue.length === 0) return;
+  if (walk.queue.length === 0) {
+    // No way around a known trap: walk up to it and say so; a tap on the trap itself steps onto it.
+    const risky = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating, true);
+    const trap = risky?.findIndex((c) => c !== cell && hasFlag(level.map[c]!, F.AVOID)) ?? -1;
+    if (risky && trap >= 0) {
+      walk.queue = risky.slice(0, trap);
+      view.say(t.trapInTheWay, '#ff8800');
+    }
+    return;
+  }
   walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && me.depth > 1) walk.stairs = 'ascend';

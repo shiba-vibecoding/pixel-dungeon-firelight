@@ -3,7 +3,7 @@ import {
 } from './actors';
 import { attack, hurt } from './combat';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
-import { charAt, type Ctx, enterCell, heroesOn, heroView, isPassable, isWater, leaveCell } from './floor';
+import { canEnter, charAt, type Ctx, enterCell, heroesOn, heroView, isPassable, isWater, leaveCell } from './floor';
 import { altarCallsMob } from './altar';
 import { type Item, itemDef, ItemGenerator, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
@@ -677,7 +677,10 @@ function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean 
     const trace = ballistica(ctx, mob.pos, target);
     let cell = trace.at(-1)!;
     if (charAt(ctx.world, ctx.depth, cell) && trace.length > 2) cell = trace[trace.length - 2]!;
-    if (cell !== mob.pos && !charAt(ctx.world, ctx.depth, cell)) {
+    // She does not fly: rather than land over a chasm (and fall, as she would in the original),
+    // she stops at the last firm cell along the way.
+    for (let i = trace.indexOf(cell); i > 0 && !canEnter(ctx.level, cell); i--) cell = trace[i - 1]!;
+    if (cell !== mob.pos && canEnter(ctx.level, cell) && !charAt(ctx.world, ctx.depth, cell)) {
       const from = mob.pos;
       moveMob(ctx, mob, cell);
       ctx.effects.push({ type: 'jumped', depth: ctx.depth, mob: mob.id, from, to: cell });

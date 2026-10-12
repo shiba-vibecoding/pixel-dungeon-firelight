@@ -7,6 +7,7 @@ import { attack, CRIPPLE_TURNS, hurt } from './combat';
 import {
   canEnter, charAt, type Ctx, dropItem, type Effect, enterCell, exploredCells, type Floor, freeCellNear, heroesOn,
   heroView, isPassable, isWater, leaveCell, observe,
+  swapsWithHero,
 } from './floor';
 import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
 import { createItem, createItems, itemDef, ItemGenerator, type ItemKind, WAND_RECHARGE, wandMaxCharges } from './items';
@@ -219,7 +220,7 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
         return keyFor(hero) >= 0 ? null : 'the door is locked';
       }
       if (!heroCanEnter(level, hero, action.to) || !adjacent(hero.pos, action.to)) return 'cannot move there';
-      return charAt(world, hero.depth, action.to) ? 'cell is occupied' : null;
+      return charAt(world, hero.depth, action.to) && !swapsWithHero(charAt(world, hero.depth, action.to)) ? 'cell is occupied' : null;
     case 'attack': {
       const mob = mobById(world, hero.depth, action.target);
       if (!mob) return 'no such enemy';
@@ -551,9 +552,15 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         if (!heroCanEnter(level, hero, to) || charAt(world, hero.depth, to) || level.map[to] === T.LOCKED_DOOR) to = hero.pos;
       }
       const from = hero.pos;
+      // A harmless wanderer in the way steps into the hero's place.
+      const wanderer = to !== from ? charAt(world, hero.depth, to) : undefined;
       hero.pos = to;
       leaveCell(world, level, hero.depth, from);
       enterCell(level, hero.pos);
+      if (wanderer && swapsWithHero(wanderer)) {
+        wanderer.pos = from;
+        enterCell(level, from);
+      }
       spend(ctx, hero, 1 / heroSpeed(hero));
       if (hero.pos === from) break;
       // The step is done, then the trap goes off; floating, the hero touches nothing (Char.move).
@@ -1041,6 +1048,8 @@ export function findPath(
   known?: readonly boolean[],
   /** A floating hero drifts over chasms (and traps). */
   floating = false,
+  /** Walk over visible traps too: for when no way around them exists. */
+  throughTraps = false,
 ): number[] | null {
   if (known && !known[to]) return null;
   if (from === to) return [];
@@ -1057,7 +1066,7 @@ export function findPath(
         next % WIDTH < WIDTH - 1 && next >= WIDTH && next < LENGTH - WIDTH;
       if ((!canEnter(level, next) && !lockedGoal && !overPit) || (blocked.has(next) && next !== to)) continue;
       // Walk around visible traps, unless one is where the player wants to go or the hero floats.
-      if (next !== to && !floating && hasFlag(level.map[next]!, F.AVOID)) continue;
+      if (next !== to && !floating && !throughTraps && hasFlag(level.map[next]!, F.AVOID)) continue;
       if (known && !known[next]) continue;
       previous.set(next, cell);
       if (next === to) {

@@ -1,5 +1,5 @@
 import {
-  type Action, adjacent, blockers, F, findPath, floorAt, hasFlag, heroById, HUNGRY, isAlive, levelAt, NEIGHBOURS8, T,
+  type Action, adjacent, blockers, canEnter, F, findPath, MOBS, swapsWithHero, floorAt, hasFlag, heroById, HUNGRY, isAlive, levelAt, NEIGHBOURS8, T,
   type World,
 } from '../src/index';
 
@@ -45,6 +45,7 @@ export function botAction(world: World, id: string, deepest = 4): Action {
     const path = findPath(level, hero.pos, target, companions);
     if (!path || path.length === 0) return { type: 'wait' };
     const inTheWay = floor.mobs.find((mob) => mob.pos === path[0]);
+    if (swapsWithHero(inTheWay)) return { type: 'move', to: path[0]! };
     if (inTheWay?.state === 'passive') return { type: 'wait' };
     return inTheWay ? { type: 'attack', target: inTheWay.id } : { type: 'move', to: path[0]! };
   };
@@ -84,7 +85,9 @@ export function checkInvariants(world: World): void {
     };
     for (const mob of floor.mobs) {
       if (!isAlive(mob) || mob.hp > mob.ht) throw new Error(`${mob.id} has ${mob.hp}/${mob.ht} HP`);
-      if (!hasFlag(level.map[mob.pos]!, F.PASSABLE)) throw new Error(`${mob.id} stands in a wall at ${mob.pos}`);
+      // A trap may be found under a monster standing on it; a flier may hover over a chasm.
+      const flier = MOBS[mob.kind].flying === true;
+      if (!canEnter(level, mob.pos) && !(flier && hasFlag(level.map[mob.pos]!, F.PIT))) throw new Error(`${mob.id} (${mob.kind}) stands in a wall at ${mob.pos} on depth ${depth} (terrain ${level.map[mob.pos]})`);
       occupy(mob.pos, mob.id);
     }
     for (const hero of world.heroes.filter((h) => h.depth === depth && isAlive(h))) {
