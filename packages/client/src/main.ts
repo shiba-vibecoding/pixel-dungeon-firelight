@@ -23,7 +23,7 @@ import { audio } from './audio';
 import { heroBuffs, Hud, type HudStatus } from './hud';
 import { capitalize, t } from './i18n';
 import { itemInfo, itemName, wearOf } from './itemtext';
-import { bakeLevel, type Camera, render } from './render';
+import { bakeLevel, type Camera, patchLevel, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, portrait, setAssets, showBackpack, showConfirm, showReforge, showDailyBoard, showHelp, showHero,
@@ -1131,8 +1131,15 @@ addEventListener('keydown', (event) => {
 function resize(): void {
   // Light effects draw a coarser canvas: pixel art stays crisp, there are just fewer pixels to fill.
   const dpr = Math.min(devicePixelRatio || 1, quality.light ? 1.5 : 3);
-  canvas.width = Math.round(canvas.clientWidth * dpr);
-  canvas.height = Math.round(canvas.clientHeight * dpr);
+  const wide = canvas.clientWidth * dpr;
+  const tall = canvas.clientHeight * dpr;
+  // The art is coarse, so a canvas past a few million pixels (a big monitor, a scaled desktop, 4K)
+  // is drawn at a half or a third and stretched without smoothing: the same picture, a fraction
+  // of the pixels to fill every frame. Phones stay under the budget and are drawn whole.
+  const budget = quality.light ? 1.6e6 : 3.3e6;
+  const shrink = Math.max(1, Math.ceil(Math.sqrt((wide * tall) / budget)));
+  canvas.width = Math.round(wide / shrink);
+  canvas.height = Math.round(tall / shrink);
   // About 12 tiles across the narrow side, at an integer zoom for crisp pixels; out to the whole
   // level across it, in to twice as close.
   const narrow = Math.min(canvas.width, canvas.height);
@@ -1163,6 +1170,9 @@ const placeholderHero: Hero = createHero({ id: '', name: '', heroClass: 'warrior
 
 let baked: HTMLCanvasElement | null = null;
 let bakedKey = '';
+/** The map the baked tiles show, and for which depth and world. */
+let bakedMap = new Uint8Array(0);
+let bakedFor = '';
 let visible: boolean[] = [];
 let busySince = 0;
 
@@ -1248,7 +1258,29 @@ let freeDepth = 0;
 /** Where my hero was last frame, for footstep and stairs sounds. */
 let lastPlace = { generation: -1, depth: 0, pos: -1 };
 
+/** The hero's light (#vignette): moved by the compositor to wherever the hero is on screen. */
+const vignette = document.getElementById('vignette');
+let vignetteState = '';
+
+function placeVignette(on: boolean, x = 0, y = 0): void {
+  if (!vignette) return;
+  // Canvas pixels to CSS pixels.
+  const css = (canvas.clientWidth || canvas.width) / canvas.width;
+  const inner = Math.round(TILE * camera.zoom * 3 * css);
+  const outer = Math.round(Math.max(canvas.clientWidth, canvas.clientHeight) * 0.7);
+  const state = on ? `${Math.round(x * css)},${Math.round(y * css)},${inner},${outer}` : 'off';
+  if (state === vignetteState) return;
+  vignetteState = state;
+  vignette.classList.toggle('on', on);
+  if (!on) return;
+  // Its middle sits on the screen's corner (game.css); moved from there onto the hero.
+  vignette.style.transform = `translate(${Math.round(x * css)}px, ${Math.round(y * css)}px)`;
+  vignette.style.setProperty('--inner', `${inner}px`);
+  vignette.style.setProperty('--outer', `${outer}px`);
+}
+
 function drawBackdrop(now: number): void {
+  placeVignette(false);
   const { level, all } = backdrop;
   const span = WIDTH * TILE;
   camera.x = Math.round(span / 2 - canvas.width / camera.zoom / 2 + Math.sin(now / 9000) * 60);
@@ -1372,7 +1404,15 @@ function tick(now: number): void {
 
   const key = `${me.depth}:${world.turn}:${session.generation}`;
   if (key !== bakedKey) {
-    baked = bakeLevel(level, assets);
+    // The tiles are baked once per depth; after that only the cells that changed are redrawn.
+    const where = `${me.depth}:${session.generation}`;
+    if (!baked || bakedFor !== where) {
+      baked = bakeLevel(level, assets);
+      bakedMap = Uint8Array.from(level.map);
+      bakedFor = where;
+    } else {
+      patchLevel(baked, bakedMap, level, assets);
+    }
     visible = visibleCells(world, me.depth);
     bakedKey = key;
 
@@ -1496,6 +1536,7 @@ function tick(now: number): void {
     middle,
   };
   render(ctx, scene, view, session.myId, assets, camera, vnow);
+  placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom);
 
   // Who the dungeon is waiting for, once my action has been queued for a moment.
   if (session.busy) busySince ||= now;

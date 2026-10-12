@@ -27,6 +27,19 @@ canvas#game {
   image-rendering: pixelated;
 }
 
+/* The hero's light: the view's edges sink into the dark. A layer over the map that the compositor
+   moves with the hero (main.ts), rather than a gradient painted into every frame. */
+#vignette {
+  position: fixed; left: 0; top: 0; z-index: 1;
+  width: 300vmax; height: 300vmax; margin: -150vmax 0 0 -150vmax;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent var(--inner, 120px), rgba(0, 0, 0, 0.55) var(--outer, 700px));
+  will-change: transform;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+#vignette.on { opacity: 1; }
+
 /* HUD, log and toolbar over the map; only their controls take taps. */
 #ui {
   position: fixed;
@@ -88,6 +101,10 @@ canvas#game {
   transition: width 0.45s steps(6) 0.3s;
 }
 @media (prefers-reduced-motion: reduce) { .pd-bar-lag { transition: none; } }
+
+/* A question's answers, one above the other: long ones wrap rather than being cut. */
+.pd-confirm-actions { display: flex; flex-direction: column; gap: var(--space-2); }
+.pd-confirm-actions .pd-button { width: 100%; white-space: normal; height: auto; min-height: var(--tap-min, 44px); text-overflow: clip; overflow: visible; line-height: 1.2; padding-top: var(--space-2); padding-bottom: var(--space-2); }
 
 /* Volume in five steps (menu): lit steps gold, the rest stone. */
 .pd-volume { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--tap-min, 44px); width: 100%; }

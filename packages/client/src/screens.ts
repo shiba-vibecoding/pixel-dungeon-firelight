@@ -11,6 +11,7 @@ import { isKnown, itemInfo, itemName, plainName, wearOf } from './itemtext';
 import type { DailyBoard } from './leaderboard';
 import { mart } from './mart';
 import { quality } from './quality';
+import { canFullscreen, isFullscreen, setFullscreen } from './telegram';
 import type { RunRecord } from './rankings';
 import { type Assets, heroSprite } from './sprites';
 import type { LogLine } from './view';
@@ -510,6 +511,27 @@ function volumeRow(label: string, value: () => number, set: (volume: number) => 
 export function showMenu(options: MenuOptions): void {
   const music = volumeRow(t.musicVolume, () => audio.musicVolume, (v) => audio.setMusicVolume(v), () => undefined);
   const sounds = volumeRow(t.soundVolume, () => audio.soundVolume, (v) => audio.setSoundVolume(v), () => audio.play('coin', 1, 0.6));
+  // Over the whole screen: in Telegram (8.0+) or a browser that allows it.
+  const full = canFullscreen()
+    ? el(
+      'button',
+      {
+        className: 'pd-switch',
+        onclick: () => {
+          const on = full!.getAttribute('aria-checked') !== 'true';
+          audio.play('click');
+          full!.setAttribute('aria-checked', String(on));
+          setFullscreen(on);
+        },
+      },
+      el('span', { className: 'pd-info', textContent: t.fullscreen }),
+      el('span', { className: 'pd-switch-box' }),
+    )
+    : null;
+  if (full) {
+    full.setAttribute('role', 'switch');
+    full.setAttribute('aria-checked', String(isFullscreen()));
+  }
   const sound = el(
     'button',
     {
@@ -552,6 +574,7 @@ export function showMenu(options: MenuOptions): void {
         button(t.help, options.onHelp),
         button(t.badges, options.onBadges),
         button(t.mart, options.onMart),
+        full,
         sound,
         music,
         sounds,
@@ -775,14 +798,15 @@ export function showQuest(options: QuestOptions): void {
   // A question wants an answer: no cross. The first answer is the yes.
   const answerRow =
     answers.length > 0 &&
+    // One above the other, the yes first, so a long answer is never cut off.
     el(
       'div',
-      { className: 'pd-row' },
-      ...[...answers].reverse().map((answer, i) =>
+      { className: 'pd-confirm-actions' },
+      ...answers.map((answer, i) =>
         button(answer.label, () => {
           answer.onAnswer();
           options.onClose();
-        }, i === answers.length - 1 ? 'primary' : 'quiet')),
+        }, i === 0 ? 'primary' : 'quiet')),
     );
   const box = windowOf(
     { title: capitalize(t.mobs[options.who]), icon: portrait(options.who), onClose: answers.length > 0 ? undefined : options.onClose },
@@ -892,14 +916,15 @@ export function showConfirm(title: string, text: string, yes: string, no: string
       { narrow: true },
       el('h2', { className: 'pd-heading center', textContent: title }),
       info(text, 'pd-info center'),
+      // One above the other, so a long answer is never cut off.
       el(
         'div',
-        { className: 'pd-row' },
-        button(no, onClose, 'quiet'),
+        { className: 'pd-confirm-actions' },
         button(yes, () => {
           onClose();
           onYes();
         }, 'danger'),
+        button(no, onClose, 'quiet'),
       ),
     ),
     onClose,

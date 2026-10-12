@@ -38,6 +38,25 @@ export function bakeLevel(level: Level, assets: Assets): HTMLCanvasElement {
   return canvas;
 }
 
+/**
+ * Brings a baked tile layer up to date with the level, redrawing only the cells that changed
+ * (a door opened, grass trampled) rather than all of them; `seen` is the map it was baked from.
+ */
+export function patchLevel(baked: HTMLCanvasElement, seen: Uint8Array, level: Level, assets: Assets): void {
+  const ctx = baked.getContext('2d')!;
+  const tiles = assets.tiles[regionOf(level.depth)]!;
+  const columns = tiles.width / TILE;
+  for (let i = 0; i < LENGTH; i++) {
+    const terrain = level.map[i]!;
+    if (seen[i] === terrain) continue;
+    seen[i] = terrain;
+    const x = (i % WIDTH) * TILE;
+    const y = Math.trunc(i / WIDTH) * TILE;
+    ctx.clearRect(x, y, TILE, TILE);
+    ctx.drawImage(tiles, (terrain % columns) * TILE, Math.trunc(terrain / columns) * TILE, TILE, TILE, x, y, TILE, TILE);
+  }
+}
+
 function drawIcon(ctx: CanvasRenderingContext2D, assets: Assets, icon: readonly [number, number, number, number], x: number, y: number): void {
   const [sx, sy, w, h] = icon;
   ctx.drawImage(assets.icons, sx, sy, w, h, Math.round(x - w / 2), Math.round(y - h), w, h);
@@ -352,18 +371,7 @@ export function render(
   }
   ctx.globalAlpha = 1;
 
-  // The hero's light: the edges of the view sink into the dark (not in light effects: a full-screen gradient).
-  if (scene.focus && !quality.light) {
-    const fx0 = (scene.focus.x - camera.x) * camera.zoom;
-    const fy0 = (scene.focus.y - camera.y) * camera.zoom;
-    const inner = TILE * camera.zoom * 3;
-    const outer = Math.max(canvas.width, canvas.height) * 0.7;
-    const shade = ctx.createRadialGradient(fx0, fy0, inner, fx0, fy0, outer);
-    shade.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    shade.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
-    ctx.fillStyle = shade;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
+  // The hero's light, the view's edges sinking into the dark, is a layer over the canvas (#vignette, main.ts).
   fx.drawScreen(ctx, canvas.width, canvas.height, now);
 
   const middle = scene.middle ?? canvas.height / 2;

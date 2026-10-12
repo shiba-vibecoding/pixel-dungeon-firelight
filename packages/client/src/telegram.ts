@@ -22,6 +22,10 @@ interface WebApp {
   };
   BackButton?: { show(): void; hide(): void; onClick(callback: () => void): void };
   onEvent?(event: string, callback: () => void): void;
+  /** Bot API 8.0: the Mini App over the whole screen. */
+  isFullscreen?: boolean;
+  requestFullscreen?(): void;
+  exitFullscreen?(): void;
 }
 
 const webApp = (globalThis as { Telegram?: { WebApp?: WebApp } }).Telegram?.WebApp;
@@ -66,6 +70,27 @@ export function onLayoutChange(callback: () => void): void {
   for (const event of ['viewportChanged', 'safeAreaChanged', 'contentSafeAreaChanged', 'fullscreenChanged']) {
     webApp.onEvent(event, callback);
   }
+}
+
+/** Whether the game can go over the whole screen here: Telegram 8.0+, or a browser that allows it. */
+export function canFullscreen(): boolean {
+  if (inTelegram) return Boolean(webApp!.requestFullscreen && webApp!.isVersionAtLeast?.('8.0'));
+  return Boolean(document.fullscreenEnabled && document.documentElement.requestFullscreen);
+}
+
+export function isFullscreen(): boolean {
+  return inTelegram ? Boolean(webApp!.isFullscreen) : Boolean(document.fullscreenElement);
+}
+
+/** Over the whole screen, or back. */
+export function setFullscreen(on: boolean): void {
+  if (inTelegram) {
+    if (on) webApp!.requestFullscreen?.();
+    else webApp!.exitFullscreen?.();
+    return;
+  }
+  if (on) void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  else if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
 }
 
 export function initData(): string | undefined {
