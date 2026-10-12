@@ -1,6 +1,6 @@
 import {
   act, type Action, addHero, applyEvent, type Bones, type ClientMessage, createWorld, type Effect, type GameMode, giveBones, heroById, type HeroClass,
-  LIVE_TURN_MS, liveTick, liveTurnMs,
+  LIVE_CALM_MS, liveBeatMs, liveReady, liveTick,
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
 } from '@pd/core';
 import { guestSecret } from './guest';
@@ -208,23 +208,28 @@ export function soloSession(
     signal() {},
     drainSignals: () => [],
   };
-  // Live turns alone: the session's own clock, a beat a turn, standing still while a window is open
-  // or the app is put away (alone, nobody else is kept waiting).
+  // Live turns alone: the session's own clock plays the hero's depth a beat at a time whenever there
+  // is something to play (an order, or a move in a fight), a beat no sooner than the last has been
+  // seen; it stands still while a window is open or the app is put away.
   let closed = false;
   let clock = 0;
-  let beat = LIVE_TURN_MS;
+  let beat = LIVE_CALM_MS;
+  let nextBeat = 0;
   const tick = (): void => {
     if (closed) return;
     const world = session.world!;
-    if (world.live && !world.over && !document.hidden && !session.hold?.()) {
-      beat = liveTurnMs(world);
-      const result = liveTick(world);
+    const me = heroById(world, 'me');
+    const now = performance.now();
+    if (me && world.live && !document.hidden && !session.hold?.() && now >= nextBeat && liveReady(world, me.depth)) {
+      beat = liveBeatMs(world, me.depth);
+      const result = liveTick(world, me.depth);
       if (result.ok) pending.push(...result.effects);
+      nextBeat = now + beat;
       save();
     }
-    clock = window.setTimeout(tick, world.live ? beat : 1000);
+    clock = window.setTimeout(tick, world.live ? 16 : 1000);
   };
-  if (session.world!.live) clock = window.setTimeout(tick, beat);
+  if (session.world!.live) clock = window.setTimeout(tick, 16);
   save();
   return session;
 }
@@ -259,7 +264,7 @@ export function onlineSession(options: OnlineOptions): Session {
   /** Where the last of them, if they are all steps, leads; null otherwise. */
   let ahead: number | null = null;
   /** Live turns: how long the room's current beat lasts (ms), from its last tick. */
-  let beat = LIVE_TURN_MS;
+  let beat = LIVE_CALM_MS;
   let closed = false;
   let pending: Effect[] = [];
   /** When the room was last heard from (performance.now()). */
@@ -378,7 +383,8 @@ export function onlineSession(options: OnlineOptions): Session {
           return;
         }
         if (message.event.type === 'restart') session.generation++;
-        if (message.event.type === 'tick') beat = message.event.ms;
+        // A beat of my depth sets how long steps take on my screen.
+        if (message.event.type === 'tick' && message.event.depth === heroById(session.world, session.myId)?.depth) beat = message.event.ms;
         if (message.event.type === 'act' && message.event.heroId === session.myId) {
           inFlight = Math.max(0, inFlight - 1);
           const at = sentAt.shift();

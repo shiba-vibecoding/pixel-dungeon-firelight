@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { applyEvent, heroById, LIVE_TURN_MS, type ServerMessage, type World } from '@pd/core';
+import { applyEvent, canEnter, charAt, createMob, floorAt, heroById, LIVE_CALM_MS, levelAt, NEIGHBOURS8, type ServerMessage, type World } from '@pd/core';
 import { pacify } from '../../core/test/helpers';
-import { type Delivery, LIVE_IDLE_MS, RoomLogic } from '../src/room-logic';
+import { type Delivery, LIVE_TURN_TIMEOUT, RoomLogic } from '../src/room-logic';
 import { sanitizeAction } from '../src/messages';
 
 const alice = { id: 'alice', name: 'Alice', heroClass: 'warrior' as const };
@@ -11,7 +11,6 @@ const bob = { id: 'bob', name: 'Bob', heroClass: 'mage' as const };
 class Replica {
   world: World | null = null;
   seq = 0;
-  ticks: number[] = [];
 
   receive(message: ServerMessage): void {
     if (message.type === 'snapshot') {
@@ -19,7 +18,6 @@ class Replica {
       this.seq = message.seq;
     } else if (message.type === 'event') {
       expect(message.seq).toBe(this.seq + 1);
-      if (message.event.type === 'tick') this.ticks.push(message.event.ms);
       applyEvent(this.world!, message.event);
       this.seq = message.seq;
     }
@@ -32,48 +30,76 @@ function route(deliveries: Delivery[], replicas: Record<string, Replica>): void 
   }
 }
 
+/** A live room with Alice and Bob in it, nothing awake on its depths, the first depth known. */
+function party(seed: number): { room: RoomLogic; world: World; replicas: Record<'alice' | 'bob', Replica> } {
+  const room = RoomLogic.create(seed);
+  const world = room.state().world;
+  pacify(world);
+  const replicas = { alice: new Replica(), bob: new Replica() };
+  route(room.connect(alice, 0), replicas);
+  route(room.connect(bob, 0), replicas);
+  world.explored[1] = levelAt(world, 1).map.map(() => true);
+  for (const r of Object.values(replicas)) r.world!.explored[1] = world.explored[1].slice();
+  return { room, world, replicas };
+}
+
+/** A rat after a hero, two cells off along an open line, on the server's world and every replica. */
+function ratAfter(world: World, replicas: Record<string, Replica>, heroId: string): void {
+  const hero = heroById(world, heroId)!;
+  const level = levelAt(world, 1);
+  const n = NEIGHBOURS8.find((d) => canEnter(level, hero.pos + d) && canEnter(level, hero.pos + 2 * d) && !charAt(world, 1, hero.pos + d) && !charAt(world, 1, hero.pos + 2 * d))!;
+  for (const w of [world, ...Object.values(replicas).map((r) => r.world!)]) {
+    const rat = createMob('r1', 'rat', hero.pos + 2 * n, 'hunting', 1);
+    rat.enemy = heroId;
+    floorAt(w, 1).mobs.push(rat);
+  }
+}
+
 describe('a live room', () => {
-  it('beats time itself while anyone plays, and every replica keeps step', () => {
-    const room = RoomLogic.create(31);
-    pacify(room.state().world);
+  it('walks a hero to where they were sent, a beat at a time, holding nobody up; every replica keeps step', () => {
+    const { room, world, replicas } = party(31);
     expect(room.live).toBe(true);
-    expect(room.ticking(0)).toBe(false);
-    const replicas = { alice: new Replica(), bob: new Replica() };
-    route(room.connect(alice, 0), replicas);
-    route(room.connect(bob, 0), replicas);
-    expect(room.ticking(0)).toBe(true);
-    const world = room.state().world;
     const hero = heroById(world, 'alice')!;
-    const start = hero.pos;
-    world.explored[1] = world.levels[1]!.map.map(() => true);
-    for (const id of ['alice', 'bob']) replicas[id as 'alice'].world!.explored[1] = world.explored[1].slice();
-    const goal = world.levels[1]!.exit;
+    const goal = levelAt(world, 1).exit;
+    // Nothing to do: nothing happens.
+    expect(room.nextWake(0)).toBeNull();
     route(room.receive('alice', { type: 'act', action: { type: 'plan', steps: [{ type: 'go', to: goal }] } }, 0), replicas);
-    // Bob does nothing at all: the clock goes on regardless.
-    for (let beat = 0; beat < 80 && hero.pos !== goal; beat++) route(room.liveTick(beat * LIVE_TURN_MS), replicas);
-    expect(hero.pos).not.toBe(start);
+    for (let t = 0; t < 200 * LIVE_CALM_MS && hero.pos !== goal; t += LIVE_CALM_MS) route(room.pump(t), replicas);
     expect(hero.pos).toBe(goal);
     expect(replicas.alice.world).toEqual(world);
     expect(replicas.bob.world).toEqual(world);
-    expect(replicas.bob.ticks.every((ms) => ms >= LIVE_TURN_MS)).toBe(true);
   });
 
-  it('stops its clock when nobody has done anything for a long while, and an order starts it again', () => {
-    const room = RoomLogic.create(33);
-    room.connect(alice, 0);
-    expect(room.ticking(LIVE_IDLE_MS - 1)).toBe(true);
-    expect(room.ticking(LIVE_IDLE_MS + 1)).toBe(false);
-    room.receive('alice', { type: 'act', action: { type: 'wait' } }, LIVE_IDLE_MS + 2);
-    expect(room.ticking(LIVE_IDLE_MS + 3)).toBe(true);
+  it('in a fight, waits for the hero to move, then plays the turn at once', () => {
+    const { room, world, replicas } = party(32);
+    ratAfter(world, replicas, 'alice');
+    const turn = world.turn;
+    route(room.pump(1000), replicas);
+    expect(world.turn).toBe(turn);
+    route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, 1100), replicas);
+    // Bob, beside her, is in it too: the turn goes once he has moved as well.
+    if (room.state().holdingSince.bob !== undefined) route(room.receive('bob', { type: 'act', action: { type: 'wait' } }, 1150), replicas);
+    expect(world.turn).toBeGreaterThan(turn + 1);
+    expect(replicas.bob.world).toEqual(world);
   });
 
-  it('stops its clock when the last player leaves', () => {
-    const room = RoomLogic.create(32);
-    room.connect(alice, 0);
-    expect(room.ticking(0)).toBe(true);
-    room.disconnect('alice', 1);
-    expect(room.ticking(1)).toBe(false);
-    expect(room.liveTick(2)).toEqual([]);
+  it('does not wait long for a player who says nothing while a companion plays, nor at all for one who is away', () => {
+    const { room, world, replicas } = party(33);
+    ratAfter(world, replicas, 'bob');
+    // Bob holds the fight up; Alice plays on.
+    route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, 1000), replicas);
+    const turn = world.turn;
+    route(room.pump(1000 + LIVE_TURN_TIMEOUT - 1), replicas);
+    expect(world.turn).toBe(turn);
+    route(room.pump(1000 + LIVE_TURN_TIMEOUT + 1), replicas);
+    expect(world.turn).toBeGreaterThan(turn);
+    // Gone, Bob is not waited for at all.
+    route(room.disconnect('bob', 20_000), replicas);
+    route(room.receive('alice', { type: 'act', action: { type: 'wait' } }, 20_001), replicas);
+    const now = world.turn;
+    route(room.pump(21_000), replicas);
+    expect(world.turn).toBeGreaterThan(now);
+    expect(replicas.alice.world).toEqual(world);
   });
 
   it('takes plans of the right shape only', () => {

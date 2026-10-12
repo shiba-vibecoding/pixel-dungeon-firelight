@@ -1,5 +1,5 @@
 import {
-  adjacent, blockers, distance, type Mob, trapAt, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
+  adjacent, blockers, liveBlockers, distance, type Mob, trapAt, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
   HEAP_SPRITES,
   type Hero, type Item, type Level,
   type Bones, hasAmulet, heroById, type HeroClass, leaveBones, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
@@ -2314,12 +2314,15 @@ function tick(now: number): void {
   );
   coachMove(me);
 
-  // Who the dungeon is waiting for, once my action has been queued for a moment.
+  // Who the dungeon is waiting for, once my action has been queued for a moment. Under live turns, the
+  // companions a fight waits for once I have made my move (and none while it waits for mine).
+  const live = session.beatMs !== null;
+  const holders = live ? liveBlockers(world) : blockers(world);
   if (session.busy) busySince ||= now;
   else busySince = 0;
   const waitingFor =
-    busySince && now - busySince > 400
-      ? blockers(world).filter((id) => id !== me.id).map((id) => heroById(world, id)?.name ?? '?')
+    (live ? !holders.includes(me.id) : busySince && now - busySince > 400)
+      ? holders.filter((id) => id !== me.id).map((id) => heroById(world, id)?.name ?? '?')
       : [];
   // Waits, written in the co-op log: how many companions and how long (a long one sends the log).
   const waitingNow = waitingFor.length;
@@ -2337,7 +2340,7 @@ function tick(now: number): void {
     loggedWait.since = now;
   }
   // The other way round: the party is held up by me. Said (and felt) once it lasts a moment.
-  const holdingUp = session.mode === 'online' && isAlive(me) && !session.busy && blockers(world).includes(me.id);
+  const holdingUp = session.mode === 'online' && isAlive(me) && !session.busy && holders.includes(me.id);
   if (holdingUp) {
     if (!holdingSince) holdingSince = now;
     else if (!holdingFelt && now - holdingSince > 700) {
@@ -2387,7 +2390,7 @@ function tick(now: number): void {
       keys: me.items.filter((i) => (i.kind === 'key.iron' || i.kind === 'key.skeleton') && i.depth === me.depth).length,
       quick: quickState(quickItem, aim !== null && aim.index === quickIndex(me, 0)),
       quick2: quickState(quickItem2, aim !== null && aim.index === quickIndex(me, 1)),
-      waitingFor: session.mode === 'online' ? blockers(world).filter((id) => id !== me.id) : [],
+      waitingFor: session.mode === 'online' ? holders.filter((id) => id !== me.id) : [],
       arena: arenaHud(world, me, session.mode === 'online'),
     },
     walk.resting,

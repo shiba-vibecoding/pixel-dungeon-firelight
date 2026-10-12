@@ -1,20 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  act, addHero, canEnter, charAt, createMob, createWorld, exploredCells, findPath, floorAt, heroById, isAlive, levelAt, LIVE_COMBAT_MS, LIVE_TURN_MS,
-  liveTick, liveTurnMs, NEIGHBOURS8, WIDTH, type World,
+  act, addHero, canEnter, charAt, createMob, createWorld, exploredCells, findPath, floorAt, heroById, inFight, isAlive, levelAt,
+  liveReady, liveTick, liveWaiting, type Mob, NEIGHBOURS8, WIDTH, type World,
 } from '../src/index';
 import { pacify } from './helpers';
 
-/** A live world with one hero (or two) on the first depth, nothing awake about. */
+/** A live world with one hero (or more) on the first depth, nothing awake about; the party knows the depth. */
 function live(players = 1): World {
   const world = pacify(createWorld(5, 0, 'dungeon', true));
   for (let i = 0; i < players; i++) addHero(world, { id: `p${i}`, name: `P${i}`, heroClass: 'warrior' });
-  // The party knows the depth (walks go only where it has been).
   world.explored[1] = levelAt(world, 1).map.map(() => true);
   return world;
 }
 
-/** A cell the party knows, some steps away along an open path. */
+/** A free cell the party knows, some steps away along an open path. */
 function farCell(world: World, from: number, steps: number): number {
   const level = levelAt(world, 1);
   const known = exploredCells(world, 1);
@@ -25,62 +24,95 @@ function farCell(world: World, from: number, steps: number): number {
   throw new Error('no such cell');
 }
 
+/** A rat after `heroId`, `away` cells from them along an open line. */
+function ratAfter(world: World, heroId: string, away: number, id = 'r1'): Mob {
+  const hero = heroById(world, heroId)!;
+  const level = levelAt(world, 1);
+  const n = NEIGHBOURS8.find((d) => [...Array(away).keys()].every((k) => canEnter(level, hero.pos + (k + 1) * d) && !charAt(world, 1, hero.pos + (k + 1) * d)))!;
+  const rat = createMob(id, 'rat', hero.pos + away * n, 'hunting', 1);
+  rat.enemy = hero.id;
+  floorAt(world, 1).mobs.push(rat);
+  return rat;
+}
+
 describe('live turns', () => {
-  it('go on by the clock, and a hero told where to go walks there a step a turn', () => {
+  it('calm, carry an order out a step a beat, and stand still when nobody has anything to do', () => {
     const world = live();
     const hero = heroById(world, 'p0')!;
+    expect(liveReady(world, 1)).toBe(false);
     const goal = farCell(world, hero.pos, 4);
     expect(act(world, 'p0', { type: 'plan', steps: [{ type: 'go', to: goal }] }).ok).toBe(true);
-    // An order takes no time by itself.
     expect(hero.time).toBe(0);
-    for (let i = 0; i < 4; i++) liveTick(world);
+    for (let i = 0; i < 4; i++) {
+      expect(liveReady(world, 1)).toBe(true);
+      liveTick(world, 1);
+    }
     expect(hero.pos).toBe(goal);
-    expect(hero.plan).toEqual([]);
-    // With nothing to do, the hero just waits: the world never stops.
-    const time = hero.time;
-    liveTick(world);
-    expect(hero.time).toBeGreaterThan(time);
+    expect(liveReady(world, 1)).toBe(false);
   });
 
-  it('never waits on a companion who does nothing', () => {
+  it('calm, never hold a walker up for a companion who does nothing', () => {
     const world = live(2);
     const walker = heroById(world, 'p0')!;
     const goal = farCell(world, walker.pos, 3);
     act(world, 'p0', { type: 'plan', steps: [{ type: 'go', to: goal }] });
-    for (let i = 0; i < 3; i++) liveTick(world);
+    for (let i = 0; i < 3; i++) liveTick(world, 1);
     expect(walker.pos).toBe(goal);
   });
 
-  it('hunts a monster down and strikes it until it falls; an idle hero strikes back', () => {
+  it('in a fight, wait for the hero to say what to do: monsters do not move meanwhile', () => {
     const world = live();
     const hero = heroById(world, 'p0')!;
-    const level = levelAt(world, 1);
-    const near = NEIGHBOURS8.map((n) => hero.pos + 2 * n).find((cell) => canEnter(level, cell) && canEnter(level, (cell + hero.pos) / 2) && !charAt(world, 1, cell))!;
-    const rat = createMob('r1', 'rat', near, 'hunting', 1);
-    rat.enemy = hero.id;
-    floorAt(world, 1).mobs.push(rat);
-    act(world, 'p0', { type: 'plan', steps: [{ type: 'hunt', target: 'r1' }] });
-    for (let i = 0; i < 60 && isAlive(rat); i++) liveTick(world);
-    expect(isAlive(rat)).toBe(false);
-
-    // Another rat comes at a hero who has no orders: they hit back without being told.
-    const rat2 = createMob('r2', 'rat', NEIGHBOURS8.map((n) => hero.pos + n).find((c) => canEnter(level, c) && !charAt(world, 1, c))!, 'hunting', 1);
-    rat2.enemy = hero.id;
-    floorAt(world, 1).mobs.push(rat2);
-    for (let i = 0; i < 60 && isAlive(rat2); i++) liveTick(world);
-    expect(isAlive(rat2)).toBe(false);
+    const rat = ratAfter(world, 'p0', 2);
+    expect(inFight(world, 1)).toBe(true);
+    expect(liveWaiting(world, 1)).toEqual(['p0']);
+    expect(liveReady(world, 1)).toBe(false);
+    const at = rat.pos;
+    for (let i = 0; i < 5; i++) liveTick(world, 1);
+    expect(rat.pos).toBe(at);
+    expect(hero.hp).toBe(hero.ht);
+    // Told to wait, a turn goes by; then the fight waits again.
+    act(world, 'p0', { type: 'wait' });
+    expect(liveReady(world, 1)).toBe(true);
+    liveTick(world, 1);
+    expect(liveWaiting(world, 1)).toEqual(['p0']);
+    for (let i = 0; i < 3 && rat.pos === at; i++) {
+      act(world, 'p0', { type: 'wait' });
+      liveTick(world, 1);
+    }
+    expect(rat.pos).not.toBe(at);
   });
 
-  it('slows down while someone is in a fight', () => {
+  it('a tap on a monster is a walk up to it and one blow; the hero never fights by itself', () => {
     const world = live();
-    expect(liveTurnMs(world)).toBe(LIVE_TURN_MS);
     const hero = heroById(world, 'p0')!;
-    const level = levelAt(world, 1);
-    const cell = NEIGHBOURS8.map((n) => hero.pos + n).find((c) => canEnter(level, c) && !charAt(world, 1, c))!;
-    const rat = createMob('r3', 'rat', cell, 'hunting', 1);
-    rat.enemy = hero.id;
-    floorAt(world, 1).mobs.push(rat);
-    expect(liveTurnMs(world)).toBe(LIVE_COMBAT_MS);
+    const rat = ratAfter(world, 'p0', 1);
+    rat.ht = rat.hp = 1000;
+    act(world, 'p0', { type: 'plan', steps: [{ type: 'hunt', target: 'r1' }] });
+    liveTick(world, 1);
+    expect(hero.plan).toEqual([]);
+    const hp = rat.hp;
+    for (let i = 0; i < 5; i++) liveTick(world, 1);
+    expect(rat.hp).toBe(hp);
+    expect(isAlive(rat)).toBe(true);
+  });
+
+  it('in a fight, plays everyone\'s moves together once all have said, a walker counting as said', () => {
+    const world = live(3);
+    const [a, b, c] = ['p0', 'p1', 'p2'].map((id) => heroById(world, id)!);
+    ratAfter(world, 'p0', 2);
+    const goal = farCell(world, c!.pos, 5);
+    act(world, 'p2', { type: 'plan', steps: [{ type: 'go', to: goal }] });
+    expect(liveWaiting(world, 1).sort()).toEqual(['p0', 'p1']);
+    act(world, 'p0', { type: 'wait' });
+    expect(liveReady(world, 1)).toBe(false);
+    act(world, 'p1', { type: 'wait' });
+    expect(liveReady(world, 1)).toBe(true);
+    const before = c!.pos;
+    liveTick(world, 1);
+    expect(c!.pos).not.toBe(before);
+    expect(a!.plan).toEqual([]);
+    expect(b!.plan).toEqual([]);
   });
 
   it('a key held down walks on until something is in the way, and never fights', () => {
@@ -90,9 +122,8 @@ describe('live turns', () => {
     const dir = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => canEnter(level, hero.pos + dx! + dy! * WIDTH))!;
     const start = hero.pos;
     act(world, 'p0', { type: 'plan', steps: [{ type: 'stride', dx: dir[0]!, dy: dir[1]! }] });
-    for (let i = 0; i < 40; i++) liveTick(world);
+    for (let i = 0; i < 40 && liveReady(world, 1); i++) liveTick(world, 1);
     expect(hero.pos).not.toBe(start);
-    // It stopped against a wall (or anything else) rather than stepping through it.
     expect(hero.plan).toEqual([]);
     expect(canEnter(level, hero.pos + dir[0]! + dir[1]! * WIDTH) && !charAt(world, 1, hero.pos + dir[0]! + dir[1]! * WIDTH)).toBe(false);
   });
@@ -102,7 +133,7 @@ describe('live turns', () => {
       const world = live(2);
       const hero = heroById(world, 'p0')!;
       act(world, 'p0', { type: 'plan', steps: [{ type: 'go', to: farCell(world, hero.pos, 6) }] });
-      for (let i = 0; i < 30; i++) liveTick(world);
+      for (let i = 0; i < 30; i++) liveTick(world, 1);
       return JSON.stringify(world);
     };
     expect(run()).toBe(run());

@@ -257,24 +257,24 @@ export class Room extends DurableObject<Env> {
   }
 
   /**
-   * Live turns: the room's clock, a beat a turn (RoomLogic.liveTick) while anyone is here to play,
-   * each as long as the turn it starts (longer in a fight). It stops by itself when the last player
-   * leaves or the run ends, and starts again with the next message.
+   * Live turns: the room wakes by itself when a beat that is ready comes due or a fight's wait runs
+   * out (RoomLogic.nextWake), and plays what is due (pump); otherwise the next message wakes it.
    */
   private runClock(): void {
-    const room = this.logic;
-    if (this.clock || !room?.ticking()) return;
+    if (this.clock) clearTimeout(this.clock);
+    this.clock = null;
+    const at = this.logic?.nextWake(Date.now()) ?? null;
+    if (at === null) return;
     this.clock = setTimeout(() => {
       this.clock = null;
       void this.beat();
-    }, room.turnMs());
+    }, Math.max(0, at - Date.now()));
   }
 
   private async beat(): Promise<void> {
     try {
       const room = await this.room();
-      if (!room.ticking()) return;
-      this.deliver(room.liveTick(Date.now()));
+      this.deliver(room.pump(Date.now()));
       if (room.state().world.over) await this.flush();
       else this.saveSoon();
       this.runClock();

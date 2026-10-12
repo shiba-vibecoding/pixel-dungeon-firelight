@@ -17,8 +17,8 @@ export type WorldEvent =
   | { type: 'act'; heroId: string; action: Action }
   /** A new run for the same party; the server picks the seed. */
   | { type: 'restart'; seed: number }
-  /** Live turns: a beat of the room's clock, one turn for every occupied depth; `ms` is how long it lasts on screen. */
-  | { type: 'tick'; ms: number };
+  /** Live turns: a beat of one depth (see liveTick in the core); `ms` is how long it lasts on screen. */
+  | { type: 'tick'; depth: number; ms: number };
 
 /** The party's emotes, in the order the co-op sheet draws them. */
 export const EMOTES = ['help', 'here', 'wait', 'attention', 'thanks', 'hooray', 'heal', 'run'] as const;
@@ -62,6 +62,6 @@ export function applyEvent(world: World, event: WorldEvent): ActionResult {
       restartWorld(world, event.seed);
       return { ok: true, effects: [] };
     case 'tick':
-      return liveTick(world);
+      return liveTick(world, event.depth);
   }
 }

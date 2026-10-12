@@ -1,5 +1,5 @@
 import {
-  applyEvent, autoAction, blockers, type ClientMessage, createWorld, type GameMode, isAlive, liveTurnMs, type PlayerInfo, type ServerMessage,
+  applyEvent, autoAction, blockers, type ClientMessage, createWorld, type GameMode, isAlive, liveBeatMs, liveBlockers, liveReady, type PlayerInfo, type ServerMessage,
   type World, type WorldEvent,
 } from '@pd/core';
 
@@ -67,8 +67,13 @@ export const IDLE_TIMEOUT = 4000;
  */
 export const ARENA_READY_TIMEOUT = 30_000;
 
-/** Live turns: the room's clock stops once nobody here has done anything for this long. */
-export const LIVE_IDLE_MS = 10 * 60_000;
+/**
+ * Live turns: a fight waits for a player who has said nothing for LIVE_TURN_TIMEOUT, then their
+ * hero waits a turn. One who is away, or has done nothing for LIVE_IDLE_MS while a companion plays,
+ * is not waited for at all. With nobody playing, nothing is hurried: the room simply waits.
+ */
+export const LIVE_TURN_TIMEOUT = 15_000;
+export const LIVE_IDLE_MS = 30_000;
 
 /** Heroes per party; a shared invite link in a big chat must not flood one dungeon. */
 export const PARTY_SIZE = 4;
@@ -78,6 +83,8 @@ export const SEAT_TIMEOUT = 30 * 60_000;
 
 export class RoomLogic {
   private readonly online = new Set<string>();
+  /** Live turns: when each depth's next beat may come (its last one's time on screen gone by). */
+  private readonly nextBeat = new Map<number, number>();
 
   constructor(
     private readonly saved: RoomState,
@@ -92,36 +99,67 @@ export class RoomLogic {
     return new RoomLogic({ format: STATE_FORMAT, world: createWorld(seed, 0, mode, live), seq: 0, holdingSince: {} }, newSeed);
   }
 
-  /** Whether the room plays live turns: then it beats time itself (liveTick), and nobody is ever waited for. */
+  /** Whether the room plays live turns (the core's liveTick): calm depths walk on, fights go turn by turn together. */
   get live(): boolean {
     return this.saved.world.live === true;
   }
 
-  /** How long the next live turn lasts (ms): longer while anyone in the party is in a fight. */
-  turnMs(): number {
-    return liveTurnMs(this.saved.world);
+  /**
+   * Live turns: plays every depth whose next beat is ready (the core's liveReady) and due (its last
+   * beat has had its time on screen), each sent to everyone as an event with how long it lasts. A
+   * fight held up by someone who is away, or has said nothing for too long, has their hero wait.
+   */
+  pump(now: number): Delivery[] {
+    if (!this.live) return [];
+    const world = this.saved.world;
+    const deliveries = this.liveTimeouts(now);
+    for (const depth of this.depths()) {
+      if (!liveReady(world, depth) || now < (this.nextBeat.get(depth) ?? 0)) continue;
+      const ms = liveBeatMs(world, depth);
+      deliveries.push(...this.commit({ type: 'tick', depth, ms }, this.onlinePlayers()));
+      this.nextBeat.set(depth, now + ms);
+    }
+    return [...deliveries, ...this.liveTimeouts(now), ...this.readyTheAbsent(now)];
+  }
+
+  /** When pump should run next by itself: a beat that is ready comes due, or a fight's wait runs out. Null: at the next message. */
+  nextWake(now: number): number | null {
+    if (!this.live || this.saved.world.over || this.online.size === 0) return null;
+    const times: number[] = [];
+    for (const depth of this.depths()) {
+      if (liveReady(this.saved.world, depth)) times.push(Math.max(now, this.nextBeat.get(depth) ?? 0));
+    }
+    for (const since of Object.values(this.saved.holdingSince)) times.push(since + LIVE_TURN_TIMEOUT);
+    return times.length > 0 ? Math.min(...times) : null;
+  }
+
+  /** Depths with living heroes, shallowest first. */
+  private depths(): number[] {
+    return [...new Set(this.saved.world.heroes.filter(isAlive).map((hero) => hero.depth))].sort((a, b) => a - b);
   }
 
   /**
-   * Whether the room's clock should run: a live world, not over, someone here to play it, and someone
-   * who has done something in the last LIVE_IDLE_MS (a game left open overnight does not play on by
-   * itself; the next order starts the clock again).
+   * Heroes the fights wait for (the core's liveBlockers): one whose player is away or has stopped
+   * playing waits a turn at once, and anyone else after LIVE_TURN_TIMEOUT; but only while somebody
+   * plays (a party all gone quiet is not marched to its death).
    */
-  ticking(now = Date.now()): boolean {
-    if (!this.live || this.saved.world.over || this.online.size === 0) return false;
-    const active = [...this.online].map((id) => this.saved.activeAt?.[id] ?? 0);
-    return active.some((at) => now - at < LIVE_IDLE_MS);
-  }
-
-  /**
-   * A beat of the room's clock (live turns): one turn for every occupied depth, sent to everyone as
-   * an event carrying how long it lasts, so every screen walks it in that time. At the arena's rest,
-   * whoever is away is ready.
-   */
-  liveTick(now: number): Delivery[] {
-    if (!this.ticking(now)) return [];
-    const deliveries = this.commit({ type: 'tick', ms: this.turnMs() }, this.onlinePlayers());
-    return [...deliveries, ...this.readyTheAbsent(now)];
+  private liveTimeouts(now: number): Delivery[] {
+    const deliveries: Delivery[] = [];
+    const activeAt = (id: string): number => this.saved.activeAt?.[id] ?? 0;
+    const playing = [...this.online].some((id) => now - activeAt(id) < LIVE_IDLE_MS);
+    const holding: Record<string, number> = {};
+    for (const id of liveBlockers(this.saved.world)) {
+      const since = this.saved.holdingSince[id] ?? now;
+      const gone = !this.online.has(id) || now - activeAt(id) >= LIVE_IDLE_MS;
+      if (playing && (gone || now >= since + LIVE_TURN_TIMEOUT)) {
+        const event: WorldEvent = { type: 'act', heroId: id, action: { type: 'wait' } };
+        if (applyEvent(this.saved.world, event).ok) deliveries.push(this.broadcast(event));
+      } else {
+        holding[id] = since;
+      }
+    }
+    this.saved.holdingSince = holding;
+    return deliveries;
   }
 
   /**
@@ -215,14 +253,14 @@ export class RoomLogic {
     }
     deliveries.push({ to: [player.id], message: this.snapshot(player.id) });
     deliveries.push(this.presence());
-    deliveries.push(...(this.live ? this.readyTheAbsent(now) : this.settle(now)));
+    deliveries.push(...(this.live ? this.pump(now) : this.settle(now)));
     return deliveries;
   }
 
   disconnect(playerId: string, now: number): Delivery[] {
     this.online.delete(playerId);
     (this.saved.offlineSince ??= {})[playerId] = now;
-    return [this.presence(), ...(this.live ? this.readyTheAbsent(now) : this.settle(now))];
+    return [this.presence(), ...(this.live ? this.pump(now) : this.settle(now))];
   }
 
   receive(playerId: string, message: ClientMessage, now: number): Delivery[] {
@@ -236,7 +274,7 @@ export class RoomLogic {
         if (!result.ok) {
           return [{ to: [playerId], message: { type: 'rejected', reason: result.reason } }];
         }
-        return [this.broadcast(event), ...(this.live ? this.readyTheAbsent(now) : this.settle(now))];
+        return [this.broadcast(event), ...(this.live ? this.pump(now) : this.settle(now))];
       }
       case 'restart':
         if (!this.saved.world.over) {
@@ -297,8 +335,8 @@ export class RoomLogic {
 
   /** Makes heroes who ran out of time wait a turn. */
   tick(now: number): Delivery[] {
-    // Live turns hold nobody up: only the arena's readiness has a deadline.
-    if (this.live) return this.readyTheAbsent(now);
+    // Live turns: the room's own clock (pump) does the waiting.
+    if (this.live) return this.pump(now);
     const deliveries: Delivery[] = [];
     for (const [id, since] of Object.entries(this.saved.holdingSince)) {
       if (now >= since + TURN_TIMEOUT || now >= this.idleAt(id, since)) {

@@ -447,20 +447,22 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
 /* Scheduling */
 
 /*
- * Live turns (world.live: co-op and the arena). The world is not held for anyone: a clock
- * (the room's, or the solo session's) calls liveTick, and every occupied depth plays one turn
- * of its time. A hero due to act does the next thing of their plan — a step towards where
- * they are going, a blow at what they hunt, an item used — and with nothing to do, strikes
- * back at whatever is after them, or waits (autoAction). The rules are the original's turns,
- * only kept to a beat, so a party moves together without ever waiting on one another.
+ * Live turns (world.live: co-op and the arena), the tactical way. Each depth is either calm
+ * or in a fight. Calm, nobody is held up: heroes with orders (Hero.plan) carry them out a step
+ * a beat, the others simply wait, and time stands still while nobody has anything to do. In a
+ * fight (a hero on the depth in danger, or the arena's wave on) it is the original's turns:
+ * time goes on only once every hero due to act has said what to do — a backpack open, a potion
+ * being chosen, and the monsters wait too — and then all those moves play out together in one
+ * beat, not one after another. An order that lasts (a walk) counts as said. A tap on a monster
+ * is a walk up to it and one blow, as in the original: heroes never fight by themselves.
  */
 
-/** A hero's standing order under live turns: an action once, or something that lasts. */
+/** A hero's order under live turns: an action once, or something that lasts. */
 export type PlanStep =
   | Action
   /** Walk to a cell, finding the way afresh at every step (around monsters in sight and companions held fast). */
   | { type: 'go'; to: number }
-  /** Go for a monster and strike it until it falls, or is lost from sight. */
+  /** Walk up to a monster and strike it once. */
   | { type: 'hunt'; target: string }
   /** Rest until healed, while nothing in sight is after the hero. */
   | { type: 'rest' }
@@ -469,27 +471,76 @@ export type PlanStep =
 
 /** The longest plan a hero keeps. */
 const MAX_PLAN = 64;
-/** How long a live turn takes (ms): exploring, and while anyone in the party is in a fight (time slows down). */
-export const LIVE_TURN_MS = 180;
-export const LIVE_COMBAT_MS = 360;
+/** How long a beat takes (ms): calm, a step of a walk; in a fight, the least time between turns (for their moves to be seen). */
+export const LIVE_CALM_MS = 150;
+export const LIVE_FIGHT_MS = 220;
+/** Resting or searching, turns go by quickly: nothing moves on screen. */
+export const LIVE_REST_MS = 40;
 
-/** The beat of the next live turn: slower while any living hero is in danger, so a fight leaves time to think. */
-export function liveTurnMs(world: World): number {
-  return world.heroes.some((hero) => isAlive(hero) && !isSafe(world, hero)) ? LIVE_COMBAT_MS : LIVE_TURN_MS;
+/** Whether a depth is in a fight: a hero there is in danger, or the arena's wave is on. */
+export function inFight(world: World, depth: number): boolean {
+  if (world.arena?.phase === 'fight' && world.arena.depth === depth) return true;
+  return world.heroes.some((hero) => hero.depth === depth && isAlive(hero) && !isSafe(world, hero));
 }
 
-/** One live turn for every occupied depth. */
-export function liveTick(world: World): ActionResult {
-  const effects: Effect[] = [];
-  if (world.over) return { ok: true, effects };
+/** A hero has something to do: an order not yet carried out. */
+const hasOrders = (hero: Hero): boolean => (hero.plan?.length ?? 0) > 0;
+
+/**
+ * Whether a fight waits for this hero's move: they are in danger (a monster in sight is after them,
+ * or near), or the arena's wave is on round them. A companion off exploring is not held to turns.
+ */
+function heldToTurns(world: World, hero: Hero): boolean {
+  return (world.arena?.phase === 'fight' && world.arena.depth === hero.depth) || !isSafe(world, hero);
+}
+
+/** Where a depth's beat ends: the one under way if a fight held it up, else the next. */
+function beatEnd(floor: Floor): number {
+  return floor.liveOpen ? floor.liveAt! : Math.max(floor.liveAt ?? floor.now, floor.now) + 1;
+}
+
+/** Heroes a depth's fight waits for: due to act in this beat, and with nothing to do. */
+export function liveWaiting(world: World, depth: number): string[] {
+  if (world.over || !inFight(world, depth)) return [];
+  const until = beatEnd(floorAt(world, depth));
+  return heroesOn(world, depth)
+    .filter((hero) => isAlive(hero) && hero.time < until && hero.paralysed <= 0 && !hasOrders(hero) && heldToTurns(world, hero))
+    .map((hero) => hero.id);
+}
+
+/** Every hero a fight is waiting for, depth by depth. */
+export function liveBlockers(world: World): string[] {
   const depths = [...new Set(world.heroes.filter(isAlive).map((hero) => hero.depth))].sort((a, b) => a - b);
-  for (const depth of depths) {
-    const floor = floorAt(world, depth);
-    // A depth's clock: from where its time stands (a party arriving gets the depth's time, see place).
-    const until = Math.max(floor.liveAt ?? floor.now, floor.now) + 1;
-    advanceLive(world, depth, effects, until);
-    floor.liveAt = until;
-  }
+  return depths.flatMap((depth) => liveWaiting(world, depth));
+}
+
+/** Whether a depth's next beat can be played: calm, when someone has something to do; in a fight, when nobody due is without orders. */
+export function liveReady(world: World, depth: number): boolean {
+  if (world.over) return false;
+  const heroes = heroesOn(world, depth).filter(isAlive);
+  if (heroes.length === 0) return false;
+  // A fight goes on once nobody it waits for is without a move; calm, once someone has something to do.
+  return inFight(world, depth) ? liveWaiting(world, depth).length === 0 && (heroes.some(hasOrders) || heroes.some((hero) => !heldToTurns(world, hero))) : heroes.some(hasOrders);
+}
+
+/** How long a depth's next beat takes on screen (ms). */
+export function liveBeatMs(world: World, depth: number): number {
+  const busy = heroesOn(world, depth).filter((hero) => isAlive(hero) && hasOrders(hero));
+  const still = busy.length > 0 && busy.every((hero) => ['rest', 'wait', 'search'].includes(hero.plan![0]!.type));
+  if (inFight(world, depth)) return LIVE_FIGHT_MS;
+  return still ? LIVE_REST_MS : LIVE_CALM_MS;
+}
+
+/** One beat of a depth: its turns up to the beat's end, each hero doing what they were told. */
+export function liveTick(world: World, depth: number): ActionResult {
+  const effects: Effect[] = [];
+  if (world.over || !world.levels[depth]) return { ok: true, effects };
+  const floor = floorAt(world, depth);
+  const until = beatEnd(floor);
+  const done = advanceLive(world, depth, effects, until);
+  floor.liveAt = until;
+  if (done) delete floor.liveOpen;
+  else floor.liveOpen = true;
   world.turn++;
   return { ok: true, effects };
 }
@@ -505,13 +556,17 @@ function turnTime(world: World, floor: Floor, turn: Turn): number {
   }
 }
 
-/** A depth's turns up to its clock's next beat; heroes do what their plans say. */
-function advanceLive(world: World, depth: number, effects: Effect[], until: number): void {
+/**
+ * A depth's turns up to `until`; heroes do what their orders say. A hero with nothing to do waits,
+ * unless a fight holds them to turns: then the beat stops at them (false) until they say. True once
+ * the beat is over.
+ */
+function advanceLive(world: World, depth: number, effects: Effect[], until: number): boolean {
   const floor = floorAt(world, depth);
   const ctx: Ctx = { world, depth, level: levelAt(world, depth), floor, rng: new Rng(floor.rng), effects };
   for (let guard = 0; guard < 10_000; guard++) {
     const turn = world.over ? undefined : nextTurn(world, depth);
-    if (!turn || turnTime(world, floor, turn) >= until) return;
+    if (!turn || turnTime(world, floor, turn) >= until) return true;
     if (turn.kind !== 'hero') {
       playTurn(ctx, turn);
       continue;
@@ -524,22 +579,26 @@ function advanceLive(world: World, depth: number, effects: Effect[], until: numb
       continue;
     }
     let action = planned(world, hero);
-    const problem = problemWith(world, hero, action);
+    const problem = action && problemWith(world, hero, action);
     if (problem) {
-      // The order cannot be carried out: it is dropped, and the hero defends themselves this turn.
-      if (hero.plan?.length) effects.push({ type: 'interrupted', hero: hero.id, reason: problem });
+      // The order cannot be carried out: it is dropped, and the player says what instead.
+      effects.push({ type: 'interrupted', hero: hero.id, reason: problem });
       hero.plan = [];
-      action = autoAction(world, hero.id);
-      if (problemWith(world, hero, action)) action = { type: 'wait' };
+      action = null;
+    }
+    if (!action) {
+      if (heldToTurns(world, hero)) return false;
+      action = { type: 'wait' };
     }
     perform(ctx, hero, action);
     if (floor.falling) itemsFall(world, depth);
     overChasm(ctx, hero);
   }
+  return true;
 }
 
-/** What a hero's plan asks of them this turn; with nothing to do, autoAction. */
-function planned(world: World, hero: Hero): Action {
+/** What a hero's orders ask of them this turn; null when they have none left. */
+function planned(world: World, hero: Hero): Action | null {
   const plan = (hero.plan ??= []);
   while (plan.length > 0) {
     const step = plan[0]!;
@@ -560,7 +619,11 @@ function planned(world: World, hero: Hero): Action {
           plan.shift();
           continue;
         }
-        if (adjacent(mob.pos, hero.pos)) return { type: 'attack', target: mob.id };
+        if (adjacent(mob.pos, hero.pos)) {
+          // One blow, as a tap on a monster is in the original; the next takes another tap.
+          plan.shift();
+          return { type: 'attack', target: mob.id };
+        }
         const next = stepTowards(world, hero, mob.pos);
         if (next === null) {
           plan.shift();
@@ -591,7 +654,7 @@ function planned(world: World, hero: Hero): Action {
         return step;
     }
   }
-  return autoAction(world, hero.id);
+  return null;
 }
 
 /**

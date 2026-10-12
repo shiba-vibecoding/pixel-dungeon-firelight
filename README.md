@@ -177,15 +177,17 @@ applies the same event to its own copy. The core is deterministic, so all
 copies stay identical; a client that misses an event asks for a snapshot.
 
 Co-op rooms (and the arena alone, unless turned off in the settings) play
-**live turns**: the world is not held for anyone. The room's clock beats a turn
-every 180 ms, 360 ms while anyone in the party is in a fight (a slower beat
-leaves time to think), and broadcasts each beat as a `tick` event; every
-occupied depth plays one turn of its time (`liveTick` in the core). A player's
-action is a standing order (`plan`): walk to a cell (the way found afresh at
-every step), hunt a monster until it falls, rest until healed, stride while a
-key is held, or any action once. A hero with no orders strikes back at what
-attacks them, else waits. A step on screen lasts the beat, so walks never
-pause. Solo games keep the original's classic turns.
+**live turns**, the tactical way. A player's action is an order (`plan`): walk
+to a cell (the way found afresh at every step), walk up to a monster and strike
+once, rest until healed, stride while a key is held, or any action once. While
+a depth is calm, orders are carried out a step a beat (150 ms) and nobody waits
+for anyone; with nothing to do, time stands still. Once a hero there is in
+danger (or the arena's wave is on), it is the original's turns: time goes on
+only when every hero in danger has said what to do — the monsters wait while a
+backpack is open — and the moves play out together in one beat, not one after
+another. A walking hero counts as having said. The room waits 15 s for someone
+who says nothing while a companion plays, and not at all for someone away.
+Heroes never fight by themselves. Solo games keep the original's classic turns.
 
 ## Development
 
