@@ -180,6 +180,8 @@ export class Room extends DurableObject<Env> {
   private readonly writer = new ChunkWriter();
   private readonly signals = new SignalLimiter();
   private readonly limiter = new MessageLimiter();
+  /** True once 'idleSince' is known to be gone from storage while players are here. */
+  private idleCleared = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -220,8 +222,11 @@ export class Room extends DurableObject<Env> {
   private async schedule(leaving?: WebSocket): Promise<void> {
     const deadline = this.logic?.deadline();
     if (this.occupied(leaving)) {
-      await this.ctx.storage.delete('idleSince');
+      // Once per wake-up is enough: every action comes through here, and writes are counted.
+      if (!this.idleCleared) await this.ctx.storage.delete('idleSince');
+      this.idleCleared = true;
     } else {
+      this.idleCleared = false;
       let idleSince = await this.ctx.storage.get<number>('idleSince');
       if (idleSince === undefined) {
         idleSince = Date.now();
