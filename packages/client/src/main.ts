@@ -1503,8 +1503,13 @@ function tick(now: number): void {
       // Below the last shop the signs burst into flames as one reads them (Sign.read).
       const tip = t.signs[me.depth - 1] ?? t.signBurns;
       if (terrain === T.SIGN && tip) {
-        walk.reset();
-        showSign(tip, hideOverlay);
+        if (walk.queue.length > 0 || held.code) {
+          // Passed over on the way somewhere: read in passing, into the log, and the walk goes on.
+          view.say(`${t.signTitle} ${tip}`, '#ffff44');
+        } else {
+          walk.reset();
+          showSign(tip, hideOverlay);
+        }
       }
     }
   }
