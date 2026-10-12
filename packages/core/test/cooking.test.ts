@@ -119,6 +119,8 @@ describe('the honeypot', () => {
     expect(bee).toMatchObject({ ht: 20, state: 'passive' });
     for (let i = 0; i < 10; i++) act(world, 'p', { type: 'wait' });
     expect(rat.hp).toBeLessThan(1000);
+    // Bitten, the rat turns on the bee, which can be hurt.
+    expect(rat.beeFoe).toBe(bee.id);
     for (let i = 0; i < 30; i++) act(world, 'p', { type: 'wait' });
     expect(floorAt(world, 1).mobs.some((m) => m.kind === 'bee')).toBe(false);
   });

@@ -598,6 +598,8 @@ function shatterHoneypot(ctx: Ctx, pos: number): void {
   const bee = createMob(`#${++world.nextId}`, 'bee', at, 'passive', floor.now + 1);
   bee.level = depth;
   bee.ht = bee.hp = mobStats(bee).ht;
+  // Alert from the start: no monster catches it off guard.
+  bee.enemySeen = true;
   floor.mobs.push(bee);
   enterCell(level, at);
   ctx.effects.push({ type: 'bee', depth, pos: at, from: pos });

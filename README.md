@@ -128,8 +128,7 @@ every monster on a level but its boss (and frees a shop's wares).
 Every item, monster, quest and room of the original is now in (the boss
 levels' skeleton keys aside: slaying the boss opens the way down directly).
 
-Where this port differs on purpose: co-op throughout; golden bees and mirror
-images are ignored by monsters rather than fought; Lloyd's beacon is not
+Where this port differs on purpose: co-op throughout; Lloyd's beacon is not
 blocked by companions standing next to its bearer; nothing wears out, so
 tempered weapons and armour of auto-repair are as good as plain ones (and
 auto-repair costs no gold).

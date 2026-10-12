@@ -156,6 +156,8 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
   const fov = (mob.blind ?? 0) > 0
     ? new Array<boolean>(LENGTH).fill(false)
     : castShadow(mob.pos, terrainBlocksSight(ctx.level.map), mobSight(mob, ctx.depth));
+  // Mob.aggro: bitten by a golden bee, it turns on the bee while the bee lives and is in sight.
+  if (mob.beeFoe && beeFight(ctx, mob, fov)) return;
   const justAlerted = mob.alerted;
   mob.alerted = false;
   const enemy = chooseEnemy(ctx, mob, fov);
@@ -262,13 +264,31 @@ function imageAct(ctx: Ctx, mob: Mob): void {
   else spend(mob, TICK);
 }
 
+/** A monster after a golden bee: at it if next to it, towards it if not; false once the bee is gone or out of sight. */
+function beeFight(ctx: Ctx, mob: Mob, fov: boolean[]): boolean {
+  const bee = ctx.floor.mobs.find((other) => other.id === mob.beeFoe && isAlive(other));
+  if (!bee || !fov[bee.pos] || mob.state === 'fleeing') {
+    delete mob.beeFoe;
+    return false;
+  }
+  mob.state = 'hunting';
+  if (adjacent(mob.pos, bee.pos)) {
+    attack(ctx, mob, bee);
+    spend(mob, mobStats(mob).attackDelay ?? TICK);
+    return true;
+  }
+  if (!getCloser(ctx, mob, bee.pos, fov)) return false;
+  spend(mob, 1 / MOBS[mob.kind].speed);
+  return true;
+}
+
 /** Bee.viewDistance. */
 const BEE_SIGHT = 4;
 
 /**
  * Bee.act: a golden bee lives a turn less with every turn. It sticks to the
  * monster it went for, or picks one in sight; with none, it keeps by the
- * nearest hero. Like a mirror image, monsters pay it no heed.
+ * nearest hero. A monster it bites turns on it (Mob.aggro).
  */
 function beeAct(ctx: Ctx, mob: Mob): void {
   if (--mob.hp <= 0) {
@@ -286,6 +306,8 @@ function beeAct(ctx: Ctx, mob: Mob): void {
   }
   if (foe && adjacent(mob.pos, foe.pos)) {
     attack(ctx, mob, foe);
+    // Bee.attackProc: the monster turns on the bee.
+    if (isAlive(foe)) foe.beeFoe = mob.id;
     spend(mob, TICK);
     return;
   }

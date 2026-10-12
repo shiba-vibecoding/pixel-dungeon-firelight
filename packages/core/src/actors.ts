@@ -436,6 +436,8 @@ export interface Mob {
   pumped?: boolean;
   /** Turns left of being marked by the sacrificial fire: dying meanwhile, it is an offering. */
   marked?: number;
+  /** Bitten by a golden bee (Mob.aggro): the bee it has turned on. */
+  beeFoe?: string;
   /** The imp who keeps the last shop has greeted the heroes. */
   greeted?: boolean;
   /** The Rat King: woken by someone (though he says he was not asleep). */

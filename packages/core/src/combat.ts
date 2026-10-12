@@ -273,7 +273,7 @@ export type Hazard = 'poison' | 'burning' | 'ooze' | 'lightning' | 'gripping' | 
 export function hurt(ctx: Ctx, victim: Char, damage: number, source: Char | Hazard): void {
   if (!isAlive(victim)) return;
   // The sad ghost cannot be harmed; the shopkeeper will not stay to be.
-  if (!isHero(victim) && victim.state === 'passive') {
+  if (!isHero(victim) && victim.state === 'passive' && victim.kind !== 'bee') {
     if (isShopkeeper(victim)) shopkeeperFlees(ctx, victim);
     return;
   }
