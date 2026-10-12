@@ -52,6 +52,8 @@ export const ITEMS = {
   // Drunk: floating above traps and chasms for a while; cleansing the air around.
   'potion.levitation': { category: 'potion' },
   'potion.purity': { category: 'potion' },
+  /** Only from a well of transmutation, out of a potion of strength. */
+  'potion.might': { category: 'potion' },
 
   'scroll.identify': { category: 'scroll' },
   'scroll.teleportation': { category: 'scroll' },
@@ -239,7 +241,7 @@ export function createItem(kind: ItemKind, qty = 1, level = 0): Item {
 const POTION_PRICES: Partial<Record<ItemKind, number>> = {
   'potion.healing': 30, 'potion.experience': 80, 'potion.mindVision': 35, 'potion.invisibility': 40,
   'potion.strength': 100, 'potion.toxicGas': 40, 'potion.paralyticGas': 40, 'potion.liquidFlame': 40,
-  'potion.frost': 50, 'potion.levitation': 35, 'potion.purity': 50,
+  'potion.frost': 50, 'potion.levitation': 35, 'potion.purity': 50, 'potion.might': 200,
 };
 const SCROLL_PRICES: Partial<Record<ItemKind, number>> = {
   'scroll.identify': 30, 'scroll.teleportation': 40, 'scroll.mapping': 25, 'scroll.lullaby': 50,
@@ -400,7 +402,7 @@ const CATEGORY_CHANCES: ReadonlyArray<readonly [GeneratedCategory, number]> = [
 ];
 
 const KIND_CHANCES: Readonly<Record<Exclude<GeneratedCategory, 'gold' | 'food'>, ReadonlyArray<readonly [ItemKind, number]>>> = {
-  // Strength only comes as guaranteed finds; the original's might never at all.
+  // Strength only comes as guaranteed finds, and might out of a well of transmutation.
   potion: [
     ['potion.healing', 45], ['potion.experience', 4], ['potion.toxicGas', 15], ['potion.paralyticGas', 10],
     ['potion.liquidFlame', 15], ['potion.levitation', 10], ['potion.mindVision', 20], ['potion.purity', 12],

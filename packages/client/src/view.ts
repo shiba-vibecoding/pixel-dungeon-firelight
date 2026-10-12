@@ -491,7 +491,10 @@ export class View {
         case 'well':
           audio.play('drink');
           if (effect.hero === myId) {
-            this.say(effect.water === 'health' ? t.wellHealth : t.wellAwareness, COLORS.positive, now);
+            this.say(
+            effect.water === 'health' ? t.wellHealth : effect.water === 'awareness' ? t.wellAwareness : t.wellTransmutation,
+            COLORS.positive, now,
+          );
             haptic('success');
           }
           break;
@@ -513,6 +516,10 @@ export class View {
           if (effect.hero === myId) {
             this.say(t.disarmed(t.mobs[mobKind(effect.depth, effect.mob, 'monk')], itemName(world, effect.item)), COLORS.negative, now);
           }
+          break;
+        case 'transmuted':
+          audio.play('evoke');
+          if (effect.hero === myId) this.say(t.transmuted(itemName(world, effect.from), itemName(world, effect.to)), COLORS.highlight, now);
           break;
         case 'mined':
           if (effect.depth !== this.depth) break;

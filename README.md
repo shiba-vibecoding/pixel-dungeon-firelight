@@ -25,7 +25,8 @@ Yendor on depth 26:
   grass that is trampled and sheds healing dew and seeds, burnable doors and
   barricades.
 - Special rooms: treasury, armory, library and crypt behind locked doors with
-  their iron keys, magic wells, trap rooms, storage rooms behind barricades,
+  their iron keys, magic wells (of health, awareness and transmutation, which
+  turns what is dropped into it into something else), trap rooms, storage rooms behind barricades,
   gardens, laboratories with an alchemy pot (three seeds brew a potion),
   statue rooms where one statue comes alive with an enchanted weapon, flooded
   pools guarded by piranhas, vaults with locked and crystal chests opened by
@@ -88,8 +89,8 @@ Yendor on depth 26:
 Worse-than-plain gear is cursed: once worn, it will not come off until a
 scroll of remove curse (or of upgrade) lifts the curse.
 
-Not ported yet: the potion of might; and gas clouds (gas acts at once on
-everyone within reach instead).
+Not ported yet: gas clouds (gas acts at once on everyone within reach
+instead).
 
 ## How co-op works
 

@@ -44,7 +44,7 @@ export type ItemSpec =
   /** One particular item, such as the wares of a shop. */
   | { roll: 'kind'; kind: ItemKind };
 
-export type WellWater = 'health' | 'awareness';
+export type WellWater = 'health' | 'awareness' | 'transmutation';
 
 export interface ItemSpawn {
   pos: number;

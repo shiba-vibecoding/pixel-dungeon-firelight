@@ -790,6 +790,11 @@ function keyFor(hero: Hero): number {
 function drinkFromWell(ctx: Ctx, hero: Hero): void {
   const { level, world } = ctx;
   const index = level.wells.findIndex((well) => well.pos === hero.pos);
+  // Water of transmutation does nothing to whoever wades in: it is for what is dropped into it.
+  if (index >= 0 && level.wells[index]!.water === 'transmutation') {
+    ctx.effects.push({ type: 'well', hero: hero.id, water: 'transmutation' });
+    return;
+  }
   level.map[hero.pos] = T.EMPTY_WELL;
   if (index < 0) return;
   const { water } = level.wells.splice(index, 1)[0]!;

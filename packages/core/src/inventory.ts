@@ -17,6 +17,7 @@ import { type Burst, burst } from './traps';
 import { plant, SEED_PLANTS } from './plants';
 import { zapWand } from './wands';
 import { mine, mineProblem, TIME_TO_MINE } from './smith';
+import { transmute } from './transmute';
 import type { World } from './world';
 
 /*
@@ -203,6 +204,16 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
     }
     case 'drop': {
       const item = hero.items.splice(action.item, 1)[0]!;
+      // Into a well of transmutation, it comes out as something else, and the well runs dry.
+      const well = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'transmutation');
+      const changed = well >= 0 && ctx.level.map[hero.pos] === T.WELL ? transmute(item, ctx.rng, ctx.depth) : null;
+      if (changed) {
+        ctx.level.wells.splice(well, 1);
+        ctx.level.map[hero.pos] = T.EMPTY_WELL;
+        dropItem(ctx.floor, hero.pos, changed);
+        ctx.effects.push({ type: 'transmuted', hero: hero.id, from: item, to: changed });
+        return TIME_TO_DROP;
+      }
       // Floating over a chasm, it falls through.
       landItem(ctx, hero.pos, item);
       ctx.effects.push({ type: 'dropped', hero: hero.id, item });
@@ -531,6 +542,13 @@ function use(ctx: Ctx, hero: Hero, index: number, target: 'weapon' | 'armor'): v
       break;
     case 'potion.strength':
       hero.str++;
+      ctx.effects.push({ type: 'strength', hero: hero.id });
+      break;
+    case 'potion.might':
+      // PotionOfMight: a point of strength, and five of health.
+      hero.str++;
+      hero.ht += 5;
+      hero.hp += 5;
       ctx.effects.push({ type: 'strength', hero: hero.id });
       break;
     case 'potion.mindVision':

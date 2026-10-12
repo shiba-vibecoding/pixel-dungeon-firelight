@@ -159,6 +159,8 @@ export type Effect =
   | { type: 'unlocked'; depth: number; pos: number; hero: string }
   | { type: 'ghost'; hero: string; line: GhostLine }
   | { type: 'well'; hero: string; water: WellWater }
+  /** Something dropped into a well of transmutation came out as something else. */
+  | { type: 'transmuted'; hero: string; from: Item; to: Item }
   | { type: 'wandmaker'; hero: string; line: WandmakerLine }
   | { type: 'imp'; hero: string; line: ImpLine }
   | { type: 'smith'; hero: string; line: SmithLine }

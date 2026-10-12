@@ -557,15 +557,14 @@ function paintGarden(level: LevelBuilder, room: Room): void {
   }
 }
 
-/** MagicWellPainter: a well of healing or awareness in the middle. */
+/** MagicWellPainter: a well of healing, awareness or transmutation in the middle. */
 function paintMagicWell(level: LevelBuilder, room: Room): void {
   const { rng } = level;
   level.fillRect(room, T.WALL);
   level.fillRect(room, T.EMPTY, 1);
   const c = room.center(rng);
   level.setXY(c.x, c.y, T.WELL);
-  // The original also has water of transmutation; it is not ported yet.
-  const water = rng.oneOf(['awareness', 'health', 'health'] as const);
+  const water = rng.oneOf(['awareness', 'health', 'transmutation'] as const);
   level.wells.push({ pos: cell(c.x, c.y), water });
   entranceOf(room).set(DoorType.REGULAR);
 }
