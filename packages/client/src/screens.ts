@@ -1581,11 +1581,17 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'potion') use(t.throwItem, () => aimWith('throw', index));
     if (category === 'honeypot') use(t.shatterPot, () => act({ type: 'use', item: index }));
     // QuickSlot: any item with a use can be kept one tap away.
-    if (quickUse(item.kind) && !inQuickslot(hero, item)) {
-      more.push(button(t.quickslotShort, () => {
-        chooseQuickslot(item.kind);
-        refreshBackpack(world, hero);
-      }));
+    // QuickSlot: one on a phone; a wide screen has two (keys 1 and 2).
+    if (quickUse(item.kind)) {
+      const wide = Boolean(document.querySelector('#ui.pd-wide'));
+      const slots = wide ? [0, 1] : [0];
+      for (const slotNo of slots) {
+        if (hero.items[quickIndex(hero, slotNo)] === item) continue;
+        more.push(button(wide ? t.quickslotN(slotNo + 1) : t.quickslotShort, () => {
+          chooseQuickslot(item.kind, slotNo);
+          refreshBackpack(world, hero);
+        }));
+      }
     }
     danger.push(button(t.dropItem, () => stay({ type: 'drop', item: index }), 'danger'));
   } else if (options.ring !== undefined) {

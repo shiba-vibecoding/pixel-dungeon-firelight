@@ -20,24 +20,6 @@ export interface MapActions {
   resume(): void;
 }
 
-/** A 12×12 pixel arrow, the resume button's icon. */
-function arrowIcon(): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 12;
-  const g = canvas.getContext('2d')!;
-  const rows = ['............', '..#.....#...', '..##....##..', '..###...###.', '..####..####', '..###...###.', '..##....##..', '..#.....#...', '............'];
-  rows.forEach((row, y) => [...row].forEach((c, x) => {
-    if (c !== '#') return;
-    g.fillStyle = '#0b0b09';
-    g.fillRect(x, y + 2, 1, 1);
-  }));
-  rows.forEach((row, y) => [...row].forEach((c, x) => {
-    if (c !== '#') return;
-    g.fillStyle = '#ffeba4';
-    g.fillRect(x, y + 1, 1, 1);
-  }));
-  return canvas.toDataURL();
-}
 
 export class MapControls {
   private readonly box: HTMLElement;
@@ -66,7 +48,6 @@ export class MapControls {
     this.attackButton = button('attack', t.attackEnemy, actions.attack);
     this.attackButton.hidden = true;
     this.resumeButton = button('resume', t.resumeWalk, actions.resume);
-    this.resumeButton.style.setProperty('--ico', `url("${arrowIcon()}")`);
     this.resumeButton.hidden = true;
     this.box = document.createElement('div');
     this.box.className = 'pd-mapctl';

@@ -1,30 +1,39 @@
 import { type Hero, type ItemKind, itemDef } from '@pd/core';
 
 /*
- * The quickslot (QuickSlot): the item the player keeps one tap away. The
- * player may put any usable item there; until then it holds the first thrown
- * weapon or wand in the pack. The choice is kept on this device.
+ * The quick slots (QuickSlot): the items the player keeps one tap away. The
+ * first is on every screen; a wide screen shows a second beside it (keys 1
+ * and 2). The player may put any usable item in either; until then the first
+ * holds the first thrown weapon or wand in the pack, and the second nothing.
+ * The choices are kept on this device.
  */
 
-const KEY = 'pd-quickslot';
+const KEYS = ['pd-quickslot', 'pd-quickslot2'] as const;
 
-let chosen: ItemKind | null = null;
-try {
-  chosen = localStorage.getItem(KEY) as ItemKind | null;
-} catch {
-  // No storage: the default it is.
-}
-
-export function chooseQuickslot(kind: ItemKind): void {
-  chosen = kind;
+const chosen: Array<ItemKind | null> = KEYS.map((key) => {
   try {
-    localStorage.setItem(KEY, kind);
+    return localStorage.getItem(key) as ItemKind | null;
   } catch {
-    // Kept for this session only.
+    // No storage: the default it is.
+    return null;
   }
+});
+
+/** Puts an item in a quick slot (0 or 1); out of the other one, if it was there. */
+export function chooseQuickslot(kind: ItemKind, slot = 0): void {
+  chosen[slot] = kind;
+  if (chosen[1 - slot] === kind) chosen[1 - slot] = null;
+  KEYS.forEach((key, i) => {
+    try {
+      if (chosen[i]) localStorage.setItem(key, chosen[i]!);
+      else localStorage.removeItem(key);
+    } catch {
+      // Kept for this session only.
+    }
+  });
 }
 
-export const isQuickslotted = (kind: ItemKind): boolean => chosen === kind;
+export const isQuickslotted = (kind: ItemKind): boolean => chosen.includes(kind);
 
 /** What a quickslot tap does with an item: aim a throw or a zap, or use it at once. */
 export function quickUse(kind: ItemKind): 'throw' | 'zap' | 'use' | null {
@@ -35,14 +44,18 @@ export function quickUse(kind: ItemKind): 'throw' | 'zap' | 'use' | null {
   return null;
 }
 
-/** The backpack slot shown in the quickslot, or -1. */
-export function quickIndex(hero: Hero): number {
-  if (chosen) {
-    const index = hero.items.findIndex((item) => item.kind === chosen);
+/** The backpack slot shown in a quick slot (0 or 1), or -1. */
+export function quickIndex(hero: Hero, slot = 0): number {
+  const kind = chosen[slot];
+  if (kind) {
+    const index = hero.items.findIndex((item) => item.kind === kind);
     if (index >= 0) return index;
   }
-  return hero.items.findIndex((item) => {
+  if (slot === 1) return -1;
+  // The first slot, empty: the first thrown weapon or wand, unless that is in the second already.
+  const other = chosen[1] ? hero.items.findIndex((item) => item.kind === chosen[1]) : -1;
+  return hero.items.findIndex((item, i) => {
     const category = itemDef(item.kind).category;
-    return category === 'missile' || category === 'wand';
+    return i !== other && (category === 'missile' || category === 'wand');
   });
 }

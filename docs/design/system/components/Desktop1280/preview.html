@@ -22,7 +22,7 @@
     document.getElementById('tabs').innerHTML = STATES.map(function (x) { return '<button class="pd-tab" role="tab" data-s="' + x[0] + '" aria-selected="' + (x[0] === state) + '">' + x[1] + '</button>'; }).join('');
     var s = document.getElementById('s'), W = PD.demo.win;
     var inGame = state === 'journal' || state === 'catalog' || state === 'intro' || state.indexOf('bag') === 0;
-    if (inGame) PD.demo.game(s, { depth: 6, mates: false, after: state === 'intro' ? intro : null }); else PD.demo.title(s, { en: lang === 'en', challenges: state === 'locked' ? 0 : 2 });
+    if (inGame && SW >= 900) { PD.demo.desk(s, { ui: 1, m: 3, mates: false, waiting: false, lang: lang }); if (state === 'intro') intro(); } else if (inGame) PD.demo.game(s, { depth: 6, mates: false, after: state === 'intro' ? intro : null }); else PD.demo.title(s, { en: lang === 'en', challenges: state === 'locked' ? 0 : 2 });
     if (state === 'settings') PD.demo.overlay(s, W.settings(lang));
     if (state === 'reset') PD.demo.overlay(s, W.reset(lang));
     if (state === 'locked') PD.demo.overlay(s, W.challenges(lang, { locked: true }));
@@ -38,8 +38,8 @@
       PD.demo.images(['emblems'], function (im) {
         var s = document.getElementById('s'), c = document.createElement('canvas'); c.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none';
         s.appendChild(c); var d = window.devicePixelRatio || 1; c.width = SW * d; c.height = SH * d; var g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.imageSmoothingEnabled = false;
-        var hb = s.querySelector('.pd-hud').getBoundingClientRect().bottom - s.getBoundingClientRect().top, lt = s.querySelector('.pd-log').getBoundingClientRect().top - s.getBoundingClientRect().top;
-        PD.fx.intro(g, DEPTH[lang], REG[lang], PD.demo.intros[lang][1], im.emblems, 1, Math.round((hb + lt) / 2) - 120, SW, 1400);
+        var hb = SW >= 900 ? 0 : s.querySelector('.pd-hud').getBoundingClientRect().bottom - s.getBoundingClientRect().top, lt = SW >= 900 ? SH : s.querySelector('.pd-log').getBoundingClientRect().top - s.getBoundingClientRect().top;
+        PD.fx.intro(g, DEPTH[lang], REG[lang], PD.demo.intros[lang][1], im.emblems, 1, (SW >= 900 ? Math.round(SH * 0.26) : Math.round((hb + lt) / 2) - 120), SW, 1400);
       });
     });
   }

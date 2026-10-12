@@ -1,0 +1,16 @@
+<!-- @dsCard group="Широкий экран" height=800 width=1280 page subtitle="Игровой экран 1280×800: герой, эффекты и отряд сверху слева, журнал/настройки/меню в углу, лог слева снизу над действиями, быстрые слоты и рюкзак справа, кнопки карты колонкой справа; подписи клавиш на кнопках и подсказка при наведении" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Игровой экран 1280×800</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .screen { position: relative; width: 1280px; height: 800px; overflow: hidden; --safe-t: 0px; --safe-b: 0px; }
+</style></head>
+<body>
+<div class="pd-root screen" id="s"></div>
+<script>
+  var q = new URLSearchParams(location.search);
+  PD.demo.desk(document.getElementById('s'), { ui: 1, m: 3, tip: q.get('tip') || 'mob', lang: q.get('lang') || 'ru', mates: q.get('solo') ? false : true, waiting: !q.get('solo'), finds: [['gold', '<i class="pd-item" data-i="14"></i><span>' + (q.get('lang') === 'en' ? 'Gold' : 'Золото') + '</span>']] });
+</script>
+</body>
+</html>

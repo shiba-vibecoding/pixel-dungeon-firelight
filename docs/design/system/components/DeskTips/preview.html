@@ -1,0 +1,23 @@
+<!-- @dsCard group="Широкий экран" height=820 width=1280 page subtitle="Подсказки при наведении мыши: монстр (красные уголки, здоровье), предмет на полу, клетка, кнопка с клавишей. Имя, коротко что это, что сделают ЛКМ и ПКМ; подсказка уходит от героя и от краёв" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Подсказки при наведении</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .grid { width: 1280px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; box-sizing: border-box; }
+  .cell { display: flex; flex-direction: column; gap: 6px; }
+  .cell h2 { margin: 0; font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
+  .cell h2 span { margin-left: 8px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+  .scr { position: relative; width: 616px; height: 352px; overflow: hidden; --safe-t: 0px; --safe-b: 0px; clip-path: var(--notch); }
+</style></head>
+<body>
+<div class="pd-root grid" id="g"></div>
+<script>
+  var CASES = [['mob', 'Монстр', 'красные уголки, полоска здоровья'], ['item', 'Предмет на полу', 'золотое имя'], ['cell', 'Клетка', 'название места и что с ним'], ['tool', 'Кнопка', 'название и клавиша, через 500 мс']];
+  CASES.forEach(function (c) {
+    var d = document.createElement('div'); d.className = 'cell'; d.innerHTML = '<h2>' + c[1] + '<span>' + c[2] + '</span></h2><div class="scr"></div>'; document.getElementById('g').appendChild(d);
+    PD.demo.desk(d.querySelector('.scr'), { ui: 1, m: 3, tip: c[0], bare: true });
+  });
+</script>
+</body>
+</html>

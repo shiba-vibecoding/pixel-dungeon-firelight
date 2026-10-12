@@ -20,7 +20,7 @@ let lastVisual = 0;
 let fallenAt = 0;
 import { BADGES, type BadgeId, badgeText, checkBadges, countGame, earnedBadges } from './badges';
 import { audio } from './audio';
-import { heroBuffs, Hud, type HudStatus } from './hud';
+import { heroBuffs, Hud, type HudStatus, type QuickState } from './hud';
 import { capitalize, t } from './i18n';
 import { itemInfo, itemName, wearOf } from './itemtext';
 import { bakeLevel, type Camera, patchLevel, render } from './render';
@@ -38,6 +38,7 @@ import { type Launch, Motion } from './motion';
 import { Scenery } from './scenery';
 import { Feedback } from './feedback';
 import { Finds, MapControls } from './mapui';
+import { type TipContent, Tooltip } from './tooltip';
 import { preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
 import { rankings, recordRun, runScore } from './rankings';
@@ -151,8 +152,14 @@ const hud = new Hud({
   },
   quick: () => {
     examining = false;
-    toggleQuickslot();
+    toggleQuickslot(0);
   },
+  quick2: () => {
+    examining = false;
+    toggleQuickslot(1);
+  },
+  journal: () => openJournal(),
+  settings: () => settings(hideOverlay),
   backpack: () => {
     examining = false;
     openBackpack();
@@ -191,7 +198,7 @@ function levelMiddle(level: Level): { x: number; y: number } {
 }
 
 /** The map's buttons over the log (zoom, the whole level, back to the hero) and the finds' stack (mapui.ts). */
-const mapControls = new MapControls(document.getElementById('ui')!, {
+const mapControlsActions = {
   zoomIn: () => zoomTo(Math.round(zoom.target) + 1, null),
   zoomOut: () => zoomTo(Math.round(zoom.target) - 1, null),
   whole: () => {
@@ -222,7 +229,8 @@ const mapControls = new MapControls(document.getElementById('ui')!, {
     const goal = walk.goal;
     if (goal !== null) tapCell(goal);
   },
-});
+};
+const mapControls = new MapControls(document.getElementById('ui')!, mapControlsActions);
 
 /** The very first game: «tap where to go» over the hero until the first step is taken (kept on this device). */
 let coach: HTMLElement | null = null;
@@ -241,8 +249,8 @@ function coachMove(me: Hero): void {
   }
   const x = (cellX(me.pos) * TILE + TILE / 2 - camera.x) * camera.zoom / (canvas.width / canvas.clientWidth);
   const y = (cellY(me.pos) * TILE - camera.y) * camera.zoom / (canvas.height / canvas.clientHeight);
-  coach.style.left = `${Math.round(x)}px`;
-  coach.style.top = `${Math.round(y)}px`;
+  coach.style.left = `${Math.round(x / hud.scale)}px`;
+  coach.style.top = `${Math.round(y / hud.scale)}px`;
 }
 
 /**
@@ -504,6 +512,13 @@ async function invite(id: string): Promise<void> {
   if (result === 'copied') toast(t.linkCopied);
 }
 
+/** The journal and catalog; from the menu it goes back to the menu, from the corner button to the game. */
+function openJournal(onClose: () => void = hideOverlay): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (world && me) showJournal({ world, hero: me, onClose });
+}
+
 function openMenu(): void {
   showMenu({
     room,
@@ -514,11 +529,7 @@ function openMenu(): void {
     },
     onHelp: () => showHelp(hideOverlay),
     onBadges: () => showBadges(hideOverlay),
-    onJournal: () => {
-      const world = session?.world;
-      const me = world && heroById(world, session!.myId);
-      if (world && me) showJournal({ world, hero: me, onClose: openMenu });
-    },
+    onJournal: () => openJournal(openMenu),
     onSettings: () => settings(openMenu),
     onReport: session?.mode === 'online'
       ? () => {
@@ -566,7 +577,7 @@ const heapAt = (world: World, depth: number, pos: number): boolean =>
 /** Aiming a thrown weapon or a wand: the next tap on the map picks the target. */
 let aim: { index: number; kind: 'throw' | 'zap' | 'special' } | null = null;
 
-function toggleQuickslot(): void {
+function toggleQuickslot(slot = 0): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!me) return;
@@ -574,7 +585,7 @@ function toggleQuickslot(): void {
     aim = null;
     return;
   }
-  const index = quickIndex(me);
+  const index = quickIndex(me, slot);
   if (index < 0) return;
   const item = me.items[index]!;
   if (item.charges === 0) {
@@ -1291,6 +1302,136 @@ canvas.addEventListener('wheel', (event) => {
   wheelSum = 0;
 }, { passive: false });
 
+/* Hover tooltips: a mouse over the map or a button says what is there (design system v12) */
+
+const tooltip = new Tooltip(document.getElementById('ui')!, () => hud.scale);
+/** The cell under the mouse, its golden corners on the map, and the tooltip's timer. */
+const hover = { cell: -1, timer: 0, frame: document.createElement('div') };
+hover.frame.className = 'pd-hover';
+hover.frame.style.display = 'none';
+canvas.insertAdjacentElement('afterend', hover.frame);
+
+/** The map cell under a point of the screen (CSS pixels), or -1. */
+function cellUnder(clientX: number, clientY: number): number {
+  const rect = canvas.getBoundingClientRect();
+  const px = (clientX - rect.left) * (canvas.width / rect.width);
+  const py = (clientY - rect.top) * (canvas.height / rect.height);
+  const x = Math.floor((camera.x + px / camera.zoom) / TILE);
+  const y = Math.floor((camera.y + py / camera.zoom) / TILE);
+  return x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT ? -1 : x + y * WIDTH;
+}
+
+function hideHover(): void {
+  window.clearTimeout(hover.timer);
+  hover.cell = -1;
+  hover.frame.style.display = 'none';
+  tooltip.hide();
+}
+
+/** What a cell holds, for its tooltip: a monster, a companion, an item on the floor, or the place itself. */
+function cellTip(cell: number): TipContent | null {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me || !exploredCells(world, me.depth)[cell]) return null;
+  const seen = visibleCells(world, me.depth)[cell];
+  const char = seen ? charAt(world, me.depth, cell) : undefined;
+  if (char && 'kind' in char) {
+    const passive = char.state === 'passive';
+    return {
+      name: capitalize(t.mobs[char.kind]),
+      kind: passive ? undefined : 'foe',
+      ...(passive ? {} : { health: Math.max(0, char.hp) / char.ht }),
+      text: `${mobDescription(char).split('. ')[0]!.replace(/\.$/, '')}.${passive ? '' : ` ${t.examineHealth(Math.max(0, char.hp), char.ht)}`}`,
+      keys: [[t.mouseLeft, passive ? t.tipTalk : t.tipAttack], [t.mouseRight, t.tipMore]],
+    };
+  }
+  if (char) {
+    return {
+      name: char.name,
+      kind: 'ally',
+      health: Math.max(0, char.hp) / char.ht,
+      text: `${capitalize(t.classes[char.heroClass])}, ${t.levelShort} ${char.lvl}`,
+      keys: char.id === me.id ? [[t.mouseLeft, t.tipSearch]] : [[t.mouseLeft, t.tipSwap], [t.mouseRight, t.tipMore]],
+    };
+  }
+  const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === cell && h.kind !== 'hidden');
+  if (heap && (seen || heap.kind !== 'heap')) {
+    const loose = heap.kind === 'heap' || heap.kind === 'forSale';
+    return {
+      name: loose ? capitalize(itemName(world, heap.items[0]!)) : capitalize(t.heapNames[heap.kind] ?? ''),
+      kind: 'item',
+      text: heap.kind === 'forSale' ? t.tipForSale : loose ? t.tipOnFloor : t.tipToOpen,
+      keys: [[t.mouseLeft, loose ? t.tipTake : t.tipOpen], [t.mouseRight, t.tipMore]],
+    };
+  }
+  const level = levelAt(world, me.depth);
+  const plant = world.floors[me.depth]?.plants?.find((p) => p.pos === cell);
+  const { name, desc } = plant ? plantText(plant.kind) : tileText(level.map[cell]!);
+  return {
+    name,
+    text: desc.split('. ')[0]!.replace(/\.$/, '') + '.',
+    keys: [[t.mouseLeft, cell === me.pos ? t.tipSearch : t.tipGo], [t.mouseRight, t.tipMore]],
+  };
+}
+
+canvas.addEventListener('pointermove', (event) => {
+  if (event.pointerType !== 'mouse' || event.buttons !== 0 || !session?.world || overlayOpen()) return;
+  const cell = cellUnder(event.clientX, event.clientY);
+  if (cell === hover.cell) return;
+  hideHover();
+  hover.cell = cell;
+  if (cell < 0) return;
+  const { clientX, clientY } = event;
+  hover.timer = window.setTimeout(() => {
+    const tip = cellTip(cell);
+    hover.frame.className = `pd-hover${tip?.kind === 'foe' ? ' foe' : ''}`;
+    hover.frame.style.display = tip ? '' : 'none';
+    if (tip) tooltip.show(tip, clientX, clientY);
+  }, 300);
+});
+canvas.addEventListener('pointerleave', hideHover);
+canvas.addEventListener('pointerdown', hideHover);
+// The right button: what the cell is, as «examine» and a tap with it do.
+canvas.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  hideHover();
+  const cell = cellUnder(event.clientX, event.clientY);
+  if (cell >= 0 && session?.world && !overlayOpen()) examineCell(cell);
+});
+
+/** The hovered cell's corners follow the map as the camera moves. */
+function placeHover(): void {
+  if (hover.cell < 0 || hover.frame.style.display === 'none') return;
+  const rect = canvas.getBoundingClientRect();
+  const k = rect.width / canvas.width;
+  const size = TILE * camera.zoom * k;
+  hover.frame.style.left = `${rect.left + ((hover.cell % WIDTH) * TILE - camera.x) * camera.zoom * k}px`;
+  hover.frame.style.top = `${rect.top + (Math.trunc(hover.cell / WIDTH) * TILE - camera.y) * camera.zoom * k}px`;
+  hover.frame.style.width = hover.frame.style.height = `${size}px`;
+}
+
+// Buttons: their name and key after a moment's hover.
+document.getElementById('ui')!.addEventListener('pointerover', (event) => {
+  if (event.pointerType !== 'mouse') return;
+  const button = (event.target as HTMLElement).closest<HTMLElement>('button[aria-label]');
+  window.clearTimeout(hover.timer);
+  if (!button) {
+    if (hover.cell < 0) tooltip.hide();
+    return;
+  }
+  const { clientX, clientY } = event;
+  hover.timer = window.setTimeout(() => {
+    const key = button.getAttribute('aria-keyshortcuts') ?? '';
+    tooltip.show({ name: button.getAttribute('aria-label') ?? '', key: key === 'Escape' ? 'Esc' : key }, clientX, clientY, true);
+  }, 500);
+});
+document.getElementById('ui')!.addEventListener('pointerout', (event) => {
+  if ((event.target as HTMLElement).closest('button[aria-label]') && hover.cell < 0) {
+    window.clearTimeout(hover.timer);
+    tooltip.hide();
+  }
+});
+
 function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;
   // A region's intro is read first: the tap that skips it does nothing else.
@@ -1413,8 +1554,23 @@ addEventListener('keydown', (event) => {
   } else if (event.code === 'Escape') {
     if (aim) aim = null;
     else openMenu();
-  } else if (event.code === 'KeyT') {
-    toggleQuickslot();
+  } else if (event.code === 'KeyT' || event.code === 'Digit1') {
+    toggleQuickslot(0);
+  } else if (event.code === 'Digit2') {
+    toggleQuickslot(1);
+  } else if (event.code === 'KeyX') {
+    aim = null;
+    examining = !examining;
+  } else if (event.code === 'Tab') {
+    mapControlsActions.attack();
+  } else if (event.code === 'KeyV') {
+    mapControlsActions.resume();
+  } else if (event.code === 'KeyH') {
+    mapControlsActions.home();
+  } else if (event.code === 'KeyM') {
+    mapControlsActions.whole();
+  } else if (event.code === 'KeyJ') {
+    openJournal();
   } else if (event.code === 'Equal' || event.code === 'NumpadAdd') {
     zoomTo(Math.round(zoom.target) + 1, null);
   } else if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
@@ -1444,11 +1600,19 @@ function resize(): void {
   // of the dungeon, as the desktop original does, instead of zooming it. Integer zoom, for crisp
   // pixels; out to the whole level across the window, in to twice as close.
   const narrow = Math.min(canvas.width, canvas.height);
+  // A wide screen (design system v12): the interface in a layer scaled by a whole number, and the
+  // map's tile chosen so 27-30 cells show across and at least 13 down.
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  const wideScreen = W >= 900;
+  hud.setLayout(wideScreen, Math.max(1, Math.min(4, Math.floor(H / 720), Math.floor(W / 1100))));
   const fine = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
   const screenNarrow = Math.min(screen.width || canvas.clientWidth, screen.height || canvas.clientHeight);
   // A small window (Telegram's on a computer) still shows at least 9 tiles across.
   const windowNarrow = Math.min(canvas.clientWidth, canvas.clientHeight);
-  const cssScale = Math.max(1, Math.min(Math.round(screenNarrow / (TILE * (fine ? 16 : 12))), Math.floor(windowNarrow / (TILE * 9))));
+  const cssScale = wideScreen
+    ? Math.max(2, Math.min(Math.round(W / 448), Math.floor(H / 208)))
+    : Math.max(1, Math.min(Math.round(screenNarrow / (TILE * (fine ? 16 : 12))), Math.floor(windowNarrow / (TILE * 9))));
   zoom.base = Math.max(1, Math.round((cssScale * dpr) / shrink));
   zoom.min = Math.max(1, Math.min(zoom.base, Math.floor(narrow / (TILE * WIDTH))));
   zoom.max = Math.max(zoom.base + 2, zoom.base * 2);
@@ -1934,6 +2098,8 @@ function tick(now: number): void {
   // The attack indicator and «go on», right there on the map's column.
   if (walk.goal === me.pos) walk.goal = null;
   const foe = isAlive(me) ? attackTarget(world, me) : null;
+  placeHover();
+  if (overlayOpen() && hover.cell >= 0) hideHover();
   mapControls.indicators(
     foe ? { key: `${foe.id}:${foe.kind}`, portrait: () => portrait(foe.kind) } : null,
     isAlive(me) && walk.goal !== null && walk.queue.length === 0 && !walk.chase && !session.busy,
@@ -1971,8 +2137,17 @@ function tick(now: number): void {
     holdingSince = 0;
     holdingFelt = false;
   }
-  const quick = quickIndex(me);
-  const quickItem = me.items[quick];
+  const quickItem = me.items[quickIndex(me, 0)];
+  const quickItem2 = hud.wide ? me.items[quickIndex(me, 1)] : undefined;
+  const quickState = (item: Item | undefined, aiming: boolean): QuickState | null =>
+    item
+      ? {
+          sprite: itemSprite(item, world.run.labels),
+          label: item.charges !== undefined ? `${item.charges}/${wandMaxCharges(item)}` : item.qty > 1 ? String(item.qty) : '',
+          aiming,
+          wear: wearOf(world, item),
+        }
+      : null;
   const cancelChoice = (): void => {
     aim = null;
     examining = false;
@@ -1999,17 +2174,9 @@ function tick(now: number): void {
       newLoot,
       looks: session.looks,
       keys: me.items.filter((i) => (i.kind === 'key.iron' || i.kind === 'key.skeleton') && i.depth === me.depth).length,
-      quick: quickItem
-        ? {
-            sprite: itemSprite(quickItem, world.run.labels),
-            label:
-              quickItem.charges !== undefined
-                ? `${quickItem.charges}/${wandMaxCharges(quickItem)}`
-                : quickItem.qty > 1 ? String(quickItem.qty) : '',
-            aiming: aim !== null,
-            wear: wearOf(world, quickItem),
-          }
-        : null,
+      quick: quickState(quickItem, aim !== null && aim.index === quickIndex(me, 0)),
+      quick2: quickState(quickItem2, aim !== null && aim.index === quickIndex(me, 1)),
+      waitingFor: session.mode === 'online' ? blockers(world).filter((id) => id !== me.id) : [],
     },
     walk.resting,
   );

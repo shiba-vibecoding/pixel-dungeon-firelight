@@ -69,6 +69,9 @@
   --spr-about: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACF0lEQVR42u1XPUgjQRT+RraJIMRC1MjapPCuORRB0LPc2iaFYqqAR1hsDkM4bCRVUgSt7vCuMZUIgbRW6RQFIcSkEOEIOVizUdKc8TDlWMQddpPZJDtZcyl8zbfz8+375s3bnXmEUgpCiA//wSilumQ0tHKhMijHWimLFSUyAwBS68AgLJNKsmep06DbFghF2/ok3sRf0vqbCPjqV9qiLNlNJtOjrjq/CW9AK2WRSSWxf3w/Y/SP9PPSeiKO759XQKvPInS9LwH1RBy/q80PJzw7LipCTEA9EW/rExDhExZgrPwyl++Z8zF2BNmvIBCKIhKcqriSA07MLqm5AuhDo4mvIW1F21+rAI8rgEx6QKvPINOjXLRdpQBvOCPgJBH7tZGuq7FBt3j8Lag1mvv5wEdb5wK84YzAIE3quJpaA2TCwzB/tGcZX15csGBYbf4d1VjawjPQkYBWMq01cJnLo3iVY3M+LS1a2t34QhEwoxpLW8av1S0Ur3I4PC31xB/KHHgXwD+MJjw9kZ3cB3r+CgKhKJBK4ifWOiYPLyk7Ob893ObWHcRcmmnlQsWYJPsVfFB/dBXh1Ln5Vkwp1Q0B7I52kd1nx5zsV1wrxVqdA9AppSwCePqrYcwr+wAgEpyq8KqYfssxw/nB7qq+kzgHEwAA/x7voP85w9z8JhPhpgCz8y/fTjDmla0CABhbwbbjDUw3leYAgBdgYXiC1QTpBQAAAABJRU5ErkJggg==");
   --spr-challenge-off: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAABwElEQVR4nK2VsWrCQBiAvyQ+RMBRQgQfoEtLBqGv0MVBWqVtoOCjdFJKKzi4+BAdSrt0VRRDcBTyEI3pUO+4xEu8QP/pQnLfd///X+6sLMswjdliIj62+jePRnPsOvA42hFHO4Bstpj8n0DAk31Csk9qSRrqw2VwcfLBIOxL+Gq5yb3z/FZ2GVxYxTlfH99mGRThtuNgOw6r5UZmMgj7lU0sFejgDcem4di1JFpBGVxEHcmJ4By8riTXZB384elWvj/uHgCSfQLAeh3lmn+UyMbLpalb8Rxcje51cJKJ8kP+Ccrgb+OZFqrGx/snnY5fKrF1cLXmVZJoG8ux2hPPbxFHO+7ue1npNn0bzwi6V/LZ81tyLOoP4Le9nKgYNmAl+wS36RKOhhzSlJ/0INMPulfaLKJtnIP/pAcOaUo4GiIqMn2ZWyIDS9ROJxEZidUL6Dk4gK0cu6WSqqiCixIxfZmLFZVKBmEfALfp4rc9I7gUmEpEiUzhAJZ6o6nHtd/2Mrfp4vktxs+vue2rg0fbWMKNjuuyTM7Bi1F5H+gkdeAnJSrG3X1PDGW5AAlHOdRED2sJdBLAGG4kKErEPBM4wC8TyQLZg8CE9QAAAABJRU5ErkJggg==");
   --spr-challenge-on: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACA0lEQVR4nK2VP0vDQBjGn1zqdyi4WUJEUHBRh4CDuPQLCCK2+Aexk4uIfgEpODgpIoqKCH4BwaGCGEGrILRQGkJFwUImcREEvcRBLr0kd2kCPtMlufs97/veexfF8zwk1dH5LpusFKeWE60haeC21YJttQDAOzrf/T8DBnfaDpy2k8okwz8Y46ORCQulog+v1xqBb5qe84zxUSW8xry+T5ZBGE5UFURVUa81/EwWSsXYTZQaiOAZlSCjklQmQgMZnCmNScSgGzyticKfA75bGPzOfAA+N/4m1Df9uc+NYQDA9KEKl1IMDg0g25uFpucA7pyQWPjlZCcUDs7rbusxkgm4FiZxcCNf6UQvkbE2grM5KjUhIjhfcyNfkcJnj3v8Mb8nmp6DbbVwc3XrSdvUyFdglqudF4Pr/pDVHwBOCt8Bo7BIcWpZcdoOsr1ZlFYW4VKKH+r66ZvlqjCL2eOeAPyHunApRWllEawiABS/i+aXZjzWBTvb+8L2NMtVPDeGIxHL4ADXRQd7pwrboHAmcYqDBwy6mZgXEwCAvoEnnBS+pXCraSscL3jQmETlWi2MoVl7wdv7BwDg6fVLCtf7NRzsnQIInWT+utb7NemedIs80XVtNW1hubrBw4r9H4hM0sAjJQprfmmGDT3uIhN2C6t5KgORCYDE8EQGYRO2LgkcAH4Bjjv2Pi6Km2cAAAAASUVORK5CYII=");
+  --spr-cursor: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAkCAYAAACTz/ouAAAA0klEQVR4nNWWIRLCMBBFXxlMJ8eoqkXiKjlHbV3PgcNyDiQOiUVxjA6yqI8IkymBbhOeykyn2X353U5wrhydK0eMWFlt/FbAysTcYK3F/XYGoKqbEWAYHsUcBZYzEHObLG8gDsc9AF3b/2RiblDo29fZ+5wuVwC6tgfiTdIbiG9N8jEQsSb5GYhPTfI1EFMm6f5FPn6nIXQiMklnUNUNEM4m30lW5+rQf57dJL8y8DsPsdtuogosl8FU56GJnzK3z2CuG1wI+wxiX/Bv4Mnn4P95AvTaf9nJ3UFoAAAAAElFTkSuQmCC");
+  --spr-book: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA0klEQVR4nGP8//8/AwMDAwMjI2MaAwng9evXsxgYGBhYkDUXi4vPlGBlxavxxe/fDL0vX6bD+EwwRqywMEHNDAwMDOhqWNAVlKyC0L+vfWdgYGBgYNXihPNZtTgZesJQ1WMYgFDAiSaDzsdhALJLYLb+vvadYWIDiQZAXALThF0zAwNSIJILKDYAqxde/P6NVTG2aMZqADHpAQZQvIDLZnxqUFwQvnkZQQMe7zvM0FvRgN0ABgYGBmNjA4IGYHXB4rdv08V8o2YeJCIzIQNGSrMzAClJQbojJzyXAAAAAElFTkSuQmCC");
+  --spr-resume: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAS0lEQVR4nGNgoBv4/3rJf2LEmUjVxIRPEps4hgZCmrBq4FFIxSbMwKOQimkDj0Iqw9ev3xkJiv9/veQ/NzcnhlNwiTNgFcQjTjsAAFaVMA2T6ca3AAAAAElFTkSuQmCC");
 }
 
 /* ---------- База ---------- */
@@ -1146,3 +1149,98 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 .pd-pick-actions { position: sticky; bottom: 0; z-index: 1; margin-top: auto; padding-top: var(--space-2); background: var(--stone-700); }
 .pd-pick-head .pd-pick-dropbtn { font: var(--text-caption, 400 15px/20px var(--font-small)); padding: 0 6px; }
 .pd-pick-head .pd-heading { overflow-wrap: normal; word-break: normal; }
+
+/* ---------- Широкий экран: игровой экран на мониторе ----------
+   .pd-wide на корне игрового экрана при ширине от 900 px. Интерфейс живёт в слое .pd-ui, который целиком увеличивается
+   в целое число раз (--ui: 1 или 2) — шрифт и спрайты остаются в своей сетке. Карта под слоем масштабируется отдельно. */
+.pd-ui { position: absolute; left: 0; top: 0; z-index: var(--z-hud, 10); width: calc(100% / var(--ui, 1)); height: calc(100% / var(--ui, 1)); transform: scale(var(--ui, 1)); transform-origin: 0 0; pointer-events: none; --gap: 12px; }
+.pd-ui > * { pointer-events: auto; }
+.pd-ui { cursor: var(--spr-cursor) 0 0, default; }
+
+/* сверху слева: герой, эффекты, отряд, строка ожидания — одной колонкой шириной с телефонный HUD */
+.pd-dcol { position: absolute; left: var(--gap); top: var(--gap); width: 380px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.pd-dcol > * { pointer-events: auto; }
+.pd-dpanel { padding: 6px 8px 6px 6px; background: rgba(11, 11, 9, 0.78); clip-path: var(--notch); box-shadow: inset 0 0 0 var(--u) var(--stone-500); }
+.pd-dhud { display: flex; flex-direction: column; gap: 6px; }
+.pd-dhud .pd-hud-main { align-items: center; }
+.pd-dhud .pd-hud-side { flex-direction: row; gap: 12px; padding: 0 2px 0 6px; align-self: center; }
+.pd-dhud .pd-buffs { padding-left: 2px; }
+
+/* отряд: карточка товарища — портрет, имя, состояние, здоровье, глубина */
+.pd-party { display: flex; flex-direction: column; gap: 4px; }
+.pd-pcard {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; grid-template-areas: "face name depth" "face bar bar" "face state state";
+  column-gap: 8px; row-gap: 2px; align-items: center; width: 260px; min-height: 52px; padding: 4px 8px 5px 6px; text-align: left;
+  background: rgba(31, 33, 28, 0.88); border: var(--u) solid var(--stone-400); clip-path: var(--notch);
+}
+.pd-pcard .pd-mate-face { grid-area: face; width: 24px; height: 30px; background: var(--atlas-heroes) no-repeat; background-size: 96px 30px; background-position: calc(var(--av, 0) * -24px) 0; image-rendering: pixelated; }
+.pd-pcard .pd-mate-name { grid-area: name; min-width: 0; font: var(--text-body, 400 18px/22px var(--font-ui)); color: var(--ally); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pd-pcard .pd-mate-depth { grid-area: depth; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); display: inline-flex; align-items: center; gap: 3px; }
+.pd-pcard .pd-mate-depth::before { content: ""; width: 12px; height: 12px; background: var(--spr-depth) center / contain no-repeat; image-rendering: pixelated; }
+.pd-pcard .pd-bar { grid-area: bar; height: 8px; border-width: 1px; box-shadow: none; }
+.pd-pcard .pd-pstate { grid-area: state; font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pd-pcard.turn { border-color: var(--gold-deep); }
+.pd-pcard.turn .pd-pstate { color: var(--gold); }
+.pd-pcard.away .pd-mate-name { color: var(--ink-muted); }
+.pd-pcard.dead .pd-mate-face { filter: grayscale(1) brightness(.6); }
+.pd-pcard.dead .pd-mate-name { color: var(--ink-muted); text-decoration: line-through; }
+.pd-pcard.dead .pd-bar::before { width: 0; }
+.pd-pcard:active { background: rgba(59, 62, 54, 0.92); }
+.pd-dcol .pd-status { position: static; width: max-content; max-width: 380px; }
+
+/* сверху справа: журнал, настройки, меню; под ними — находки */
+.pd-dcorner { position: absolute; right: var(--gap); top: var(--gap); display: flex; gap: 6px; }
+.pd-mapbtn.journal { --ico: var(--spr-book); } .pd-mapbtn.prefs { --ico: var(--spr-prefs); } .pd-mapbtn.menu { --ico: var(--spr-menu); --iw: 6; --ih: 5; }
+.pd-mapbtn.prefs, .pd-mapbtn.journal { --iw: 16; --ih: 16; }
+.pd-ui .pd-mapbtn::before { width: calc(var(--iw, 12) * var(--u)); height: calc(var(--ih, 12) * var(--u)); }
+.pd-ui .pd-finds { top: calc(var(--gap) + 56px); right: var(--gap); }
+.pd-ui .pd-toast { top: var(--gap); }
+
+/* подпись горячей клавиши на кнопке */
+.pd-key { position: absolute; z-index: 2; left: 3px; top: 1px; font: var(--text-digits, 400 15px/15px var(--font-small)); color: var(--stone-200); text-shadow: var(--text-outline); pointer-events: none; letter-spacing: 0; }
+/* на панели снизу клавиша подписана под значком; у кнопок карты и угла — только в подсказке при наведении */
+.pd-dbar .pd-tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.pd-dbar .pd-tool .pd-icon { width: calc(var(--w) * var(--u)); height: calc(var(--h) * var(--u)); }
+.pd-dbar .pd-key { position: static; color: var(--ink-muted); }
+
+/* снизу: действия слева, быстрые слоты и рюкзак справа — как панель оригинала, но двумя островами */
+.pd-dbar { position: absolute; bottom: var(--gap); display: flex; gap: 4px; padding: 4px; background: rgba(11, 11, 9, 0.78); clip-path: var(--notch); box-shadow: inset 0 0 0 var(--u) var(--stone-500); }
+.pd-dbar.left { left: var(--gap); }
+.pd-dbar.right { right: var(--gap); }
+.pd-dbar .pd-tool { width: 64px; height: var(--tool-h, 56px); flex: none; }
+.pd-dbar .pd-tool.quick .pd-item { --u: 2px; }
+
+/* лог: слева снизу, над действиями; без подложки — тень под строками и лёгкий градиент, клики по карте проходят сквозь */
+.pd-ui .pd-log { left: var(--gap); right: auto; width: min(560px, 44%); bottom: calc(var(--gap) + var(--tool-h, 56px) + 8px + 8px); padding: 10px 14px 6px 10px; background: linear-gradient(to right, rgba(11, 11, 9, 0.62), rgba(11, 11, 9, 0.38) 70%, rgba(11, 11, 9, 0)); clip-path: var(--notch); pointer-events: none; }
+.pd-ui .pd-log .pd-log-more { pointer-events: auto; align-self: flex-start; }
+
+/* кнопки карты: колонкой справа над быстрыми слотами */
+.pd-ui .pd-mapctl { right: var(--gap); bottom: calc(var(--gap) + var(--tool-h, 56px) + 8px + 8px); }
+.pd-mapbtn.attack { --ico: none; } .pd-mapbtn.attack::before { display: none; }
+.pd-mapbtn.attack i { width: 32px; height: 30px; background: center / contain no-repeat; image-rendering: pixelated; }
+.pd-mapbtn.attack { box-shadow: inset 0 0 0 2px var(--bad), inset 0 0 0 4px var(--void); }
+.pd-mapbtn.resume { --ico: var(--spr-resume); }
+
+/* подсказка при наведении: имя, коротко что это, и что сделают кнопки мыши */
+.pd-tooltip {
+  position: absolute; z-index: 40; text-align: left; max-width: 300px; padding: 6px 10px 7px; pointer-events: none;
+  background: rgba(31, 33, 28, 0.96); border: var(--u) solid var(--stone-400); clip-path: var(--notch);
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.45)); display: flex; flex-direction: column; gap: 2px;
+}
+.pd-tooltip-name { font: var(--text-body, 400 18px/22px var(--font-ui)); color: var(--ink); }
+.pd-tooltip-name.foe { color: var(--bad); } .pd-tooltip-name.ally { color: var(--ally); } .pd-tooltip-name.item { color: var(--gold); }
+.pd-tooltip-text { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+.pd-tooltip .pd-bar { width: 100%; min-width: 200px; height: 8px; border-width: 1px; box-shadow: none; margin: 3px 0 1px; }
+.pd-tooltip-keys { display: flex; gap: 10px; margin-top: 3px; padding-top: 4px; border-top: var(--u) solid var(--stone-600); font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); }
+.pd-tooltip-keys b { font-weight: 400; color: var(--gold-deep); }
+.pd-tooltip.small { padding: 2px 8px; } /* у кнопок: название и клавиша */
+.pd-tooltip.small .pd-tooltip-name { font: var(--text-caption, 400 15px/20px var(--font-small)); }
+.pd-tooltip.small .pd-tooltip-name b { font-weight: 400; color: var(--gold-deep); margin-left: 6px; }
+/* клетка под курсором: уголки в цвет того, что на ней */
+.pd-hover { position: absolute; z-index: 4; pointer-events: none; box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 0 4px rgba(11, 11, 9, 0.6); clip-path: polygon(0 0, 30% 0, 30% 2px, 70% 2px, 70% 0, 100% 0, 100% 30%, calc(100% - 2px) 30%, calc(100% - 2px) 70%, 100% 70%, 100% 100%, 70% 100%, 70% calc(100% - 2px), 30% calc(100% - 2px), 30% 100%, 0 100%, 0 70%, 2px 70%, 2px 30%, 0 30%); }
+.pd-hover.foe { box-shadow: inset 0 0 0 2px var(--bad), inset 0 0 0 4px rgba(11, 11, 9, 0.6); }
+.pd-cursor { position: absolute; z-index: 41; width: 24px; height: 36px; background: var(--spr-cursor) 0 0 / contain no-repeat; image-rendering: pixelated; pointer-events: none; }
+/* только для макетов: слой без HUD, чтобы показать подсказку крупно */
+.pd-ui.bare > :not(.pd-tooltip, .pd-cursor, .pd-dbar.left) { display: none; }
+.pd-ui.bare.notool > .pd-dbar { display: none; }
+.pd-tooltip-name b { font-weight: 400; color: var(--gold-deep); margin-left: 6px; }

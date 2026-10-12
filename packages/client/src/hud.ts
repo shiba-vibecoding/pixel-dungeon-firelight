@@ -9,6 +9,13 @@ import type { LogLine } from './view';
  * status band on top (portrait, health, experience, satiety, depth, keys,
  * menu, buffs, companions), the log and the toolbar at the bottom. The
  * middle of the screen stays free for the map and its effects.
+ *
+ * A wide screen (900 px and more, design system v12) arranges the same
+ * nodes otherwise: the hero's panel, the party's cards and the status in a
+ * column at the top left; journal, settings and menu in the top right
+ * corner; the toolbar split in two islands (actions left; two quick slots
+ * and the backpack right), each button with its key. The whole layer is
+ * scaled up by a whole number (--ui) on big monitors, so the pixels stay sharp.
  */
 
 /** Buff icons in buffs.png (BuffIndicator). */
@@ -61,7 +68,11 @@ export interface HudHandlers {
   search(): void;
   examine(): void;
   quick(): void;
+  /** The second quick slot (wide screens). */
+  quick2(): void;
   backpack(): void;
+  journal(): void;
+  settings(): void;
   history(): void;
   /** A tap on a buff icon: what it is. */
   buff(name: BuffName, turns?: number): void;
@@ -89,7 +100,11 @@ export interface HudState {
   log: readonly LogLine[];
   buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
   /** The quickslot: a thrown weapon or a wand, ready to use. */
-  quick: { sprite: number; label: string; aiming: boolean; wear?: { left: number; max: number } | null } | null;
+  quick: QuickState | null;
+  /** The second quick slot (shown on wide screens). */
+  quick2?: QuickState | null;
+  /** Companions the party is waiting for now (their cards say «their move»). */
+  waitingFor?: readonly string[];
   /** Iron keys for the current depth. */
   keys: number;
   examining: boolean;
@@ -97,6 +112,13 @@ export interface HudState {
   newLoot: boolean;
   /** What each player wears (Pixel-Mart): my portrait's frame, the patron's star by companions' names. */
   looks: Record<string, Look>;
+}
+
+export interface QuickState {
+  sprite: number;
+  label: string;
+  aiming: boolean;
+  wear?: { left: number; max: number } | null;
 }
 
 /** How long a log line stays, and how many are shown at once (three on short screens). */
@@ -174,7 +196,20 @@ export class Hud {
   private readonly notice: HTMLElement;
   private readonly log: HTMLElement;
   private readonly more: HTMLElement;
-  private readonly tools: Record<'wait' | 'search' | 'examine' | 'quick' | 'bag', HTMLButtonElement>;
+  private readonly tools: Record<'wait' | 'search' | 'examine' | 'quick' | 'quick2' | 'bag', HTMLButtonElement>;
+  private readonly main: HTMLElement;
+  private readonly menu: HTMLButtonElement;
+  private readonly toolbar: HTMLElement;
+  /** The wide screen's own places: the column, the corner and the two islands. */
+  private readonly column: HTMLElement;
+  private readonly panel: HTMLElement;
+  private readonly corner: HTMLElement;
+  private readonly islandLeft: HTMLElement;
+  private readonly islandRight: HTMLElement;
+  /** Whether the wide layout is on, and its whole-number scale. */
+  wide = false;
+  scale = 1;
+  private laid = false;
   /** What each part last showed, so the DOM is only touched when something changed. */
   private shown: Record<string, string> = {};
   private hold: { start: number; timer: number; fired: boolean } | null = null;
@@ -202,15 +237,14 @@ export class Hud {
     this.keys = document.createTextNode('');
     const menu = el('button', 'pd-menu');
     menu.ariaLabel = t.menu;
+    menu.setAttribute('aria-keyshortcuts', 'Escape');
     menu.onclick = tap(() => handlers.menu());
+    this.menu = menu;
     this.buffBox = el('div', 'pd-buffs');
     this.mates = el('div', 'pd-mates');
     this.notice = el('div', 'pd-status');
     this.notice.setAttribute('role', 'status');
-    this.band = el(
-      'header',
-      'pd-hud',
-      el(
+    this.main = el(
         'div',
         'pd-hud-main',
         el('div', 'pd-avatar-wrap', avatarButton, this.level),
@@ -232,37 +266,105 @@ export class Hud {
           el('span', 'pd-stat', icon('key', 14, 18), this.keys),
         ),
         menu,
-      ),
-      this.buffBox,
-      this.mates,
-      this.notice,
-    );
+      );
+    this.band = el('header', 'pd-hud', this.main, this.buffBox, this.mates, this.notice);
 
     this.more = el('button', 'pd-log-more', t.history);
     this.more.onclick = tap(() => handlers.history());
     this.log = el('div', 'pd-log', this.more);
 
-    const tool = (label: string, className: string, ...content: Child[]): HTMLButtonElement => {
+    const tool = (label: string, className: string, key: string, ...content: Child[]): HTMLButtonElement => {
       const node = el('button', `pd-tool${className ? ` ${className}` : ''}`, ...content);
       node.ariaLabel = label;
+      node.setAttribute('aria-keyshortcuts', key);
+      node.dataset.key = key === ' ' ? 'Space' : key;
       return node;
     };
     this.tools = {
-      wait: tool(t.waitLabel, '', glyph('tool-wait', 12, 12)),
-      search: tool(t.searchLabel, '', glyph('tool-search', 12, 12)),
-      examine: tool(t.examineLabel, '', glyph('tool-info', 8, 12)),
-      quick: tool(t.quickLabel, 'quick empty'),
-      bag: tool(t.backpack, 'bag', glyph('tool-backpack', 14, 15)),
+      wait: tool(t.waitLabel, '', 'Space', glyph('tool-wait', 12, 12)),
+      search: tool(t.searchLabel, '', 'F', glyph('tool-search', 12, 12)),
+      examine: tool(t.examineLabel, '', 'X', glyph('tool-info', 8, 12)),
+      quick: tool(t.quickLabel, 'quick empty', '1'),
+      quick2: tool(t.quickLabel, 'quick empty', '2'),
+      bag: tool(t.backpack, 'bag', 'I', glyph('tool-backpack', 14, 15)),
     };
     this.tools.search.onclick = tap(() => handlers.search());
     this.tools.examine.onclick = tap(() => handlers.examine());
     this.tools.quick.onclick = tap(() => handlers.quick());
+    this.tools.quick2.onclick = tap(() => handlers.quick2());
     this.tools.bag.onclick = tap(() => handlers.backpack());
     this.holdToRest(this.tools.wait);
-    const toolbar = el('nav', 'pd-toolbar', ...Object.values(this.tools));
-    toolbar.ariaLabel = t.actionsLabel;
+    this.toolbar = el('nav', 'pd-toolbar');
+    this.toolbar.ariaLabel = t.actionsLabel;
 
-    this.root.replaceChildren(this.band, this.log, toolbar);
+    // The wide screen's places, filled by setLayout.
+    const cornerButton = (kind: string, label: string, key: string, act: () => void): HTMLButtonElement => {
+      const node = el('button', `pd-mapbtn ${kind}`);
+      node.ariaLabel = label;
+      if (key) node.setAttribute('aria-keyshortcuts', key);
+      node.onclick = tap(act);
+      return node;
+    };
+    this.panel = el('header', 'pd-dpanel pd-dhud');
+    this.column = el('div', 'pd-dcol');
+    this.corner = el(
+      'div',
+      'pd-dcorner',
+      cornerButton('journal', t.meta.journal, 'J', () => handlers.journal()),
+      cornerButton('prefs', t.meta.settings, '', () => handlers.settings()),
+    );
+    this.islandLeft = el('nav', 'pd-dbar left');
+    this.islandLeft.ariaLabel = t.actionsLabel;
+    this.islandRight = el('nav', 'pd-dbar right');
+    this.islandRight.ariaLabel = t.backpack;
+
+    this.root.prepend(this.band, this.log, this.toolbar);
+    this.setLayout(false, 1);
+  }
+
+  /**
+   * The phone's arrangement or the wide screen's (from 900 px), and the wide one's whole-number
+   * scale. The same nodes move between places; nothing else in the layer (the map's buttons,
+   * the finds) is touched.
+   */
+  setLayout(wide: boolean, scale: number): void {
+    if (this.laid && this.wide === wide && this.scale === (wide ? scale : 1)) return;
+    this.laid = true;
+    this.wide = wide;
+    this.scale = wide ? scale : 1;
+    this.root.classList.toggle('pd-ui', wide);
+    this.root.classList.toggle('pd-wide', wide);
+    this.root.style.setProperty('--ui', String(this.scale));
+    // The key under each button on the wide screen's islands.
+    for (const button of Object.values(this.tools)) {
+      button.querySelector('.pd-key')?.remove();
+      if (wide) button.prepend(el('span', 'pd-key', button.dataset.key ?? ''));
+    }
+    this.menu.className = wide ? 'pd-mapbtn menu' : 'pd-menu';
+    this.mates.className = wide ? 'pd-party' : 'pd-mates';
+    delete this.shown.mates;
+    delete this.shown.quick;
+    delete this.shown.quick2;
+    if (wide) {
+      this.main.querySelector('.pd-menu, .pd-mapbtn.menu')?.remove();
+      this.corner.append(this.menu);
+      this.panel.append(this.main, this.buffBox);
+      this.column.append(this.panel, this.mates, this.notice);
+      this.islandLeft.append(this.tools.wait, this.tools.search, this.tools.examine);
+      this.islandRight.append(this.tools.quick, this.tools.quick2, this.tools.bag);
+      this.band.remove();
+      this.toolbar.remove();
+      this.root.prepend(this.column, this.corner, this.log, this.islandLeft, this.islandRight);
+    } else {
+      this.main.append(this.menu);
+      this.band.append(this.main, this.buffBox, this.mates, this.notice);
+      this.toolbar.append(this.tools.wait, this.tools.search, this.tools.examine, this.tools.quick, this.tools.bag);
+      this.column.remove();
+      this.corner.remove();
+      this.islandLeft.remove();
+      this.islandRight.remove();
+      this.root.prepend(this.band, this.log, this.toolbar);
+    }
   }
 
   /** The hourglass: a tap waits a turn; holding it fills a bar in steps, then rests until healed. */
@@ -361,7 +463,7 @@ export class Hud {
     }
 
     const mateKey = state.party
-      .map((h) => `${h.id}:${h.name}:${h.heroClass}:${Math.max(0, h.hp)}/${h.ht}:${h.depth}:${state.online.includes(h.id)}:${state.looks[h.id]?.patron ?? ''}`)
+      .map((h) => `${h.id}:${h.name}:${h.heroClass}:${Math.max(0, h.hp)}/${h.ht}:${h.depth}:${state.online.includes(h.id)}:${state.looks[h.id]?.patron ?? ''}:${state.waitingFor?.includes(h.id) ?? false}`)
       .join('|') + `@${me.depth}`;
     if (this.changed('mates', mateKey)) {
       this.mates.hidden = state.party.length === 0;
@@ -372,13 +474,20 @@ export class Hud {
           const bar = el('div', 'pd-bar');
           bar.style.setProperty('--v', String(Math.max(0, hero.hp) / hero.ht));
           const away = hero.depth !== me.depth || !state.online.includes(hero.id);
+          const turn = Boolean(state.waitingFor?.includes(hero.id));
+          // The wide screen's card says what the companion is up to.
+          const what = !isAlive(hero) ? t.mateFallen
+            : !state.online.includes(hero.id) ? t.mateOffline
+            : hero.depth !== me.depth ? t.mateOnDepth(hero.depth)
+            : turn ? t.mateTurn : '';
           const node = el(
             'button',
-            `pd-mate${!isAlive(hero) ? ' dead' : away ? ' away' : ''}`,
+            `${this.wide ? 'pd-pcard' : 'pd-mate'}${!isAlive(hero) ? ' dead' : turn ? ' turn' : away ? ' away' : ''}`,
             face,
             el('span', 'pd-mate-name', state.looks[hero.id]?.patron ? el('i', 'pd-patron-mark sm') : null, hero.name),
-            bar,
-            el('span', 'pd-mate-depth', String(hero.depth)),
+            this.wide ? el('span', 'pd-mate-depth', String(hero.depth)) : bar,
+            this.wide ? bar : el('span', 'pd-mate-depth', String(hero.depth)),
+            this.wide && el('span', 'pd-pstate', what),
           );
           node.onclick = () => this.handlers.mate(hero.id);
           return node;
@@ -406,31 +515,35 @@ export class Hud {
 
     this.updateLog(state.log);
 
-    const quick = state.quick;
-    if (this.changed('quick', quick ? `${quick.sprite}:${quick.label}:${quick.aiming}:${quick.wear?.left ?? ''}` : '')) {
-      const button = this.tools.quick;
-      button.classList.toggle('empty', !quick);
-      button.classList.toggle('targeting', Boolean(quick?.aiming));
-      if (quick) {
-        const item = el('i', 'pd-item');
-        item.dataset.i = String(quick.sprite);
-        button.replaceChildren(item);
-        if (quick.label) button.append(el('span', 'pd-qty', quick.label));
-        if (quick.wear) {
-          button.append(durabilityBar(quick.wear.left, quick.wear.max));
-          markWear(button);
-        } else {
-          button.classList.remove('has-dur', 'broken');
-        }
-        sprites(button);
-      } else {
-        button.replaceChildren();
-      }
-    }
+    this.drawQuick('quick', this.tools.quick, state.quick);
+    this.drawQuick('quick2', this.tools.quick2, state.quick2 ?? null);
     this.tools.examine.setAttribute('aria-pressed', String(state.examining));
     this.tools.bag.classList.toggle('alert', state.newLoot);
     this.tools.wait.classList.toggle('resting', resting);
     for (const button of Object.values(this.tools)) button.disabled = dead;
+  }
+
+  /** A quick slot's button: the item, its count or charges, its wear; the key on a wide screen. */
+  private drawQuick(key: string, button: HTMLButtonElement, quick: QuickState | null): void {
+    if (!this.changed(key, quick ? `${quick.sprite}:${quick.label}:${quick.aiming}:${quick.wear?.left ?? ''}` : '')) return;
+    button.classList.toggle('empty', !quick);
+    button.classList.toggle('targeting', Boolean(quick?.aiming));
+    const label = this.wide ? [el('span', 'pd-key', button.dataset.key ?? '')] : [];
+    if (quick) {
+      const item = el('i', 'pd-item');
+      item.dataset.i = String(quick.sprite);
+      button.replaceChildren(...label, item);
+      if (quick.label) button.append(el('span', 'pd-qty', quick.label));
+      if (quick.wear) {
+        button.append(durabilityBar(quick.wear.left, quick.wear.max));
+        markWear(button);
+      } else {
+        button.classList.remove('has-dur', 'broken');
+      }
+      sprites(button);
+    } else {
+      button.replaceChildren(...label);
+    }
   }
 
   /** The last few lines, older ones dimmer; each goes out after a while and frees the band. */
@@ -455,13 +568,16 @@ export class Hud {
   /** The band of the screen left for the map, in CSS pixels from the top: between the HUD and the log or toolbar. */
   freeZone(): { top: number; bottom: number } {
     if (this.root.hidden) return { top: 0, bottom: innerHeight };
+    // Wide, the column and the islands sit at the sides: the map has the whole height.
+    if (this.wide) return { top: 0, bottom: this.islandLeft.getBoundingClientRect().top };
     const top = this.band.getBoundingClientRect().bottom;
-    const toolbar = this.root.querySelector('.pd-toolbar')!.getBoundingClientRect().top;
+    const toolbar = this.toolbar.getBoundingClientRect().top;
     return { top, bottom: toolbar };
   }
 
-  /** The HUD's height, for toasts to appear under it. */
+  /** The HUD's height, for toasts to appear under it (wide, they come at the top). */
   height(): number {
-    return this.root.hidden ? 0 : this.band.getBoundingClientRect().bottom;
+    if (this.root.hidden || this.wide) return 0;
+    return this.band.getBoundingClientRect().bottom;
   }
 }

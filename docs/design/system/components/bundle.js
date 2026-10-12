@@ -642,6 +642,107 @@
   };
   PD.demo.win.bagT = BT;
 
+  /* ---------- Игровой экран на широком мониторе (макет) ----------
+     PD.demo.desk(el, { ui: 1|2, m: масштаб тайла, mates: true, tip: 'mob'|'item'|'cell'|'ally'|'tool'|null, lang, waiting: true }) */
+  var DMAP = ["############w###############################", "#......#####.......############.....########", "#.,hh,.+...+...,,..+..........+..>..#......#", "#.,hh,.#####..hhh..############.....#..s...#", "#..hh..#   #..hhh..#          #.....+......#", "#......#   #..,,...#          #######..W...#", "###+####   ####+####                #..d...#", "  #.#         #.#                   ###+####", "  #.#   ####w##+######w####           #.#   ", "  #.#   #.....,,..........#           #.#   ", "  #.#   #..S..,hhh........#############.#   ", "  #.+...+....,hhhhh......+.............#   ", "  #.#   #.....,hhhh.......#############.#   ", "  #.#   #..........<......#           #.#   ", "  #.#   #.......d.........#     #######+####", "  ###   ####+##############     #..........#", "           #.#                  #..,,......#", "           #.#                  #.,hh,.....#", "     #######+#######            #..,,......#", "     #.............#            #####+######", "     #..,,......S..+................#       ", "     #.,hh,........#                        ", "     #..,,.........#                        ", "     ###############                        "];
+  var DT = { '#': 4, '.': 1, ',': 2, h: 15, '+': 5, '<': 7, '>': 8, w: 12, s: 29, d: 24, W: 34, S: 35 };
+  var DTX = {
+    ru: { str: 'Сила', depth: 'Глубина', keys: 'Ключи', party: 'Отряд', wait: 'Ждём: Ёжик', more: 'История',
+      tools: [['wait', 12, 12, 'Ждать', 'Space'], ['search', 12, 12, 'Искать', 'F'], ['info', 8, 12, 'Осмотреть', 'X']], quick: 'Быстрый слот', bag: 'Рюкзак',
+      mates: [['Лиса', 1, .8, 3, 'ходит…', 'turn'], ['Ёжик', 3, .45, 3, 'ждёт вас у лестницы', ''], ['Кирилл_К', 2, .6, 4, 'на глубине 4', 'away']],
+      log: [['Добро пожаловать на третий уровень подземелья!', ''], ['Вы нашли 12 золотых монет.', 'good'], ['<span class="pd-ally">Лиса</span> открывает дверь.', ''], ['Сумчатая крыса кусает вас.', 'bad']],
+      map: [['attack', 'Атаковать: сумчатая крыса', 'Tab'], ['resume', 'Идти дальше', 'V'], ['in', 'Приблизить', '+'], ['out', 'Отдалить', '−'], ['all', 'Весь уровень', 'M']],
+      corner: [['journal', 'Журнал', 'J'], ['prefs', 'Настройки', ''], ['menu', 'Меню', 'Esc']],
+      tips: { mob: ['foe', 'Сумчатая крыса', 'Агрессивная, но слабая. Здоровье 6 из 8.', '<span><b>ЛКМ</b> атаковать</span><span><b>ПКМ</b> подробнее</span>', .75],
+        item: ['item', 'Зелье Исцеления', 'Лежит на полу. Полностью восстанавливает здоровье.', '<span><b>ЛКМ</b> подойти и взять</span>'],
+        cell: ['', 'Высокая трава', 'Заслоняет обзор. Пройдёте — примнётся.', '<span><b>ЛКМ</b> идти сюда</span><span><b>ПКМ</b> осмотреть</span>'],
+        ally: ['ally', 'Лиса', 'Маг, уровень 4. Здоровье 16 из 20.', '<span><b>ЛКМ</b> поменяться местами</span>', .8],
+        tool: ['', 'Ждать <b>Space</b>', 'Удерживайте или нажмите R — отдых до полного здоровья.', ''] } },
+    en: { str: 'Strength', depth: 'Depth', keys: 'Keys', party: 'Party', wait: 'Waiting: Hedgehog', more: 'History',
+      tools: [['wait', 12, 12, 'Wait', 'Space'], ['search', 12, 12, 'Search', 'F'], ['info', 8, 12, 'Examine', 'X']], quick: 'Quickslot', bag: 'Backpack',
+      mates: [['Fox', 1, .8, 3, 'taking a turn…', 'turn'], ['Hedgehog', 3, .45, 3, 'waits for you by the stairs', ''], ['Kirill_K', 2, .6, 4, 'on depth 4', 'away']],
+      log: [['Welcome to the level 3 of Pixel Dungeon!', ''], ['You found 12 gold coins.', 'good'], ['<span class="pd-ally">Fox</span> opens the door.', ''], ['The marsupial rat bites you.', 'bad']],
+      map: [['attack', 'Attack: marsupial rat', 'Tab'], ['resume', 'Go on', 'V'], ['in', 'Zoom in', '+'], ['out', 'Zoom out', '−'], ['all', 'The whole level', 'M']],
+      corner: [['journal', 'Journal', 'J'], ['prefs', 'Settings', ''], ['menu', 'Menu', 'Esc']],
+      tips: { mob: ['foe', 'Marsupial rat', 'Aggressive but weak. Health 6 of 8.', '<span><b>LMB</b> attack</span><span><b>RMB</b> more</span>', .75],
+        item: ['item', 'Potion of Healing', 'On the floor. Restores all health.', '<span><b>LMB</b> walk over and take</span>'],
+        cell: ['', 'High grass', 'Blocks the view. Walk through and it flattens.', '<span><b>LMB</b> go here</span><span><b>RMB</b> examine</span>'],
+        ally: ['ally', 'Fox', 'Mage, level 4. Health 16 of 20.', '<span><b>LMB</b> swap places</span>', .8],
+        tool: ['', 'Wait <b>Space</b>', 'Hold it, or press R, to rest until healed.', ''] } }
+  };
+  var D_UNSEEN = function (x, y) { return (x >= 31 && y >= 14) || (x <= 19 && y >= 17) || (y >= 19); };
+  var D_HERO = [17, 11], D_MATE = [21, 12], D_RAT = [13, 10], D_ITEMS = [[11, 13, 57], [22, 9, 14], [6, 2, 45]];
+  function deskMap(canvas, W, H, m, cb, solo) {
+    var dpr = window.devicePixelRatio || 1; canvas.width = W * dpr; canvas.height = H * dpr;
+    var g = canvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.imageSmoothingEnabled = false;
+    var ts = 16 * m, ox = Math.round(W / 2 - (D_HERO[0] + .5) * ts), oy = Math.round(H * .5 - (D_HERO[1] + .5) * ts);
+    ready(['tiles', 'warrior', 'mage', 'rat', 'items'], function () {
+      g.fillStyle = '#0b0b09'; g.fillRect(0, 0, W, H);
+      var tiles = img('tiles');
+      for (var y = 0; y < DMAP.length; y++) for (var x = 0; x < DMAP[y].length; x++) {
+        var ch = DMAP[y][x], t = DT[ch]; if (t == null || ch === ' ' || D_UNSEEN(x, y)) continue;
+        var X = ox + x * ts, Y = oy + y * ts; if (X > W || Y > H || X < -ts || Y < -ts) continue;
+        g.drawImage(tiles, (t % 16) * 16, Math.floor(t / 16) * 16, 16, 16, X, Y, ts, ts);
+        var dd = Math.hypot(x - D_HERO[0], y - D_HERO[1]);
+        if (dd > 8.5) { g.fillStyle = 'rgba(11,11,9,0.55)'; g.fillRect(X, Y, ts, ts); }
+      }
+      var it = img('items');
+      D_ITEMS.forEach(function (p) { g.drawImage(it, (p[2] % 8) * 16, Math.floor(p[2] / 8) * 16, 16, 16, ox + p[0] * ts, oy + p[1] * ts, ts, ts); });
+      function spr(k, sx, sy, sw, sh, c) { g.drawImage(img(k), sx, sy, sw, sh, ox + c[0] * ts + (16 - sw) / 2 * m, oy + c[1] * ts + (16 - sh) * m, sw * m, sh * m); }
+      spr('rat', 0, 0, 16, 15, D_RAT); if (!solo) spr('mage', 0, 15, 12, 15, D_MATE); spr('warrior', 0, 15, 12, 15, D_HERO);
+      var bx = ox + D_RAT[0] * ts + 2 * m, by = oy + D_RAT[1] * ts - 2 * m;
+      g.fillStyle = '#0b0b09'; g.fillRect(bx - m, by - m, 14 * m, 4 * m); g.fillStyle = '#cc0000'; g.fillRect(bx, by, 12 * m, 2 * m); g.fillStyle = '#00ee00'; g.fillRect(bx, by, 9 * m, 2 * m);
+      cb({ ts: ts, cell: function (c) { return { x: ox + c[0] * ts, y: oy + c[1] * ts }; } });
+    });
+  }
+  PD.demo.desk = function (el, o) {
+    o = o || {}; var L = DTX[o.lang || 'ru'], ui = o.ui || 1, W = el.clientWidth, H = el.clientHeight, m = o.m || 3;
+    var tool = function (t) { return '<button class="pd-tool" aria-label="' + t[3] + '" aria-keyshortcuts="' + t[4] + '"><span class="pd-key">' + t[4] + '</span><i class="pd-icon" style="--w:' + t[1] + ';--h:' + t[2] + ';background-image:var(--spr-tool-' + t[0] + ')"></i></button>'; };
+    var mates = o.mates === false ? '' : '<section class="pd-party" aria-label="' + L.party + '">' + L.mates.map(function (p) { return '<button class="pd-pcard ' + p[5] + '"><i class="pd-mate-face" style="--av:' + p[1] + '"></i><span class="pd-mate-name">' + p[0] + '</span><span class="pd-mate-depth">' + p[3] + '</span><div class="pd-bar" style="--v:' + p[2] + '"></div><span class="pd-pstate">' + p[4] + '</span></button>'; }).join('') + '</section>' + (o.waiting === false ? '' : '<p class="pd-status waiting"><span class="pd-status-text">' + L.wait.replace(/: (.*)$/, ': <span class="pd-ally">$1</span>') + '</span></p>');
+    var log = o.mates === false ? L.log.filter(function (l) { return l[0].indexOf('pd-ally') < 0; }) : L.log;
+    var lines = log.map(function (l, i) { return '<div class="pd-log-line ' + l[1] + '" data-age="' + (log.length - 1 - i) + '">' + l[0] + '</div>'; }).join('');
+    el.innerHTML = '<canvas class="pd-map" style="position:absolute;inset:0;width:100%;height:100%"></canvas>' +
+      '<div class="pd-ui pd-wide' + (o.bare ? ' bare' + (o.tip === 'tool' ? '' : ' notool') : '') + '" style="--ui:' + ui + '">' +
+        '<div class="pd-dcol"><header class="pd-dpanel pd-dhud"><div class="pd-hud-main">' +
+          '<div class="pd-avatar-wrap"><button class="pd-avatar" aria-label="Герой"><i style="--av:0"></i></button><span class="pd-hero-lvl">3</span></div>' +
+          '<div class="pd-hud-bars"><div class="pd-bar" style="--v:.75"><span class="pd-bar-text">18/24</span></div><div class="pd-bars-small"><div class="pd-bar-pair"><i class="pd-icon" style="background-image:var(--spr-star)"></i><div class="pd-bar thin xp" style="--v:.4"></div></div><div class="pd-bar-pair"><i class="pd-icon" style="background-image:var(--spr-food)"></i><div class="pd-bar thin food" style="--v:.7"></div></div></div></div>' +
+          '<div class="pd-hud-side"><span class="pd-stat" title="' + L.depth + '"><i class="pd-icon" style="background-image:var(--spr-depth)"></i>3</span><span class="pd-stat" title="' + L.keys + '"><i class="pd-icon" style="width:14px;height:18px;background-image:var(--spr-key)"></i>1</span></div>' +
+        '</div><div class="pd-buffs"><button class="pd-buff" aria-label="Отравление"><i data-b="3"></i></button><button class="pd-buff" aria-label="Ярость"><i data-b="30"></i><span class="pd-buff-n">3</span></button><button class="pd-buff fading" aria-label="Левитация"><i data-b="1"></i></button></div></header>' + mates + '</div>' +
+        '<div class="pd-dcorner">' + L.corner.map(function (c) { return '<button class="pd-mapbtn ' + c[0] + '" aria-label="' + c[1] + '"' + (c[2] ? ' aria-keyshortcuts="' + c[2] + '"' : '') + '></button>'; }).join('') + '</div>' +
+        (o.toast ? '<div class="pd-toast ' + (o.toastType || '') + '">' + o.toast + '</div>' : '') +
+        '<div class="pd-finds"></div>' +
+        '<button class="pd-log" aria-label="' + L.more + '">' + lines + '<span class="pd-log-more">' + L.more + '</span></button>' +
+        '<nav class="pd-dbar left" aria-label="Действия">' + L.tools.map(tool).join('') + '</nav>' +
+        '<nav class="pd-dbar right" aria-label="Вещи"><button class="pd-tool quick" aria-label="' + L.quick + ' 1" aria-keyshortcuts="1"><span class="pd-key">1</span><i class="pd-item" data-i="57"></i><span class="pd-qty">2</span></button><button class="pd-tool quick" aria-label="' + L.quick + ' 2" aria-keyshortcuts="2"><span class="pd-key">2</span><i class="pd-item" data-i="31"></i><span class="pd-qty">8</span></button>' + tool(['backpack', 14, 15, L.bag, 'I']) + '</nav>' +
+        '<div class="pd-mapctl">' + L.map.map(function (b) { return '<button class="pd-mapbtn ' + b[0] + '" aria-label="' + b[1] + '" aria-keyshortcuts="' + b[2] + '">' + (b[0] === 'attack' ? '<i style="background-image:url(' + SRC.rat + ');background-size:512px 64px;background-position:0 0;width:32px;height:30px"></i>' : '') + '</button>'; }).join('') + '</div>' +
+      '</div>';
+    PD.sprite(el);
+    var layer = el.querySelector('.pd-ui');
+    if (o.finds) o.finds.forEach(function (f) { PD.find(layer.querySelector('.pd-finds'), f[0], f[1], { ttl: 600000 }); });
+    var solo = o.mates === false;
+    deskMap(el.querySelector('canvas'), W, H, m, function (mp) {
+      if (!o.tip) return;
+      var tp = L.tips[o.tip], at, size = mp.ts;
+      if (o.tip === 'tool') { var b = layer.querySelector('.pd-dbar.left .pd-tool'), r = b.getBoundingClientRect(), lr = layer.getBoundingClientRect();
+        var tip = document.createElement('div'); tip.className = 'pd-tooltip'; tip.innerHTML = '<span class="pd-tooltip-name">' + tp[1] + '</span><span class="pd-tooltip-text">' + tp[2] + '</span>';
+        layer.appendChild(tip); tip.style.left = ((r.left - lr.left) / ui) + 'px'; tip.style.top = ((r.top - lr.top) / ui - tip.offsetHeight - 8) + 'px';
+        var cu = document.createElement('i'); cu.className = 'pd-cursor'; cu.style.left = ((r.left - lr.left) / ui + 30) + 'px'; cu.style.top = ((r.top - lr.top) / ui + 24) + 'px'; layer.appendChild(cu); return; }
+      at = mp.cell(o.tip === 'mob' ? D_RAT : o.tip === 'item' ? D_ITEMS[0] : o.tip === 'ally' ? D_MATE : [15, 11]);
+      var hv = document.createElement('div'); hv.className = 'pd-hover' + (o.tip === 'mob' ? ' foe' : '');
+      hv.style.cssText = 'left:' + at.x + 'px;top:' + at.y + 'px;width:' + size + 'px;height:' + size + 'px'; el.insertBefore(hv, layer);
+      var t2 = document.createElement('div'); t2.className = 'pd-tooltip';
+      t2.innerHTML = '<span class="pd-tooltip-name ' + tp[0] + '">' + tp[1] + '</span>' + (tp[4] != null ? '<div class="pd-bar" style="--v:' + tp[4] + '"></div>' : '') + '<span class="pd-tooltip-text">' + tp[2] + '</span>' + (tp[3] ? '<div class="pd-tooltip-keys">' + tp[3] + '</div>' : '');
+      layer.appendChild(t2); var cx = (at.x + size * .55) / ui, cy = (at.y + size * .5) / ui;
+      // подсказка уходит от середины экрана, где стоит герой, и не вылезает за край
+      var lw = W / ui, lh = H / ui, tw = t2.offsetWidth, th = t2.offsetHeight;
+      var left = cx < lw / 2 ? cx - tw - 14 : cx + 22, top = cy + 26;
+      if (left < 8) left = cx + 22; if (left + tw > lw - 8) left = cx - tw - 14;
+      if (top + th > lh - 8) top = cy - th - 12;
+      t2.style.left = left + 'px'; t2.style.top = top + 'px';
+      var c3 = document.createElement('i'); c3.className = 'pd-cursor'; c3.style.left = cx + 'px'; c3.style.top = cy + 'px'; layer.appendChild(c3);
+    }, solo);
+  };
+
   /* окно поверх экрана макета: box — .phone; html — строка окна */
   PD.demo.overlay = function (box, html) { var o = document.createElement('div'); o.className = 'pd-overlay static'; o.innerHTML = html; box.appendChild(o); PD.sprite(o); return o; };
 

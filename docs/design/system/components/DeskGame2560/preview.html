@@ -1,0 +1,16 @@
+<!-- @dsCard group="Широкий экран" height=1440 width=2560 page subtitle="2560×1440: весь слой интерфейса ×2 (шрифт и спрайты остаются в сетке), тайл карты ×6 — около 27 клеток по ширине. Подсказка над товарищем" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Игровой экран 2560×1440</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .screen { position: relative; width: 2560px; height: 1440px; overflow: hidden; --safe-t: 0px; --safe-b: 0px; }
+</style></head>
+<body>
+<div class="pd-root screen" id="s"></div>
+<script>
+  var q = new URLSearchParams(location.search);
+  PD.demo.desk(document.getElementById('s'), { ui: 2, m: 6, tip: q.get('tip') || 'ally', lang: q.get('lang') || 'ru', mates: q.get('solo') ? false : true, waiting: !q.get('solo'), finds: [['gold', '<i class="pd-item" data-i="14"></i><span>' + (q.get('lang') === 'en' ? 'Gold' : 'Золото') + '</span>']] });
+</script>
+</body>
+</html>

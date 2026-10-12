@@ -841,3 +841,128 @@ PD.seg(langSeg, lang, (v) => setLanguage(v));
 | `.pd-slot.dim`, `.pd-slot.can`, `.pd-slot.holding`, `.pd-slot.keys` | тусклая, подходящая для цели, удерживаемая, связка ключей |
 | `.pd-pick(.empty)`, `.pd-pick-head`, `.pd-pick-dropbtn`, `.pd-pick-actions` (`.wide`) | панель выбранного предмета |
 | `.pd-hold-hint`, `.pd-hold-demo`, `.pd-hold-label` | подсказка и подпись удержания |
+
+## Игровой экран на мониторе
+
+### Когда включать
+
+```ts
+const W = innerWidth, H = innerHeight;               // CSS px
+const wide = W >= 900;                                // ниже — телефонная раскладка без изменений
+const ui = Math.max(1, Math.min(4, Math.floor(H / 720), Math.floor(W / 1100)));
+const baseZoom = Math.max(2, Math.min(Math.round(W / 448), Math.floor(H / 208)));   // масштаб тайла
+root.classList.toggle('pd-wide', wide);
+layer.style.setProperty('--ui', String(wide ? ui : 1));
+```
+
+Масштаб карты, который выбрал игрок, храните как сдвиг от `baseZoom` (+1, −1), а не как число. Так при смене монитора или окна карта останется «чуть ближе обычного», а не станет крошечной или огромной. В `main.ts` это уже сделано (коммит e4c3a28), здесь только формула для базы.
+
+### Разметка
+
+Весь интерфейс лежит в одном слое поверх canvas. Слой рисуется в размере `W/ui × H/ui` и увеличивается `transform: scale(ui)`. Координаты мыши для подсказки делите на `ui`.
+
+```html
+<canvas id="game"></canvas>
+<div class="pd-ui pd-wide" style="--ui:1">
+  <div class="pd-dcol">
+    <header class="pd-dpanel pd-dhud">
+      <div class="pd-hud-main">
+        <div class="pd-avatar-wrap"><button class="pd-avatar" aria-label="Герой"><i style="--av:0"></i></button><span class="pd-hero-lvl">3</span></div>
+        <div class="pd-hud-bars">
+          <div class="pd-bar" style="--v:.75"><span class="pd-bar-text">18/24</span></div>
+          <div class="pd-bars-small">…опыт и сытость, как в HUD телефона…</div>
+        </div>
+        <div class="pd-hud-side"><span class="pd-stat">…глубина</span><span class="pd-stat">…ключи</span></div>
+      </div>
+      <div class="pd-buffs">…</div>
+    </header>
+    <section class="pd-party" aria-label="Отряд">
+      <button class="pd-pcard turn"><i class="pd-mate-face" style="--av:1"></i><span class="pd-mate-name">Лиса</span><span class="pd-mate-depth">3</span><div class="pd-bar" style="--v:.8"></div><span class="pd-pstate">ходит…</span></button>
+      <button class="pd-pcard away">…<span class="pd-pstate">на глубине 4</span></button>
+    </section>
+    <p class="pd-status waiting"><span class="pd-status-text">Ждём: <span class="pd-ally">Ёжик</span></span></p>
+  </div>
+  <div class="pd-dcorner">
+    <button class="pd-mapbtn journal" aria-label="Журнал" aria-keyshortcuts="J"></button>
+    <button class="pd-mapbtn prefs" aria-label="Настройки"></button>
+    <button class="pd-mapbtn menu" aria-label="Меню" aria-keyshortcuts="Escape"></button>
+  </div>
+  <div class="pd-finds"></div>
+  <button class="pd-log" aria-label="История">…строки… <span class="pd-log-more">История</span></button>
+  <nav class="pd-dbar left" aria-label="Действия">
+    <button class="pd-tool" aria-label="Ждать" aria-keyshortcuts="Space"><span class="pd-key">Space</span><i class="pd-icon" style="--w:12;--h:12;background-image:var(--spr-tool-wait)"></i></button>
+    <button class="pd-tool" aria-label="Искать" aria-keyshortcuts="F"><span class="pd-key">F</span>…</button>
+    <button class="pd-tool" aria-label="Осмотреть" aria-keyshortcuts="X"><span class="pd-key">X</span>…</button>
+  </nav>
+  <nav class="pd-dbar right" aria-label="Вещи">
+    <button class="pd-tool quick" aria-keyshortcuts="1"><span class="pd-key">1</span><i class="pd-item" data-i="57"></i><span class="pd-qty">2</span></button>
+    <button class="pd-tool quick" aria-keyshortcuts="2"><span class="pd-key">2</span>…</button>
+    <button class="pd-tool" aria-label="Рюкзак" aria-keyshortcuts="I"><span class="pd-key">I</span>…</button>
+  </nav>
+  <div class="pd-mapctl">…attack, resume, hero, in, out, all — как на телефоне…</div>
+  <div class="pd-tooltip" style="left:…;top:…">
+    <span class="pd-tooltip-name foe">Сумчатая крыса</span>
+    <div class="pd-bar" style="--v:.75"></div>
+    <span class="pd-tooltip-text">Агрессивная, но слабая. Здоровье 6 из 8.</span>
+    <div class="pd-tooltip-keys"><span><b>ЛКМ</b> атаковать</span><span><b>ПКМ</b> подробнее</span></div>
+  </div>
+</div>
+<div class="pd-hover foe" style="left:…;top:…;width:48px;height:48px"></div>  <!-- в координатах карты, под слоем -->
+```
+
+На мониторе те же узлы, что на телефоне: `.pd-log`, `.pd-mapctl`, `.pd-finds`, `.pd-toast`, `.pd-status`, `.pd-bar`, `.pd-buff`. Меняется только раскладка, по `.pd-ui`/`.pd-wide`. Если удобнее держать одну разметку для обоих экранов:
+
+- `.pd-hud` превращается в `.pd-dcol > .pd-dhud`;
+- `.pd-mates` — в `.pd-party` с `.pd-pcard`;
+- `.pd-toolbar` делится на два `.pd-dbar`;
+- кнопка меню уходит из HUD в `.pd-dcorner`.
+
+### Подсказки при наведении
+
+- **Когда показывать.** Через 300 мс неподвижного курсора над клеткой; над кнопкой — через 500 мс. Прячется при движении на другую клетку, при нажатии и при открытии окна. На сенсорном экране подсказок нет.
+- **Что внутри:**
+  - монстр — `.foe`, его имя, полоска здоровья, одна строка из описания, ЛКМ атаковать / ПКМ подробнее;
+  - предмет на полу — `.item`, имя (неопознанное — как в рюкзаке), «Лежит на полу», ЛКМ подойти и взять;
+  - товарищ — `.ally`, класс, уровень, здоровье, ЛКМ поменяться местами;
+  - клетка — название места из `examine.ts`, одна строка, ЛКМ идти сюда / ПКМ осмотреть;
+  - туман и неисследованное — подсказки нет.
+- **ПКМ** по клетке — то же, что «Осмотреть» и касание: открывает окно, как на телефоне. Режим «Осмотреть» с кнопки панели остаётся.
+- **Положение:** справа снизу от курсора; если курсор левее середины экрана — слева. У края подсказка переворачивается. Ширина не больше 300 px.
+- **Кнопки:** `.pd-tooltip.small` или тот же `.pd-tooltip` с названием и `<b>клавиша</b>` в имени и одной строкой пояснения, например «Ждать **Space** — удерживайте или нажмите R: отдых».
+
+### Клавиши
+
+| Клавиша | Действие | В коде сейчас |
+| --- | --- | --- |
+| стрелки, WASD, Q/E/Z/C, цифровой блок | шаг и диагонали; удержание — идти дальше | есть |
+| Space, Num5, «.» | ждать | есть |
+| R | отдых | есть |
+| F | искать | есть |
+| I | рюкзак | есть |
+| G | взять с пола | есть |
+| T | быстрый слот 1 | есть |
+| Enter | действие на своей клетке | есть |
+| Esc | закрыть окно / отменить цель / меню | есть |
+| + / − | масштаб | есть |
+| **1, 2** | быстрые слоты 1 и 2 (T оставить как 1) | новое |
+| **X** | осмотреть: режим, как кнопка | новое |
+| **Tab** | атаковать врага с кнопки атаки | новое |
+| **V** | идти дальше, если путь прервали | новое |
+| **H** | к герою | новое |
+| **M** | весь уровень | новое |
+| **J** | журнал | новое |
+
+В задании «S — искать», но S уже шаг вниз в WASD. Поэтому на кнопке подписано F — так в коде сейчас. Если WASD не нужен, верните S и поправьте подпись в одном месте.
+
+### Новые классы — монитор
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-ui`, `.pd-wide`, `--ui` | слой интерфейса и его целый масштаб |
+| `.pd-dcol`, `.pd-dpanel`, `.pd-dhud` | колонка сверху слева и панель героя |
+| `.pd-party`, `.pd-pcard(.turn/.away/.dead)`, `.pd-pstate` | отряд |
+| `.pd-dcorner`, `.pd-mapbtn.journal/.prefs/.menu` | угол справа сверху |
+| `.pd-dbar.left/.right`, `.pd-key` | острова нижней панели и подпись клавиши |
+| `.pd-mapbtn.attack`, `.pd-mapbtn.resume` | атака по врагу и «идти дальше» |
+| `.pd-tooltip(.small)`, `.pd-tooltip-name(.foe/.item/.ally)`, `.pd-tooltip-text`, `.pd-tooltip-keys` | подсказка при наведении |
+| `.pd-hover(.foe)`, `.pd-cursor`, `--spr-cursor` | уголки клетки под курсором и пиксельный курсор |
