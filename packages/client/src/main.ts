@@ -38,7 +38,6 @@ import { type Launch, Motion } from './motion';
 import { Scenery } from './scenery';
 import { Feedback } from './feedback';
 import { Finds, MapControls } from './mapui';
-import { type TipContent, Tooltip } from './tooltip';
 import { type HintId, hints } from './hints';
 import { preloadSheets, regionIndex } from './worldsheets';
 import { sharePicture } from './share';
@@ -1378,11 +1377,11 @@ function learnFromEffect(world: World, me: Hero, effect: Effect): void {
   void me;
 }
 
-/* Hover tooltips: a mouse over the map or a button says what is there (design system v12) */
+/* The mouse over the map (design system v13): quiet corners on the cell under it, red over a foe, and
+   nothing that pops up; the right button examines. */
 
-const tooltip = new Tooltip(document.getElementById('ui')!, () => hud.scale);
-/** The cell under the mouse, its golden corners on the map, and the tooltip's timer. */
-const hover = { cell: -1, timer: 0, frame: document.createElement('div') };
+/** The cell under the mouse and its corners on the map. */
+const hover = { cell: -1, frame: document.createElement('div') };
 hover.frame.className = 'pd-hover';
 hover.frame.style.display = 'none';
 canvas.insertAdjacentElement('afterend', hover.frame);
@@ -1398,56 +1397,17 @@ function cellUnder(clientX: number, clientY: number): number {
 }
 
 function hideHover(): void {
-  window.clearTimeout(hover.timer);
   hover.cell = -1;
   hover.frame.style.display = 'none';
-  tooltip.hide();
 }
 
-/** What a cell holds, for its tooltip: a monster, a companion, an item on the floor, or the place itself. */
-function cellTip(cell: number): TipContent | null {
+/** The corners a cell gets: red over a monster in sight, gold over the rest explored, none in the unknown. */
+function hoverKind(cell: number): 'foe' | 'cell' | null {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!world || !me || !exploredCells(world, me.depth)[cell]) return null;
-  const seen = visibleCells(world, me.depth)[cell];
-  const char = seen ? charAt(world, me.depth, cell) : undefined;
-  if (char && 'kind' in char) {
-    const passive = char.state === 'passive';
-    return {
-      name: capitalize(t.mobs[char.kind]),
-      kind: passive ? undefined : 'foe',
-      ...(passive ? {} : { health: Math.max(0, char.hp) / char.ht }),
-      text: `${mobDescription(char).split('. ')[0]!.replace(/\.$/, '')}.${passive ? '' : ` ${t.examineHealth(Math.max(0, char.hp), char.ht)}`}`,
-      keys: [[t.mouseLeft, passive ? t.tipTalk : t.tipAttack], [t.mouseRight, t.tipMore]],
-    };
-  }
-  if (char) {
-    return {
-      name: char.name,
-      kind: 'ally',
-      health: Math.max(0, char.hp) / char.ht,
-      text: `${capitalize(t.classes[char.heroClass])}, ${t.levelShort} ${char.lvl}`,
-      keys: char.id === me.id ? [[t.mouseLeft, t.tipSearch]] : [[t.mouseLeft, t.tipSwap], [t.mouseRight, t.tipMore]],
-    };
-  }
-  const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === cell && h.kind !== 'hidden');
-  if (heap && (seen || heap.kind !== 'heap')) {
-    const loose = heap.kind === 'heap' || heap.kind === 'forSale';
-    return {
-      name: loose ? capitalize(itemName(world, heap.items[0]!)) : capitalize(t.heapNames[heap.kind] ?? ''),
-      kind: 'item',
-      text: heap.kind === 'forSale' ? t.tipForSale : loose ? t.tipOnFloor : t.tipToOpen,
-      keys: [[t.mouseLeft, loose ? t.tipTake : t.tipOpen], [t.mouseRight, t.tipMore]],
-    };
-  }
-  const level = levelAt(world, me.depth);
-  const plant = world.floors[me.depth]?.plants?.find((p) => p.pos === cell);
-  const { name, desc } = plant ? plantText(plant.kind) : tileText(level.map[cell]!);
-  return {
-    name,
-    text: desc.split('. ')[0]!.replace(/\.$/, '') + '.',
-    keys: [[t.mouseLeft, cell === me.pos ? t.tipSearch : t.tipGo], [t.mouseRight, t.tipMore]],
-  };
+  const char = visibleCells(world, me.depth)[cell] ? charAt(world, me.depth, cell) : undefined;
+  return char && 'kind' in char && char.state !== 'passive' ? 'foe' : 'cell';
 }
 
 canvas.addEventListener('pointermove', (event) => {
@@ -1457,11 +1417,9 @@ canvas.addEventListener('pointermove', (event) => {
   hideHover();
   hover.cell = cell;
   if (cell < 0) return;
-  // Only the cell's corners: a popup at every cell under the mouse got in the way (players asked).
-  // What a cell holds is a right click away.
-  const tip = cellTip(cell);
-  hover.frame.className = `pd-hover${tip?.kind === 'foe' ? ' foe' : ''}`;
-  hover.frame.style.display = tip ? '' : 'none';
+  const kind = hoverKind(cell);
+  hover.frame.className = `pd-hover${kind === 'foe' ? ' foe' : ''}`;
+  hover.frame.style.display = kind ? '' : 'none';
   placeHover();
 });
 canvas.addEventListener('pointerleave', hideHover);
@@ -1484,28 +1442,6 @@ function placeHover(): void {
   hover.frame.style.top = `${rect.top + (Math.trunc(hover.cell / WIDTH) * TILE - camera.y) * camera.zoom * k}px`;
   hover.frame.style.width = hover.frame.style.height = `${size}px`;
 }
-
-// Buttons: their name and key after a moment's hover.
-document.getElementById('ui')!.addEventListener('pointerover', (event) => {
-  if (event.pointerType !== 'mouse') return;
-  const button = (event.target as HTMLElement).closest<HTMLElement>('button[aria-label]');
-  window.clearTimeout(hover.timer);
-  if (!button) {
-    if (hover.cell < 0) tooltip.hide();
-    return;
-  }
-  const { clientX, clientY } = event;
-  hover.timer = window.setTimeout(() => {
-    const key = button.getAttribute('aria-keyshortcuts') ?? '';
-    tooltip.show({ name: button.getAttribute('aria-label') ?? '', key: key === 'Escape' ? 'Esc' : key }, clientX, clientY, true);
-  }, 500);
-});
-document.getElementById('ui')!.addEventListener('pointerout', (event) => {
-  if ((event.target as HTMLElement).closest('button[aria-label]') && hover.cell < 0) {
-    window.clearTimeout(hover.timer);
-    tooltip.hide();
-  }
-});
 
 function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;

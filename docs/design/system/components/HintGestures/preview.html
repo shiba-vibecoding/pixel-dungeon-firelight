@@ -1,0 +1,39 @@
+<!-- @dsCard group="Обучение" height=470 width=1000 page subtitle="Схемы жестов 16×16 по 3 кадра (gestures.png): нажмите, удерживайте, перетащите, бросьте, ЛКМ, ПКМ — ×1, ×2, ×4. Стрелка-указатель 16×16 в четыре стороны, рамка цели и колпачок клавиши" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Жесты и указатель</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .wrap { width: 1000px; box-sizing: border-box; padding: 16px 20px; color: var(--ink); display: flex; flex-direction: column; gap: 14px; }
+  h2 { margin: 0; font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
+  h2 span { margin-left: 8px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+  .g { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .c { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; background: var(--stone-900); clip-path: var(--notch); text-align: center; font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); }
+  .c b { font-weight: 400; color: var(--ink); }
+  .sz { display: flex; align-items: flex-end; gap: 8px; }
+  .x1 { --u: 1px; } .x2 { --u: 2px; } .x4 { --u: 4px; }
+  .stage { position: relative; height: 170px; background: var(--stone-900); clip-path: var(--notch); }
+  .stage .pd-tool { position: absolute; width: 64px; height: 56px; }
+  .keys { display: flex; gap: 8px; align-items: center; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+</style></head>
+<body>
+<div class="pd-root wrap">
+  <h2>Жесты<span>.pd-gesture.tap / .hold / .drag / .throw / .click / .rclick — шаги по 3 кадра</span></h2>
+  <div class="g" id="g"></div>
+  <h2>Указатель<span>PD.point(слой, кнопка, 'top' | 'bottom' | 'left' | 'right') — стрелка снаружи, качается к цели, цель в рамке .pd-spot</span></h2>
+  <div class="row" style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+    <div class="stage" id="st">
+      <button class="pd-tool" style="left:70px;top:70px" aria-label="Ждать"><i class="pd-icon" style="--w:12;--h:12;background-image:var(--spr-tool-wait)"></i></button>
+      <button class="pd-tool" style="left:290px;top:70px" aria-label="Искать"><i class="pd-icon" style="--w:12;--h:12;background-image:var(--spr-tool-search)"></i></button>
+      <button class="pd-tool" style="left:470px;top:20px" aria-label="Рюкзак"><i class="pd-icon" style="--w:14;--h:15;background-image:var(--spr-tool-backpack)"></i></button>
+    </div>
+    <div class="c" style="justify-content:center;gap:10px"><b>Клавиша</b><div class="keys"><span class="pd-keycap">F</span><span class="pd-keycap">I</span><span class="pd-keycap">Space</span><span class="pd-keycap">Tab</span></div><span>.pd-keycap — только на мониторе, в строке «как»</span></div>
+  </div>
+</div>
+<script>
+  var G = [['tap', 'Нажмите', 'касание: ступень, кольцо'], ['hold', 'Удерживайте', 'кольцо заполняется'], ['drag', 'Перетащите', 'след к рамке слота'], ['throw', 'Бросьте', 'дуга к рамке цели'], ['click', 'ЛКМ', 'монитор: щелчок'], ['rclick', 'ПКМ', 'монитор: осмотреть']];
+  document.getElementById('g').innerHTML = G.map(function (g) { return '<div class="c"><span class="sz"><i class="pd-gesture x1 ' + g[0] + '"></i><i class="pd-gesture x2 ' + g[0] + '"></i><i class="pd-gesture x4 ' + g[0] + '"></i></span><b>' + g[1] + '</b><span>' + g[2] + '</span></div>'; }).join('');
+  requestAnimationFrame(function () { var st = document.getElementById('st'), b = st.querySelectorAll('.pd-tool'); st.style.setProperty('--ui', 1); PD.point(st, b[0], 'right'); PD.point(st, b[0], 'top', { spot: true }); PD.point(st, b[1], 'left'); PD.point(st, b[1], 'bottom', { spot: false }); PD.point(st, b[2], 'right'); });
+</script>
+</body>
+</html>

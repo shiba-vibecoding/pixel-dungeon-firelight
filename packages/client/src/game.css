@@ -130,23 +130,9 @@ body:has(#ui.pd-wide) #game { cursor: var(--spr-cursor) 0 0, default; }
 .pd-drag-ghost .pd-slot { --slot: 64px; }
 .pd-drag-ghost .pd-slot .pd-item { --u: 3px; }
 
-/* A learning hint (hints.ts): a small card under the HUD that never covers the hero; on a wide screen, above the islands. */
-.pd-hint {
-  position: absolute; z-index: var(--z-toast, 30); left: 50%; transform: translateX(-50%);
-  top: calc(var(--hud-bottom, 120px) + 8px); width: min(380px, calc(100% - 24px));
-  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
-  background: rgba(31, 33, 28, 0.96); border: 2px solid var(--gold-deep, #ffcc66); clip-path: var(--notch);
-  color: var(--ink); animation: pd-toast-in .2s steps(3) both; pointer-events: auto;
-}
-.pd-wide .pd-hint { top: auto; bottom: calc(var(--gap, 12px) + var(--tool-h, 56px) + 24px); }
-.pd-hint-head { display: flex; align-items: center; gap: 10px; }
-.pd-hint-head b { font: var(--text-body, 400 18px/22px var(--font-ui)); color: var(--gold); font-weight: 400; }
-.pd-hint-head .pd-item { --u: 2px; }
-.pd-hint-head .pd-portrait canvas { max-height: 32px; }
-.pd-hint p { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); }
-.pd-hint-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pd-hint-off { background: none; border: 0; padding: 4px 0; min-height: 36px; color: var(--ink-muted); font: var(--text-caption, 400 15px/20px var(--font-small)); text-decoration: underline; cursor: pointer; }
-@media (prefers-reduced-motion: reduce) { .pd-hint { animation: none; } }
+/* The learning card on a phone keeps clear of the map's buttons down the right edge (design system v13 centres it). */
+#ui:not(.pd-wide) .pd-hint { left: 12px; transform: none; width: min(380px, calc(100% - 12px - 44px - 20px)); }
+.pd-hint-head .pd-slot .pd-icon { width: calc(var(--w) * 2px); height: calc(var(--h) * 2px); } /* a button's glyph, when the hint is about that button */
 .pd-coach {
   position: absolute; z-index: var(--z-hud, 10); transform: translate(-50%, calc(-100% - 10px)); pointer-events: none;
   padding: 4px 10px; background: var(--stone-900, #1f1d1d); border: 2px solid var(--gold-deep, #ffcc66); color: var(--gold, #ffeba4);

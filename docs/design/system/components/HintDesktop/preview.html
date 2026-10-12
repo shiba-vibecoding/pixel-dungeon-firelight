@@ -1,0 +1,24 @@
+<!-- @dsCard group="Обучение" height=800 width=1280 page subtitle="Карточка обучения на мониторе: над нижней панелью по центру, в строке «как» — схема мыши и клавиша; стрелка показывает кнопку на панели. Сюда: «Тайники» → лупа, F" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Обучение на мониторе</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .screen { position: relative; width: 1280px; height: 800px; overflow: hidden; --safe-t: 0px; --safe-b: 0px; }
+</style></head>
+<body>
+<div class="pd-root screen" id="s"></div>
+<script>
+  var q = new URLSearchParams(location.search), k = q.get('h') || 'secret', en = q.get('lang') === 'en';
+  var H = {
+    secret: { target: '.pd-dbar.left .pd-tool[aria-label="' + (en ? 'Search' : 'Искать') + '"]', hint: { icon: '<span class="pd-slot"><i class="pd-icon" style="width:24px;height:24px;background-image:var(--spr-tool-search)"></i></span>', title: en ? 'Hidden things' : 'Тайники', text: en ? 'If the level looks like a dead end, search by the walls: the dungeon hides doors and traps.' : 'Если уровень кажется тупиком, ищите у стен: подземелье прячет двери и ловушки.', gesture: 'click', how: en ? '<b>Click the magnifier</b> or press' : '<b>Щёлкните по лупе</b> или нажмите', key: 'F' } },
+    examine: { target: '.pd-dbar.left .pd-tool[aria-label="' + (en ? 'Examine' : 'Осмотреть') + '"]', hint: { icon: '<span class="pd-slot"><i class="pd-icon" style="width:16px;height:24px;background-image:var(--spr-tool-info)"></i></span>', title: en ? 'Look around' : 'Осмотреться', text: en ? 'Find out what is on any cell: a monster, an item, a trap.' : 'Узнайте, что на любой клетке: монстр, вещь, ловушка.', gesture: 'rclick', how: en ? '<b>Right-click the cell</b> or' : '<b>Правой кнопкой по клетке</b> или', key: 'X' } },
+    bag: { target: '.pd-dbar.right .pd-tool[aria-label="' + (en ? 'Backpack' : 'Рюкзак') + '"]', hint: { icon: '<span class="pd-slot"><i class="pd-item" data-i="20"></i></span>', title: en ? 'Weapon' : 'Оружие', text: en ? 'The number in the corner is the strength it needs.' : 'Число в углу — нужная сила: тяжёлое оружие без силы бьёт хуже.', gesture: 'drag', how: en ? '<b>Drag it</b> to the weapon slot in the backpack' : '<b>Перетащите</b> в слот оружия в рюкзаке', key: 'I' } }
+  };
+  var s = document.getElementById('s'), c = H[k]; c.hint.lang = en ? 'en' : 'ru';
+  PD.demo.desk(s, { ui: 1, m: 3, mates: false, waiting: false, lang: en ? 'en' : 'ru' });
+  var layer = s.querySelector('.pd-ui'); layer.insertAdjacentHTML('beforeend', PD.hintCard(c.hint)); PD.sprite(layer);
+  requestAnimationFrame(function () { PD.point(layer, layer.querySelector(c.target), 'top'); });
+</script>
+</body>
+</html>

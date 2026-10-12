@@ -77,6 +77,8 @@ export class MapControls {
     this.zoomOut.disabled = !canOut;
     this.hero.hidden = !away;
     this.box.style.setProperty('--log-h', `${Math.round(logHeight)}px`);
+    // The learning card stands above the log, in the same layer.
+    this.box.parentElement?.style.setProperty('--log-h', `${Math.round(logHeight)}px`);
   }
 }
 

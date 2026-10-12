@@ -71,6 +71,8 @@
   --spr-challenge-on: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACA0lEQVR4nK2VP0vDQBjGn1zqdyi4WUJEUHBRh4CDuPQLCCK2+Aexk4uIfgEpODgpIoqKCH4BwaGCGEGrILRQGkJFwUImcREEvcRBLr0kd2kCPtMlufs97/veexfF8zwk1dH5LpusFKeWE60haeC21YJttQDAOzrf/T8DBnfaDpy2k8okwz8Y46ORCQulog+v1xqBb5qe84zxUSW8xry+T5ZBGE5UFURVUa81/EwWSsXYTZQaiOAZlSCjklQmQgMZnCmNScSgGzyticKfA75bGPzOfAA+N/4m1Df9uc+NYQDA9KEKl1IMDg0g25uFpucA7pyQWPjlZCcUDs7rbusxkgm4FiZxcCNf6UQvkbE2grM5KjUhIjhfcyNfkcJnj3v8Mb8nmp6DbbVwc3XrSdvUyFdglqudF4Pr/pDVHwBOCt8Bo7BIcWpZcdoOsr1ZlFYW4VKKH+r66ZvlqjCL2eOeAPyHunApRWllEawiABS/i+aXZjzWBTvb+8L2NMtVPDeGIxHL4ADXRQd7pwrboHAmcYqDBwy6mZgXEwCAvoEnnBS+pXCraSscL3jQmETlWi2MoVl7wdv7BwDg6fVLCtf7NRzsnQIInWT+utb7NemedIs80XVtNW1hubrBw4r9H4hM0sAjJQprfmmGDT3uIhN2C6t5KgORCYDE8EQGYRO2LgkcAH4Bjjv2Pi6Km2cAAAAASUVORK5CYII=");
   --spr-cursor: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAkCAYAAACTz/ouAAAA0klEQVR4nNWWIRLCMBBFXxlMJ8eoqkXiKjlHbV3PgcNyDiQOiUVxjA6yqI8IkymBbhOeykyn2X353U5wrhydK0eMWFlt/FbAysTcYK3F/XYGoKqbEWAYHsUcBZYzEHObLG8gDsc9AF3b/2RiblDo29fZ+5wuVwC6tgfiTdIbiG9N8jEQsSb5GYhPTfI1EFMm6f5FPn6nIXQiMklnUNUNEM4m30lW5+rQf57dJL8y8DsPsdtuogosl8FU56GJnzK3z2CuG1wI+wxiX/Bv4Mnn4P95AvTaf9nJ3UFoAAAAAElFTkSuQmCC");
   --spr-book: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA0klEQVR4nGP8//8/AwMDAwMjI2MaAwng9evXsxgYGBhYkDUXi4vPlGBlxavxxe/fDL0vX6bD+EwwRqywMEHNDAwMDOhqWNAVlKyC0L+vfWdgYGBgYNXihPNZtTgZesJQ1WMYgFDAiSaDzsdhALJLYLb+vvadYWIDiQZAXALThF0zAwNSIJILKDYAqxde/P6NVTG2aMZqADHpAQZQvIDLZnxqUFwQvnkZQQMe7zvM0FvRgN0ABgYGBmNjA4IGYHXB4rdv08V8o2YeJCIzIQNGSrMzAClJQbojJzyXAAAAAElFTkSuQmCC");
+  --atlas-gestures: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABgCAYAAABbjPFwAAAEKElEQVR4nO1avWvbQBR/F7yY05rd4C7eQsnUUoy7de3QBpJAM9hD/qAM7pCAHUg7lC4lW00oDR5MKGTwkBhCpoDXmIzXoT1xOt1J774kK+gHgeis372Pe/f03kkE1hBsOWaqcbK5R1JjwZSYDRJKkO0hShZXXlZWNx4EbDZgogHytZa3HDOd9zG/e4NKWawBpvdsZN1MaZNR2gxvsYN8rQGUNtliPoHFfAK2Rrg4ACs/cwVcYOuAvD0gj6ENMPGmKuNgslBWhqG0yaJWP3VPA6PQYj6J/293egwAYLV6Mkpn3Pg8HtncI2w5ZlGrj5Kfmkz0skgUMb2+gd0Pg0xleAjJaHd6kGWIqfxECIlxa4u8UFvMJ3D6dajcFzbytXvAxggfDjCVnzBgtXoifImLUsBVfmoF8ibJin8fDjCVrwwh3SSYzeviABv5mSlNtdGw6VOVhTDK+5JfGeRaw6tIbD3vi2/bT2gnw5TDvvi2/YRXJWz5uvu8GRGan3WP6regDU0R/GANTVF8o4YGfbKgiWFUT7A9JCb8whqaqDtCr4QJv5CGJiQ/tQIu9XwZfK8NTRl8rw1NGXyvDU0ZfK8NTRl87w3NOvCfH1zLW2e+dKxufMxue1zuja9QtpD3BDXA0zuKskKI0iZ7uJ+yh/tpyggeQuhqVN6EeYJTAg34efOK8e89n4rnQe1Ozypns9mARd0RAKhLCnHeYG9oOGximPcDKuWn1zeJ69gAH5tF5vPKEttW2oTWBhfs+kKPC8d4TccXOzFVOaEqJZQdGfZ1kAiyPSQuK6hqI/8bweSxBI8LzdssWMiHuqELsAaA/bKrgPGaT6CaelMUWe5uYDfLuqIQBcXN7dspmZOx5Zi5fp9DaZN93H0fX385/ebVCO2TmM0GzsqLePP2tRNf95DTHmzxWsSXwF8/fzvxdeeqicFQyx1yDyhDyHW5ZaxWT4T/uc4lr4zSANPlLhK5R/R8D7gWdbaw5lfhdZKIxKlEVu+JFV4kX1wlVDl9fHbEAAAOdg7j+FONheJzb/OvuKLuKB5rqLoojnanx/gksqCDnUNyfHaU8lgoftTqg5jio1YfHu8+/8tCeeW0ykvieGi+WBGIKZ5s7pHgTb1vKFO8uIke7qfs+49RYml5vMrg46H5PN7lFM+WY9YAwHVRx2dHTLUJi+LLlXF9uCviWXijLCNyv54V4fKtWyi+8inI8/L55RW8e/Uy/g1zTkRpkz1e7AMAwMntlhXfRL7yTb0OeUePovK2fFP5lXuQyUgVc+eXV5nXeTi53XLim8pPGSDGnAzMcWPR/MqHUG1A2UB/buP65XoofuWfxDVqVBWV7iF8Kl/5LBSkHxD5n178iX+LuqP17wey+I8X+3U/IMN7PyDfL/cHANnv3up+oGqoDSgbdT+wjvwaReIvO6dI4W3+UWIAAAAASUVORK5CYII=");
+  --spr-pointer: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAiklEQVR4nGNgoBAwYhPk5ub8j03869fvGOpZcJn85cFsFD6PQipWdUz4nMfw8BAE4wH4DSACDLwB8EDEFfLIAFkNLEYYkSXRQx5XAPLYL8Y0AMUQPCGPrJmBAS0Mvn79zsijkMrAIG9HlGYMA/AZgk0zXsDNzfn//+sl//+fSftPTADjNIRszXQDAP90O/EYveguAAAAAElFTkSuQmCC");
   --spr-resume: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAS0lEQVR4nGNgoBv4/3rJf2LEmUjVxIRPEps4hgZCmrBq4FFIxSbMwKOQimkDj0Iqw9ev3xkJiv9/veQ/NzcnhlNwiTNgFcQjTjsAAFaVMA2T6ca3AAAAAElFTkSuQmCC");
 }
 
@@ -1211,7 +1213,7 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 .pd-dbar .pd-tool.quick .pd-item { --u: 2px; }
 
 /* лог: слева снизу, над действиями; без подложки — тень под строками и лёгкий градиент, клики по карте проходят сквозь */
-.pd-ui .pd-log { left: var(--gap); right: auto; width: min(560px, 44%); bottom: calc(var(--gap) + var(--tool-h, 56px) + 8px + 8px); padding: 10px 14px 6px 10px; background: linear-gradient(to right, rgba(11, 11, 9, 0.62), rgba(11, 11, 9, 0.38) 70%, rgba(11, 11, 9, 0)); clip-path: var(--notch); pointer-events: none; }
+.pd-ui .pd-log { left: var(--gap); right: auto; width: min(560px, 34%); bottom: calc(var(--gap) + var(--tool-h, 56px) + 8px + 8px); padding: 10px 14px 6px 10px; background: linear-gradient(to right, rgba(11, 11, 9, 0.62), rgba(11, 11, 9, 0.38) 70%, rgba(11, 11, 9, 0)); clip-path: var(--notch); pointer-events: none; }
 .pd-ui .pd-log .pd-log-more { pointer-events: auto; align-self: flex-start; }
 
 /* кнопки карты: колонкой справа над быстрыми слотами */
@@ -1221,26 +1223,58 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 .pd-mapbtn.attack { box-shadow: inset 0 0 0 2px var(--bad), inset 0 0 0 4px var(--void); }
 .pd-mapbtn.resume { --ico: var(--spr-resume); }
 
-/* подсказка при наведении: имя, коротко что это, и что сделают кнопки мыши */
-.pd-tooltip {
-  position: absolute; z-index: 40; text-align: left; max-width: 300px; padding: 6px 10px 7px; pointer-events: none;
-  background: rgba(31, 33, 28, 0.96); border: var(--u) solid var(--stone-400); clip-path: var(--notch);
-  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.45)); display: flex; flex-direction: column; gap: 2px;
-}
-.pd-tooltip-name { font: var(--text-body, 400 18px/22px var(--font-ui)); color: var(--ink); }
-.pd-tooltip-name.foe { color: var(--bad); } .pd-tooltip-name.ally { color: var(--ally); } .pd-tooltip-name.item { color: var(--gold); }
-.pd-tooltip-text { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
-.pd-tooltip .pd-bar { width: 100%; min-width: 200px; height: 8px; border-width: 1px; box-shadow: none; margin: 3px 0 1px; }
-.pd-tooltip-keys { display: flex; gap: 10px; margin-top: 3px; padding-top: 4px; border-top: var(--u) solid var(--stone-600); font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); }
-.pd-tooltip-keys b { font-weight: 400; color: var(--gold-deep); }
-.pd-tooltip.small { padding: 2px 8px; } /* у кнопок: название и клавиша */
-.pd-tooltip.small .pd-tooltip-name { font: var(--text-caption, 400 15px/20px var(--font-small)); }
-.pd-tooltip.small .pd-tooltip-name b { font-weight: 400; color: var(--gold-deep); margin-left: 6px; }
-/* клетка под курсором: уголки в цвет того, что на ней */
+/* клетка под курсором: тихие уголки в цвет того, что на ней — и больше ничего не всплывает */
 .pd-hover { position: absolute; z-index: 4; pointer-events: none; box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 0 4px rgba(11, 11, 9, 0.6); clip-path: polygon(0 0, 30% 0, 30% 2px, 70% 2px, 70% 0, 100% 0, 100% 30%, calc(100% - 2px) 30%, calc(100% - 2px) 70%, 100% 70%, 100% 100%, 70% 100%, 70% calc(100% - 2px), 30% calc(100% - 2px), 30% 100%, 0 100%, 0 70%, 2px 70%, 2px 30%, 0 30%); }
 .pd-hover.foe { box-shadow: inset 0 0 0 2px var(--bad), inset 0 0 0 4px rgba(11, 11, 9, 0.6); }
 .pd-cursor { position: absolute; z-index: 41; width: 24px; height: 36px; background: var(--spr-cursor) 0 0 / contain no-repeat; image-rendering: pixelated; pointer-events: none; }
 /* только для макетов: слой без HUD, чтобы показать подсказку крупно */
-.pd-ui.bare > :not(.pd-tooltip, .pd-cursor, .pd-dbar.left) { display: none; }
+.pd-ui.bare > :not(.pd-cursor, .pd-dbar.left) { display: none; }
 .pd-ui.bare.notool > .pd-dbar { display: none; }
-.pd-tooltip-name b { font-weight: 400; color: var(--gold-deep); margin-left: 6px; }
+
+/* ---------- Карточка обучения ----------
+   Маленькая карточка, которая никогда не закрывает героя: на телефоне — над логом (между героем и панелью), на мониторе — над нижней панелью.
+   Шапка (иконка + золотой заголовок), 1–2 строки, строка «как» со схемой жеста и клавишей, внизу «Больше не подсказывать» и «Понятно». */
+.pd-hint {
+  position: absolute; z-index: var(--z-toast, 30); left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--safe-b) + var(--tool-h, 56px) + var(--space-2) * 2 + var(--log-h, 120px) + 8px); width: min(380px, calc(100% - 24px)); box-sizing: border-box; /* над логом: ниже героя и рядом с кнопками, на которые показывает */
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 8px;
+  background: rgba(31, 33, 28, 0.96); border: var(--u) solid var(--gold-deep); clip-path: var(--notch);
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.45)); color: var(--ink); text-align: left;
+  animation: pd-toast-in .2s steps(3) both; pointer-events: auto;
+}
+.pd-wide .pd-hint { top: auto; bottom: calc(var(--gap, 12px) + var(--tool-h, 56px) + 8px + 16px); width: 400px; }
+.pd-hint-head { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+.pd-hint-head .pd-slot { --slot: 40px; flex: none; }
+.pd-hint-head .pd-slot .pd-item { --u: 2px; }
+.pd-hint-head .pd-portrait { flex: none; }
+.pd-hint-head b { flex: 1; min-width: 0; font: var(--text-body, 400 18px/22px var(--font-ui)); color: var(--gold); font-weight: 400; }
+.pd-hint p { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); }
+.pd-hint p b { font-weight: 400; color: var(--gold); }
+/* «как»: схема жеста 16×16 ×2, коротко что сделать, на мониторе — клавиша */
+.pd-hint-how { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; background: var(--stone-800); clip-path: var(--notch); font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+.pd-hint-how > span:not(.pd-keycap) { flex: 1; min-width: 0; }
+.pd-hint-how b { font-weight: 400; color: var(--ink); }
+.pd-hint-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pd-hint-off { min-height: var(--tap-min, 44px); padding: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); text-decoration: underline; text-decoration-color: var(--stone-400); text-underline-offset: 4px; }
+.pd-hint-off:active { color: var(--ink); }
+/* сколько осталось до того, как карточка уйдёт сама: черта внизу укорачивается шагами */
+.pd-hint-time { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--gold-deep); transform-origin: 0 0; animation: pd-hint-time var(--hint-ms, 14s) steps(14) both; opacity: .7; }
+@keyframes pd-hint-time { to { transform: scaleX(0); } }
+.pd-hint:hover .pd-hint-time, .pd-hint:focus-within .pd-hint-time { animation-play-state: paused; }
+
+/* жест: 6 строк по 3 кадра (tap, hold, drag, throw, click, rclick) */
+.pd-gesture { --g: 0; flex: none; width: calc(16 * var(--u)); height: calc(16 * var(--u)); background: var(--atlas-gestures) no-repeat; background-size: calc(48 * var(--u)) calc(96 * var(--u)); background-position: 0 calc(var(--g) * -16 * var(--u)); image-rendering: pixelated; animation: pd-gesture .75s steps(3) infinite; }
+.pd-gesture.tap { --g: 0; } .pd-gesture.hold { --g: 1; animation-duration: 1.2s; } .pd-gesture.drag { --g: 2; animation-duration: .9s; } .pd-gesture.throw { --g: 3; animation-duration: .9s; } .pd-gesture.click { --g: 4; } .pd-gesture.rclick { --g: 5; }
+@keyframes pd-gesture { to { background-position-x: calc(-48 * var(--u)); } }
+@media (prefers-reduced-motion: reduce) { .pd-gesture { animation: none; background-position-x: calc(-16 * var(--u)); } .pd-hint-time { animation: none; display: none; } }
+/* клавиша: колпачок с толстым низом */
+.pd-keycap { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink); background: var(--stone-600); border: 1px solid var(--void); border-bottom-width: 3px; clip-path: var(--notch); white-space: nowrap; }
+
+/* указатель на кнопку: золотая стрелка 16×16 ×2 качается к цели на 2 px; цель — в мигающей рамке */
+.pd-pointer { position: absolute; z-index: 32; width: calc(16 * var(--u)); height: calc(16 * var(--u)); background: var(--spr-pointer) center / contain no-repeat; image-rendering: pixelated; pointer-events: none; animation: pd-point .6s steps(2) infinite; --r: 0deg; transform: rotate(var(--r)); }
+.pd-pointer.up { --r: 180deg; } .pd-pointer.left { --r: -90deg; } .pd-pointer.right { --r: 90deg; }  /* .up — стрелка снизу смотрит вверх; .left — стоит слева и смотрит вправо */
+@keyframes pd-point { 50% { transform: rotate(var(--r)) translateY(calc(2 * var(--u))); } }
+@media (prefers-reduced-motion: reduce) { .pd-pointer { animation: none; } }
+.pd-spot { box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 0 4px var(--void) !important; animation: pd-spot 1s steps(1) infinite; }
+@keyframes pd-spot { 50% { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void) !important; } }
+@media (prefers-reduced-motion: reduce) { .pd-spot { animation: none; } }

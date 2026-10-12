@@ -1,0 +1,32 @@
+<!-- @dsCard group="Обучение" height=844 width=820 page subtitle="Подсказки о вещах: «Оружие» — перетащите в слот, стрелка на рюкзак; «Бомба» — бросьте, стрелка на быстрый слот. Схема жеста 16×16 ×2 в строке «как»" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Обучение: вещи</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .row { display: flex; gap: 40px; width: 820px; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; --safe-t: 0px; --safe-b: 34px; flex: none; }
+</style></head>
+<body>
+<div class="pd-root row" id="row"></div>
+<script>
+  function ratIcon() { return '<span class="pd-slot"><i style="width:32px;height:30px;background:url(' + PD.demo.src('rat') + ') 0 0 / 512px 64px no-repeat;image-rendering:pixelated"></i></span>'; }
+  function itemIcon(i) { return '<span class="pd-slot"><i class="pd-item" data-i="' + i + '"></i></span>'; }
+  function phone(row, cfg) {
+    var p = document.createElement('div'); p.className = 'phone'; row.appendChild(p);
+    PD.demo.game(p, { mates: false, log: cfg.log });
+    if (cfg.mapctl) p.insertAdjacentHTML('beforeend', '<div class="pd-mapctl"><button class="pd-mapbtn attack" aria-label="Атаковать"><i style="display:block;width:32px;height:30px;background:url(' + PD.demo.src('rat') + ') 0 0 / 512px 64px no-repeat;image-rendering:pixelated"></i></button><button class="pd-mapbtn in" aria-label="Приблизить"></button><button class="pd-mapbtn out" aria-label="Отдалить"></button><button class="pd-mapbtn all" aria-label="Весь уровень"></button></div>');
+    p.insertAdjacentHTML('beforeend', PD.hintCard(cfg.hint));
+    PD.sprite(p);
+    requestAnimationFrame(function () { PD.point(p, p.querySelector(cfg.target), cfg.side || 'top'); });
+  }
+  var CFG = {
+    monster: { mapctl: true, target: '.pd-mapbtn.attack', side: 'left', log: [['Сумчатая крыса замечает вас.', 'warn']], hint: { icon: ratIcon(), title: 'Враг!', text: 'Бой идёт по ходам: пока вы стоите, стоит и он.', gesture: 'tap', how: '<b>Нажмите на монстра</b> или на кнопку с его портретом справа' } },
+    attacked: { target: '.pd-tool[aria-label="Ждать"]', log: [['Сумчатая крыса кусает вас.', 'bad']], hint: { icon: '<span class="pd-slot"><i class="pd-icon" style="width:24px;height:24px;background-image:var(--spr-tool-wait)"></i></span>', title: 'Вас ранили', text: 'Красная полоса вверху — здоровье. Оно восстанавливается само.', gesture: 'hold', how: '<b>Удерживайте часы</b> — отдых до полного здоровья' } },
+    weapon: { target: '.pd-tool[aria-label="Рюкзак"]', log: [['Вы подобрали: меч.', 'good']], hint: { icon: itemIcon(20), title: 'Оружие', text: 'Число в углу — нужная сила: тяжёлое оружие без силы бьёт хуже.', gesture: 'drag', how: '<b>Перетащите</b> в слот оружия в рюкзаке или нажмите «Надеть»' } },
+    bomb: { target: '.pd-tool.quick', log: [['Вы подобрали: бомба.', 'good']], hint: { icon: itemIcon(124), title: 'Бомба', text: 'Через пару ходов после броска взорвётся. Не стойте рядом!', gesture: 'throw', how: '<b>Бросьте</b>: положите в быстрый слот и нажмите на цель' } }
+  };
+  'weapon,bomb'.split(',').forEach(function (k) { phone(document.getElementById('row'), CFG[k]); });
+</script>
+</body>
+</html>

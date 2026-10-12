@@ -49,6 +49,26 @@
     seg.setAttribute('role', 'radiogroup'); pick(value);
   };
 
+  /* Указатель на кнопку для карточки обучения: стрелка снаружи цели, смотрит на неё. side: 'top' (над целью, вниз) | 'bottom' | 'left' | 'right'.
+     layer — слой, в котором лежит стрелка (для монитора — .pd-ui, его --ui учитывается). Вернёт стрелку; снимите её и .pd-spot, когда подсказка ушла. */
+  PD.point = function (layer, target, side, o) {
+    o = o || {}; side = side || 'top';
+    var ui = parseFloat(getComputedStyle(layer).getPropertyValue('--ui')) || 1, lr = layer.getBoundingClientRect(), r = target.getBoundingClientRect();
+    var x = (r.left - lr.left) / ui, y = (r.top - lr.top) / ui, w = r.width / ui, h = r.height / ui, a = document.createElement('i'), s = 32, gap = 4;
+    a.className = 'pd-pointer' + (side === 'top' ? '' : side === 'bottom' ? ' up' : side === 'left' ? ' left' : ' right');
+    var L = side === 'left' ? x - s - gap : side === 'right' ? x + w + gap : x + w / 2 - s / 2, T = side === 'top' ? y - s - gap : side === 'bottom' ? y + h + gap : y + h / 2 - s / 2;
+    a.style.left = Math.round(L) + 'px'; a.style.top = Math.round(T) + 'px'; layer.appendChild(a);
+    if (o.spot !== false) target.classList.add('pd-spot');
+    return a;
+  };
+  /* Карточка обучения для макетов: { icon: html, title, text, gesture: 'tap'|'hold'|'drag'|'throw'|'click'|'rclick', how: html, key, lang } */
+  PD.hintCard = function (o) {
+    var ru = (o.lang || 'ru') === 'ru';
+    return '<section class="pd-hint" role="status"><div class="pd-hint-head">' + (o.icon || '') + '<b>' + o.title + '</b></div><p>' + o.text + '</p>' +
+      (o.gesture || o.how ? '<div class="pd-hint-how">' + (o.gesture ? '<i class="pd-gesture ' + o.gesture + '"></i>' : '') + '<span>' + (o.how || '') + '</span>' + (o.key ? '<span class="pd-keycap">' + o.key + '</span>' : '') + '</div>' : '') +
+      '<div class="pd-hint-row"><button class="pd-hint-off">' + (ru ? 'Больше не подсказывать' : 'No more hints') + '</button><button class="pd-button small">' + (ru ? 'Понятно' : 'Got it') + '</button></div><i class="pd-hint-time"></i></section>';
+  };
+
   /* Тосты находок: box — .pd-finds. Та же вещь подряд не дублируется, а копит «×N»; держится 3 штуки, каждая гаснет через ttl. */
   PD.find = function (box, key, html, opts) {
     opts = opts || {}; var ttl = opts.ttl || 2400, max = opts.max || 3;
@@ -723,22 +743,12 @@
     deskMap(el.querySelector('canvas'), W, H, m, function (mp) {
       if (!o.tip) return;
       var tp = L.tips[o.tip], at, size = mp.ts;
-      if (o.tip === 'tool') { var b = layer.querySelector('.pd-dbar.left .pd-tool'), r = b.getBoundingClientRect(), lr = layer.getBoundingClientRect();
-        var tip = document.createElement('div'); tip.className = 'pd-tooltip'; tip.innerHTML = '<span class="pd-tooltip-name">' + tp[1] + '</span><span class="pd-tooltip-text">' + tp[2] + '</span>';
-        layer.appendChild(tip); tip.style.left = ((r.left - lr.left) / ui) + 'px'; tip.style.top = ((r.top - lr.top) / ui - tip.offsetHeight - 8) + 'px';
-        var cu = document.createElement('i'); cu.className = 'pd-cursor'; cu.style.left = ((r.left - lr.left) / ui + 30) + 'px'; cu.style.top = ((r.top - lr.top) / ui + 24) + 'px'; layer.appendChild(cu); return; }
+      // наведение мыши ничего не всплывает: только тихие уголки на клетке под курсором
+      if (o.tip === 'tool') return;
       at = mp.cell(o.tip === 'mob' ? D_RAT : o.tip === 'item' ? D_ITEMS[0] : o.tip === 'ally' ? D_MATE : [15, 11]);
       var hv = document.createElement('div'); hv.className = 'pd-hover' + (o.tip === 'mob' ? ' foe' : '');
       hv.style.cssText = 'left:' + at.x + 'px;top:' + at.y + 'px;width:' + size + 'px;height:' + size + 'px'; el.insertBefore(hv, layer);
-      var t2 = document.createElement('div'); t2.className = 'pd-tooltip';
-      t2.innerHTML = '<span class="pd-tooltip-name ' + tp[0] + '">' + tp[1] + '</span>' + (tp[4] != null ? '<div class="pd-bar" style="--v:' + tp[4] + '"></div>' : '') + '<span class="pd-tooltip-text">' + tp[2] + '</span>' + (tp[3] ? '<div class="pd-tooltip-keys">' + tp[3] + '</div>' : '');
-      layer.appendChild(t2); var cx = (at.x + size * .55) / ui, cy = (at.y + size * .5) / ui;
-      // подсказка уходит от середины экрана, где стоит герой, и не вылезает за край
-      var lw = W / ui, lh = H / ui, tw = t2.offsetWidth, th = t2.offsetHeight;
-      var left = cx < lw / 2 ? cx - tw - 14 : cx + 22, top = cy + 26;
-      if (left < 8) left = cx + 22; if (left + tw > lw - 8) left = cx - tw - 14;
-      if (top + th > lh - 8) top = cy - th - 12;
-      t2.style.left = left + 'px'; t2.style.top = top + 'px';
+      var cx = (at.x + size * .55) / ui, cy = (at.y + size * .5) / ui;
       var c3 = document.createElement('i'); c3.className = 'pd-cursor'; c3.style.left = cx + 'px'; c3.style.top = cy + 'px'; layer.appendChild(c3);
     }, solo);
   };

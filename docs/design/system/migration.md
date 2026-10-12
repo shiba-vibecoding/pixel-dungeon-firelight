@@ -859,7 +859,7 @@ layer.style.setProperty('--ui', String(wide ? ui : 1));
 
 ### Разметка
 
-Весь интерфейс лежит в одном слое поверх canvas. Слой рисуется в размере `W/ui × H/ui` и увеличивается `transform: scale(ui)`. Координаты мыши для подсказки делите на `ui`.
+Весь интерфейс лежит в одном слое поверх canvas. Слой рисуется в размере `W/ui × H/ui` и увеличивается `transform: scale(ui)`. Координаты мыши в слое делите на `ui`.
 
 ```html
 <canvas id="game"></canvas>
@@ -900,12 +900,6 @@ layer.style.setProperty('--ui', String(wide ? ui : 1));
     <button class="pd-tool" aria-label="Рюкзак" aria-keyshortcuts="I"><span class="pd-key">I</span>…</button>
   </nav>
   <div class="pd-mapctl">…attack, resume, hero, in, out, all — как на телефоне…</div>
-  <div class="pd-tooltip" style="left:…;top:…">
-    <span class="pd-tooltip-name foe">Сумчатая крыса</span>
-    <div class="pd-bar" style="--v:.75"></div>
-    <span class="pd-tooltip-text">Агрессивная, но слабая. Здоровье 6 из 8.</span>
-    <div class="pd-tooltip-keys"><span><b>ЛКМ</b> атаковать</span><span><b>ПКМ</b> подробнее</span></div>
-  </div>
 </div>
 <div class="pd-hover foe" style="left:…;top:…;width:48px;height:48px"></div>  <!-- в координатах карты, под слоем -->
 ```
@@ -917,18 +911,13 @@ layer.style.setProperty('--ui', String(wide ? ui : 1));
 - `.pd-toolbar` делится на два `.pd-dbar`;
 - кнопка меню уходит из HUD в `.pd-dcorner`.
 
-### Подсказки при наведении
+### Мышь
 
-- **Когда показывать.** Через 300 мс неподвижного курсора над клеткой; над кнопкой — через 500 мс. Прячется при движении на другую клетку, при нажатии и при открытии окна. На сенсорном экране подсказок нет.
-- **Что внутри:**
-  - монстр — `.foe`, его имя, полоска здоровья, одна строка из описания, ЛКМ атаковать / ПКМ подробнее;
-  - предмет на полу — `.item`, имя (неопознанное — как в рюкзаке), «Лежит на полу», ЛКМ подойти и взять;
-  - товарищ — `.ally`, класс, уровень, здоровье, ЛКМ поменяться местами;
-  - клетка — название места из `examine.ts`, одна строка, ЛКМ идти сюда / ПКМ осмотреть;
-  - туман и неисследованное — подсказки нет.
-- **ПКМ** по клетке — то же, что «Осмотреть» и касание: открывает окно, как на телефоне. Режим «Осмотреть» с кнопки панели остаётся.
-- **Положение:** справа снизу от курсора; если курсор левее середины экрана — слева. У края подсказка переворачивается. Ширина не больше 300 px.
-- **Кнопки:** `.pd-tooltip.small` или тот же `.pd-tooltip` с названием и `<b>клавиша</b>` в имени и одной строкой пояснения, например «Ждать **Space** — удерживайте или нажмите R: отдых».
+- **Наведение ничего не всплывает.** Ни над картой, ни над кнопками. Подсказки по наведению (`.pd-tooltip`) из системы убраны. Если они уже есть в коде (коммит 9b51cf0), уберите их.
+- **Клетка под курсором** получает `.pd-hover` — тихие уголки в размер тайла, в координатах карты, под слоем `.pd-ui`. Над врагом — `.pd-hover.foe`, красные. Туман и неисследованное — без уголков.
+- **ЛКМ** — как касание: идти, атаковать, взять. **ПКМ** по клетке — окно осмотра, как касание в режиме «Осмотреть». Контекстное меню браузера над картой отключите.
+- **Курсор:** `cursor: url(cursor-x2.png) 0 0, default` над картой и панелью. При `--ui: 2` возьмите стрелку ×4 без сглаживания.
+- **Клавиши** кнопок карты и угла (Tab, V, H, M, J, Esc) перечислены в справке, вкладка «Управление». На кнопках панели снизу клавиша подписана под значком.
 
 ### Клавиши
 
@@ -964,5 +953,54 @@ layer.style.setProperty('--ui', String(wide ? ui : 1));
 | `.pd-dcorner`, `.pd-mapbtn.journal/.prefs/.menu` | угол справа сверху |
 | `.pd-dbar.left/.right`, `.pd-key` | острова нижней панели и подпись клавиши |
 | `.pd-mapbtn.attack`, `.pd-mapbtn.resume` | атака по врагу и «идти дальше» |
-| `.pd-tooltip(.small)`, `.pd-tooltip-name(.foe/.item/.ally)`, `.pd-tooltip-text`, `.pd-tooltip-keys` | подсказка при наведении |
 | `.pd-hover(.foe)`, `.pd-cursor`, `--spr-cursor` | уголки клетки под курсором и пиксельный курсор |
+
+## Карточка обучения
+
+```html
+<section class="pd-hint" role="status">
+  <div class="pd-hint-head"><span class="pd-slot"><i class="pd-item" data-i="124"></i></span><b>Бомба</b></div>
+  <p>Через пару ходов после броска взорвётся. Не стойте рядом!</p>
+  <div class="pd-hint-how"><i class="pd-gesture throw"></i><span><b>Бросьте</b>: положите в быстрый слот и нажмите на цель</span></div>
+  <!-- на мониторе: <i class="pd-gesture click"></i><span><b>Щёлкните по лупе</b> или нажмите</span><span class="pd-keycap">F</span> -->
+  <div class="pd-hint-row"><button class="pd-hint-off">Больше не подсказывать</button><button class="pd-button small">Понятно</button></div>
+  <i class="pd-hint-time" style="--hint-ms:14s"></i>
+</section>
+```
+
+```js
+const arrow = PD.point(uiLayer, document.querySelector('.pd-tool.quick'), 'top');   // 'top' | 'bottom' | 'left' | 'right'
+// при уходе карточки или первом нажатии на кнопку:
+arrow.remove(); target.classList.remove('pd-spot');
+```
+
+Что поменять в `hints.ts` и `game.css`:
+
+- Разметка та же: `.pd-hint`, `.pd-hint-head`, `p`, `.pd-hint-row`, `.pd-hint-off`. Стили из `game.css` можно убрать, они теперь в системе.
+- Иконку кладите в `.pd-slot` 40 px — так портрет и предмет стоят одинаково.
+- **Место.** На телефоне карточка теперь над логом, а не под HUD: `bottom` считается от `--log-h`. Обновляйте `--log-h`, когда лог растёт. На мониторе (`.pd-wide`) — над островами, как сейчас.
+- **Время.** `SHOW_MS` передавайте в `--hint-ms`. На `pointerenter` ставьте таймер на паузу, на `pointerleave` — продолжайте. Черта ведёт себя так же сама.
+- **Жест и стрелка.** Добавьте к тексту подсказки, если они есть, `[title, text, how, gesture, target]`. Для монитора — `howWide` и `key`. Предлагаемые соответствия:
+
+| HintId | Жест | Стрелка на | Клавиша |
+| --- | --- | --- | --- |
+| monster | tap / click | `.pd-mapbtn.attack`, слева | Tab |
+| attacked, lowHealth | hold / click | «Ждать», сверху | Space, R |
+| floorItem, container, stairs, npc, shop | tap / click | — | — |
+| secret | tap / click | «Искать», сверху | F |
+| examine | tap / rclick | «Осмотреть», сверху | X |
+| hungry, food | tap / click | «Рюкзак», сверху | I |
+| weapon, armor, ring | drag | «Рюкзак», сверху | I |
+| potion, scroll, wand | hold | «Рюкзак», сверху | I |
+| missile, bomb, seed | throw | быстрый слот, сверху | 1 |
+| companion | tap / click | первая карточка отряда, справа | — |
+
+- **Снятие стрелки.** Стрелка и `.pd-spot` снимаются вместе с карточкой и по первому нажатию на кнопку-цель, а «Понятно» сразу закрывает всё. Если кнопки сейчас нет (атака без врага в поле зрения), стрелку не ставьте.
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-hint`, `.pd-hint-head`, `.pd-hint-row`, `.pd-hint-off` | карточка обучения |
+| `.pd-hint-how`, `.pd-hint-time` (`--hint-ms`) | строка «как» и время до ухода |
+| `.pd-gesture.tap/.hold/.drag/.throw/.click/.rclick` | схема жеста 16×16, 3 кадра |
+| `.pd-keycap` | колпачок клавиши |
+| `.pd-pointer(.up/.left/.right)`, `.pd-spot` | стрелка на кнопку и рамка цели |
