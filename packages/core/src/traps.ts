@@ -37,10 +37,14 @@ const PURE_TURNS = 5;
 /** What a gas trap or a shattered potion releases; purity cleanses the air instead. */
 export type Burst = 'toxic' | 'paralytic' | 'fire' | 'frost' | 'purity';
 
-/** Yog-Dzewa breathes no gas and does not burn, nor does its burning fist (Yog's IMMUNITIES). */
-export function immuneTo(char: Char, harm: 'burning' | 'gas'): boolean {
+/**
+ * IMMUNITIES: Yog-Dzewa breathes no gas and does not burn, nor does its
+ * burning fist; piranhas in their pool fear neither gas, fire nor frost.
+ */
+export function immuneTo(char: Char, harm: 'burning' | 'gas' | 'frost'): boolean {
   if (isHero(char)) return harm === 'gas' && (char.gasImmune ?? 0) > 0;
-  return char.kind === 'yog' || (harm === 'burning' && char.kind === 'burningFist');
+  if (char.kind === 'piranha') return true;
+  return harm !== 'frost' && (char.kind === 'yog' || (harm === 'burning' && char.kind === 'burningFist'));
 }
 
 /**
@@ -60,7 +64,7 @@ export function burst(ctx: Ctx, pos: number, kind: Burst, radius = GAS_RADIUS, s
       char.burning = Math.max(char.burning ?? 0, BURNING_TURNS);
     }
     // Freezing: frozen stiff, and any fire put out.
-    if (kind === 'frost') {
+    if (kind === 'frost' && !immuneTo(char, 'frost')) {
       char.paralysed = Math.max(char.paralysed ?? 0, Math.round(FROST_TURNS * ctx.rng.floatRange(1, 1.5)));
       char.burning = 0;
     }

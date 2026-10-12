@@ -66,6 +66,8 @@ export type Effect =
   | { type: 'exp'; hero: string; amount: number }
   | { type: 'levelUp'; hero: string; lvl: number }
   | { type: 'revived'; hero: string }
+  /** An ankh brought a hero back from death, at the stairs. */
+  | { type: 'resurrected'; hero: string }
   /** An enchanted weapon showed its power on a blow; an inscribed armour on one taken. */
   | { type: 'enchanted'; depth: number; pos: number; enchant: Enchantment }
   | { type: 'glyph'; depth: number; hero: string; glyph: Glyph }

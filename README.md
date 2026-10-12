@@ -27,7 +27,10 @@ Yendor on depth 26:
 - Special rooms: treasury, armory, library and crypt behind locked doors with
   their iron keys, magic wells, trap rooms, storage rooms behind barricades,
   gardens, laboratories with an alchemy pot (three seeds brew a potion),
-  and the shops on depths 6, 11, 16 and 21.
+  statue rooms where one statue comes alive with an enchanted weapon, flooded
+  pools guarded by piranhas, vaults with locked and crystal chests opened by
+  golden keys, and the shops on depths 6, 11, 16 and 21 (which also sell an
+  ankh, to come back once from death).
 - Chasms you can jump into, landing hurt and crippled on the depth below
   (with whatever was thrown in before you); a weak floor drops you into the
   locked pit room beneath it, where an earlier victim's remains hold its key.
@@ -76,12 +79,11 @@ Yendor on depth 26:
 
 Not ported yet: cursed items and the scroll of remove curse; the scroll of
 mirror image and the glyph of multiplicity (there are no allies yet); the
-potion of might; the ankh; the wands of amok, reach, flock and regrowth; the
-rotberry and the ring of herbalism; the blacksmith's and the imp's quests and
-the wandmaker's rotberry errand; the remaining special rooms (pool, statue,
-vault); dwarf monks disarming; the rare monster variants (albino rats,
-bandits, fetid rats); and gas clouds (gas acts at once on everyone within
-reach instead).
+potion of might; the wands of amok, reach, flock and regrowth; the rotberry
+and the ring of herbalism; the blacksmith's and the imp's quests and the
+wandmaker's rotberry errand; dwarf monks disarming; the rare monster variants
+(albino rats, bandits, fetid rats); and gas clouds (gas acts at once on
+everyone within reach instead).
 
 ## How co-op works
 

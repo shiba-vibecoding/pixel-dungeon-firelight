@@ -280,7 +280,8 @@ export type MobKind =
   | 'skeleton' | 'thief' | 'swarm' | 'shaman' | 'bat' | 'brute' | 'tengu'
   | 'spinner' | 'dm300'
   | 'elemental' | 'monk' | 'warlock' | 'golem' | 'king' | 'undead'
-  | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva' | 'mimic';
+  | 'succubus' | 'eye' | 'scorpio' | 'yog' | 'rottingFist' | 'burningFist' | 'larva' | 'mimic'
+  | 'statue' | 'piranha';
 /** `passive`: the sad ghost and the shopkeeper, who neither fight nor can be hurt; `fleeing`: a thief making off with its loot. */
 export type MobState = 'sleeping' | 'wandering' | 'hunting' | 'fleeing' | 'passive';
 
@@ -337,12 +338,28 @@ export const MOBS: Readonly<Record<MobKind, MobStats>> = {
   larva: { name: "god's larva", ht: 25, attack: 30, defense: 20, damage: [15, 20], dr: 8, exp: 0, maxLvl: 30, speed: 1 },
   // A chest that bites; its numbers grow with the depth (see mobStats).
   mimic: { name: 'mimic', ht: 16, attack: 10, defense: 5, damage: [1, 4], dr: 0, exp: 2, maxLvl: 30, speed: 1 },
+  // Guardians of special rooms, as strong as their depth (see mobStats): a statue that comes alive, armed;
+  // piranhas that never leave their pool.
+  statue: { name: 'animated statue', ht: 20, attack: 10, defense: 5, damage: [1, 4], dr: 1, exp: 0, maxLvl: 30, speed: 1 },
+  piranha: { name: 'giant piranha', ht: 15, attack: 22, defense: 12, damage: [1, 6], dr: 1, exp: 0, maxLvl: 30, speed: 2 },
 };
 
 /** A monster's numbers: the table's, but a mimic is as strong as the depth it lurks on (Mimic.adjustStats). */
 export function mobStats(mob: Mob): MobStats {
+  const depth = mob.level ?? 1;
+  if (mob.kind === 'statue' && mob.item) {
+    // Statue: its numbers grow with the depth, and it fights with the weapon it holds.
+    const weapon = weaponStats(mob.item);
+    return {
+      ...MOBS.statue, ht: 15 + depth * 5, attack: Math.trunc((9 + depth) * weapon.accuracy), defense: 4 + depth,
+      damage: [weapon.min, weapon.max], dr: depth, attackDelay: weapon.delay,
+    };
+  }
+  if (mob.kind === 'piranha') {
+    return { ...MOBS.piranha, ht: 10 + depth * 5, attack: 20 + depth * 2, defense: 10 + depth * 2, damage: [depth, 4 + depth * 2], dr: depth };
+  }
   if (mob.kind !== 'mimic') return MOBS[mob.kind];
-  const level = mob.level ?? 1;
+  const level = depth;
   const ht = (3 + level) * 4;
   const attack = 9 + level;
   return {

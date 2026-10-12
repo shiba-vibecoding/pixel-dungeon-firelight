@@ -34,9 +34,11 @@ export type ItemSpec =
   /** A few loose coins (Gold(Random.IntRange(1, 3))). */
   | { roll: 'coins' }
   /** From one of the categories, keeping the best of `tries` rolls by upgrade level. */
-  | { roll: 'category'; categories: ReadonlyArray<'weapon' | 'armor' | 'potion' | 'scroll' | 'food' | 'gold' | 'ring'>; tries: number }
+  | { roll: 'category'; categories: ReadonlyArray<'weapon' | 'armor' | 'potion' | 'scroll' | 'food' | 'gold' | 'ring' | 'wand'>; tries: number }
   /** The iron key to this level's locked room. */
   | { roll: 'key' }
+  /** The golden key to this level's locked or crystal chest. */
+  | { roll: 'goldenKey' }
   /** A potion of liquid flame, to burn the way into a storage room. */
   | { roll: 'liquidFlame' }
   /** One particular item, such as the wares of a shop. */
@@ -66,6 +68,10 @@ export class LevelBuilder {
   arenaDoor = -1;
   /** A shop's level: where the shopkeeper stands. */
   shopkeeper = -1;
+  /** A statue room's level: where the animated statue stands. */
+  statue = -1;
+  /** A pool room's piranhas. */
+  readonly piranhas: number[] = [];
   /** Plants grown at generation (GardenPainter's sungrass). */
   readonly plants: Array<{ pos: number; kind: 'sungrass' }> = [];
   pitRoomNeeded = false;

@@ -62,7 +62,7 @@ export function itemInfo(world: World, hero: Hero, item: Item): string[] {
     if (!isKnown(world, item)) return [t.unknownRingInfo];
     return [t.itemInfo[item.kind] ?? '', ...(item.level < 0 ? [t.ringNegative] : [])];
   }
-  if (category === 'key') return [t.keyInfo(item.depth ?? 0)];
+  if (category === 'key') return [item.kind === 'key.golden' ? t.goldenKeyInfo(item.depth ?? 0) : t.keyInfo(item.depth ?? 0)];
   if (category === 'gold') return [];
   return [isKnown(world, item) ? (t.itemInfo[item.kind] ?? '') : t.unknownInfo];
 }

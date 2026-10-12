@@ -1,9 +1,10 @@
 import {
-  createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, isAlive, type Mob, type MobState, MOBS, rollMob,
+  createMob, GOO_PUMPED, type Hero, heroDefenseSkill, heroStealth, isAlive, type Mob, type MobState, MOBS, mobStats, rollMob,
 } from './actors';
 import { attack, hurt } from './combat';
 import { castShadow, LIGHT_DISTANCE, terrainBlocksSight, viewDistance } from './fov';
 import { charAt, type Ctx, enterCell, heroesOn, isPassable, isWater, leaveCell } from './floor';
+import { type Item, itemDef, ItemGenerator, randomEnchantment } from './items';
 import { isBossDepth } from './level/builder';
 import { KING_PEDESTALS } from './level/city-boss';
 import type { Level, RoomInfo } from './level/generate';
@@ -118,6 +119,11 @@ export function mobAct(ctx: Ctx, mob: Mob): void {
 
   switch (mob.state) {
     case 'sleeping':
+      // An animated statue stands still until someone strikes it.
+      if (mob.kind === 'statue') {
+        spend(mob, TICK);
+        return;
+      }
       if (enemyInFov && ctx.rng.int(distance(mob.pos, enemy.pos) + heroStealth(enemy)) === 0) {
         notice(ctx, mob, enemy, 'hunting');
         spend(mob, TIME_TO_WAKE_UP);
@@ -210,7 +216,7 @@ function getFurther(ctx: Ctx, mob: Mob, threat: number): 'moved' | 'safe' | 'cor
   let bestDist = dist[mob.pos]!;
   for (const n of STEP_ORDER) {
     const step = mob.pos + n;
-    if (step < 0 || step >= LENGTH || !adjacent(mob.pos, step) || charAt(world, depth, step)) continue;
+    if (step < 0 || step >= LENGTH || !adjacent(mob.pos, step) || charAt(world, depth, step) || !canStand(ctx, mob, step)) continue;
     if (dist[step]! > bestDist) {
       best = step;
       bestDist = dist[step]!;
@@ -545,7 +551,7 @@ function getCloser(ctx: Ctx, mob: Mob, target: number, fov: boolean[]): boolean 
     tenguJump(ctx, mob);
     return true;
   }
-  const step = findStep(ctx, mob.pos, target, fov);
+  const step = findStep(ctx, mob.pos, target, fov, mob);
   if (step === -1) return false;
   moveMob(ctx, mob, step);
   return true;
@@ -565,12 +571,17 @@ function moveMob(ctx: Ctx, mob: Mob, to: number): void {
 }
 
 /** Dungeon.findPath: the next step, treating characters the mover can see as obstacles. */
-function findStep(ctx: Ctx, from: number, to: number, fov: boolean[]): number {
+function findStep(ctx: Ctx, from: number, to: number, fov: boolean[], mob?: Mob): number {
   const { world, depth, level } = ctx;
   if (adjacent(from, to)) {
-    return !charAt(world, depth, to) && isPassable(level, to) ? to : -1;
+    return !charAt(world, depth, to) && canStand(ctx, mob, to) ? to : -1;
   }
-  return getStep(from, to, (cell) => isPassable(level, cell) && !(fov[cell] && charAt(world, depth, cell)));
+  return getStep(from, to, (cell) => canStand(ctx, mob, cell) && !(fov[cell] && charAt(world, depth, cell)));
+}
+
+/** Where a monster may go: open ground, and for a piranha only the water of its pool. */
+function canStand(ctx: Ctx, mob: Mob | undefined, cell: number): boolean {
+  return isPassable(ctx.level, cell) && (mob?.kind !== 'piranha' || isWater(ctx.level.map[cell]!));
 }
 
 /** Neighbour order of PathFinder.getStep, which decides between equally short steps. */
@@ -673,6 +684,13 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
   }
   const mobs: Mob[] = [];
   if (level.shopkeeper !== undefined) mobs.push(createMob(nextMobId(world), 'shopkeeper', level.shopkeeper, 'passive', 0));
+  if (level.statue !== undefined) mobs.push(animatedStatue(world, level, rng));
+  for (const pos of level.piranhas ?? []) {
+    const piranha = createMob(nextMobId(world), 'piranha', pos, 'sleeping', 0);
+    piranha.level = level.depth;
+    piranha.ht = piranha.hp = mobStats(piranha).ht;
+    mobs.push(piranha);
+  }
   const count = nMobs(rng, level.depth);
   // Not yet registered in world.floors, so placement checks this list itself.
   const hidden = (cell: number): boolean => !mobs.some((mob) => mob.pos === cell);
@@ -683,6 +701,21 @@ export function populate(world: World, level: Level, rng: Rng): Mob[] {
     mobs.push(createMob(nextMobId(world), kind, pos, 'sleeping', 0));
   }
   return mobs;
+}
+
+/** Statue: still as stone until struck, holding an enchanted weapon that is no worse than plain. */
+function animatedStatue(world: World, level: Level, rng: Rng): Mob {
+  const generator = new ItemGenerator(rng, level.depth);
+  let weapon: Item;
+  do {
+    weapon = generator.of('weapon');
+  } while (itemDef(weapon.kind).category !== 'weapon' || weapon.level < 0);
+  weapon.enchant = randomEnchantment(rng, weapon.enchant);
+  const statue = createMob(nextMobId(world), 'statue', level.statue!, 'sleeping', 0);
+  statue.level = level.depth;
+  statue.item = weapon;
+  statue.ht = statue.hp = mobStats(statue).ht;
+  return statue;
 }
 
 /** Level.respawner: tops the depth up with a wandering monster now and then. */

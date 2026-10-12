@@ -182,7 +182,9 @@ export class View {
       }
     }
     for (const mob of world.floors[this.depth]?.mobs ?? []) {
-      place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht, mob.state === 'sleeping', mob.pumped);
+      place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht,
+        // A statue biding its time shows no sign of sleep.
+        mob.state === 'sleeping' && mob.kind !== 'statue', mob.pumped);
     }
     for (const [id, puppet] of this.puppets) {
       if (!seen.has(id) && (puppet.alive || now >= puppet.removeAt)) this.puppets.delete(id);
@@ -327,6 +329,13 @@ export class View {
         }
         case 'revived':
           this.say(t.revived(this.name(world, effect.hero)), COLORS.positive, now);
+          break;
+        case 'resurrected':
+          // Up again at the stairs: no sliding across the map.
+          this.puppets.delete(effect.hero);
+          audio.play('levelup');
+          this.say(effect.hero === myId ? t.resurrected : t.resurrectedCompanion(this.name(world, effect.hero)), COLORS.highlight, now);
+          if (effect.hero === myId) haptic('success');
           break;
         case 'hurt':
           if (effect.depth === this.depth) this.float(effect.who, String(effect.damage), COLORS.negative, now);

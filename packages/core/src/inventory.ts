@@ -67,6 +67,10 @@ const INVISIBILITY_DURATION = 15;
 const LEVITATION_DURATION = 20;
 const GAS_IMMUNITY_DURATION = 15;
 
+/** The backpack slot of a golden key for the hero's current depth, or -1. */
+const goldenKeyFor = (hero: Hero): number =>
+  hero.items.findIndex((item) => item.kind === 'key.golden' && item.depth === hero.depth);
+
 function heapAt(world: World, hero: Hero): Heap | undefined {
   return world.floors[hero.depth]?.heaps.find((heap) => heap.pos === hero.pos);
 }
@@ -75,6 +79,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   if (action.type === 'pickup') {
     const heap = heapAt(world, hero);
     if (!heap) return 'nothing here';
+    if ((heap.kind === 'lockedChest' || heap.kind === 'crystalChest') && goldenKeyFor(hero) < 0) return 'the chest is locked';
     return heap.kind === 'forSale' ? 'that is for sale' : null;
   }
   if (action.type === 'remove') {
@@ -322,6 +327,8 @@ export function collect(hero: Hero, item: Item): boolean {
 function pickUp(ctx: Ctx, hero: Hero): void {
   const heap = ctx.floor.heaps.find((h) => h.pos === hero.pos)!;
   if (heap.kind === 'mimic' && springMimic(ctx, hero, heap)) return;
+  // A locked or crystal chest: the golden key turns in its lock and stays there.
+  if (heap.kind === 'lockedChest' || heap.kind === 'crystalChest') hero.items.splice(goldenKeyFor(hero), 1);
   if (heap.kind !== 'heap') {
     ctx.effects.push({ type: 'opened', depth: ctx.depth, pos: heap.pos, heap: heap.kind });
     heap.kind = 'heap';
@@ -348,9 +355,10 @@ function pickUp(ctx: Ctx, hero: Hero): void {
   if (left.length === 0) ctx.floor.heaps.splice(ctx.floor.heaps.indexOf(heap), 1);
 }
 
-/** The potion each seed brews into (Plant.Seed.alchemyClass); icecap's frost is not ported. */
+/** The potion each seed brews into (Plant.Seed.alchemyClass). */
 const ALCHEMY: Partial<Record<ItemKind, ItemKind>> = {
   'seed.firebloom': 'potion.liquidFlame',
+  'seed.icecap': 'potion.frost',
   'seed.sorrowmoss': 'potion.toxicGas',
   'seed.dreamweed': 'potion.invisibility',
   'seed.sungrass': 'potion.healing',

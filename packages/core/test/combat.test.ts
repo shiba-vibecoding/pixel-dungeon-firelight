@@ -38,8 +38,8 @@ describe('monsters', () => {
       const world = createWorld(seed);
       for (let depth = 1; depth <= 4; depth++) {
         const level = levelAt(world, depth);
-        // The sad ghost may haunt one level besides its monsters.
-        const mobs = floorAt(world, depth).mobs.filter((mob) => mob.kind !== 'ghost');
+        // The sad ghost may haunt one level besides its monsters, and special rooms have guardians of their own.
+        const mobs = floorAt(world, depth).mobs.filter((mob) => mob.kind !== 'ghost' && mob.kind !== 'statue' && mob.kind !== 'piranha');
         const base = 2 + (depth % 5);
         expect(mobs.length).toBeGreaterThanOrEqual(base);
         expect(mobs.length).toBeLessThanOrEqual(base + 2);

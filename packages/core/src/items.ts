@@ -16,7 +16,7 @@ import type { RunState } from './run';
 
 export type ItemCategory =
   | 'gold' | 'potion' | 'scroll' | 'weapon' | 'armor' | 'missile' | 'wand' | 'ring' | 'seed' | 'food' | 'dew' | 'torch' | 'key'
-  | 'tome' | 'quest';
+  | 'tome' | 'quest' | 'ankh';
 
 export interface ItemDef {
   category: ItemCategory;
@@ -125,6 +125,8 @@ export const ITEMS = {
   dew: { category: 'dew', sprite: 81 },
   /** Opens the locked room of the level it was found on. */
   'key.iron': { category: 'key', sprite: 9 },
+  /** Opens a locked or crystal chest of the level it was found on. */
+  'key.golden': { category: 'key', sprite: 10 },
   /** The sad ghost's dried rose. */
   'quest.rose': { category: 'quest', sprite: 100 },
   /** What the old wandmaker is after. */
@@ -133,6 +135,8 @@ export const ITEMS = {
   'tome.mastery': { category: 'tome', sprite: 82 },
   /** Lit, it lets one see further in the dark halls for a while. */
   torch: { category: 'torch', sprite: 84 },
+  /** Brings its bearer back to life once, at a price: everything else in the pack, and all gold. */
+  ankh: { category: 'ankh', sprite: 1 },
   /** The Amulet of Yendor, at the very bottom of the dungeon. */
   'quest.amulet': { category: 'quest', sprite: 87 },
 } as const satisfies Record<string, ItemDef>;
@@ -251,6 +255,8 @@ export function itemPrice(item: Item, known: boolean): number {
       return levelled(80);
     case 'seed':
       return 10 * item.qty;
+    case 'ankh':
+      return 50 * item.qty;
     default:
       return 0;
   }
@@ -475,7 +481,7 @@ export class ItemGenerator {
 /* What lies around on a new level */
 
 /** `forSale`: a shop's wares, bought rather than picked up. */
-export type HeapKind = 'heap' | 'chest' | 'skeleton' | 'tomb' | 'forSale' | 'mimic';
+export type HeapKind = 'heap' | 'chest' | 'skeleton' | 'tomb' | 'forSale' | 'mimic' | 'lockedChest' | 'crystalChest';
 
 export interface Heap {
   pos: number;
@@ -485,7 +491,9 @@ export interface Heap {
 
 /** Sprites of closed containers in items.png. */
 /** A mimic looks just like a chest. */
-export const HEAP_SPRITES: Readonly<Record<Exclude<HeapKind, 'heap' | 'forSale'>, number>> = { chest: 11, skeleton: 0, tomb: 13, mimic: 11 };
+export const HEAP_SPRITES: Readonly<Record<Exclude<HeapKind, 'heap' | 'forSale'>, number>> = {
+  chest: 11, skeleton: 0, tomb: 13, mimic: 11, lockedChest: 12, crystalChest: 105,
+};
 
 /** Dungeon.posNeeded / souNeeded: guaranteed strength and upgrades, spread over the floors. */
 function quotaReached(rng: Rng, depth: number, quota: readonly number[], found: number): boolean {
@@ -517,6 +525,8 @@ const HEAP_KINDS: Readonly<Partial<Record<HeapType, HeapKind>>> = {
   [HeapType.CHEST]: 'chest',
   [HeapType.MIMIC]: 'chest',
   [HeapType.TOMB]: 'tomb',
+  [HeapType.LOCKED_CHEST]: 'lockedChest',
+  [HeapType.CRYSTAL_CHEST]: 'crystalChest',
   [HeapType.SKELETON]: 'skeleton',
   [HeapType.FOR_SALE]: 'forSale',
 };
@@ -532,6 +542,8 @@ function rollSpec(spec: ItemSpec, generator: ItemGenerator, rng: Rng, depth: num
       return createItem('gold', rng.intRange(1, 3));
     case 'key':
       return { ...createItem('key.iron'), depth };
+    case 'goldenKey':
+      return { ...createItem('key.golden'), depth };
     case 'liquidFlame':
       return createItem('potion.liquidFlame');
     case 'kind':

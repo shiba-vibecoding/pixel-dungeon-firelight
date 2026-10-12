@@ -1,6 +1,6 @@
 import type { ItemKind } from '../items';
 import { Feeling, HeapType, isBossDepth, type ItemSpec, type LevelBuilder } from './builder';
-import { cell, type Point } from './geometry';
+import { cell, NEIGHBOURS8, type Point } from './geometry';
 import { type Door, DoorType, type Room, RoomType } from './room';
 import { T } from './terrain';
 
@@ -492,6 +492,8 @@ function paintShop(level: LevelBuilder, room: Room): void {
     { roll: 'category', categories: ['scroll'], tries: 1 },
     { roll: 'kind', kind: 'food.ration' },
     { roll: 'kind', kind: 'food.ration' },
+    // Shops also keep an ankh, for those who fear the end.
+    { roll: 'kind', kind: 'ankh' },
   ];
   rng.shuffle(wares);
   const door = entranceOf(room);
@@ -661,7 +663,97 @@ function paintPit(level: LevelBuilder, room: Room): void {
   }
 }
 
+/** StatuePainter: a row of statues along the far wall, and before them one that is no statue. */
+function paintStatue(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY, 1);
+  const c = room.center(rng);
+  let { x: cx, y: cy } = c;
+  const door = entranceOf(room);
+  lockWithKey(level, room);
+  if (door.x === room.left) {
+    level.fill(room.right - 1, room.top + 1, 1, room.height() - 1, T.STATUE);
+    cx = room.right - 2;
+  } else if (door.x === room.right) {
+    level.fill(room.left + 1, room.top + 1, 1, room.height() - 1, T.STATUE);
+    cx = room.left + 2;
+  } else if (door.y === room.top) {
+    level.fill(room.left + 1, room.bottom - 1, room.width() - 1, 1, T.STATUE);
+    cy = room.bottom - 2;
+  } else {
+    level.fill(room.left + 1, room.top + 1, room.width() - 1, 1, T.STATUE);
+    cy = room.top + 2;
+  }
+  level.statue = cell(cx, cy);
+}
+
+/**
+ * PoolPainter: a flooded room with a prize on a pedestal at the far end,
+ * guarded by three piranhas; somewhere on the level, a potion of
+ * invisibility to get past them.
+ */
+function paintPool(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.WATER, 1);
+  const door = entranceOf(room);
+  door.set(DoorType.REGULAR);
+  const x = door.x === room.left ? room.right - 1
+    : door.x === room.right ? room.left + 1
+    : room.left + Math.trunc(room.width() / 2);
+  const y = door.y === room.top ? room.bottom - 1
+    : door.y === room.bottom ? room.top + 1
+    : room.top + Math.trunc(room.height() / 2);
+  const prize = { roll: 'category', categories: ['weapon', 'armor'], tries: 5 } as const;
+  level.dropItem(cell(x, y), rng.int(3) === 0 ? HeapType.CHEST : HeapType.HEAP, prize);
+  level.setXY(x, y, T.PEDESTAL);
+  level.toSpawn.push({ roll: 'kind', kind: 'potion.invisibility' });
+  for (let i = 0; i < 3; i++) {
+    let pos: number;
+    do {
+      pos = room.random(rng);
+    } while (level.map[pos] !== T.WATER || level.piranhas.includes(pos));
+    level.piranhas.push(pos);
+  }
+}
+
+/**
+ * VaultPainter: a wand or a ring behind a locked door, in a chest that wants
+ * a golden key, or one of two crystal chests to choose between, or simply on
+ * a pedestal.
+ */
+function paintVault(level: LevelBuilder, room: Room): void {
+  const { rng } = level;
+  level.fillRect(room, T.WALL);
+  level.fillRect(room, T.EMPTY_SP, 1);
+  level.fillRect(room, T.EMPTY, 2);
+  const c = cell(Math.trunc((room.left + room.right) / 2), Math.trunc((room.top + room.bottom) / 2));
+  const prize = (): ItemSpec => ({ roll: 'category', categories: [rng.oneOf(['wand', 'ring'] as const)], tries: 1 });
+  switch (rng.int(3)) {
+    case 0:
+      level.dropItem(c, HeapType.LOCKED_CHEST, prize());
+      level.toSpawn.push({ roll: 'goldenKey' });
+      break;
+    case 1: {
+      // Two crystal chests and one golden key: a choice between what each holds.
+      const [a, b] = rng.int(2) === 0 ? ['wand', 'ring'] as const : ['ring', 'wand'] as const;
+      level.dropItem(c, HeapType.CRYSTAL_CHEST, { roll: 'category', categories: [a], tries: 1 });
+      level.dropItem(c + NEIGHBOURS8[rng.int(8)]!, HeapType.CRYSTAL_CHEST, { roll: 'category', categories: [b], tries: 1 });
+      level.toSpawn.push({ roll: 'goldenKey' });
+      break;
+    }
+    default:
+      level.dropItem(c, HeapType.HEAP, prize());
+      level.set(c, T.PEDESTAL);
+  }
+  lockWithKey(level, room);
+}
+
 export const PAINTERS: ReadonlyMap<RoomType, Painter> = new Map<RoomType, Painter>([
+  [RoomType.STATUE, paintStatue],
+  [RoomType.POOL, paintPool],
+  [RoomType.VAULT, paintVault],
   [RoomType.WEAK_FLOOR, paintWeakFloor],
   [RoomType.PIT, paintPit],
   [RoomType.TREASURY, paintTreasury],

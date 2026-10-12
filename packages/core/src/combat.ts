@@ -2,7 +2,9 @@ import {
   BRUTE_ENRAGED_DAMAGE, createMob, type Hero, heroArmor, heroAttackSkill, heroDamageRoll, heroDefenseSkill, isAlive,
   maxExp, type Mob, MOBS, mobStats, ringBonus,
 } from './actors';
-import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, isPassable, isWater, leaveCell } from './floor';
+import {
+  charAt, type Char, type Ctx, dropItem, enterCell, freeCellNear, heroesOn, isHero, isPassable, isWater, leaveCell, observe,
+} from './floor';
 import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold, wandMaxCharges } from './items';
 import { NEIGHBOURS4, NEIGHBOURS8 } from './level/geometry';
 import { armorProc, TERROR_TURNS, weaponProc } from './enchant';
@@ -391,6 +393,10 @@ function explode(ctx: Ctx, skeleton: Mob): void {
 }
 
 function heroDied(ctx: Ctx, hero: Hero): void {
+  if (hero.items.some((item) => item.kind === 'ankh')) {
+    resurrect(ctx, hero);
+    return;
+  }
   hero.hp = 0;
   hero.intent = null;
   leaveCell(ctx.world, ctx.level, ctx.depth, hero.pos);
@@ -398,6 +404,25 @@ function heroDied(ctx: Ctx, hero: Hero): void {
   if (!ctx.world.heroes.some(isAlive)) {
     ctx.world.over = true;
   }
+}
+
+/**
+ * Hero.resurrect, with an ankh: back on their feet at the stairs, whole and
+ * rid of every ailment, but with nothing left in the pack except keys and
+ * quest items, no gold, and no experience towards the next level.
+ */
+function resurrect(ctx: Ctx, hero: Hero): void {
+  const { world, level, depth } = ctx;
+  hero.items = hero.items.filter((item) => ['key', 'quest', 'tome'].includes(itemDef(item.kind).category));
+  Object.assign(hero, {
+    hp: hero.ht, gold: 0, exp: 0, killedBy: null, intent: null, ooze: -1, poison: 0, burning: 0, paralysed: 0, rooted: 0,
+    slowed: 0, weakened: 0, crippled: 0, charmed: 0, charmedBy: null, hunger: 0, deferred: 0, blind: 0,
+  });
+  leaveCell(world, level, depth, hero.pos);
+  hero.pos = freeCellNear(world, level, depth, level.entrance);
+  enterCell(level, hero.pos);
+  observe(world, hero);
+  ctx.effects.push({ type: 'resurrected', hero: hero.id });
 }
 
 export function earnExp(ctx: Ctx, hero: Hero, exp: number): void {

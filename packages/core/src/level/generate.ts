@@ -44,6 +44,9 @@ export interface Level {
   arenaDoor?: number;
   /** A shop's level: where the shopkeeper stands. */
   shopkeeper?: number;
+  /** Where an animated statue stands guard, and a pool's piranhas swim. */
+  statue?: number;
+  piranhas?: number[];
   /** Plants the level starts with (a garden's sungrass). */
   plants?: PlantInfo[];
 }
@@ -130,6 +133,8 @@ export function generateLevel(run: RunState, depth: number): Level {
       secretDoors: level.secretDoors,
       ...(level.arenaDoor >= 0 ? { arenaDoor: level.arenaDoor } : {}),
       ...(level.shopkeeper >= 0 ? { shopkeeper: level.shopkeeper } : {}),
+      ...(level.statue >= 0 ? { statue: level.statue } : {}),
+      ...(level.piranhas.length > 0 ? { piranhas: level.piranhas } : {}),
       ...(level.plants.length > 0 ? { plants: level.plants } : {}),
     };
   }

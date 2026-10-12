@@ -11,6 +11,7 @@ import * as core from '@pd/core';
 import { audio } from './audio';
 import { BUFF_ICONS, heroBuffs, Hud } from './hud';
 import { t } from './i18n';
+import { itemName } from './itemtext';
 import { bakeLevel, type Camera, render } from './render';
 import { type DailyBoard, fetchDaily, type Identity, submitDaily } from './leaderboard';
 import {
@@ -385,6 +386,12 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
 function takeHere(world: World, me: Hero, now: number): void {
   const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === me.pos);
   if (!heap) return;
+  // A locked or crystal chest wants the level's golden key; through crystal one sees what it holds.
+  const locked = heap.kind === 'lockedChest' || heap.kind === 'crystalChest';
+  if (locked && !me.items.some((i) => i.kind === 'key.golden' && i.depth === me.depth)) {
+    view.say(heap.kind === 'crystalChest' ? t.crystalChest(itemName(world, heap.items[0]!)) : t.lockedChest, '#ff8800');
+    return;
+  }
   if (heap.kind === 'forSale') openTrade(world, me, heap.items[0]!);
   else send({ type: 'pickup' }, now);
 }
