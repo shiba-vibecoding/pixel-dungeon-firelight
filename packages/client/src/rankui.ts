@@ -97,7 +97,9 @@ function mineRows(records: readonly RunRecord[], trophies: Profile['trophies']):
   for (const record of records) {
     const arena = record.mode === 'arena';
     const what = record.won ? '' : record.cause ? ` · ${record.cause}` : '';
-    list.append(row(null, record, [`${shortDate(record.date)} · `, ...detail(record.heroClass, record.lvl, record.depth, arena, record.won), what], false));
+    // A run the server did not check (played before checked runs, or without the server) is on no board: it says so.
+    const unranked = record.checked ? '' : ` · ${t.ranked.offBoard}`;
+    list.append(row(null, record, [`${shortDate(record.date)} · `, ...detail(record.heroClass, record.lvl, record.depth, arena, record.won), unranked, what], false));
   }
   nodes.push(list);
   return nodes;
