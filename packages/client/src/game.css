@@ -187,3 +187,5 @@ body:has(#overlay.open) .pd-mapctl { visibility: hidden; }
 /* The ranked title (design system v16): the logo alone, each of the card's facts on one line. */
 .pd-title-screen.ranked .pd-logo-sub { display: none; }
 .pd-profile-facts .pd-fact { white-space: nowrap; }
+/* The daily dungeon's rules of the day (core daily.ts). */
+.pd-daily-rules { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--gold); }

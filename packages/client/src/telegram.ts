@@ -25,6 +25,15 @@ interface WebApp {
   onEvent?(event: string, callback: () => void): void;
   /** Bot API 6.9: a few kilobytes kept on the player's account. */
   CloudStorage?: CloudStorage;
+  /** Bot API 7.8: a story with a picture (a public https address). */
+  shareToStory?(mediaUrl: string, params?: { text?: string; widget_link?: { url: string; name?: string } }): void;
+  /** Bot API 8.0: sends a message the bot prepared (savePreparedInlineMessage) to a chat the player picks. */
+  shareMessage?(id: string, callback?: (sent: boolean) => void): void;
+  /** Bot API 6.9: lets the bot write to the player. */
+  requestWriteAccess?(callback?: (granted: boolean) => void): void;
+  /** Bot API 8.0: the game's icon on the phone's home screen. */
+  addToHomeScreen?(): void;
+  checkHomeScreenStatus?(callback?: (status: 'unsupported' | 'unknown' | 'added' | 'missed') => void): void;
   /** Bot API 8.0: the Mini App over the whole screen. */
   isFullscreen?: boolean;
   requestFullscreen?(): void;
@@ -236,4 +245,57 @@ export function openExternal(url: string): void {
 export function openLink(url: string): void {
   if (webApp?.openTelegramLink && inTelegram) webApp.openTelegramLink(url);
   else window.open(url, '_blank', 'noopener');
+}
+
+const at = (version: string): boolean => inTelegram && (webApp?.isVersionAtLeast?.(version) ?? false);
+
+/** The game's t.me link, opening at `start` (daily, arena) or at the title. */
+export const appLink = (start?: string): string => (start ? `${APP_LINK}?startapp=${encodeURIComponent(start)}` : APP_LINK);
+
+/** Whether this Telegram can post a story from the game. */
+export const canShareStory = (): boolean => at('7.8') && typeof webApp?.shareToStory === 'function';
+
+/** A story with the picture at `url` and a caption (a link in it opens the game). */
+export function shareStory(url: string, text: string): void {
+  webApp?.shareToStory?.(url, { text: text.slice(0, 200) });
+}
+
+/** Whether this Telegram can send a message the bot prepared. */
+export const canShareMessage = (): boolean => at('8.0') && typeof webApp?.shareMessage === 'function';
+
+/** Sends the bot's prepared message to a chat the player picks; resolves to whether it went. */
+export function shareMessage(id: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!canShareMessage()) {
+      resolve(false);
+      return;
+    }
+    webApp!.shareMessage!(id, (sent) => resolve(Boolean(sent)));
+  });
+}
+
+/** Asks the player to let the bot write to them; resolves to whether they did (or had already). */
+export function requestWriteAccess(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!at('6.9') || !webApp?.requestWriteAccess) {
+      resolve(false);
+      return;
+    }
+    webApp.requestWriteAccess((granted) => resolve(Boolean(granted)));
+  });
+}
+
+/** Whether the game could still be put on the home screen («missed»: not there, and the phone can). */
+export function homeScreenStatus(): Promise<'unsupported' | 'unknown' | 'added' | 'missed'> {
+  return new Promise((resolve) => {
+    if (!at('8.0') || !webApp?.checkHomeScreenStatus) {
+      resolve('unsupported');
+      return;
+    }
+    webApp.checkHomeScreenStatus((status) => resolve(status));
+  });
+}
+
+export function addToHomeScreen(): void {
+  if (at('8.0')) webApp?.addToHomeScreen?.();
 }

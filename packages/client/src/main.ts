@@ -22,7 +22,7 @@ import { adoptBadges, BADGES, type BadgeId, badgeText, checkBadges, countGame, e
 import { pullCloud, pushCloud } from './cloud';
 import { audio } from './audio';
 import { type ArenaHud, heroBuffs, Hud, type HudStatus, type QuickState } from './hud';
-import { arenaBest, arenaEntry, recordArena, showArenaEnd, showArenaPick, showArenaReward } from './arenaui';
+import { arenaBest, recordArena, showArenaEnd, showArenaReward } from './arenaui';
 import { ArenaView } from './arenaview';
 import { levelRegion } from './sprites';
 import { capitalize, t } from './i18n';
@@ -30,7 +30,7 @@ import { chargesOf, itemInfo, itemName, wearOf } from './itemtext';
 import { bakeLevel, type Camera, patchLevel, render } from './render';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
-  refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, showWaiting, slot, toast,
+  refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
 import { profileCard, rankingBlock, showBoards, trophyText } from './rankui';
 import { mart } from './mart';
@@ -44,15 +44,16 @@ import { Feedback } from './feedback';
 import { Finds, MapControls } from './mapui';
 import { type HintId, hints } from './hints';
 import { lookIndex, preloadSheets, regionIndex } from './worldsheets';
-import { sharePicture } from './share';
+import { type ShareCard, shareCard, sharePicture, storyCard } from './share';
 import { rankings, recordRun, runScore } from './rankings';
 import { type CheckOptions, forgetSolo, loadCheck, loadSolo, type Session, soloSession, staleSolo } from './session';
 import { type BoardKind, type Profile, type RunMeta, type RunSlot, runApi, type SyncAnswer } from './checked';
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, haptic, initData, initTelegram, inTelegram, launchedForArena, launchedForDaily, onLayoutChange, platform,
-  shareArena, shareDaily, telegramName,
+  backButton, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
+  shareArena, shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
+  homeScreenStatus, addToHomeScreen,
 } from './telegram';
 import { startReporting } from './report';
 import { STEP_MS, TILE, View } from './view';
@@ -436,7 +437,10 @@ async function startRun(key: string, mode: 'dungeon' | 'arena', fresh: boolean, 
   const name = playerName.trim() || telegramName() || t.heroDefault;
   const chosen = slot === 'dungeon' && challengesOpen() ? challenges : 0;
   const local = (): Session =>
-    soloSession(key, heroClass, slot === 'daily' ? dailySeed : randomSeed, name, chosen, mode, slot === 'dungeon' ? readBones : undefined);
+    soloSession(
+      key, heroClass, slot === 'daily' ? dailySeed : randomSeed, name, chosen, mode, slot === 'dungeon' ? readBones : undefined, false, undefined,
+      slot === 'daily' ? core.dayOf(Date.now()) : undefined,
+    );
   // The run being played is written out first: what the slot holds is read next.
   session?.close();
   session = null;
@@ -481,16 +485,16 @@ async function startRun(key: string, mode: 'dungeon' | 'arena', fresh: boolean, 
 }
 
 function startSolo(mode: 'continue' | 'new' | 'daily'): void {
-  void startRun(mode === 'daily' ? dailySlot() : SOLO_SLOT, 'dungeon', mode === 'new');
+  const daily = mode === 'daily';
+  void startRun(daily ? dailySlot() : SOLO_SLOT, 'dungeon', mode === 'new', daily ? todayRules(t.ranked.rulesWelcome) : undefined);
 }
 
-/** The arena of waves: the arena run kept on this device goes on, or a new one begins. */
-function startArenaSolo(): void {
-  void startRun(ARENA_SLOT, 'arena', false, t.arena.welcome);
-}
-
-function openArenaPick(): void {
-  showArenaPick({ best: arenaBest(), onStart: startArenaSolo, onClose: toTitle });
+/** Today's rules of the daily dungeon (core daily.ts), in words: the hardship's name, the boon's name and what it gives. */
+function todayRules(words: (hardship: string, boon: string, info: string) => string): string {
+  const rules = core.dailyRules(core.dayOf(Date.now()));
+  const index = core.CHALLENGES.findIndex((challenge) => challenge.mask === rules.challenge);
+  const [boon, info] = t.ranked.boons[rules.boon] ?? [rules.boon, ''];
+  return words(t.meta.challengeList[index]?.[0] ?? '', boon, info);
 }
 
 /** Challenges for the next new solo game (a bit mask, Challenges.MASKS), kept on this device. */
@@ -508,8 +512,63 @@ function resetDevice(): void {
 }
 
 function settings(onClose: () => void): void {
-  showSettings({ onClose, onEffects: () => resize(), onReset: resetDevice });
+  showSettings({
+    onClose, onEffects: () => resize(), onReset: resetDevice,
+    ...(api && inTelegram ? { reminders: { on: stored('pd-notify') === 'on', set: (on: boolean) => void setReminders(on) } } : {}),
+  });
 }
+
+/** The bot's reminders on or off: on asks Telegram to let the bot write first; false if it did not come about. */
+async function setReminders(on: boolean): Promise<boolean> {
+  store('pd-notify-asked', '1');
+  if (on && !(await requestWriteAccess())) return false;
+  if (!(await api!.notify(on))) {
+    toast(t.ranked.remindersFailed);
+    return false;
+  }
+  store('pd-notify', on ? 'on' : 'off');
+  if (on) toast(t.ranked.remindersOn);
+  return true;
+}
+
+/**
+ * Once the title knows the player, it may ask one thing, once each: after a daily dungeon begun,
+ * whether the bot may remind them of the streak; from the third launch on, to put the game on
+ * the phone's home screen.
+ */
+let askedThisLaunch = false;
+function askOnTitle(): void {
+  if (askedThisLaunch || overlayOpen() || !inTelegram) return;
+  if (api && profile && profile.streak.count >= 1 && !stored('pd-notify-asked')) {
+    askedThisLaunch = true;
+    showConfirm(t.ranked.remindersAsk, t.ranked.remindersAskText, t.ranked.remindersYes, t.ranked.remindersNo, () => {
+      toTitle(false);
+      void setReminders(true);
+    }, () => {
+      store('pd-notify-asked', '1');
+      toTitle(false);
+    });
+    return;
+  }
+  if (openings >= 3 && !stored('pd-home-asked')) {
+    askedThisLaunch = true;
+    void homeScreenStatus().then((status) => {
+      if (status !== 'missed' || overlayOpen() || session) return;
+      store('pd-home-asked', '1');
+      showConfirm(t.ranked.homeAsk, t.ranked.homeAskText, t.ranked.homeYes, t.ranked.notNow, () => {
+        addToHomeScreen();
+        toTitle(false);
+      }, () => toTitle(false));
+    });
+  }
+}
+
+/** How many times the game has been opened on this device. */
+const openings = ((): number => {
+  const count = Number(stored('pd-launches') ?? 0) + 1;
+  store('pd-launches', String(count));
+  return count;
+})();
 
 /** The player as the server last told (checked.ts Profile); null until it has, or without checked runs. */
 let profile: Profile | null = null;
@@ -543,7 +602,10 @@ function refreshProfile(): void {
     profile = answer;
     adoptBadges(answer.badges);
     announceTrophies(answer.trophies);
-    if (!session && document.querySelector('.pd-title-screen')) toTitle(false);
+    if (!session && document.querySelector('.pd-title-screen')) {
+      toTitle(false);
+      askOnTitle();
+    }
   });
 }
 
@@ -587,12 +649,12 @@ function toTitle(ask = true): void {
     onDaily: () => startSolo('daily'),
     onDailyBoard: api ? () => openBoards('daily') : undefined,
     dailyState: dailyState(),
+    dailyRules: todayRules((hardship, boon, info) => t.ranked.rulesLine(hardship, boon, info)),
     onPractice: () => startSolo('daily'),
     profile: profile ? profileCard(profile, () => openBoards()) : undefined,
     onRankings: () => openBoards(),
     onMart: () => showMart({ heroClass, onClose: toTitle }),
     onSettings: () => settings(toTitle),
-    arena: arenaEntry(arenaBest(), openArenaPick),
     challenges: challengesOpen() ? challenges : 0,
     onChallenges: () =>
       showChallenges({
@@ -2452,20 +2514,18 @@ function tick(now: number): void {
     const answer = session.checked ? session.checked.finished() : null;
     if (answer) void answer.then((reply) => reply?.badges && announceBadges(reply.badges.filter((id) => !earnedBadges().has(id))));
     const deepestNow = Object.keys(world.levels).length;
-    const scoreNow = runScore(me.stats?.gold ?? me.gold, me.lvl, deepestNow, victory);
-    const onShare = (): void => {
-      void (async () => {
-        const reply = answer ? await answer : null;
-        const place = reply?.places?.daily ?? reply?.places?.week ?? null;
-        const text = t.shareText(scoreNow, deepestNow);
-        const killer = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
-        const shared = await sharePicture({
-          name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, level: me.lvl, depth: deepestNow, score: scoreNow,
-          place, won: victory, cause: killer ? capitalize(t.killedBy(killer)) : t.soloFell(me.depth),
-        }, text);
-        if (!shared && (await shareDaily(text)) === 'copied') toast(t.linkCopied);
-      })();
-    };
+    // Scored as the server scores it (core verify.ts runOutcome: challenges raise it).
+    const scoreNow = core.runOutcome(world, me).score;
+    const killer = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
+    const shareText = dailyRun ? t.shareText(scoreNow, deepestNow) : t.shareTextRun(scoreNow, deepestNow);
+    const share = shareChoices(async () => {
+      const reply = answer ? await answer : null;
+      return {
+        name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, level: me.lvl, depth: deepestNow, score: scoreNow,
+        place: reply?.places?.daily ?? reply?.places?.week ?? null, won: victory, cause: killer ? capitalize(t.killedBy(killer)) : t.soloFell(me.depth),
+        title: dailyRun ? undefined : 'Pixel Dungeon',
+      };
+    }, shareText, 'daily');
     window.setTimeout(() => {
       if (!session?.world?.over) return;
       if (!victory) haptic('error');
@@ -2475,7 +2535,7 @@ function tick(now: number): void {
       const gold = me.stats?.gold ?? me.gold;
       const place = recordRun({
         key: `${world.run.seed}:${me.id}:${world.turn}`,
-        score: runScore(gold, me.lvl, deepest, victory),
+        score: scoreNow,
         name: me.name || playerName || telegramName() || t.heroLabel,
         heroClass: me.heroClass,
         lvl: me.lvl,
@@ -2503,7 +2563,7 @@ function tick(now: number): void {
         score: scoreNow,
         ranking: rankingBlock(answer),
         onBoards: api ? () => openBoards(dailyRun ? 'daily' : 'week') : undefined,
-        onShare,
+        share,
       });
     }, 1200);
   }
@@ -2627,14 +2687,61 @@ function showArenaRunEnd(world: World, me: Hero, solo: boolean): void {
       },
       ranking: rankingBlock(answer),
       onBoards: api ? () => openBoards('arena') : undefined,
-      onShare: () => {
-        void shareArena(t.arena.shareText(cleared, score)).then((result) => {
-          if (result === 'copied') toast(t.linkCopied);
-        });
-      },
+      share: shareChoices(async () => {
+        const reply = answer ? await answer : null;
+        return {
+          name, heroClass: me.heroClass, level: me.lvl, depth: cleared, score, place: reply?.places?.arena ?? null, won: false,
+          cause: cause ? capitalize(cause) : '', title: t.arena.title, arena: true,
+        };
+      }, t.arena.shareText(cleared, score), 'arena'),
       onExit: toTitle,
     });
   }, 1200);
+}
+
+/**
+ * The ways to share a result: a story with its picture and a challenge sent to a chat (both through
+ * the server, which keeps the picture at a public address), and a link (a picture where the phone can).
+ */
+function shareChoices(card: () => Promise<ShareCard>, text: string, start: 'daily' | 'arena'): ShareChoice[] {
+  const choices: ShareChoice[] = [];
+  const link = (): void => {
+    void (async () => {
+      const shared = await sharePicture(await card(), text);
+      if (!shared && (await (start === 'arena' ? shareArena(text) : shareDaily(text))) === 'copied') toast(t.linkCopied);
+    })();
+  };
+  if (api && canShareStory()) {
+    choices.push({
+      label: t.ranked.shareStory,
+      run: () => {
+        toast(t.ranked.sharePreparing);
+        void (async () => {
+          const blob = await storyCard(await card(), t.ranked.storyCall);
+          const url = blob && (await api.card(blob));
+          if (url) shareStory(url, `${text} ${appLink(start)}`);
+          else toast(t.ranked.shareFailed);
+        })();
+      },
+    });
+  }
+  if (api && canShareMessage()) {
+    choices.push({
+      label: t.ranked.shareChat,
+      run: () => {
+        toast(t.ranked.sharePreparing);
+        void (async () => {
+          const blob = await shareCard(await card());
+          const url = blob && (await api.card(blob));
+          const id = await api.challenge(text, url, start);
+          if (id) await shareMessage(id);
+          else link();
+        })();
+      },
+    });
+  }
+  choices.push({ label: choices.length > 0 ? t.ranked.shareLink : t.shareResult, run: link });
+  return choices;
 }
 
 requestAnimationFrame(frame);
@@ -2644,10 +2751,6 @@ addEventListener('pd-run-restored', () => toast(t.ranked.restored));
 if (launchedForDaily()) {
   // Opened from a shared daily result: straight into today's dungeon.
   startSolo('daily');
-} else if (launchedForArena()) {
-  // Opened from a shared arena result: the arena's own window over the title.
-  toTitle();
-  openArenaPick();
 } else {
   toTitle();
 }
@@ -2676,5 +2779,5 @@ if (import.meta.env.DEV) {
       await new Promise((resolve) => setTimeout(resolve, 33));
     }
   };
-  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, startArenaSolo, audio, tick, held, tapCell } });
+  Object.assign(window, { __pd: { get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, audio, tick, held, tapCell } });
 }

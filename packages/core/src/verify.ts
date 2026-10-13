@@ -1,5 +1,6 @@
 import type { Hero } from './actors';
 import { arenaScore, wavesCleared } from './arena';
+import { challengeMultiplier } from './daily';
 import type { World } from './world';
 
 /*
@@ -109,7 +110,9 @@ export function runOutcome(world: World, hero: Hero): RunOutcome {
     return { ...base, mode: 'arena', score: arenaScore(world, hero.id), depth: wavesCleared(world.arena), won: false };
   }
   const depth = deepestDepth(world);
-  return { ...base, mode: 'dungeon', score: dungeonScore(gold, hero.lvl, depth, world.victory), depth, won: world.victory };
+  // Challenges raise the score (daily.ts challengeMultiplier): the way up for a hero who has won.
+  const score = Math.round(dungeonScore(gold, hero.lvl, depth, world.victory) * challengeMultiplier(world.challenges ?? 0));
+  return { ...base, mode: 'dungeon', score, depth, won: world.victory };
 }
 
 /** The daily dungeon's seed: the same for everyone on the same (UTC) day, `date` as YYYY-MM-DD. */

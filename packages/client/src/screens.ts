@@ -367,6 +367,8 @@ export interface TitleOptions {
   dailyState?: { state: 'open' | 'going' | 'done'; place: number | null; total: number };
   /** Practice in today's dungeon, once its attempt is played. */
   onPractice?: () => void;
+  /** Today's rules of the daily dungeon, as a line. */
+  dailyRules?: string;
   /** The player's card (rankui.ts profileCard), once the server has told who they are. */
   profile?: HTMLElement;
   onRankings(): void;
@@ -474,6 +476,7 @@ export function showTitle(options: TitleOptions): void {
     { className: `pd-daily${done ? ' done' : ''}` },
     el('div', { className: 'pd-daily-head' }, picture('stairs'), el('h3', { textContent: t.daily }), chip),
     place,
+    options.dailyRules ? el('p', { className: 'pd-daily-rules', textContent: options.dailyRules }) : null,
     info(done ? t.ranked.dailyDone : day ? t.ranked.dailyOpenNote : t.dailyInfo, 'pd-note'),
     el(
       'div',
@@ -579,7 +582,8 @@ export function showBadges(onClose: () => void): void {
     sprites(detail);
   };
   const grid = el('div', { className: 'pd-grid c6' });
-  for (const badge of BADGES) {
+  // The arena's badges are left out: the arena of waves is no longer offered.
+  for (const badge of BADGES.filter((b) => b.image < ARENA_BADGES)) {
     const icon = el('i', { className: `pd-badge${earned.has(badge.id) ? '' : ' dim'}` });
     icon.dataset.i = String(badge.image);
     const node = el('button', { className: `pd-slot${fresh.has(badge.id) ? ' new' : ''}`, ariaLabel: badgeText(badge.id) }, icon);
@@ -1023,8 +1027,8 @@ export interface EndOptions {
   score: number;
   /** How the server scored it (rankui.ts rankingBlock). */
   ranking?: HTMLElement;
-  /** Shares the result (a picture where the phone can, else text and a link). */
-  onShare?: () => void;
+  /** The ways to share the result (shareButton). */
+  share?: readonly ShareChoice[];
   /** Opens the boards; absent without checked runs. */
   onBoards?: () => void;
 }
@@ -1058,12 +1062,27 @@ export function showRunEnd(options: EndOptions): void {
       options.ranking,
       actions(
         [button(options.restartLabel, options.onRestart, 'primary')],
-        [...(options.onShare ? [button(t.shareResult, options.onShare)] : []), ...(options.onBoards ? [button(t.ranked.title, options.onBoards)] : [])],
+        [...(options.share?.length ? [shareButton(options.share)] : []), ...(options.onBoards ? [button(t.ranked.title, options.onBoards)] : [])],
       ),
       button(t.toMenu, options.onExit, 'quiet'),
     ),
     null,
   );
+}
+
+/** A way to share a result: a story, a chat, a link. */
+export interface ShareChoice {
+  label: string;
+  run(): void;
+}
+
+/** «Share»: one way, at once; several, and it opens into a row of them in its place. */
+export function shareButton(choices: readonly ShareChoice[], label = t.shareResult, className = ''): HTMLElement {
+  if (choices.length === 1) return button(label, () => choices[0]!.run(), className);
+  const node = button(label, () => {
+    node.replaceWith(el('div', { className: 'pd-row pd-share-row' }, ...choices.map((choice) => button(choice.label, () => choice.run()))));
+  }, className);
+  return node;
 }
 
 /** A window with only a word in it, while something is on its way (a new run from the server). */

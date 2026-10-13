@@ -15,6 +15,8 @@ import {
 import { boardTtl } from './boards';
 import { CORS, json, jsonBody } from './http';
 import { boardRoute, meRoute, Player, runRoute } from './player';
+import { Card, cardRoute, challengeRoute } from './sharing';
+import { Notifier, notifierStub, notifyRoute } from './notifier';
 import { readBody, sameSecret } from './secret';
 import { SignalLimiter, validSignal } from './signals';
 import { DAY_SECONDS, type TelegramUser, verifyInitData, WEEK_SECONDS } from './telegram-auth';
@@ -42,6 +44,10 @@ export interface Env {
   WALLET: DurableObjectNamespace<WalletStore>;
   /** One per player: their checked runs and profile (player.ts). */
   PLAYER: DurableObjectNamespace<Player>;
+  /** One per shared picture (sharing.ts). */
+  CARD: DurableObjectNamespace<Card>;
+  /** The bot's reminders (notifier.ts). */
+  NOTIFIER: DurableObjectNamespace<Notifier>;
   /** The secret Telegram sends with every webhook call (setWebhook's secret_token). */
   WEBHOOK_SECRET?: string;
   /** The Mini App's t.me link, for the bot's play button. */
@@ -694,6 +700,14 @@ export class DailyBoard extends DurableObject<Env> {
       return json({ rank, total: board.entries().length });
     }
     if (request.method === 'POST') return json({ error: 'results come from checked runs only' }, 410);
+    // Every player's place, by account (the reminders' weekly results); never served outside.
+    if (url.searchParams.get('owners') === '1') {
+      const owners: Record<string, number> = {};
+      board.entries().forEach((entry, i) => {
+        if (entry.owner) owners[entry.owner] = i + 1;
+      });
+      return json({ owners, total: board.entries().length });
+    }
     const me = url.searchParams.get('me');
     const owner = url.searchParams.get('owner');
     const count = Math.min(100, Math.max(0, Number(url.searchParams.get('top') ?? 20) || 0));
@@ -754,6 +768,9 @@ export default {
     if (url.pathname === '/run') return runRoute(request, env);
     if (url.pathname === '/me') return meRoute(request, env);
     if (url.pathname === '/board') return boardRoute(request, env);
+    if (url.pathname === '/card' || url.pathname.startsWith('/card/')) return cardRoute(request, env, url);
+    if (url.pathname === '/challenge') return challengeRoute(request, env);
+    if (url.pathname === '/notify') return notifyRoute(request, env);
     const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
     if (day) return daily(request, env, day[1]!);
 
@@ -767,6 +784,14 @@ export default {
     const room = env.ROOM.get(env.ROOM.idFromName(match[1]!));
     return room.fetch(request);
   },
+  /** Every hour (wrangler.jsonc triggers): the bot's reminders that are due (notifier.ts). */
+  async scheduled(controller, env): Promise<void> {
+    try {
+      await notifierStub(env).tick(controller.scheduledTime);
+    } catch (error) {
+      await keepReport(env, serverReport(error, 'reminders'));
+    }
+  },
 } satisfies ExportedHandler<Env>;
 
-export { Player };
+export { Card, Notifier, Player };

@@ -1,5 +1,5 @@
 import {
-  act, type Action, addHero, type BadgeId, type BadgeProgress, type Bones, checkBadges, countGame, createWorld, dailySeed, deriveSeed,
+  act, type Action, addHero, applyBoon, type BadgeId, type BadgeProgress, type Bones, checkBadges, countGame, createWorld, dailyRules, dailySeed, deriveSeed,
   emptyBadgeProgress, fingerprint, giveBones, type HeroClass, heroById, leaveBones, Rng, type RunOutcome, runOutcome, type World,
 } from '@pd/core';
 
@@ -188,8 +188,11 @@ export class PlayerLogic {
     const daily = slot === 'daily';
     const ranked = !daily || this.profile.dailyDate !== today;
     const seed = daily ? dailySeed(today) : options.seed;
-    const world = createWorld(seed, daily || slot === 'arena' ? 0 : options.challenges, slot === 'arena' ? 'arena' : 'dungeon');
-    addHero(world, { id: ME, name: options.name, heroClass: options.heroClass });
+    // The daily dungeon has its own rules (daily.ts): the day's hardship, and its boon once the hero is there.
+    const rules = daily ? dailyRules(today) : null;
+    const world = createWorld(seed, rules ? rules.challenge : slot === 'arena' ? 0 : options.challenges, slot === 'arena' ? 'arena' : 'dungeon');
+    const hero = addHero(world, { id: ME, name: options.name, heroClass: options.heroClass });
+    if (rules) applyBoon(world, hero, rules.boon);
     // Bones.java: a fallen hero's bones wait in ordinary runs, never in the daily dungeon (the same for everyone).
     if (slot === 'dungeon' && this.profile.bones) {
       giveBones(world, this.profile.bones);

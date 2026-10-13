@@ -7,6 +7,7 @@ import { type DailyEntry, publicId } from './leaderboard';
 import { sanitizeAction } from './messages';
 import { EntryWriter, fromEntries, toEntries } from './run-store';
 import { describe, ended, MAX_SYNC_ACTIONS, parseSlot, PlayerLogic, type RunSlot, type RunSummary, streakNow } from './runs';
+import { notifierStub } from './notifier';
 import { verifyInitData, WEEK_SECONDS } from './telegram-auth';
 
 /*
@@ -142,6 +143,17 @@ export class Player extends DurableObject<Env> {
           id: crypto.randomUUID(), now, today: dayOf(now),
         });
         await this.persist(new Set([slot]), new Map());
+        // The reminders hear that the streak was kept today (they keep nothing for those who did not ask).
+        const chat = /^tg(\d+)$/.exec(body.player.key)?.[1];
+        if (slot === 'daily' && run.ranked && chat) {
+          try {
+            await notifierStub(this.env).fetch('https://notifier/streak', {
+              method: 'POST', body: JSON.stringify({ chat: Number(chat), streak: logic.profile.streak.count, last: logic.profile.streak.last }),
+            });
+          } catch {
+            // A reminder may go out needlessly; nothing else is lost.
+          }
+        }
         return json({ run: describe(run), world: run.world });
       }
       case 'get': {

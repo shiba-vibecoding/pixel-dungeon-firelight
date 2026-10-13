@@ -1,5 +1,5 @@
 import {
-  act, type Action, addHero, applyEvent, type Bones, type ClientMessage, createWorld, type Effect, fingerprint, type GameMode, giveBones, heroById,
+  act, type Action, addHero, applyBoon, applyEvent, type Bones, type ClientMessage, createWorld, dailyRules, type Effect, fingerprint, type GameMode, giveBones, heroById,
   type HeroClass,
   LIVE_CALM_MS, liveBeatMs, liveReady, liveTick,
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
@@ -164,11 +164,14 @@ export function forgetSolo(key: string): void {
  */
 export function soloSession(
   key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0, mode: GameMode = 'dungeon',
-  bones: () => Bones | null = () => null, live = false, checkOptions?: CheckOptions,
+  bones: () => Bones | null = () => null, live = false, checkOptions?: CheckOptions, daily?: string,
 ): Session {
   const fresh = (): World => {
-    const world = createWorld(newSeed(), challenges, mode, live);
-    addHero(world, { id: 'me', name, heroClass });
+    // The daily dungeon played without the server keeps the day's rules all the same (daily.ts).
+    const rules = daily ? dailyRules(daily) : null;
+    const world = createWorld(newSeed(), rules ? rules.challenge : challenges, mode, live);
+    const hero = addHero(world, { id: 'me', name, heroClass });
+    if (rules) applyBoon(world, hero, rules.boon);
     const left = bones();
     if (left) giveBones(world, left);
     return world;

@@ -2,7 +2,7 @@ import { type Hero, type HeroClass, type Item, itemDef, itemSprite, type World }
 import { audio } from './audio';
 import { capitalize, locale, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
-import { AVATAR, el, hideOverlay, show, showInfo, slot, sprites, stats } from './screens';
+import { AVATAR, el, hideOverlay, type ShareChoice, shareButton, show, showInfo, slot, sprites, stats } from './screens';
 
 /*
  * The arena of waves' windows, in design system v14's markup (docs/design/system/migration.md
@@ -253,7 +253,8 @@ export interface ArenaEndOptions {
   /** Opens the boards; absent without checked runs. */
   onBoards?: () => void;
   onAgain(): void;
-  onShare(): void;
+  /** The ways to share the result (screens.ts shareButton). */
+  share: readonly ShareChoice[];
   onExit(): void;
 }
 
@@ -307,7 +308,7 @@ export function showArenaEnd(options: ArenaEndOptions): void {
       'div',
       { className: 'pd-actions' },
       button(t.arena.again, 'primary', options.onAgain),
-      button(t.arena.share, '', options.onShare),
+      shareButton(options.share, t.arena.share),
       options.onBoards ? button(t.ranked.title, '', options.onBoards) : null,
       button(t.toMenu, 'quiet', options.onExit),
     ),

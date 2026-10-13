@@ -95,6 +95,12 @@ export interface Identity {
 }
 
 export interface RunApi {
+  /** The result's picture at a public address (a story and a challenge need one); null if it cannot be had. */
+  card(png: Blob): Promise<string | null>;
+  /** A message with the result the player may send to any chat (WebApp.shareMessage); its id, or null. */
+  challenge(text: string, card: string | null, mode: 'daily' | 'arena'): Promise<string | null>;
+  /** The bot's reminders on or off; false if the server could not be told. */
+  notify(on: boolean): Promise<boolean>;
   start(slot: RunSlot, hero: HeroClass, challenges: number): Promise<{ run: RunMeta; world: World } | Trouble>;
   sync(meta: RunMeta, actions: readonly Action[], hash: string | null, keepalive?: boolean): Promise<SyncAnswer | Trouble>;
   get(slot: RunSlot): Promise<{ run: RunMeta | null; world?: World } | Trouble>;
@@ -136,6 +142,16 @@ export function runApi(server: string, identity: () => Identity, development: bo
       post('/run', { op: 'sync', slot: meta.slot, run: meta.id, from: meta.seq, actions, hash }, keepalive),
     get: (slot) => post('/run', { op: 'get', slot }),
     me: () => quiet('/me', {}),
+    card: async (png) => {
+      try {
+        const response = await fetch(`${base}/card`, { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Init-Data': identity().initData ?? '' }, body: png });
+        return response.ok ? ((await response.json()) as { url: string }).url : null;
+      } catch {
+        return null;
+      }
+    },
+    challenge: async (text, card, mode) => (await quiet<{ id: string }>('/challenge', { text, card, mode }))?.id ?? null,
+    notify: async (on) => (await quiet<{ on: boolean }>('/notify', { on })) !== null,
     board: (kind) => quiet('/board', { kind }),
   };
 }

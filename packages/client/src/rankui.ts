@@ -13,7 +13,8 @@ import { type RankIcon, rankIcon, trophyKind } from './trophyicons';
  */
 
 type Tab = 'daily' | 'week' | 'arena' | 'all' | 'device';
-const TABS: readonly Tab[] = ['daily', 'week', 'arena', 'all', 'device'];
+/** The arena of waves is no longer offered: its boards are not shown. */
+const TABS: readonly Tab[] = ['daily', 'week', 'all', 'device'];
 /** The icon of each board's note and of its places 1–3. */
 const BOARD_ICON: Partial<Record<string, RankIcon>> = { daily: 'gold', week: 'week', arena: 'arena' };
 
@@ -126,7 +127,7 @@ export function showBoards(options: BoardsOptions): void {
     const icon = BOARD_ICON[tab];
     note.replaceChildren(...(icon ? [rankIcon(icon)] : []), options.api ? t.ranked.tabInfo[tab] ?? '' : t.ranked.telegramOnly);
     if (tab === 'device' || !options.api) {
-      body.replaceChildren(...mineRows(options.device, options.trophies ?? []));
+      body.replaceChildren(...mineRows(options.device.filter((record) => record.mode !== 'arena'), (options.trophies ?? []).filter((trophy) => !trophy.board.startsWith('arena:'))));
       sprites(body);
       return;
     }

@@ -20,6 +20,10 @@ export interface ShareCard {
   won: boolean;
   /** What ended the run, for a fall. */
   cause: string;
+  /** The card's heading: the daily dungeon's (with the day) by default. */
+  title?: string;
+  /** The arena: the waves held stand where the depth would. */
+  arena?: boolean;
 }
 
 const C = {
@@ -55,6 +59,34 @@ function floor(g: CanvasRenderingContext2D, tiles: HTMLImageElement, width: numb
 
 /** Draws the card; resolves to a PNG. */
 export async function shareCard(data: ShareCard): Promise<Blob | null> {
+  const canvas = await drawCard(data);
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'));
+}
+
+/** The card on a phone's whole screen (1080×1920) for a story: the logo above, the card, a call below. */
+export async function storyCard(data: ShareCard, call: string): Promise<Blob | null> {
+  const card = await drawCard(data);
+  const base = `${import.meta.env.BASE_URL}assets/`;
+  const [tiles, logo] = await Promise.all([loadImage(`${base}tiles0.png`), loadImage(`${base}banner-title.png`)]);
+  const canvas = document.createElement('canvas');
+  const W = 1080;
+  const H = 1920;
+  canvas.width = W;
+  canvas.height = H;
+  const g = canvas.getContext('2d')!;
+  g.imageSmoothingEnabled = false;
+  floor(g, tiles, W, H, 5, 23);
+  g.fillStyle = 'rgba(11, 11, 9, 0.78)';
+  g.fillRect(0, 0, W, H);
+  const logoW = 640;
+  g.drawImage(logo, 0, 0, logo.width, logo.height, (W - logoW) / 2, 220, logoW, (logo.height / logo.width) * logoW);
+  const cardH = (card.height / card.width) * W;
+  g.drawImage(card, 0, 0, card.width, card.height, 0, (H - cardH) / 2, W, cardH);
+  fxText(g, call, W / 2, 1520, 1, { scale: 4, color: C.gold });
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'));
+}
+
+async function drawCard(data: ShareCard): Promise<HTMLCanvasElement> {
   const base = `${import.meta.env.BASE_URL}assets/`;
   const [tiles, avatars, logo] = await Promise.all([
     loadImage(`${base}tiles0.png`), loadImage(`${base}avatars.png`), loadImage(`${base}banner-title.png`),
@@ -83,11 +115,11 @@ export async function shareCard(data: ShareCard): Promise<Blob | null> {
 
   const x0 = 384;
   const day = new Date().toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'long' });
-  fxText(g, `${t.daily.toUpperCase()} · ${day}`, x0, 132, 1, { scale: 2, color: C.goldDeep, align: 'left', shadow: 0 });
+  fxText(g, `${(data.title ?? t.daily).toUpperCase()} · ${day}`, x0, 132, 1, { scale: 2, color: C.goldDeep, align: 'left', shadow: 0 });
   fxText(g, data.name, x0, 216, 1, { scale: data.name.length > 12 ? 4 : 6, color: C.ink, align: 'left' });
   fxText(g, data.won ? t.victory : data.cause, x0, 264, 1, { scale: 2, color: data.won ? C.gold : C.bad, align: 'left', shadow: 0 });
   const stats: Array<[string, string, string]> = [
-    [t.statDepth, String(data.depth), C.ink],
+    [data.arena ? t.arena.statWaves : t.statDepth, String(data.depth), C.ink],
     [t.score, data.score.toLocaleString(locale), C.gold],
     [t.place, data.place ? String(data.place) : '—', C.ally],
   ];
@@ -103,7 +135,7 @@ export async function shareCard(data: ShareCard): Promise<Blob | null> {
   });
   // Our logo already says TELEGRAM.
   g.drawImage(logo, 0, 0, logo.width, logo.height, W - 72 - 256, H - 36 - 140, 256, 140);
-  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'));
+  return canvas;
 }
 
 /**

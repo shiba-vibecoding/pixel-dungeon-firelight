@@ -38,3 +38,4 @@ export { chargesKnown, cursedKnown, isIdentified, kindKnown, levelKnown, visibly
 export * from './shop';
 export * from './verify';
 export * from './badges';
+export * from './daily';

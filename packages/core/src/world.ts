@@ -110,6 +110,8 @@ export interface World {
   live?: boolean;
   /** How the run was won: the Amulet's own end, or the way out to the surface (the original's «Happy end»). */
   ending?: 'amulet' | 'surface';
+  /** The daily dungeon's boon the hero set out with (daily.ts), for the screens. */
+  boon?: string;
   /** The Amulet of Yendor has been taken up (Statistics.amuletObtained): its question is asked once. */
   amuletTaken?: boolean;
   /** A fallen hero's bones from an earlier run on this device, for their depth to hold (bones.ts; solo only). */

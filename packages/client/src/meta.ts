@@ -1,7 +1,7 @@
-import { type Hero, type Item, itemDef, type ItemKind, ITEMS, itemSprite, RoomType, T, type World } from '@pd/core';
+import { challengeMultiplier, type Hero, type Item, itemDef, type ItemKind, ITEMS, itemSprite, RoomType, T, type World } from '@pd/core';
 import { audio } from './audio';
 import { fx } from './fx';
-import { lang, t } from './i18n';
+import { lang, locale, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { type FxMode, quality } from './quality';
 import { el, info, show, sprites, windowOf } from './screens';
@@ -143,6 +143,8 @@ export interface SettingsOptions {
   onEffects(mode: FxMode): void;
   /** Asked to erase everything on this device (see eraseDevice), once confirmed. */
   onReset(): void;
+  /** The bot's reminders (in Telegram): on now, and the switch; absent elsewhere. */
+  reminders?: { on: boolean; set(on: boolean): void };
 }
 
 /** The settings, from the title's corner or the menu in a run. */
@@ -164,6 +166,7 @@ export function showSettings(options: SettingsOptions): void {
   const learning = group(
     t.meta.learning,
     switchRow(t.meta.hints, t.meta.hintsNote, hints.enabled, (on) => hints.setEnabled(on)),
+    options.reminders ? switchRow(t.ranked.remindersSwitch, t.ranked.remindersNote, options.reminders.on, (on) => options.reminders!.set(on)) : null,
     linkRow(t.meta.hintsAgain, () => {
       hints.reset();
       hints.setEnabled(true);
@@ -321,7 +324,10 @@ export interface ChallengesOptions {
 /** WndChallenges: seven switches, locked until the first victory. */
 export function showChallenges(options: ChallengesOptions): void {
   let mask = options.unlocked ? options.mask : 0;
-  const sub = el('span', { className: 'pd-note', textContent: t.meta.challengesOn(countChallenges(mask)) });
+  // How many are on, and what they do to the score (core daily.ts challengeMultiplier).
+  const onText = (m: number): string =>
+    countChallenges(m) > 0 ? `${t.meta.challengesOn(countChallenges(m))} · ${t.ranked.scoreTimes(challengeMultiplier(m).toLocaleString(locale))}` : t.meta.challengesOn(0);
+  const sub = el('span', { className: 'pd-note', textContent: onText(mask) });
   const list = el('div', { className: `pd-challenges${options.unlocked ? '' : ' locked'}` });
   if (!options.unlocked) list.append(el('p', { className: 'pd-lockplate' }, el('span', { textContent: t.meta.challengesLocked })));
   t.meta.challengeList.forEach(([name, desc], i) => {
@@ -337,7 +343,7 @@ export function showChallenges(options: ChallengesOptions): void {
           click();
           mask ^= bit;
           row.setAttribute('aria-checked', String(Boolean(mask & bit)));
-          sub.textContent = t.meta.challengesOn(countChallenges(mask));
+          sub.textContent = onText(mask);
           options.onChange(mask);
         },
       },

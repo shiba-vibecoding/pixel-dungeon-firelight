@@ -9,7 +9,9 @@
       { "name": "DAILY", "class_name": "DailyBoard" },
       { "name": "WALLET", "class_name": "WalletStore" },
       { "name": "REPORTS", "class_name": "ReportStore" },
-      { "name": "PLAYER", "class_name": "Player" }
+      { "name": "PLAYER", "class_name": "Player" },
+      { "name": "CARD", "class_name": "Card" },
+      { "name": "NOTIFIER", "class_name": "Notifier" }
     ]
   },
   "migrations": [
@@ -17,8 +19,11 @@
     { "tag": "v2", "new_sqlite_classes": ["DailyBoard"] },
     { "tag": "v3", "new_sqlite_classes": ["WalletStore"] },
     { "tag": "v4", "new_sqlite_classes": ["ReportStore"] },
-    { "tag": "v5", "new_sqlite_classes": ["Player"] }
+    { "tag": "v5", "new_sqlite_classes": ["Player"] },
+    { "tag": "v6", "new_sqlite_classes": ["Card", "Notifier"] }
   ],
+  // Every hour: the bot's reminders that are due (notifier.ts).
+  "triggers": { "crons": ["0 * * * *"] },
   "vars": {
     // Players outside Telegram (a plain browser) may join rooms as guests.
     "ALLOW_GUESTS": "true",
