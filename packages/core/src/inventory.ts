@@ -192,9 +192,8 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       return itemPrice(item, world.known.includes(item.kind)) > 0 ? null : 'nobody would buy that';
     case 'throw':
     case 'zap': {
-      const fits = action.type === 'throw'
-        ? category === 'missile' || category === 'potion' || category === 'seed' || category === 'bomb' || category === 'honeypot'
-        : category === 'wand';
+      // Item.AC_THROW: anything in the pack may be thrown (a bag would scatter what it holds: not that).
+      const fits = action.type === 'throw' ? category !== 'bag' : category === 'wand';
       if (!fits) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
       if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
         return 'bad target';
@@ -434,6 +433,21 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     } else {
       plant(ctx, end, SEED_PLANTS[kind]!);
     }
+    return;
+  }
+  if (itemDef(item.kind).category !== 'missile') {
+    // Item.onThrow: anything else flies to the first thing in its way and falls there (a stack lets go of one);
+    // over a chasm, it falls through.
+    let flying = item;
+    if (isStackable(item.kind) && item.qty > 1) {
+      item.qty--;
+      flying = { ...(JSON.parse(JSON.stringify(item)) as Item), qty: 1 };
+    } else {
+      hero.items.splice(index, 1);
+    }
+    const end = ballistica(ctx, hero.pos, target).at(-1)!;
+    ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: item.kind });
+    landItem(ctx, end, flying);
     return;
   }
   const boomerang = item.kind === 'missile.boomerang';
