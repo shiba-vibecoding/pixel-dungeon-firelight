@@ -1,0 +1,29 @@
+<!-- @dsCard group="Рейтинги" height=320 width=900 page subtitle="Значки рейтинга: кубки дня (золото, серебро, бронза), медаль недели, медаль арены — 16×16 и 32×32; огонёк серии (горит / погас) и заморозка — 16×16. Без эмодзи: в интерфейсе только эти спрайты" -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Значки рейтинга</title>
+<style>
+  html, body { margin: 0; background: var(--void); }
+  .wrap { width: 900px; box-sizing: border-box; padding: 16px 20px; color: var(--ink); display: flex; flex-direction: column; gap: 12px; }
+  h2 { margin: 0; font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
+  h2 span { margin-left: 8px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+  .g { display: grid; gap: 8px; }
+  .c { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; background: var(--stone-900); clip-path: var(--notch); text-align: center; font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); }
+  .c b { font-weight: 400; color: var(--ink); }
+  .sz { display: flex; align-items: flex-end; gap: 4px; }
+</style></head>
+<body>
+<div class="pd-root wrap">
+  <h2>Трофеи<span>trophies16.png (×1, ×2) · trophies32.png (×1, ×2)</span></h2>
+  <div class="g" style="grid-template-columns:repeat(5,minmax(0,1fr))" id="t"></div>
+  <h2>Серия<span>trophies16.png, кадры 5–7 · ×1, ×2, ×3</span></h2>
+  <div class="g" style="grid-template-columns:repeat(3,minmax(0,1fr))" id="s"></div>
+</div>
+<script>
+  var T = [['gold', 'День · 1 место'], ['silver', 'День · 2 место'], ['bronze', 'День · 3 место'], ['week', 'Медаль недели'], ['arena', 'Медаль арены']];
+  document.getElementById('t').innerHTML = T.map(function (t) { return '<div class="c"><span class="sz"><i class="pd-tro ' + t[0] + '" style="--u:1px"></i><i class="pd-tro ' + t[0] + '" style="--u:2px"></i><i class="pd-tro big ' + t[0] + '" style="--u:1px"></i><i class="pd-tro big ' + t[0] + '" style="--u:2px"></i></span><b>' + t[1] + '</b></div>'; }).join('');
+  var S = [['flame', 'Серия горит'], ['flame-off', 'Серия погасла'], ['frost', 'Заморозка']];
+  document.getElementById('s').innerHTML = S.map(function (t) { return '<div class="c"><span class="sz"><i class="pd-tro ' + t[0] + '" style="--u:1px"></i><i class="pd-tro ' + t[0] + '" style="--u:2px"></i><i class="pd-tro ' + t[0] + '" style="--u:3px"></i></span><b>' + t[1] + '</b></div>'; }).join('');
+</script>
+</body>
+</html>

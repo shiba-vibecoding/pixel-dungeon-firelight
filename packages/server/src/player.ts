@@ -224,11 +224,14 @@ export class Player extends DurableObject<Env> {
     }
     if (changed) await this.persist(new Set(), new Map());
     const places: Partial<Record<BoardKind, number | null>> = {};
+    const totals: Partial<Record<BoardKind, number>> = {};
     for (const kind of BOARD_KINDS) {
       const name = boardName(kind, now);
       try {
         const response = await boardStub(this.env, name).fetch(`https://board/?name=${encodeURIComponent(name)}&owner=${encodeURIComponent(player.key)}&top=0`);
-        places[kind] = ((await response.json()) as { owner?: { rank: number } }).owner?.rank ?? null;
+        const answer = (await response.json()) as { owner?: { rank: number }; total?: number };
+        places[kind] = answer.owner?.rank ?? null;
+        totals[kind] = answer.total ?? 0;
       } catch {
         places[kind] = null;
       }
@@ -243,7 +246,7 @@ export class Player extends DurableObject<Env> {
     return {
       name: p.name, games: p.games, wins: p.wins, deepest: p.deepest, best: p.best, bestByClass: p.bestByClass,
       arenaWaves: p.arenaWaves, arenaBest: p.arenaBest, streak: streakNow(p.streak, today), dailyDone: p.dailyDate === today,
-      badges: p.badges, history: p.history, trophies: p.trophies, places, runs, today,
+      badges: p.badges, history: p.history, trophies: p.trophies, places, totals, runs, today,
     };
   }
 }

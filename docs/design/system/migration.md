@@ -1111,3 +1111,133 @@ PD.fx.depth(ctx, t.regionNames[1], 'Арена погружается глубж
 | `.pd-runend.arena`, `.pd-arena-party` | итоги |
 
 Все строки на двух языках — `docs/design/tasks/arena-strings.ts`.
+
+## Рейтинги
+
+В `rankui.ts` эмодзи заменяются спрайтами `.pd-tro` (`assets/Ranked`, в `bundle.css` встроены как `--atlas-troph16` и `--atlas-troph32`). Текст из строк i18n уходит: `freezes(n)` → просто `n`, у `trophy()` убрать префикс медали.
+
+| Было | Стало |
+| --- | --- |
+| `🔥 ${streak}` в `.pd-streak` | `<span class="pd-streak on"><i class="pd-tro flame"></i><b>12</b></span>`; без серии — `.off` и `flame-off` |
+| `.pd-freeze` «1 ❄» | `<span class="pd-counter frost"><i class="pd-tro frost"></i>1</span>` |
+| `.pd-trophies` «🏆 3» | `<span class="pd-counter trophies"><i class="pd-tro gold"></i>3</span>` |
+| 🥇 🥈 🥉 в `trophy()` | `.pd-tro.gold` / `.silver` / `.bronze` |
+| 🏅 (неделя / арена) | `.pd-tro.week` / `.pd-tro.arena` |
+| `✓ ` в `.pd-checked` | убрать: галочка рисуется `::before` |
+| `★ ` перед именем | `<i class="pd-patron-mark"></i>` |
+| `small` с подписью внутри `.pd-rank-name` | `<small class="pd-rank-detail">` пятым ребёнком `.pd-rank`, после очков |
+| `t.depthShort(n)` в подписи | `<i class="pd-rank-depth"></i>${n}` |
+| `.pd-info.center.pd-gold` (рекорд) | `<p class="pd-new-record">` |
+| `.pd-note.center` (проверка, без сервера) | `<p class="pd-checked pending">`, `<p class="pd-checked off">` |
+
+Кадры `trophies16.png`: 0 gold, 1 silver, 2 bronze, 3 week, 4 arena, 5 flame, 6 flame-off, 7 frost. `trophies32.png` — кадры 0–4 (`.pd-tro.big`). Значок трофея по записи:
+
+```ts
+export function trophyClass(board: string, place: number): string {
+  const kind = board.split(':')[0];
+  if (kind === 'week') return 'week';
+  if (kind === 'arena') return 'arena';
+  return place === 1 ? 'gold' : place === 2 ? 'silver' : 'bronze';   // daily
+}
+```
+
+### Карточка игрока
+
+```html
+<button class="pd-profile" aria-label="Рейтинг">
+  <span class="pd-streak on"><i class="pd-tro flame"></i><b>12</b></span>
+  <span class="pd-profile-text">
+    <span class="pd-profile-streak">12 дней подряд</span>
+    <span class="pd-profile-facts">Рекорд <b>4 320</b> · Забегов <b>37</b> · Сегодня <b class="place">#8</b></span>
+  </span>
+  <span class="pd-profile-side">
+    <span class="pd-counter frost"><i class="pd-tro frost"></i>1</span>
+    <span class="pd-counter trophies"><i class="pd-tro gold"></i>3</span>
+  </span>
+</button>
+```
+
+- Без серии: `.pd-streak.off` с `flame-off`, `<b>` скрыт; текст — `streakNone`. Пустые счётчики не выводите.
+- «Сегодня #N» — только если попытка дня сыграна.
+- На титуле добавьте `.ranked` к `.pd-title-screen`: компактный логотип, отступы 8 px, дети не сжимаются. Тогда карточка, окно и 5 рядов кнопок помещаются в 375×812.
+
+### Подземелье дня
+
+```html
+<!-- попытка есть -->
+<div class="pd-daily">
+  <div class="pd-daily-head"><i class="pd-icon" style="background-image:var(--spr-stairs)"></i><h3>Подземелье дня</h3><span class="pd-chip">1 попытка</span></div>
+  <p class="pd-note">У всех одно подземелье; в таблицу идёт одна попытка.</p>
+  <div class="pd-row"><button class="pd-button">Спуститься</button><button class="pd-button">Таблица дня</button></div>
+</div>
+<!-- сыграно -->
+<div class="pd-daily done">
+  <div class="pd-daily-head">…<span class="pd-chip done">сыграно</span></div>
+  <div class="pd-daily-place"><i class="pd-tro gold"></i><b>#1</b><span>из 214</span></div>   <!-- кубок только для мест 1–3 -->
+  <p class="pd-note">Попытка дня сыграна. Возвращайтесь завтра или тренируйтесь.</p>
+  <div class="pd-row"><button class="pd-button">Тренировка</button><button class="pd-button">Таблица дня</button></div>
+</div>
+```
+
+Ниже — «Продолжить» (`.primary.big.stacked`), ряд «Новая игра» + «Испытания», «Арена волн» (`.pd-mode-btn`), ряд «Рейтинг» (`<i class="pd-tro x1 gold"></i>`) + «Пиксель-Март».
+
+### Окно «Рейтинг»
+
+```html
+<section class="pd-window pd-boards-window" role="dialog" aria-label="Рейтинг">
+  <div class="pd-window-head"><div class="pd-titles"><h2 class="pd-heading">Рейтинг</h2></div><button class="pd-close" aria-label="Закрыть"></button></div>
+  <div class="pd-tabs compact" role="tablist">
+    <button class="pd-tab" role="tab" aria-selected="false">День</button><button class="pd-tab" role="tab" aria-selected="true">Неделя</button>
+    <button class="pd-tab" role="tab">Арена</button><button class="pd-tab" role="tab">Лучшие</button><button class="pd-tab" role="tab">Мои</button>
+  </div>
+  <p class="pd-board-note"><i class="pd-tro week"></i>Лучший забег недели. Десятка лучших получает медаль в понедельник.</p>
+  <div class="pd-scroll pd-boards">
+    <div class="pd-ranks">
+      <div class="pd-rank pd-medal-1">
+        <span class="pd-rank-n">1</span><i class="pd-rank-face" style="--av:0"></i>
+        <span class="pd-rank-name"><i class="pd-patron-mark"></i>Lumen</span>
+        <span class="pd-rank-score">9 800</span>
+        <small class="pd-rank-detail">Воин · ур.22 · <i class="pd-rank-depth"></i>24</small>
+      </div>
+      <!-- … до 50 строк; своя строка — .pd-rank.me -->
+    </div>
+    <div class="pd-ranks-me">                       <!-- прилипает снизу -->
+      <div class="pd-ranks-gap">· · ·</div>         <!-- только если своя строка ниже списка -->
+      <div class="pd-rank me">…</div>
+      <div class="pd-board-place">Ваше место: 37 из 214</div>
+    </div>
+  </div>
+</section>
+```
+
+- `--av` у портрета: 0 воин, 1 маг, 2 разбойник, 3 охотница (кадр `avatars.png`).
+- Значок пояснения: День — `gold`, Неделя — `week`, Арена — `arena`, у «Лучших» и «Моих» нет.
+- Арена: подпись «Класс · волна 23».
+- «Мои»: перед списком `<div class="pd-trophy-shelf"><span><i class="pd-tro big gold"></i><b>#1</b>День</span>…</div>`, список — `.pd-ranks.mine` без `.pd-rank-n`, дата в начале подписи: «12.10 · Воин · ур.22 · ⛶24».
+- Сейчас `.pd-ranks-me` в `rankui.ts` висит на самом списке. Вынесите его отдельным блоком после `.pd-ranks` внутри `.pd-scroll`, иначе он не прилипнет.
+
+### Под итогами забега
+
+```html
+<div class="pd-ranking">
+  <p class="pd-checked">Проверено сервером</p>
+  <p class="pd-new-record">Новый личный рекорд!</p>
+  <div class="pd-places">
+    <span class="pd-place top"><i class="pd-tro week"></i><b>#3</b>Неделя</span>
+    <span class="pd-place"><b>#12</b>Лучшие</span>
+  </div>
+</div>
+<!-- пока сервер считает -->  <div class="pd-ranking"><p class="pd-checked pending">Сервер проверяет забег…</p></div>
+<!-- без сервера -->           <div class="pd-ranking"><p class="pd-checked off">Вне рейтинга: сыграно без сервера</p></div>
+```
+
+`.top` и значок доски — для мест 1–3. Порядок плашек: сначала лучшие места.
+
+| Класс | Что это |
+| --- | --- |
+| `.pd-tro` + `gold` `silver` `bronze` `week` `arena` `flame` `flame-off` `frost` | значок 16 px; `.big` — 32 px; `.x1` — ×1 |
+| `.pd-profile`, `.pd-streak.on/.off`, `.pd-profile-text`, `.pd-profile-streak`, `.pd-profile-facts`, `.pd-profile-side`, `.pd-counter.frost/.trophies` | карточка игрока |
+| `.pd-title-screen.ranked` | компактный титул |
+| `.pd-daily(.done)`, `.pd-daily-place`, `.pd-chip.done` | подземелье дня |
+| `.pd-boards-window`, `.pd-board-note`, `.pd-boards`, `.pd-ranks(.mine)`, `.pd-rank(.me)`, `.pd-medal-1/2/3`, `.pd-rank-detail`, `.pd-rank-depth`, `.pd-ranks-me`, `.pd-ranks-gap`, `.pd-board-place`, `.pd-trophy-shelf` | окно «Рейтинг» |
+| `.pd-ranking`, `.pd-checked(.pending/.off)`, `.pd-new-record`, `.pd-places`, `.pd-place(.top)` | блок под итогами |

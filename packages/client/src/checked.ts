@@ -59,6 +59,8 @@ export interface Profile {
   history: RunSummary[];
   trophies: Array<{ board: string; place: number; at: number }>;
   places: Partial<Record<BoardKind, number | null>>;
+  /** How many players each board holds now. */
+  totals?: Partial<Record<BoardKind, number>>;
   runs: Partial<Record<RunSlot, RunMeta & { over: boolean; depth: number; lvl: number; heroClass?: HeroClass }>>;
   today: string;
 }

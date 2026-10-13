@@ -9,6 +9,7 @@ import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import { mart } from './mart';
+import { rankIcon, trophyKind } from './trophyicons';
 import { countChallenges } from './meta';
 import type { RunRecord } from './rankings';
 import { type Assets, heroSprite } from './sprites';
@@ -359,8 +360,13 @@ export interface TitleOptions {
   onDaily(): void;
   /** Shows today's board; absent without checked runs. */
   onDailyBoard?: () => void;
-  /** The daily dungeon's state today: open, or its attempt played. */
-  dailyNote?: string;
+  /**
+   * The daily dungeon today, as the server knows it: its attempt open, under way, or played (with
+   * the place it took of how many); absent without checked runs.
+   */
+  dailyState?: { state: 'open' | 'going' | 'done'; place: number | null; total: number };
+  /** Practice in today's dungeon, once its attempt is played. */
+  onPractice?: () => void;
   /** The player's card (rankui.ts profileCard), once the server has told who they are. */
   profile?: HTMLElement;
   onRankings(): void;
@@ -371,6 +377,13 @@ export interface TitleOptions {
   onChallenges(): void;
   /** The arena of waves' entry, under «Play with friends» (arenaui.ts). */
   arena?: HTMLElement;
+}
+
+/** «Rankings» with its cup. */
+function rankingsButton(onClick: () => void): HTMLButtonElement {
+  const node = button(t.ranked.title, onClick);
+  node.prepend(rankIcon('gold', { x1: true }));
+  return node;
 }
 
 export function showTitle(options: TitleOptions): void {
@@ -443,12 +456,31 @@ export function showTitle(options: TitleOptions): void {
   if (main.length) rest.push(el('div', { className: 'pd-row' }, fresh, challenges));
   else main.push(fresh, challenges);
 
+  // The daily dungeon: its attempt open (or under way), or played, with the place it took (a cup for 1–3).
+  const day = options.dailyState;
+  const done = day?.state === 'done';
+  const chip = day && el('span', { className: `pd-chip${done ? ' done' : ''}`, textContent: done ? t.ranked.dailyChipDone : day.state === 'going' ? t.ranked.dailyChipGoing : t.ranked.dailyChipOpen });
+  const place = done && day.place !== null
+    ? el(
+      'div',
+      { className: 'pd-daily-place' },
+      day.place <= 3 ? rankIcon(trophyKind('daily', day.place)) : null,
+      el('b', { textContent: `#${day.place}` }),
+      el('span', { textContent: t.ranked.ofTotal(Math.max(day.total, day.place)) }),
+    )
+    : null;
   const daily = el(
     'div',
-    { className: 'pd-daily' },
-    el('div', { className: 'pd-daily-head' }, picture('stairs'), el('h3', { textContent: t.daily })),
-    info(options.dailyNote ?? t.dailyInfo, 'pd-note'),
-    el('div', { className: 'pd-row' }, button(t.descendDaily, options.onDaily), options.onDailyBoard && button(t.dailyBoard, options.onDailyBoard)),
+    { className: `pd-daily${done ? ' done' : ''}` },
+    el('div', { className: 'pd-daily-head' }, picture('stairs'), el('h3', { textContent: t.daily }), chip),
+    place,
+    info(done ? t.ranked.dailyDone : day ? t.ranked.dailyOpenNote : t.dailyInfo, 'pd-note'),
+    el(
+      'div',
+      { className: 'pd-row' },
+      done && options.onPractice ? button(t.ranked.practice2, options.onPractice) : button(t.descendDaily, options.onDaily),
+      options.onDailyBoard && button(t.dailyBoard, options.onDailyBoard),
+    ),
   );
 
   const logo = el(
@@ -461,7 +493,7 @@ export function showTitle(options: TitleOptions): void {
   show(
     el(
       'main',
-      { className: 'pd-title-screen' },
+      { className: `pd-title-screen${options.profile ? ' ranked' : ''}` },
       el(
         'div',
         { className: 'pd-corner' },
@@ -478,11 +510,11 @@ export function showTitle(options: TitleOptions): void {
         el(
           'div',
           { className: 'pd-actions' },
+          daily,
           ...main,
           ...rest,
-          daily,
           options.arena,
-          el('div', { className: 'pd-row' }, button(t.ranked.title, options.onRankings, 'quiet'), button(t.mart, options.onMart, 'quiet')),
+          el('div', { className: 'pd-row' }, rankingsButton(options.onRankings), button(t.mart, options.onMart)),
         ),
       ),
     ),
@@ -993,6 +1025,8 @@ export interface EndOptions {
   ranking?: HTMLElement;
   /** Shares the result (a picture where the phone can, else text and a link). */
   onShare?: () => void;
+  /** Opens the boards; absent without checked runs. */
+  onBoards?: () => void;
 }
 
 /** The end of a run: the whole party fell, or it won. */
@@ -1022,7 +1056,10 @@ export function showRunEnd(options: EndOptions): void {
       ),
       stats(rows),
       options.ranking,
-      actions([button(options.restartLabel, options.onRestart, 'primary')], options.onShare ? [button(t.shareResult, options.onShare)] : []),
+      actions(
+        [button(options.restartLabel, options.onRestart, 'primary')],
+        [...(options.onShare ? [button(t.shareResult, options.onShare)] : []), ...(options.onBoards ? [button(t.ranked.title, options.onBoards)] : [])],
+      ),
       button(t.toMenu, options.onExit, 'quiet'),
     ),
     null,

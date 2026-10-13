@@ -250,6 +250,8 @@ export interface ArenaEndOptions {
   party: ReadonlyArray<{ name: string; heroClass: HeroClass; kills: number; score: number; me: boolean }>;
   /** How the server scored the run (rankui.ts rankingBlock). */
   ranking?: HTMLElement;
+  /** Opens the boards; absent without checked runs. */
+  onBoards?: () => void;
   onAgain(): void;
   onShare(): void;
   onExit(): void;
@@ -306,6 +308,7 @@ export function showArenaEnd(options: ArenaEndOptions): void {
       { className: 'pd-actions' },
       button(t.arena.again, 'primary', options.onAgain),
       button(t.arena.share, '', options.onShare),
+      options.onBoards ? button(t.ranked.title, '', options.onBoards) : null,
       button(t.toMenu, 'quiet', options.onExit),
     ),
   );

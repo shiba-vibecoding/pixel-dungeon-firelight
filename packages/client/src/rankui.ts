@@ -3,88 +3,130 @@ import type { BoardEntry, BoardKind, BoardView, Profile, RunApi, SyncAnswer } fr
 import { locale, t } from './i18n';
 import type { RunRecord } from './rankings';
 import { AVATAR, button, el, info, show, sprites, windowOf } from './screens';
+import { type RankIcon, rankIcon, trophyKind } from './trophyicons';
 
 /*
  * The boards of checked runs (the server's player.ts): the day's daily dungeon, the week's
- * best, the arena's week, the best ever, and the device's own table; a player's card on the
- * title (the streak, the best, the trophies); and the end of a run's places as the server
- * scored it.
+ * best, the arena's week, the best ever, and the player's own runs and trophies; the player's
+ * card on the title (the streak, the best, the trophies); and the end of a run's places as
+ * the server scored it. Markup after the design system's Ranked cards (v16, migration.md).
  */
 
 type Tab = 'daily' | 'week' | 'arena' | 'all' | 'device';
 const TABS: readonly Tab[] = ['daily', 'week', 'arena', 'all', 'device'];
+/** The icon of each board's note and of its places 1–3. */
+const BOARD_ICON: Partial<Record<string, RankIcon>> = { daily: 'gold', week: 'week', arena: 'arena' };
 
-/** One row of a board: place, face, name (with a patron's star), what the run came to, its score. */
-function row(place: number, entry: Pick<BoardEntry, 'heroClass' | 'name' | 'score' | 'patron'>, detail: string, me: boolean): HTMLElement {
+const number = (n: number): string => n.toLocaleString(locale);
+
+interface RowEntry {
+  heroClass: BoardEntry['heroClass'];
+  name: string;
+  score: number;
+  patron?: boolean;
+}
+
+/** One row of a board: place (none on the player's own list), face, name with a patron's mark, score, and what the run came to. */
+function row(place: number | null, entry: RowEntry, detail: Array<string | Node>, me: boolean): HTMLElement {
   const face = el('i', { className: 'pd-rank-face' });
   face.style.setProperty('--av', String(AVATAR[entry.heroClass]));
-  const medal = place <= 3 ? ` pd-medal-${place}` : '';
+  const medal = place !== null && place <= 3 ? ` pd-medal-${place}` : '';
   return el(
     'div',
     { className: `pd-rank${me ? ' me' : ''}${medal}` },
-    el('span', { className: 'pd-rank-n', textContent: String(place) }),
+    place !== null ? el('span', { className: 'pd-rank-n', textContent: String(place) }) : null,
     face,
-    el('span', { className: 'pd-rank-name', textContent: `${entry.patron ? '★ ' : ''}${entry.name}` }, el('small', { textContent: detail })),
-    el('span', { className: 'pd-rank-score', textContent: entry.score.toLocaleString(locale) }),
+    el('span', { className: 'pd-rank-name' }, entry.patron ? el('i', { className: 'pd-patron-mark' }) : null, entry.name),
+    el('span', { className: 'pd-rank-score', textContent: number(entry.score) }),
+    el('small', { className: 'pd-rank-detail' }, ...detail),
   );
 }
 
-const entryDetail = (entry: BoardEntry, arena: boolean): string =>
-  arena
-    ? `${t.classes[entry.heroClass]} · ${t.arena.waveWord(entry.depth)}`
-    : `${t.classes[entry.heroClass]} · ${t.levelShort} ${entry.level} · ${t.depthShort(entry.depth)}${entry.won ? ' · ★' : ''}`;
-
-/** A board as rows; mine highlighted, and my place under the list when it is further down. */
-export function boardRows(board: BoardView | null, arena: boolean, count = 50): HTMLElement {
-  if (!board) return info(t.boardOffline, 'pd-note center');
-  const list = el('div', { className: 'pd-ranks' });
-  board.top.slice(0, count).forEach((entry, i) => list.append(row(i + 1, entry, entryDetail(entry, arena), i + 1 === board.rank)));
-  const mine = board.rank !== null && board.rank > count && board.you
-    ? el('div', { className: 'pd-ranks pd-ranks-me' }, row(board.rank, board.you, entryDetail(board.you, arena), true))
-    : null;
-  return el(
-    'div',
-    {},
-    board.top.length === 0 ? info(t.noResults, 'pd-note center') : list,
-    mine,
-    board.rank !== null && board.total ? info(t.ranked.placeOf(board.rank, board.total), 'pd-info center') : info(t.ranked.notYet, 'pd-note center'),
-  );
+/** «Warrior · lv.22 · ⛶24», the depth as its icon; in the arena «Warrior · wave 23». */
+function detail(heroClass: BoardEntry['heroClass'], level: number, depth: number, arena: boolean, won = false): Array<string | Node> {
+  if (arena) return [`${t.classes[heroClass]} · ${t.arena.waveWord(depth)}`];
+  return [`${t.classes[heroClass]} · ${t.ranked.lv}${level} · `, el('i', { className: 'pd-rank-depth' }), `${depth}${won ? ' · ★' : ''}`];
 }
 
-function deviceRows(records: readonly RunRecord[]): HTMLElement {
-  if (records.length === 0) return info(t.noRankings, 'pd-note center');
+/** A board as rows, then (stuck to the bottom) my row if it is further down, and my place. */
+export function boardRows(board: BoardView | null, arena: boolean, count = 50): HTMLElement[] {
+  if (!board) return [info(t.boardOffline, 'pd-note center')];
   const list = el('div', { className: 'pd-ranks' });
-  records.forEach((record, i) => {
-    const what = record.won ? `★ ${t.won}` : record.cause;
-    const detail = record.mode === 'arena'
-      ? `${t.arena.title} · ${t.arena.waveWord(record.depth)}${what ? ` · ${what}` : ''}`
-      : `${t.levelShort} ${record.lvl} · ${t.depthShort(record.depth)}${what ? ` · ${what}` : ''}`;
-    list.append(row(i + 1, { heroClass: record.heroClass, name: record.name, score: record.score }, detail, false));
-  });
-  return list;
+  board.top.slice(0, count).forEach((entry, i) => list.append(row(i + 1, entry, detail(entry.heroClass, entry.level, entry.depth, arena, entry.won), i + 1 === board.rank)));
+  const nodes: HTMLElement[] = [board.top.length === 0 ? info(t.noResults, 'pd-note center') : list];
+  if (board.rank !== null) {
+    const below = board.rank > count && board.you;
+    nodes.push(
+      el(
+        'div',
+        { className: 'pd-ranks-me' },
+        below ? el('div', { className: 'pd-ranks-gap', textContent: '· · ·' }) : null,
+        below ? row(board.rank, board.you!, detail(board.you!.heroClass, board.you!.level, board.you!.depth, arena, board.you!.won), true) : null,
+        el('div', { className: 'pd-board-place', textContent: t.ranked.placeOf(board.rank, board.total ?? board.rank) }),
+      ),
+    );
+  } else {
+    nodes.push(info(t.ranked.notYet, 'pd-note center'));
+  }
+  return nodes;
+}
+
+const shortDate = (time: number): string => new Date(time).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
+
+/** «Mine»: the shelf of trophies won, then the device's best runs, each with its date. */
+function mineRows(records: readonly RunRecord[], trophies: Profile['trophies']): HTMLElement[] {
+  const nodes: HTMLElement[] = [];
+  if (trophies.length > 0) {
+    nodes.push(
+      el(
+        'div',
+        { className: 'pd-trophy-shelf' },
+        ...trophies.slice(0, 12).map((trophy) => {
+          const kind = trophy.board.split(':')[0] ?? '';
+          return el('span', { title: trophyText(trophy) }, rankIcon(trophyKind(trophy.board, trophy.place), { big: true }), el('b', { textContent: `#${trophy.place}` }), t.ranked.trophyBoard[kind] ?? kind);
+        }),
+      ),
+    );
+  }
+  if (records.length === 0) {
+    nodes.push(info(t.noRankings, 'pd-note center'));
+    return nodes;
+  }
+  const list = el('div', { className: 'pd-ranks mine' });
+  for (const record of records) {
+    const arena = record.mode === 'arena';
+    const what = record.won ? '' : record.cause ? ` · ${record.cause}` : '';
+    list.append(row(null, record, [`${shortDate(record.date)} · `, ...detail(record.heroClass, record.lvl, record.depth, arena, record.won), what], false));
+  }
+  nodes.push(list);
+  return nodes;
 }
 
 export interface BoardsOptions {
   api: RunApi | null;
   /** The device's own table (rankings.ts). */
   device: readonly RunRecord[];
+  /** Trophies won, for «Mine» (the server's profile). */
+  trophies?: Profile['trophies'];
   tab?: Tab;
   onClose(): void;
 }
 
-/** The rankings window: a tab a board, loaded when first shown. */
+/** The rankings window: a tab a board, each loaded when first shown. */
 export function showBoards(options: BoardsOptions): void {
   const body = el('div', { className: 'pd-scroll pd-boards' });
-  const note = info('', 'pd-note center');
+  const note = el('p', { className: 'pd-board-note' });
   const tabs = el('div', { className: 'pd-tabs compact' });
+  tabs.setAttribute('role', 'tablist');
   const cache = new Map<Tab, Promise<BoardView | null>>();
   let current: Tab = options.api ? (options.tab ?? 'daily') : 'device';
   const select = (tab: Tab): void => {
     current = tab;
     for (const node of tabs.children) node.setAttribute('aria-selected', String((node as HTMLElement).dataset.tab === tab));
-    note.textContent = t.ranked.tabInfo[tab] ?? '';
+    const icon = BOARD_ICON[tab];
+    note.replaceChildren(...(icon ? [rankIcon(icon)] : []), options.api ? t.ranked.tabInfo[tab] ?? '' : t.ranked.telegramOnly);
     if (tab === 'device' || !options.api) {
-      body.replaceChildren(deviceRows(options.device), options.api ? '' : info(t.ranked.telegramOnly, 'pd-note center'));
+      body.replaceChildren(...mineRows(options.device, options.trophies ?? []));
       sprites(body);
       return;
     }
@@ -92,7 +134,7 @@ export function showBoards(options: BoardsOptions): void {
     if (!cache.has(tab)) cache.set(tab, options.api.board(tab as BoardKind));
     void cache.get(tab)!.then((board) => {
       if (current !== tab) return;
-      body.replaceChildren(boardRows(board, tab === 'arena'));
+      body.replaceChildren(...boardRows(board, tab === 'arena'));
       sprites(body);
     });
   };
@@ -113,65 +155,80 @@ export function showBoards(options: BoardsOptions): void {
   select(current);
 }
 
-/** The player's card on the title: the streak (and its frosts), the best, runs and wins, trophies, today's place. */
+/** The player's card on the title: the streak's flame and days, the best and the runs (today's place once played), frosts and trophies. */
 export function profileCard(profile: Profile, onOpen: () => void): HTMLElement {
   const streak = profile.streak.count;
-  const flame = el('span', { className: `pd-streak${streak > 0 ? ' on' : ''}`, textContent: `🔥 ${streak}` });
-  const lines: HTMLElement[] = [
-    el('span', { className: 'pd-profile-streak', textContent: streak > 0 ? t.ranked.streak(streak) : t.ranked.streakNone }),
-  ];
-  const facts = [
-    profile.best > 0 ? `${t.ranked.best}: ${profile.best.toLocaleString(locale)}` : '',
-    `${t.ranked.games}: ${profile.games}`,
-    profile.wins > 0 ? `${t.ranked.wins}: ${profile.wins}` : '',
-    profile.places.daily ? t.ranked.dailyPlace(profile.places.daily) : '',
-  ].filter(Boolean);
-  lines.push(el('small', { textContent: facts.join(' · ') }));
-  const card = el(
+  const flame = el('span', { className: `pd-streak ${streak > 0 ? 'on' : 'off'}` }, rankIcon(streak > 0 ? 'flame' : 'flame-off'), streak > 0 ? el('b', { textContent: String(streak) }) : null);
+  const facts: Node[] = [];
+  const fact = (label: string, value: string, className = ''): void => {
+    if (facts.length > 0) facts.push(document.createTextNode(' · '));
+    // Each fact keeps to one line; the line breaks between them.
+    facts.push(el('span', { className: 'pd-fact' }, `${label} `, el('b', { className, textContent: value })));
+  };
+  if (profile.best > 0) fact(t.ranked.best, number(profile.best));
+  fact(t.ranked.games, String(profile.games));
+  if (profile.dailyDone && profile.places.daily) fact(t.ranked.today, `#${profile.places.daily}`, 'place');
+  const side = el('span', { className: 'pd-profile-side' });
+  if (profile.streak.freezes > 0) {
+    side.append(el('span', { className: 'pd-counter frost', title: t.ranked.freezeInfo }, rankIcon('frost'), String(profile.streak.freezes)));
+  }
+  if (profile.trophies.length > 0) side.append(el('span', { className: 'pd-counter trophies' }, rankIcon('gold'), String(profile.trophies.length)));
+  return el(
     'button',
     {
       className: 'pd-profile',
+      ariaLabel: t.ranked.title,
       onclick: () => {
         audio.play('click');
         onOpen();
       },
     },
     flame,
-    el('span', { className: 'pd-profile-text' }, ...lines),
-    profile.streak.freezes > 0 ? el('span', { className: 'pd-freeze', title: t.ranked.freezeInfo, textContent: t.ranked.freezes(profile.streak.freezes) }) : null,
-    profile.trophies.length > 0 ? el('span', { className: 'pd-trophies', textContent: `🏆 ${profile.trophies.length}` }) : null,
+    el(
+      'span',
+      { className: 'pd-profile-text' },
+      el('span', { className: 'pd-profile-streak', textContent: streak > 0 ? t.ranked.streak(streak) : t.ranked.streakNone }),
+      el('span', { className: 'pd-profile-facts' }, ...facts),
+    ),
+    side.childElementCount > 0 ? side : null,
   );
-  return card;
 }
 
-/** A trophy's words: which board, which place. */
+/** A trophy's words: which board, which place, and when. */
 export function trophyText(trophy: { board: string; place: number }): string {
-  const kind = trophy.board.split(':')[0] ?? '';
-  const when = trophy.board.split(':')[1] ?? '';
+  const [kind = '', when = ''] = trophy.board.split(':');
   return `${t.ranked.trophy(t.ranked.trophyBoard[kind] ?? kind, trophy.place)} (${when})`;
 }
 
-/** The end of a run as the server scored it: checked, its places, a record; or why it does not count. */
-export function rankingBlock(answer: Promise<SyncAnswer | null> | null, onBoards: (() => void) | null): HTMLElement {
+/** The end of a run as the server scored it: checked, a record, its places best first; or why it does not count. */
+export function rankingBlock(answer: Promise<SyncAnswer | null> | null): HTMLElement {
   const block = el('div', { className: 'pd-ranking' });
   if (!answer) {
-    block.append(info(t.ranked.unchecked, 'pd-note center'));
+    block.append(el('p', { className: 'pd-checked off', textContent: t.ranked.unchecked }));
     return block;
   }
-  block.append(info(t.ranked.checking, 'pd-note center'));
+  block.append(el('p', { className: 'pd-checked pending', textContent: t.ranked.checking }));
   void answer.then((reply) => {
     if (!reply?.finished) {
-      block.replaceChildren(info(t.ranked.offline, 'pd-note center'));
+      block.replaceChildren(el('p', { className: 'pd-checked off', textContent: t.ranked.offline }));
       return;
     }
-    const places = Object.entries(reply.places ?? {}).filter(([, place]) => typeof place === 'number') as Array<[string, number]>;
+    const places = (Object.entries(reply.places ?? {}).filter(([, place]) => typeof place === 'number') as Array<[string, number]>)
+      .sort((a, b) => a[1] - b[1]);
     block.replaceChildren(
-      el('p', { className: 'pd-checked', textContent: `✓ ${t.ranked.checked}` }),
-      reply.record ? el('p', { className: 'pd-info center pd-gold', textContent: t.ranked.record }) : '',
+      el('p', { className: 'pd-checked', textContent: t.ranked.checked }),
+      reply.record ? el('p', { className: 'pd-new-record', textContent: t.ranked.record }) : '',
       places.length > 0
-        ? el('div', { className: 'pd-places' }, ...places.map(([kind, place]) => el('span', { className: `pd-place${place <= 3 ? ' top' : ''}` }, el('b', { textContent: `#${place}` }), ` ${t.ranked.placeShort[kind] ?? kind}`)))
+        ? el(
+          'div',
+          { className: 'pd-places' },
+          ...places.map(([kind, place]) => {
+            const top = place <= 3;
+            const icon = top && BOARD_ICON[kind] ? rankIcon(kind === 'daily' ? trophyKind('daily', place) : BOARD_ICON[kind]!) : null;
+            return el('span', { className: `pd-place${top ? ' top' : ''}` }, icon, el('b', { textContent: `#${place}` }), t.ranked.placeShort[kind] ?? kind);
+          }),
+        )
         : !reply.finished.ranked ? info(t.ranked.practice, 'pd-note center') : '',
-      onBoards ? button(t.ranked.title, onBoards, 'quiet') : '',
     );
   });
   return block;

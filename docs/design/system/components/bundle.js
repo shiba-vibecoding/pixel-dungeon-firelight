@@ -877,6 +877,80 @@
     }); });
   };
 
+  /* ---------- Рейтинги (одиночная игра): титул, окно «Рейтинг», блок под итогами ---------- */
+  var RT = {
+    ru: { streak: function (n) { return n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'день' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'дня' : 'дней') + ' подряд'; }, streakNone: 'Сыграйте подземелье дня, чтобы начать серию', best: 'Рекорд', games: 'Забегов', today: 'Сегодня', fresh: 'Первый забег впереди',
+      daily: 'Подземелье дня', dailyOpen: 'У всех одно подземелье; в таблицу идёт одна попытка.', dailyDone: 'Попытка дня сыграна. Возвращайтесь завтра или тренируйтесь.', descend: 'Спуститься', train: 'Тренировка', board: 'Таблица дня', open: '1 попытка', done: 'сыграно', of: function (n, m) { return 'из ' + m; },
+      play: 'Продолжить', playMeta: 'Воин, уровень 7 · глубина 9', newGame: 'Новая игра', challenges: 'Испытания', arena: 'Арена волн', arenaSub: 'рекорд: <b>волна 12</b>', rating: 'Рейтинг', mart: 'Пиксель-Март',
+      title: 'Рейтинг', tabs: [['daily', 'День'], ['week', 'Неделя'], ['arena', 'Арена'], ['all', 'Лучшие'], ['mine', 'Мои']],
+      note: { daily: 'Подземелье дня: у всех одно, засчитывается одна попытка. Тройка лучших получает трофей.', week: 'Лучший забег недели. Десятка лучших получает медаль в понедельник.', arena: 'Лучший забег на арене за неделю. Десятка лучших получает медаль.', all: 'Лучшие забеги за всё время.', mine: 'Ваши трофеи и лучшие забеги.' },
+      placeOf: function (n, m) { return 'Ваше место: ' + n + ' из ' + m; }, cls: ['Воин', 'Маг', 'Разбойник', 'Охотница'], lvl: 'ур.', depth: 'гл.', wave: 'волна',
+      checked: 'Проверено сервером', checking: 'Сервер проверяет забег…', record: 'Новый личный рекорд!', unchecked: 'Вне рейтинга: сыграно без сервера', places: [['#3', 'Неделя', 'week', 1], ['#12', 'Лучшие', '', 0], ['#8', 'День', 'gold', 0]],
+      shelf: [['gold', 'День', '#1'], ['silver', 'День', '#2'], ['bronze', 'День', '#3'], ['week', 'Неделя', '#4'], ['arena', 'Арена', '#7']] },
+    en: { streak: function (n) { return n + ' ' + (n === 1 ? 'day' : 'days') + ' in a row'; }, streakNone: 'Play the daily dungeon to start a streak', best: 'Best', games: 'Runs', today: 'Today', fresh: 'Your first run is ahead',
+      daily: 'Daily dungeon', dailyOpen: 'The same dungeon for everyone; one attempt counts.', dailyDone: 'Today’s attempt is played. Come back tomorrow or practise.', descend: 'Descend', train: 'Practice', board: 'Day’s board', open: '1 attempt', done: 'played', of: function (n, m) { return 'of ' + m; },
+      play: 'Continue', playMeta: 'Warrior, level 7 · depth 9', newGame: 'New game', challenges: 'Challenges', arena: 'Wave arena', arenaSub: 'best: <b>wave 12</b>', rating: 'Rankings', mart: 'Pixel-Mart',
+      title: 'Rankings', tabs: [['daily', 'Day'], ['week', 'Week'], ['arena', 'Arena'], ['all', 'Best'], ['mine', 'Mine']],
+      note: { daily: 'Today’s dungeon: the same for everyone, one attempt counts. Top 3 win a trophy.', week: 'The best run of the week. Top 10 win a medal on Monday.', arena: 'The best arena run of the week. Top 10 win a medal.', all: 'The best runs of all time.', mine: 'Your trophies and best runs.' },
+      placeOf: function (n, m) { return 'Your place: ' + n + ' of ' + m; }, cls: ['Warrior', 'Mage', 'Rogue', 'Huntress'], lvl: 'lv', depth: 'd', wave: 'wave',
+      checked: 'Checked by the server', checking: 'The server is checking the run…', record: 'New personal best!', unchecked: 'Unranked: played without the server', places: [['#3', 'Week', 'week', 1], ['#12', 'Best', '', 0], ['#8', 'Day', 'gold', 0]],
+      shelf: [['gold', 'Day', '#1'], ['silver', 'Day', '#2'], ['bronze', 'Day', '#3'], ['week', 'Week', '#4'], ['arena', 'Arena', '#7']] }
+  };
+  var NAMES = ['Ёжик', 'Morgana', 'Тень_77', 'dwarf_slayer', 'Аня', 'Shiba', 'Гоша', 'Lumen', 'Кот-Учёный', 'nyx', 'Боря', 'Rook', 'Сова', 'mira_k', 'Стрелок', 'Pixel', 'Вера', 'tengu_main', 'Зоя', 'Ash'];
+  PD.demo.profile = function (lang, o) {
+    var L = RT[lang || 'ru'], n = o.streak || 0;
+    return '<button class="pd-profile" aria-label="' + L.title + '"><span class="pd-streak ' + (n ? 'on' : 'off') + '"><i class="pd-tro ' + (n ? 'flame' : 'flame-off') + '"></i><b>' + n + '</b></span>' +
+      '<span class="pd-profile-text"><span class="pd-profile-streak">' + (n ? L.streak(n) : L.streakNone) + '</span><span class="pd-profile-facts">' + L.best + ' <b>4 320</b> · ' + L.games + ' <b>37</b>' + (o.place ? ' · ' + L.today + ' <b class="place">#' + o.place + '</b>' : '') + '</span></span>' +
+      '<span class="pd-profile-side">' + (o.frost ? '<span class="pd-counter frost"><i class="pd-tro frost"></i>' + o.frost + '</span>' : '') + (o.trophies ? '<span class="pd-counter trophies"><i class="pd-tro gold"></i>' + o.trophies + '</span>' : '') + '</span></button>';
+  };
+  /* титул одиночной игры. o: { lang, daily: 'open' | 'done', streak, frost, trophies, place } */
+  PD.demo.titleRanked = function (el, o) {
+    o = o || {}; var lang = o.lang || 'ru', L = RT[lang], en = lang === 'en', done = o.daily === 'done';
+    var cls = L.cls.map(function (c, i) { return '<button class="pd-class' + (i ? '' : ' selected') + '" role="radio" aria-checked="' + !i + '" aria-label="' + c + '"><i class="pd-class-face" style="--av:' + i + '"></i></button>'; }).join('');
+    var daily = '<div class="pd-daily' + (done ? ' done' : '') + '"><div class="pd-daily-head"><i class="pd-icon" style="background-image:var(--spr-stairs)"></i><h3>' + L.daily + '</h3><span class="pd-chip ' + (done ? 'done' : '') + '">' + (done ? L.done : L.open) + '</span></div>' +
+      (done ? '<div class="pd-daily-place">' + (o.place <= 3 ? '<i class="pd-tro ' + ['gold', 'silver', 'bronze'][o.place - 1] + '"></i>' : '') + '<b>#' + o.place + '</b><span>' + L.of(o.place, 214) + '</span></div><p class="pd-note">' + L.dailyDone + '</p><div class="pd-row"><button class="pd-button">' + L.train + '</button><button class="pd-button">' + L.board + '</button></div>'
+        : '<p class="pd-note">' + L.dailyOpen + '</p><div class="pd-row"><button class="pd-button">' + L.descend + '</button><button class="pd-button">' + L.board + '</button></div>') + '</div>';
+    el.innerHTML = '<canvas class="bg" style="position:absolute;inset:0;width:100%;height:100%;opacity:.45"></canvas>' +
+      '<div class="pd-corner"><button class="pd-iconbtn prefs" aria-label="' + (en ? 'Settings' : 'Настройки') + '"></button></div>' +
+      '<main class="pd-title-screen ranked" style="background:none"><div class="pd-logo"><img alt="Pixel Dungeon" src="' + SRC.logo + '"></div>' +
+      PD.demo.profile(lang, { streak: o.streak, frost: o.frost, trophies: o.trophies, place: done ? o.place : 0, fresh: o.fresh }) +
+      '<section class="pd-window"><div class="pd-classes" role="radiogroup">' + cls + '</div>' +
+      '<div class="pd-field"><input class="pd-input" value="QA" maxlength="16" aria-label="' + (en ? "Hero's name" : 'Имя героя') + '"></div>' + daily +
+      '<div class="pd-actions"><button class="pd-button primary big stacked">' + L.play + '<span class="pd-btn-sub">' + L.playMeta + '</span></button>' +
+      '<div class="pd-row"><button class="pd-button">' + L.newGame + '</button><button class="pd-button"><i class="pd-icon" style="width:24px;height:24px;background-image:var(--spr-challenge-off)"></i>' + L.challenges + '</button></div>' +
+      '<button class="pd-button pd-mode-btn"><i class="pd-mode-ico"></i><span class="pd-mode-text">' + L.arena + '<small>' + L.arenaSub + '</small></span></button>' +
+      '<div class="pd-row"><button class="pd-button"><i class="pd-tro x1 gold"></i>' + L.rating + '</button><button class="pd-button">' + L.mart + '</button></div></div></section></main>';
+    PD.demo.map(el.querySelector('canvas'), { fy: 0.3, names: false });
+  };
+  function rankRow(L, i, me, tab, patron) {
+    var name = i === me ? 'QA' : NAMES[(i * 7 + (tab === 'arena' ? 3 : 0)) % NAMES.length], c = (i * 3 + 1) % 4, score = Math.round((tab === 'arena' ? 3800 : 9800) * Math.pow(.955, i - 1) / 10) * 10;
+    var det = L.cls[c] + ' · ' + (tab === 'arena' ? L.wave + ' ' + Math.max(3, 24 - Math.floor(i / 2)) : L.lvl + Math.max(3, 22 - Math.floor(i / 3)) + ' · <i class="pd-rank-depth"></i>' + Math.max(2, 24 - Math.floor(i / 2)));
+    return '<div class="pd-rank' + (i <= 3 ? ' pd-medal-' + i : '') + (i === me ? ' me' : '') + '"><span class="pd-rank-n">' + i + '</span><i class="pd-rank-face" style="--av:' + c + '"></i><span class="pd-rank-name">' + (patron ? '<i class="pd-patron-mark"></i>' : '') + name + '</span><span class="pd-rank-score">' + score.toLocaleString(L === RT.en ? 'en' : 'ru') + '</span><small class="pd-rank-detail">' + det + '</small></div>';
+  }
+  /* окно «Рейтинг». o: { tab, me, total, rows } */
+  PD.demo.win.boards = function (lang, o) {
+    o = o || {}; var L = RT[lang || 'ru'], tab = o.tab || 'week', me = o.me || 37, total = o.total || 214, rows = o.rows || 9, body = '';
+    if (tab === 'mine') {
+      body = '<div class="pd-trophy-shelf">' + L.shelf.map(function (s) { return '<span><i class="pd-tro big ' + s[0] + '"></i><b>' + s[2] + '</b>' + s[1] + '</span>'; }).join('') + '</div>' +
+        '<div class="pd-ranks mine">' + [1, 2, 3, 4].map(function (i) { return rankRow(L, i, i, 'all', false).replace(' pd-medal-' + i, '').replace(' me"', '"').replace('<small class="pd-rank-detail">', '<small class="pd-rank-detail">' + ['12.10', '11.10', '09.10', '07.10'][i - 1] + ' · '); }).join('') + '</div>';
+    } else {
+      var list = ''; for (var i = 1; i <= rows; i++) list += rankRow(L, i, me, tab, i === 2 || i === 5);
+      body = '<div class="pd-ranks">' + list + '</div>' + (me > rows ? '<div class="pd-ranks-me"><div class="pd-ranks-gap">· · ·</div>' + rankRow(L, me, me, tab, false) + '<div class="pd-board-place">' + L.placeOf(me, total) + '</div></div>' : '<div class="pd-ranks-me"><div class="pd-board-place">' + L.placeOf(me, total) + '</div></div>');
+    }
+    var icon = tab === 'daily' ? 'gold' : tab === 'week' ? 'week' : tab === 'arena' ? 'arena' : '';
+    return '<section class="pd-window pd-boards-window" role="dialog" aria-label="' + L.title + '"><div class="pd-window-head"><div class="pd-titles"><h2 class="pd-heading">' + L.title + '</h2></div><button class="pd-close" aria-label="×"></button></div>' +
+      '<div class="pd-tabs compact" role="tablist">' + L.tabs.map(function (t) { return '<button class="pd-tab" role="tab" aria-selected="' + (t[0] === tab) + '">' + t[1] + '</button>'; }).join('') + '</div>' +
+      '<p class="pd-board-note">' + (icon ? '<i class="pd-tro ' + icon + '"></i>' : '') + L.note[tab] + '</p><div class="pd-scroll pd-boards">' + body + '</div></section>';
+  };
+  /* блок под итогами забега. state: 'checked' | 'checking' | 'unchecked' */
+  PD.demo.rankingBlock = function (lang, state) {
+    var L = RT[lang || 'ru'];
+    if (state === 'checking') return '<div class="pd-ranking"><p class="pd-checked pending">' + L.checking + '</p></div>';
+    if (state === 'unchecked') return '<div class="pd-ranking"><p class="pd-checked off">' + L.unchecked + '</p></div>';
+    return '<div class="pd-ranking"><p class="pd-checked">' + L.checked + '</p><p class="pd-new-record">' + L.record + '</p><div class="pd-places">' + L.places.map(function (p) { return '<span class="pd-place' + (p[3] ? ' top' : '') + '">' + (p[2] ? '<i class="pd-tro ' + p[2] + '"></i>' : '') + '<b>' + p[0] + '</b>' + p[1] + '</span>'; }).join('') + '</div></div>';
+  };
+  PD.demo.rankedT = RT;
+
   /* окно поверх экрана макета: box — .phone; html — строка окна */
   PD.demo.overlay = function (box, html) { var o = document.createElement('div'); o.className = 'pd-overlay static'; o.innerHTML = html; box.appendChild(o); PD.sprite(o); return o; };
 

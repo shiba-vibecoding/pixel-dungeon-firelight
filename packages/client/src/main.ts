@@ -516,7 +516,16 @@ let profile: Profile | null = null;
 
 /** The boards window; back to the title when closed. */
 function openBoards(tab?: 'daily' | 'week' | 'arena' | 'all' | 'device'): void {
-  showBoards({ api, device: rankings(), tab, onClose: toTitle });
+  showBoards({ api, device: rankings(), trophies: profile?.trophies, tab, onClose: toTitle });
+}
+
+/** Today's daily dungeon as the server last told: its attempt open, under way, or played (and its place). */
+function dailyState(): { state: 'open' | 'going' | 'done'; place: number | null; total: number } | undefined {
+  if (!profile) return undefined;
+  const run = profile.runs.daily;
+  const today = run?.date === profile.today && run.ranked ? run : null;
+  const state = !profile.dailyDone ? 'open' : today && !today.over ? 'going' : 'done';
+  return { state, place: profile.places.daily ?? null, total: profile.totals?.daily ?? 0 };
 }
 
 /** Trophies won since the device last looked: announced once each. */
@@ -577,7 +586,8 @@ function toTitle(ask = true): void {
       : startSolo('new'),
     onDaily: () => startSolo('daily'),
     onDailyBoard: api ? () => openBoards('daily') : undefined,
-    dailyNote: profile ? (profile.dailyDone ? t.ranked.dailyDone : t.ranked.dailyOpen) : undefined,
+    dailyState: dailyState(),
+    onPractice: () => startSolo('daily'),
     profile: profile ? profileCard(profile, () => openBoards()) : undefined,
     onRankings: () => openBoards(),
     onMart: () => showMart({ heroClass, onClose: toTitle }),
@@ -2491,7 +2501,8 @@ function tick(now: number): void {
         },
         onExit: () => toTitle(),
         score: scoreNow,
-        ranking: rankingBlock(answer, api ? () => openBoards(dailyRun ? 'daily' : 'week') : null),
+        ranking: rankingBlock(answer),
+        onBoards: api ? () => openBoards(dailyRun ? 'daily' : 'week') : undefined,
         onShare,
       });
     }, 1200);
@@ -2614,7 +2625,8 @@ function showArenaRunEnd(world: World, me: Hero, solo: boolean): void {
         session?.restart();
         hideOverlay();
       },
-      ranking: rankingBlock(answer, api ? () => openBoards('arena') : null),
+      ranking: rankingBlock(answer),
+      onBoards: api ? () => openBoards('arena') : undefined,
       onShare: () => {
         void shareArena(t.arena.shareText(cleared, score)).then((result) => {
           if (result === 'copied') toast(t.linkCopied);

@@ -180,32 +180,10 @@ body:has(#ui.pd-wide) #game { cursor: var(--spr-cursor) 0 0, default; }
 .pd-badge.big.arena { background-size: calc(72 * var(--u)) calc(24 * var(--u)); }
 .pd-slot .pd-badge.arena { background-image: url("/assets/meta/badges-arena.png"); }
 
-/* Checked runs and the boards (rankui.ts) */
-.pd-profile {
-  display: flex; align-items: center; gap: var(--space-2, 8px); width: min(100%, 420px); margin: 0 auto var(--space-2, 8px);
-  padding: 8px 12px; background: var(--stone-800); border: var(--u, 2px) solid var(--stone-500); clip-path: var(--notch);
-  color: var(--ink); font: var(--text-body); text-align: left; cursor: pointer;
-}
-.pd-profile:active { background: var(--stone-700); }
-.pd-profile .pd-streak { font: var(--text-title); color: var(--stone-300); white-space: nowrap; }
-.pd-profile .pd-streak.on { color: var(--warn); text-shadow: 0 0 8px rgba(255, 153, 51, 0.45); }
-.pd-profile .pd-profile-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.pd-profile .pd-profile-streak { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pd-profile small { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
-.pd-profile .pd-freeze { color: var(--season); white-space: nowrap; }
-.pd-profile .pd-trophies { color: var(--gold-deep); white-space: nowrap; }
-.pd-boards-window .pd-tabs { flex-wrap: wrap; }
-.pd-boards { min-height: 240px; }
-.pd-ranks-me { margin-top: var(--space-2, 8px); border-top: var(--u, 2px) dashed var(--stone-500); }
-.pd-rank.pd-medal-1 .pd-rank-n { color: #ffd84a; }
-.pd-rank.pd-medal-2 .pd-rank-n { color: #d6dde3; }
-.pd-rank.pd-medal-3 .pd-rank-n { color: #e09a5a; }
-.pd-ranking { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: var(--space-2, 8px) 0; }
-.pd-ranking .pd-checked { margin: 0; color: var(--good); font: var(--text-caption, 400 15px/20px var(--font-small)); }
-.pd-places { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-.pd-place { padding: 4px 10px; background: var(--stone-700); clip-path: var(--notch); color: var(--ink-muted); white-space: nowrap; }
-.pd-place b { color: var(--ink); font-weight: 400; }
-.pd-place.top b { color: var(--gold-deep); }
+/* Checked runs: the window shown while a new run comes from the server. */
 .pd-waiting { text-align: center; padding: var(--space-4, 16px); }
 /* A window over the map hides the map's own buttons (they sit above the scrim otherwise). */
 body:has(#overlay.open) .pd-mapctl { visibility: hidden; }
+/* The ranked title (design system v16): the logo alone, each of the card's facts on one line. */
+.pd-title-screen.ranked .pd-logo-sub { display: none; }
+.pd-profile-facts .pd-fact { white-space: nowrap; }
