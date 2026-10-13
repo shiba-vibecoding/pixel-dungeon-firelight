@@ -8,7 +8,6 @@ import { ARENA_BADGES, BADGES, type BadgeId, badgeText, earnedBadges, markBadges
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
-import type { DailyBoard } from './leaderboard';
 import { mart } from './mart';
 import { countChallenges } from './meta';
 import type { RunRecord } from './rankings';
@@ -349,21 +348,21 @@ const inQuickslot = (hero: Hero, item: Item): boolean => hero.items[quickIndex(h
 
 export interface TitleOptions {
   heroClass: HeroClass;
-  invitedRoom: string | null;
   /** The solo run that can be continued, if any. */
   save: { heroClass: HeroClass; lvl: number; depth: number } | null;
-  coopAvailable: boolean;
   /** Shown outside Telegram, where the name is not known. */
   askName: string | null;
   onClass(heroClass: HeroClass): void;
   onName(name: string): void;
   onContinue(): void;
   onSolo(): void;
-  onCoop(): void;
-  onJoin(): void;
   onDaily(): void;
-  /** Shows today's leaderboard; absent without a server. */
+  /** Shows today's board; absent without checked runs. */
   onDailyBoard?: () => void;
+  /** The daily dungeon's state today: open, or its attempt played. */
+  dailyNote?: string;
+  /** The player's card (rankui.ts profileCard), once the server has told who they are. */
+  profile?: HTMLElement;
   onRankings(): void;
   onMart(): void;
   onSettings(): void;
@@ -428,7 +427,6 @@ export function showTitle(options: TitleOptions): void {
   const { save } = options;
   const main: HTMLElement[] = [];
   const rest: HTMLElement[] = [];
-  if (options.invitedRoom) main.push(button(t.join(options.invitedRoom), options.onJoin, 'primary big'));
   if (save) {
     const resume = button(t.continueRun, options.onContinue, `${main.length ? '' : 'primary big '}stacked`);
     resume.append(el('span', { className: 'pd-btn-sub', textContent: t.continueMeta(t.classes[save.heroClass], save.lvl, save.depth) }));
@@ -449,7 +447,7 @@ export function showTitle(options: TitleOptions): void {
     'div',
     { className: 'pd-daily' },
     el('div', { className: 'pd-daily-head' }, picture('stairs'), el('h3', { textContent: t.daily })),
-    info(t.dailyInfo, 'pd-note'),
+    info(options.dailyNote ?? t.dailyInfo, 'pd-note'),
     el('div', { className: 'pd-row' }, button(t.descendDaily, options.onDaily), options.onDailyBoard && button(t.dailyBoard, options.onDailyBoard)),
   );
 
@@ -470,6 +468,7 @@ export function showTitle(options: TitleOptions): void {
         el('button', { className: 'pd-iconbtn prefs', ariaLabel: t.meta.settings, onclick: () => (audio.play('click'), options.onSettings()) }),
       ),
       logo,
+      options.profile,
       el(
         'section',
         { className: 'pd-window' },
@@ -481,11 +480,10 @@ export function showTitle(options: TitleOptions): void {
           { className: 'pd-actions' },
           ...main,
           ...rest,
-          options.coopAvailable ? button(t.coop, options.onCoop, 'ally') : info(t.coopUnavailable, 'pd-note center'),
+          daily,
           options.arena,
-          el('div', { className: 'pd-row' }, button(t.rankings, options.onRankings, 'quiet'), button(t.mart, options.onMart, 'quiet')),
+          el('div', { className: 'pd-row' }, button(t.ranked.title, options.onRankings, 'quiet'), button(t.mart, options.onMart, 'quiet')),
         ),
-        daily,
       ),
     ),
     null,
@@ -496,9 +494,7 @@ export function showTitle(options: TitleOptions): void {
 /* Menu */
 
 export interface MenuOptions {
-  room: string | null;
   onResume(): void;
-  onInvite(): void;
   onHelp(): void;
   onBadges(): void;
   onJournal(): void;
@@ -513,12 +509,11 @@ export interface MenuOptions {
 export function showMenu(options: MenuOptions): void {
   show(
     windowOf(
-      { title: t.menu, sub: options.room ? t.room(options.room) : undefined, onClose: options.onResume, narrow: true },
+      { title: t.menu, onClose: options.onResume, narrow: true },
       el(
         'div',
         { className: 'pd-menu-list' },
         button(t.resume, options.onResume, 'primary'),
-        options.room && button(t.invite, options.onInvite, 'ally'),
         el('div', { className: 'pd-row' }, button(t.meta.journal, options.onJournal), button(t.help, options.onHelp)),
         el('div', { className: 'pd-row' }, button(t.badges, options.onBadges), button(t.mart, options.onMart)),
         button(t.meta.settings, options.onSettings),
@@ -992,30 +987,12 @@ export interface EndOptions {
   onExit: () => void;
   /** The run's place among this device's best, if it made the table. */
   place?: number | null;
-  /** For the daily dungeon: today's leaderboard (loading) and a way to share. */
-  daily?: { score: number; board: Promise<DailyBoard | null>; onShare: () => void };
-}
-
-/** Today's best runs, as rows; mine is highlighted. */
-function boardView(board: DailyBoard | null): HTMLElement {
-  if (!board) return info(t.boardOffline, 'pd-note');
-  if (board.top.length === 0) return info(t.noResults, 'pd-note');
-  const ranks = el('div', { className: 'pd-ranks' });
-  board.top.slice(0, 10).forEach((entry, i) => {
-    const face = el('i', { className: 'pd-rank-face' });
-    face.style.setProperty('--av', String(AVATAR[entry.heroClass]));
-    ranks.append(
-      el(
-        'div',
-        { className: `pd-rank${entry.id === board.you ? ' me' : ''}` },
-        el('span', { className: 'pd-rank-n', textContent: String(i + 1) }),
-        face,
-        el('span', { className: 'pd-rank-name', textContent: entry.name }, el('small', { textContent: `${t.classes[entry.heroClass]} · ${t.depthShort(entry.depth)}${entry.won ? ' · ★' : ''}` })),
-        el('span', { className: 'pd-rank-score', textContent: entry.score.toLocaleString(locale) }),
-      ),
-    );
-  });
-  return el('div', {}, ranks, board.rank && board.rank > 10 ? info(t.yourPlace(board.rank), 'pd-note center') : null);
+  /** The run's score. */
+  score: number;
+  /** How the server scored it (rankui.ts rankingBlock). */
+  ranking?: HTMLElement;
+  /** Shares the result (a picture where the phone can, else text and a link). */
+  onShare?: () => void;
 }
 
 /** The end of a run: the whole party fell, or it won. */
@@ -1023,21 +1000,20 @@ export function showRunEnd(options: EndOptions): void {
   const { hero } = options;
   const avatar = el('i');
   avatar.style.setProperty('--av', String(AVATAR[hero.heroClass]));
-  const board = el('div', { className: 'pd-scroll' }, options.daily && info(t.loading, 'pd-note center'));
   const rows: Array<readonly [string, string, string?]> = [
     [t.statDepth, String(hero.depth)],
     [t.statLevel, String(hero.lvl)],
     [t.goldLabel, String(hero.gold), 'gold'],
     [t.slain, String(hero.kills)],
+    [t.scoreLabel, options.score.toLocaleString(locale), 'ally'],
   ];
-  if (options.daily) rows.push([t.daily, String(options.daily.score), 'ally']);
   show(
     el(
       'section',
       { className: `pd-window pd-runend${options.victory ? ' win' : ''}` },
       el('h2', { className: 'pd-display', textContent: options.title }),
       options.cause && el('p', { className: 'pd-cause', textContent: options.cause }),
-      options.place ? el('p', { className: 'pd-info center pd-gold', textContent: options.place === 1 ? t.newRecord : t.rankPlace(options.place) }) : null,
+      options.place && !options.ranking ? el('p', { className: 'pd-info center pd-gold', textContent: options.place === 1 ? t.newRecord : t.rankPlace(options.place) }) : null,
       el(
         'div',
         { className: 'pd-runend-hero' },
@@ -1045,19 +1021,17 @@ export function showRunEnd(options: EndOptions): void {
         el('div', { className: 'pd-info', textContent: `${hero.name} · ${t.classes[hero.heroClass]}` }),
       ),
       stats(rows),
-      options.daily && board,
-      actions(
-        options.daily ? [button(t.shareResult, options.daily.onShare, 'primary')] : [button(options.restartLabel, options.onRestart, 'primary')],
-        options.daily ? [button(options.restartLabel, options.onRestart)] : [],
-      ),
+      options.ranking,
+      actions([button(options.restartLabel, options.onRestart, 'primary')], options.onShare ? [button(t.shareResult, options.onShare)] : []),
       button(t.toMenu, options.onExit, 'quiet'),
     ),
     null,
   );
-  void options.daily?.board.then((loaded) => {
-    board.replaceChildren(...(loaded?.rank ? [info(t.yourPlace(loaded.rank), 'pd-info center')] : []), boardView(loaded));
-    sprites(board);
-  });
+}
+
+/** A window with only a word in it, while something is on its way (a new run from the server). */
+export function showWaiting(text: string): void {
+  show(el('section', { className: 'pd-window narrow pd-waiting' }, el('p', { className: 'pd-info center', textContent: text })), null);
 }
 
 /** Rankings: the best runs on this device; `latest` is highlighted. */
@@ -1093,13 +1067,6 @@ export function showRankings(records: readonly RunRecord[], onClose: () => void,
     ),
     onClose,
   );
-}
-
-/** Today's leaderboard from the title screen. */
-export function showDailyBoard(loading: Promise<DailyBoard | null>, onClose: () => void): void {
-  const body = el('div', { className: 'pd-scroll' }, info(t.loading, 'pd-note'));
-  show(windowOf({ title: t.dailyBoard, sub: t.dailyInfo, onClose }, body), onClose);
-  void loading.then((board) => body.replaceChildren(boardView(board)));
 }
 
 /** Scrolls read on one thing the player picks. */

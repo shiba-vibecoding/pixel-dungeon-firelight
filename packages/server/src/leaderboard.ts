@@ -17,6 +17,18 @@ export interface DailyEntry extends DailyResult {
   name: string;
   score: number;
   at: number;
+  /** The arena: monsters slain; anywhere, absent in boards from before it was kept. */
+  kills?: number;
+  /** A patron of the game (Pixel-Mart): a star by the name. */
+  patron?: boolean;
+  /** Who it is, privately: the player's account key, never served (see servedEntry). */
+  owner?: string;
+}
+
+/** An entry as anyone may see it: without its owner. */
+export function servedEntry(entry: DailyEntry): DailyEntry {
+  const { owner: _owner, ...rest } = entry;
+  return rest;
 }
 
 const HERO_CLASSES = new Set(['warrior', 'mage', 'rogue', 'huntress']);
@@ -53,7 +65,12 @@ export class Leaderboard {
 
   /** Records a run if it beats the player's best; returns the player's place (1-based) or null. */
   submit(id: string, name: string, result: DailyResult, now: number): number | null {
-    const entry: DailyEntry = { ...result, id, name: name.slice(0, 32), score: score(result), at: now };
+    return this.put({ ...result, id, name: name.slice(0, 32), score: score(result), at: now });
+  }
+
+  /** Records an entry scored already (a checked run) if it beats the player's best; returns the player's place or null. */
+  put(entry: DailyEntry): number | null {
+    const id = entry.id;
     const previous = this.board.findIndex((e) => e.id === id);
     if (previous >= 0) {
       if (this.board[previous]!.score >= entry.score) return this.rank(id);
@@ -71,8 +88,14 @@ export class Leaderboard {
     return index >= 0 ? index + 1 : null;
   }
 
+  /** A player's entry by their account key, and its place. */
+  ofOwner(owner: string): { rank: number; entry: DailyEntry } | null {
+    const index = this.board.findIndex((e) => e.owner === owner);
+    return index >= 0 ? { rank: index + 1, entry: this.board[index]! } : null;
+  }
+
   top(count: number): DailyEntry[] {
-    return this.board.slice(0, count);
+    return this.board.slice(0, count).map(servedEntry);
   }
 }
 

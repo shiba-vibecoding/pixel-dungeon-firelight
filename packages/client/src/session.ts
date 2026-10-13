@@ -1,8 +1,10 @@
 import {
-  act, type Action, addHero, applyEvent, type Bones, type ClientMessage, createWorld, type Effect, type GameMode, giveBones, heroById, type HeroClass,
+  act, type Action, addHero, applyEvent, type Bones, type ClientMessage, createWorld, type Effect, fingerprint, type GameMode, giveBones, heroById,
+  type HeroClass,
   LIVE_CALM_MS, liveBeatMs, liveReady, liveTick,
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
 } from '@pd/core';
+import type { RunApi, RunMeta, SyncAnswer } from './checked';
 import { guestSecret } from './guest';
 import { netlog, sendNetlog, startNetlog } from './netlog';
 import { report } from './report';
@@ -54,13 +56,45 @@ export interface Session {
   signal(signal: Signal): void;
   /** Signals the room relayed since the last call (mine among them), in order: who sent each, and when it came (performance.now()). */
   drainSignals(): Array<{ from: string; signal: Signal; at: number }>;
+  /** A checked run (checked.ts): how it stands with the server; null for a run played on the device alone. */
+  readonly checked?: CheckState | null;
 }
+
+export interface CheckState {
+  readonly meta: RunMeta;
+  /** The device has moves the server has not taken, and cannot reach it just now. */
+  readonly offline: boolean;
+  /** The run's end as the server scored it, once the run is over; null if it cannot be had (or the run is not checked). */
+  finished(): Promise<SyncAnswer | null>;
+}
+
+/** What a checked run needs besides the world. */
+export interface CheckOptions {
+  api: RunApi;
+  meta: RunMeta;
+  /** Moves played and not yet taken by the server. */
+  log?: Action[];
+  /** The run's world as the server gave it (a new run, or one carried on from another device). */
+  world?: World;
+  /** A new checked run in the same slot (after a fall); null: none could be had, the next is the device's alone. */
+  renew(): Promise<{ run: RunMeta; world: World } | null>;
+}
+
+/** Moves sent to the server at once when so many wait; fewer go after SYNC_DELAY_MS. */
+const SYNC_BATCH = 40;
+const SYNC_DELAY_MS = 8000;
+/** The most moves one request carries (the server takes at most 400; a keepalive request must stay small). */
+const SYNC_MAX = 300;
+/** How long the end of a run waits for the server's word on it. */
+const FINISH_WAIT_MS = 10_000;
 
 const SAVE_VERSION = 31;
 
 interface SoloSave {
   version: number;
   world: World;
+  /** A checked run: the server's run, and the moves it has not taken yet. */
+  check?: { meta: RunMeta; log: Action[] };
 }
 
 /**
@@ -86,6 +120,18 @@ export function loadSolo(key: string): World | null {
 }
 
 /** A run saved by a version too old to carry on, still in its slot: the title says so before a new run replaces it. */
+/** A saved checked run's standing with the server: its run, and the moves not yet sent. */
+export function loadCheck(key: string): { meta: RunMeta; log: Action[] } | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const save = JSON.parse(raw) as SoloSave;
+    return save.version === SAVE_VERSION && save.check ? save.check : null;
+  } catch {
+    return null;
+  }
+}
+
 export function staleSolo(key: string): { depth: number; heroClass: HeroClass } | null {
   try {
     const raw = localStorage.getItem(key);
@@ -118,7 +164,7 @@ export function forgetSolo(key: string): void {
  */
 export function soloSession(
   key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0, mode: GameMode = 'dungeon',
-  bones: () => Bones | null = () => null, live = false,
+  bones: () => Bones | null = () => null, live = false, checkOptions?: CheckOptions,
 ): Session {
   const fresh = (): World => {
     const world = createWorld(newSeed(), challenges, mode, live);
@@ -138,8 +184,9 @@ export function soloSession(
     dirty = false;
     try {
       const world = session.world!;
-      if (world.over) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify({ version: SAVE_VERSION, world } satisfies SoloSave));
+      // A checked run is kept until the server has it all, over or not.
+      if (world.over && !(check && check.log.length > 0)) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify({ version: SAVE_VERSION, world, ...(check ? { check } : {}) } satisfies SoloSave));
     } catch {
       // Out of space or storage blocked: the run is not kept, and the player is told (main.ts, once).
       dispatchEvent(new Event('pd-save-failed'));
@@ -154,14 +201,100 @@ export function soloSession(
   };
   // Leaving the app (Telegram closed or sent to the background) must not lose the last moves.
   const away = (): void => {
-    if (document.hidden) flush();
+    if (!document.hidden) return;
+    flush();
+    void syncNow(true);
+  };
+
+  /* Checked runs: moves go to the server in batches; its answer may send its own copy back. */
+  let check: { meta: RunMeta; log: Action[] } | null = checkOptions ? { meta: { ...checkOptions.meta }, log: [...(checkOptions.log ?? [])] } : null;
+  let syncing = false;
+  let syncTimer = 0;
+  let retryMs = 0;
+  let offline = false;
+  /** A run carried on is checked against the server's once, moves or none. */
+  let verify = check !== null;
+  let answer: SyncAnswer | null = null;
+  let waiters: Array<(answer: SyncAnswer | null) => void> = [];
+  const settleWaiters = (value: SyncAnswer | null): void => {
+    for (const waiter of waiters) waiter(value);
+    waiters = [];
+  };
+  const syncSoon = (delay: number): void => {
+    if (!check) return;
+    clearTimeout(syncTimer);
+    syncTimer = window.setTimeout(() => void syncNow(), delay);
+  };
+  const syncNow = async (keepalive = false): Promise<void> => {
+    if (!check || syncing || closed || (check.log.length === 0 && !verify)) return;
+    clearTimeout(syncTimer);
+    syncing = true;
+    const meta = { ...check.meta };
+    const batch = check.log.slice(0, keepalive ? Math.min(SYNC_MAX, 150) : SYNC_MAX);
+    const whole = batch.length === check.log.length;
+    const reply = await checkOptions!.api.sync(meta, batch, whole ? fingerprint(session.world!) : null, keepalive);
+    syncing = false;
+    // Another run took the slot meanwhile (a restart): this answer is of no use.
+    if (!check || check.meta.id !== meta.id) return;
+    if (reply === 'offline') {
+      offline = true;
+      retryMs = Math.min(60_000, retryMs ? retryMs * 2 : 2000);
+      syncSoon(retryMs);
+      return;
+    }
+    if (reply === 'unauthorized') {
+      // The server no longer knows the player: the run goes on, on the device alone.
+      check = null;
+      settleWaiters(null);
+      save();
+      return;
+    }
+    if (reply === 'rules') {
+      // The game was updated: the new version picks the run up where the server has it.
+      flush();
+      location.reload();
+      return;
+    }
+    if (reply.reason === 'none') {
+      // The server keeps no run here (gone after long disuse): the run goes on, on the device alone.
+      check = null;
+      settleWaiters(null);
+      save();
+      return;
+    }
+    if (!reply.world && reply.seq === meta.seq && batch.length > 0) {
+      // Nothing taken and nothing said why: try again later rather than at once.
+      retryMs = Math.min(60_000, retryMs ? retryMs * 2 : 2000);
+      syncSoon(retryMs);
+      return;
+    }
+    offline = false;
+    retryMs = 0;
+    verify = false;
+    if (reply.world && reply.run) {
+      // The device's copy parted from the server's (or the run went on elsewhere): the server's is the run.
+      session.world = reply.world;
+      check = { meta: reply.run, log: [] };
+      pending = [];
+      session.generation++;
+      dispatchEvent(new CustomEvent('pd-run-restored', { detail: reply.reason }));
+    } else {
+      check.log.splice(0, Math.max(0, reply.seq - meta.seq));
+      check.meta.seq = reply.seq;
+    }
+    if (reply.finished) {
+      answer = reply;
+      settleWaiters(reply);
+    }
+    save();
+    if (check.log.length > 0) syncSoon(check.log.length >= SYNC_BATCH ? 0 : SYNC_DELAY_MS);
   };
   document.addEventListener('visibilitychange', away);
   addEventListener('pagehide', flush);
 
   const session: Session = {
     mode: 'solo',
-    world: (key && loadSolo(key)) || fresh(),
+    world: checkOptions?.world ?? ((key && loadSolo(key)) || fresh()),
     myId: 'me',
     online: ['me'],
     status: '',
@@ -172,16 +305,43 @@ export function soloSession(
       return session.world?.live ? beat : null;
     },
     send(action) {
+      const depth = heroById(session.world!, 'me')?.depth;
       const result = act(session.world!, 'me', action);
       if (result.ok) {
         pending.push(...result.effects);
         save();
+        if (check) {
+          check.log.push(action);
+          // The end goes at once (its place on the boards is awaited); a new depth soon; else in batches.
+          const world = session.world!;
+          if (world.over) void syncNow();
+          else syncSoon(check.log.length >= SYNC_BATCH ? 0 : heroById(world, 'me')?.depth !== depth ? 500 : SYNC_DELAY_MS);
+        }
       } else {
         // Refused: let the player know why, where that is worth saying.
         pending.push({ type: 'interrupted', hero: 'me', reason: result.reason });
       }
     },
     restart() {
+      if (checkOptions && check) {
+        // A checked run's successor comes from the server too; failing that, the device plays one alone.
+        const old = check.meta.id;
+        void checkOptions.renew().then((next) => {
+          if (closed || !check || check.meta.id !== old) return;
+          if (next) {
+            session.world = next.world;
+            check = { meta: next.run, log: [] };
+          } else {
+            check = null;
+            restartWorld(session.world!, newSeed());
+          }
+          answer = null;
+          pending = [];
+          session.generation++;
+          save();
+        });
+        return;
+      }
       restartWorld(session.world!, newSeed());
       const left = bones();
       if (left) giveBones(session.world!, left);
@@ -194,9 +354,11 @@ export function soloSession(
       return effects;
     },
     close() {
-      // Back to the title: what was played is kept, to the last move.
+      // Back to the title: what was played is kept, to the last move, and the server hears of it.
+      void syncNow(true);
       closed = true;
       clearTimeout(clock);
+      clearTimeout(syncTimer);
       flush();
       document.removeEventListener('visibilitychange', away);
       removeEventListener('pagehide', flush);
@@ -207,6 +369,23 @@ export function soloSession(
     },
     signal() {},
     drainSignals: () => [],
+    get checked(): CheckState | null {
+      if (!check) return null;
+      const meta = check.meta;
+      return {
+        meta,
+        offline,
+        finished: () => {
+          if (answer) return Promise.resolve(answer);
+          if (!check || !session.world?.over) return Promise.resolve(null);
+          void syncNow();
+          return new Promise((resolve) => {
+            waiters.push(resolve);
+            window.setTimeout(() => resolve(answer), FINISH_WAIT_MS);
+          });
+        },
+      };
+    },
   };
   // Live turns alone: the session's own clock plays the hero's depth a beat at a time whenever there
   // is something to play (an order, or a move in a fight), a beat no sooner than the last has been
@@ -231,6 +410,8 @@ export function soloSession(
   };
   if (session.world!.live) clock = window.setTimeout(tick, 16);
   save();
+  // A checked run carried on: the server's copy is checked against this one at once.
+  if (check) void syncNow();
   return session;
 }
 

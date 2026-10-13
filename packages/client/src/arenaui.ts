@@ -65,14 +65,11 @@ export function arenaEntry(best: number | null, onOpen: () => void): HTMLButtonE
 
 export interface ArenaPickOptions {
   best: number | null;
-  /** Co-op needs the server; without one only «Alone» is there. */
-  coop: boolean;
-  onSolo(): void;
-  onFriends(): void;
+  onStart(): void;
   onClose(): void;
 }
 
-/** «Wave arena»: what it is, the record, and «Alone» or «With friends». */
+/** «Wave arena»: what it is, the record, and into it. */
 export function showArenaPick(options: ArenaPickOptions): void {
   // A strip of the arena's own frames: the gate, the brazier, the crowd, the banner (arena1.png, ×2).
   const art = el('div', { className: 'pd-arena-art' });
@@ -123,8 +120,7 @@ export function showArenaPick(options: ArenaPickOptions): void {
       el(
         'div',
         { className: 'pd-actions' },
-        choice(t.arena.solo, t.arena.soloSub, '', options.onSolo),
-        options.coop && choice(t.arena.friends, t.arena.friendsSub, 'ally', options.onFriends),
+        choice(t.arena.solo, t.arena.soloSub, 'primary big', options.onStart),
       ),
     ),
   );
@@ -252,6 +248,8 @@ export interface ArenaEndOptions {
   best: number | null;
   /** Co-op: everyone's kills and score, mine first. */
   party: ReadonlyArray<{ name: string; heroClass: HeroClass; kills: number; score: number; me: boolean }>;
+  /** How the server scored the run (rankui.ts rankingBlock). */
+  ranking?: HTMLElement;
   onAgain(): void;
   onShare(): void;
   onExit(): void;
@@ -302,6 +300,7 @@ export function showArenaEnd(options: ArenaEndOptions): void {
       [t.arena.statScore, number(options.score), 'gold'],
     ]),
     party,
+    options.ranking,
     el(
       'div',
       { className: 'pd-actions' },

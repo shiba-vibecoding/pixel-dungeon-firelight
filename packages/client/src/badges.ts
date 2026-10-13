@@ -1,21 +1,17 @@
-import { type Effect, type Hero, type Item, itemDef, ITEMS, type ItemKind, levelKnown, wavesCleared, type World } from '@pd/core';
+import {
+  type BadgeId, type BadgeProgress, checkBadges as checkCore, countGame as countCore, type Effect, emptyBadgeProgress, type Hero, mergeBadgeProgress,
+  type World,
+} from '@pd/core';
 import { lang } from './i18n';
 import { mergeWith } from './cloud';
 
 /*
- * Badges (Badges): feats remembered on this device across runs. Most are
- * earned within a run (so many monsters slain, so much gold, a boss); a few
- * gather over many runs (every class has slain Goo, every rare monster has
- * fallen). Each player earns their own, co-op or not.
+ * Badges (Badges): feats remembered on this device across runs, as the core's rules earn them
+ * (core badges.ts). The server earns them too, from the runs it checks, and its record joins
+ * this one (adoptBadges).
  */
 
-export type BadgeId =
-  | 'slain1' | 'slain2' | 'slain3' | 'slain4' | 'gold1' | 'gold2' | 'gold3' | 'gold4' | 'level1' | 'level2' | 'level3' | 'level4'
-  | 'potions' | 'scrolls' | 'rings' | 'wands' | 'allItems' | 'bags' | 'deathFire' | 'deathPoison' | 'deathGas' | 'deathHunger'
-  | 'deathGlyph' | 'deathFalling' | 'yasd' | 'boss1' | 'boss2' | 'boss3' | 'boss4' | 'boss1AllClasses' | 'boss3AllSubclasses'
-  | 'haggler' | 'thorns' | 'str1' | 'str2' | 'str3' | 'str4' | 'food1' | 'food2' | 'food3' | 'food4' | 'item1' | 'item2' | 'item3'
-  | 'item4' | 'rare' | 'victory' | 'victoryAllClasses' | 'happyEnd' | 'combo' | 'cooked1' | 'cooked2' | 'cooked3' | 'cooked4' | 'grim' | 'piranhas'
-  | 'games1' | 'games2' | 'games3' | 'games4' | 'champion' | 'arena5' | 'arena10' | 'arena20';
+export type { BadgeId } from '@pd/core';
 
 /** Where the arena's badges begin: images from here on are in meta/badges-arena.png, not badges.png. */
 export const ARENA_BADGES = 64;
@@ -95,17 +91,7 @@ export const badgeText = (id: BadgeId): string => {
 };
 
 /** What is remembered on this device. */
-interface Store {
-  earned: BadgeId[];
-  /** Rare monster kinds slain, classes that slew Goo or won, ways that slew DM-300, deaths suffered. */
-  rare: string[];
-  boss1: string[];
-  boss3: string[];
-  victories: string[];
-  deaths: string[];
-  games: number;
-  /** The last run counted, so a run is counted once however often it is reopened. */
-  lastRun?: number;
+interface Store extends BadgeProgress {
   /** Badges already shown in the badges window; absent for stores from before it was kept. */
   seen?: BadgeId[];
 }
@@ -113,7 +99,7 @@ interface Store {
 const KEY = 'pd-badges';
 
 function load(): Store {
-  const empty: Store = { earned: [], rare: [], boss1: [], boss3: [], victories: [], deaths: [], games: 0 };
+  const empty: Store = emptyBadgeProgress();
   try {
     return { ...empty, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Store>) };
   } catch {
@@ -132,20 +118,9 @@ export function reloadBadges(): void {
 mergeWith(KEY, (here, cloud) => {
   try {
     const a = { ...load(), ...(here ? (JSON.parse(here) as Partial<Store>) : {}) };
-    const b = JSON.parse(cloud) as Partial<Store>;
+    const b = { ...emptyBadgeProgress(), ...(JSON.parse(cloud) as Partial<Store>) };
     const join = <T>(x: T[] | undefined, y: T[] | undefined): T[] => [...new Set([...(x ?? []), ...(y ?? [])])];
-    const merged: Store = {
-      ...a,
-      earned: join(a.earned, b.earned),
-      rare: join(a.rare, b.rare),
-      boss1: join(a.boss1, b.boss1),
-      boss3: join(a.boss3, b.boss3),
-      victories: join(a.victories, b.victories),
-      deaths: join(a.deaths, b.deaths),
-      games: Math.max(a.games ?? 0, b.games ?? 0),
-      lastRun: Math.max(a.lastRun ?? 0, b.lastRun ?? 0) || undefined,
-      seen: a.seen || b.seen ? join(a.seen, b.seen) : undefined,
-    };
+    const merged: Store = { ...mergeBadgeProgress(a, b), seen: a.seen || b.seen ? join(a.seen, b.seen) : undefined };
     return JSON.stringify(merged);
   } catch {
     return here;
@@ -170,125 +145,25 @@ export function markBadgesSeen(): void {
   save();
 }
 
-const RARE_KINDS = ['albino', 'bandit', 'shielded', 'senior', 'acidic'];
-const BOSSES: Readonly<Record<string, BadgeId>> = { goo: 'boss1', tengu: 'boss2', dm300: 'boss3', king: 'boss4' };
-const SUBCLASSES = ['gladiator', 'berserker', 'warlock', 'battlemage', 'freerunner', 'assassin', 'sniper', 'warden'];
-const CLASSES = ['warrior', 'mage', 'rogue', 'huntress'];
-const DEATHS: Readonly<Record<string, BadgeId>> = {
-  burning: 'deathFire', poison: 'deathPoison', gas: 'deathGas', hunger: 'deathHunger', fall: 'deathFalling',
-  multiplicity: 'deathGlyph', deferred: 'deathGlyph',
-};
-
-/** Kinds that go by a label until known: every one of them known means the whole category is identified. */
-const LABELLED = new Map<string, ItemKind[]>();
-const labelled = (category: string): ItemKind[] => {
-  if (!LABELLED.has(category)) {
-    LABELLED.set(category, (Object.keys(ITEMS) as ItemKind[]).filter((kind) => itemDef(kind).category === category && itemDef(kind).sprite === undefined));
-  }
-  return LABELLED.get(category)!;
-};
-
 /** Games played: counts a run the first time it is seen on this device. */
 export function countGame(seed: number): BadgeId[] {
-  if (store.lastRun === seed) return [];
-  store.lastRun = seed;
-  store.games++;
-  const fresh: BadgeId[] = [];
-  const earn = (id: BadgeId, when: boolean): void => {
-    if (when && !store.earned.includes(id)) {
-      store.earned.push(id);
-      fresh.push(id);
-    }
-  };
-  earn('games1', store.games >= 10);
-  earn('games2', store.games >= 100);
-  earn('games3', store.games >= 500);
-  earn('games4', store.games >= 2000);
+  const fresh = countCore(store, seed);
   save();
   return fresh;
 }
 
 /** Looks over the hero and what just happened; returns the badges earned just now. */
 export function checkBadges(world: World, me: Hero, effects: readonly Effect[]): BadgeId[] {
-  const fresh: BadgeId[] = [];
-  let dirty = false;
-  const remember = (list: string[], value: string): void => {
-    if (!list.includes(value)) {
-      list.push(value);
-      dirty = true;
-    }
-  };
-  const earn = (id: BadgeId, when = true): void => {
-    if (when && !store.earned.includes(id)) {
-      store.earned.push(id);
-      fresh.push(id);
-    }
-  };
-  const tiers = (ids: readonly BadgeId[], value: number, steps: readonly number[]): void =>
-    ids.forEach((id, i) => earn(id, value >= steps[i]!));
-
-  tiers(['slain1', 'slain2', 'slain3', 'slain4'], me.kills, [10, 50, 150, 250]);
-  tiers(['gold1', 'gold2', 'gold3', 'gold4'], me.stats?.gold ?? 0, [100, 500, 2500, 7500]);
-  tiers(['level1', 'level2', 'level3', 'level4'], me.lvl, [6, 12, 18, 24]);
-  tiers(['str1', 'str2', 'str3', 'str4'], me.str, [13, 15, 17, 19]);
-  tiers(['food1', 'food2', 'food3', 'food4'], me.stats?.food ?? 0, [10, 20, 30, 40]);
-  tiers(['cooked1', 'cooked2', 'cooked3', 'cooked4'], me.stats?.brewed ?? 0, [3, 6, 9, 12]);
-  earn('piranhas', (me.stats?.piranhas ?? 0) >= 6);
-  // The arena of waves: so many waves held.
-  if (world.arena) tiers(['arena5', 'arena10', 'arena20'], wavesCleared(world.arena), [5, 10, 20]);
-
-  const belongings: Item[] = [...me.items, ...me.rings, me.armor, ...(me.weapon ? [me.weapon] : [])];
-  // Badges.validateItemLevelAquired: only a level that is known counts.
-  const best = Math.max(0, ...belongings.filter(levelKnown).map((item) => item.level));
-  tiers(['item1', 'item2', 'item3', 'item4'], best, [3, 6, 9, 12]);
-  earn('haggler', belongings.some((item) => item.kind === 'ring.haggler'));
-  earn('thorns', belongings.some((item) => item.kind === 'ring.thorns'));
-  earn('bags', ['bag.seeds', 'bag.scrolls', 'bag.wands'].every((kind) => me.items.some((item) => item.kind === kind)));
-
-  const known = new Set(world.known);
-  const all = (category: string): boolean => labelled(category).every((kind) => known.has(kind));
-  earn('potions', all('potion'));
-  earn('scrolls', all('scroll'));
-  earn('rings', all('ring'));
-  earn('wands', all('wand'));
-  earn('allItems', ['potions', 'scrolls', 'rings', 'wands'].every((id) => store.earned.includes(id as BadgeId)));
-
-  let grimAt = -1;
-  for (const effect of effects) {
-    if (effect.type === 'combo' && effect.hero === me.id) earn('combo', effect.count >= 7);
-    if (effect.type === 'enchanted' && effect.enchant === 'death') grimAt = effect.pos;
-    if (effect.type === 'died' && effect.by === me.id) {
-      if (effect.pos === grimAt) earn('grim');
-      if (effect.kind && RARE_KINDS.includes(effect.kind)) remember(store.rare, effect.kind);
-    }
-    if (effect.type === 'bossSlain' && effect.depth === me.depth && BOSSES[effect.kind]) {
-      earn(BOSSES[effect.kind]!);
-      if (effect.kind === 'goo') remember(store.boss1, me.heroClass);
-      if (effect.kind === 'dm300' && me.subclass) remember(store.boss3, me.subclass);
-    }
-    // Badges.validateVictory: the Amulet in hand; and a party's win is everyone's.
-    if (effect.type === 'amulet' && effect.hero === me.id) earn('victory');
-    if (effect.type === 'victory') {
-      earn('victory');
-      // Badges.validateHappyEnd: out on the surface with it.
-      earn('happyEnd', effect.ending === 'surface');
-      // Badges.validateChampion: the Amulet taken with a challenge on.
-      earn('champion', (world.challenges ?? 0) > 0);
-      remember(store.victories, me.heroClass);
-    }
-    if (effect.type === 'died' && effect.who === me.id && me.killedBy) {
-      const death = DEATHS[me.killedBy];
-      if (death) {
-        earn(death);
-        remember(store.deaths, death);
-      }
-    }
-  }
-  earn('rare', RARE_KINDS.every((kind) => store.rare.includes(kind)));
-  earn('boss1AllClasses', CLASSES.every((cls) => store.boss1.includes(cls)));
-  earn('boss3AllSubclasses', SUBCLASSES.every((way) => store.boss3.includes(way)));
-  earn('victoryAllClasses', CLASSES.every((cls) => store.victories.includes(cls)));
-  earn('yasd', ['deathFire', 'deathPoison', 'deathGas', 'deathHunger'].every((id) => store.deaths.includes(id)));
-  if (fresh.length > 0 || dirty) save();
+  const { fresh, changed } = checkCore(store, world, me, effects);
+  if (changed) save();
   return fresh;
+}
+
+/** The server's record of badges (from the runs it checked) joins this device's; returns those new here. */
+export function adoptBadges(server: BadgeProgress): BadgeId[] {
+  const before = new Set(store.earned);
+  const merged = mergeBadgeProgress(store, server);
+  Object.assign(store, merged);
+  save();
+  return store.earned.filter((id) => !before.has(id));
 }

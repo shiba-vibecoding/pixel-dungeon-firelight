@@ -5,13 +5,16 @@ import {
 import { botApi, createInvoice, handleUpdate, type TelegramUpdate, type Wallets } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { guestId } from './guest';
-import { countSubmission, type DailyEntry, type DailyResult, isPublicId, Leaderboard, parseResult, publicId } from './leaderboard';
+import { type DailyEntry, isPublicId, Leaderboard, publicId, servedEntry } from './leaderboard';
 import { CLOSE_TOO_BIG, MAX_MESSAGE_BYTES, MessageLimiter, messageBytes, WindowLimiter } from './limits';
 import { parseClientMessage } from './messages';
 import { type Delivery, RoomLogic, type RoomState } from './room-logic';
 import {
   ADDRESS_HEADER, addReport, MAX_REPORT_BYTES, parseReport, type Report, REPORT_WINDOW_MS, REPORTS_PER_WINDOW,
 } from './reports';
+import { boardTtl } from './boards';
+import { CORS, json, jsonBody } from './http';
+import { boardRoute, meRoute, Player, runRoute } from './player';
 import { readBody, sameSecret } from './secret';
 import { SignalLimiter, validSignal } from './signals';
 import { DAY_SECONDS, type TelegramUser, verifyInitData, WEEK_SECONDS } from './telegram-auth';
@@ -37,6 +40,8 @@ export interface Env {
   DAILY: DurableObjectNamespace<DailyBoard>;
   /** One per Telegram user: what they bought in Pixel-Mart. */
   WALLET: DurableObjectNamespace<WalletStore>;
+  /** One per player: their checked runs and profile (player.ts). */
+  PLAYER: DurableObjectNamespace<Player>;
   /** The secret Telegram sends with every webhook call (setWebhook's secret_token). */
   WEBHOOK_SECRET?: string;
   /** The Mini App's t.me link, for the bot's play button. */
@@ -612,21 +617,6 @@ function wallets(env: Env): Wallets {
   };
 }
 
-/** The longest JSON body the shop and the leaderboard take: init data and a few fields. */
-const MAX_JSON_BYTES = 16 * 1024;
-
-/** A request's JSON object body, or null if it is too big, not JSON or not an object. */
-async function jsonBody(request: Request, limit = MAX_JSON_BYTES): Promise<Record<string, unknown> | null> {
-  const text = await readBody(request, limit);
-  if (text === null) return null;
-  try {
-    const body = JSON.parse(text) as unknown;
-    return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
 /** The Telegram user behind a request's init data, if signed within `maxAgeSeconds`; Pixel-Mart takes no guests. */
 async function telegramUser(body: Record<string, unknown>, env: Env, maxAgeSeconds: number): Promise<TelegramUser | null> {
   if (!env.BOT_TOKEN || typeof body.initData !== 'string') return null;
@@ -682,46 +672,50 @@ async function webhook(request: Request, env: Env): Promise<Response> {
   return new Response('ok');
 }
 
-/** One day's leaderboard of the daily dungeon. Entries are by public id (leaderboard.ts publicId). */
+/**
+ * One board (boards.ts names them): a day's daily dungeon, a week's best, the best ever.
+ * Entries are by public id (leaderboard.ts publicId); each knows its owner privately.
+ *
+ *   GET  ?name=&me=<public id>|owner=<account>&top=<n>   the best n, and that player's place
+ *   POST /put?name=   an entry of a checked run (from the player's object only)
+ *
+ * Boards named by a bare date are the daily boards of before checked runs, read as they were.
+ */
 export class DailyBoard extends DurableObject<Env> {
   override async fetch(request: Request): Promise<Response> {
     const board = new Leaderboard((await this.ctx.storage.get<DailyEntry[]>('board')) ?? []);
     const url = new URL(request.url);
-    await this.expireAfter(url.searchParams.get('date'), board.entries().length > 0);
-    if (request.method === 'POST') {
-      const { id, name, result } = (await request.json()) as { id: string; name: string; result: DailyResult };
-      const counts = (await this.ctx.storage.get<Record<string, number>>('counts')) ?? {};
-      if (!countSubmission(counts, id)) return json({ error: 'too many results today' }, 429);
-      const rank = board.submit(id, name, result, Date.now());
-      await this.ctx.storage.put({ board: board.entries(), counts });
-      await this.expireAfter(url.searchParams.get('date'), true);
-      return json({ rank, top: board.top(20) });
+    const name = url.searchParams.get('name') ?? url.searchParams.get('date') ?? '';
+    if (request.method === 'POST' && url.pathname === '/put') {
+      const entry = (await request.json()) as DailyEntry;
+      const rank = board.put(entry);
+      await this.ctx.storage.put('board', board.entries());
+      await this.expireAfter(name);
+      return json({ rank, total: board.entries().length });
     }
-    const id = url.searchParams.get('me');
-    return json({ rank: id ? board.rank(id) : null, top: board.top(20) });
+    if (request.method === 'POST') return json({ error: 'results come from checked runs only' }, 410);
+    const me = url.searchParams.get('me');
+    const owner = url.searchParams.get('owner');
+    const count = Math.min(100, Math.max(0, Number(url.searchParams.get('top') ?? 20) || 0));
+    const mine = owner ? board.ofOwner(owner) : null;
+    const rank = me ? board.rank(me) : (mine?.rank ?? null);
+    const you = me && rank !== null ? board.entries()[rank - 1] : undefined;
+    return json({
+      rank, top: board.top(count), total: board.entries().length,
+      ...(you ? { you: servedEntry(you) } : {}), ...(mine ? { owner: { rank: mine.rank } } : {}),
+    });
   }
 
-  /** Sets the board's deletion BOARD_TTL_MS after its day, once it has anything to delete. */
-  private async expireAfter(date: string | null, stored: boolean): Promise<void> {
-    if (!stored || (await this.ctx.storage.getAlarm()) !== null) return;
-    const day = Date.parse(`${date}T00:00:00Z`);
-    const at = Number.isFinite(day) ? day + BOARD_TTL_MS : Date.now() + BOARD_TTL_MS;
-    await this.ctx.storage.setAlarm(Math.max(at, Date.now() + 60_000));
+  /** Sets the board's deletion some time after its day or week (boards.ts boardTtl); the best ever are kept. */
+  private async expireAfter(name: string): Promise<void> {
+    const ttl = boardTtl(name);
+    if (ttl === null || (await this.ctx.storage.getAlarm()) !== null) return;
+    await this.ctx.storage.setAlarm(Date.now() + ttl);
   }
 
   override async alarm(): Promise<void> {
     await this.ctx.storage.deleteAll();
   }
-}
-
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...CORS } });
 }
 
 /** Only today's board (UTC, give or take a day for time zones) takes results. */
@@ -747,26 +741,8 @@ async function daily(request: Request, env: Env, date: string): Promise<Response
     const payload = (await response.json()) as { rank: number | null; top: DailyEntry[] };
     return json({ rank: payload.rank, top: await publicEntries(payload.top, env, date), ...(me && payload.rank !== null ? { you: me } : {}) });
   }
-  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
-  if (!isCurrentDay(date, Date.now())) return json({ error: 'this day is over' }, 400);
-
-  const body = await jsonBody(request);
-  if (!body) return json({ error: 'bad json' }, 400);
-  const params = new URLSearchParams();
-  for (const key of ['initData', 'id', 'name', 'hero'] as const) {
-    if (typeof body[key] === 'string') params.set(key, body[key] as string);
-  }
-  const player = await authenticate(params, env);
-  if (!player) return json({ error: 'unauthorized' }, 401);
-  // A guest could send any result under any number of ids: only Telegram players are ranked.
-  if (env.BOT_TOKEN && !/^tg\d+$/.test(player.id)) return json({ error: 'only Telegram players are ranked' }, 403);
-  const result = parseResult(body.result);
-  if (!result) return json({ error: 'bad result' }, 400);
-  const id = await publicId(boardKey(env), date, player.id);
-  const response = await board.fetch(`https://board/?date=${date}`, { method: 'POST', body: JSON.stringify({ id, name: player.name, result }) });
-  const payload = (await response.json()) as { rank?: number | null; top?: DailyEntry[]; error?: string };
-  if (!response.ok) return json(payload, response.status);
-  return json({ rank: payload.rank ?? null, top: await publicEntries(payload.top ?? [], env, date), you: id });
+  // Results come from checked runs only (player.ts): a client's word for its score is not taken.
+  return json({ error: 'results come from checked runs only' }, 410);
 }
 
 export default {
@@ -775,6 +751,9 @@ export default {
     if (url.pathname === '/shop/me' || url.pathname === '/shop/invoice') return shop(request, env, url.pathname === '/shop/me' ? 'me' : 'invoice');
     if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env);
     if (url.pathname === '/report' || url.pathname === '/reports') return reports(request, env);
+    if (url.pathname === '/run') return runRoute(request, env);
+    if (url.pathname === '/me') return meRoute(request, env);
+    if (url.pathname === '/board') return boardRoute(request, env);
     const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
     if (day) return daily(request, env, day[1]!);
 
@@ -789,3 +768,5 @@ export default {
     return room.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
+
+export { Player };

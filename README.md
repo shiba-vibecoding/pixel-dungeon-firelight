@@ -1,16 +1,18 @@
 # Pixel Dungeon — TypeScript
 
 A modern rewrite of Watabou's **Pixel Dungeon** (1.9.2a) for Telegram Mini Apps
-and the web, built for **co-op multiplayer** from the start.
+and the web: a single-player game whose runs are **checked by the server**, with a
+daily dungeon, weekly rankings and trophies.
 
 - `packages/core` — the whole game as pure, deterministic TypeScript: no globals,
   no rendering, no platform APIs. The world state is plain JSON, so the same code
-  runs in the browser and on the authoritative co-op server, and games can be
-  saved, sent over the network and replayed.
+  runs in the browser and on the server, which plays every run again from the
+  player's actions to check it.
 - `packages/client` — the Mini App: the map on a canvas with the original art; windows, HUD, log and
   toolbar in HTML after the «Pixel Dungeon UI» design system (`docs/design/system`).
-- `packages/server` — the co-op server: a Cloudflare Worker with one Durable
-  Object per party, WebSockets with hibernation, Telegram login.
+- `packages/server` — a Cloudflare Worker: one Durable Object per player (their
+  checked runs and profile), one per board, Telegram login, Pixel-Mart payments.
+  (The co-op rooms it still hosts are no longer offered by the client.)
 
 ## What works
 
@@ -90,14 +92,11 @@ Yendor on depth 26:
   worn into class armour with a special ability for a third of the hero's
   health: the warrior's heroic leap, the mage's molten earth, the rogue's
   smoke bomb, the huntress's spectral blades.
-- Solo runs saved on the device; a daily dungeon with a global leaderboard and
-  shareable results; the original's rankings (the eleven best runs on the
-  device) and badges (59 of them).
-- Co-op: invite friends by a Telegram link; everyone plays in the same dungeon.
-  Time flows freely while the party explores; in a fight the dungeon waits for
-  each hero in turn (with a timeout, and never for someone who left). A fallen
-  hero gets back up when a companion goes deeper; items are handed over by
-  dropping them. Every level holds food for the whole party.
+- Runs saved on the device and on the server (carried on from any device); a
+  daily dungeon (the same for everyone, one attempt counts), boards of the day,
+  the week, the arena's week and all time, trophies for the best of a finished
+  day or week, a daily streak with frosts; the original's rankings (the eleven
+  best runs on the device) and badges (59 of them, earned by the server too).
 - The original art, sounds and music; Russian (names from the original's Russian
   localisation) and English.
 - Game feel beyond the original: blows spray blood, ichor, bone dust or sparks
@@ -161,7 +160,7 @@ mends it), a scroll of enchantment, a weightstone or the blacksmith mends
 it. Tempering and auto-repair (a coin per tier a blow) keep their item
 whole; the backpack shows how worn each upgraded item is.
 
-Where this port differs on purpose: co-op throughout; Lloyd's beacon is not
+Where this port differs on purpose: Lloyd's beacon is not
 blocked by companions standing next to its bearer; heroes swap places with
 the sad ghost, magic sheep and quest givers rather than being walled in by
 them (as later versions do); a tap past a known trap that bars the only way
@@ -169,25 +168,27 @@ walks up to it and says so; the last shop's depth does not swallow the potion
 of strength or scroll of upgrade the original rolled for it and never
 dropped (the depths below make up for them).
 
-## How co-op works
+## How runs are checked
 
-The server owns the world. A client sends an intention (`move`, `attack`, …);
-the server applies it and broadcasts it as an ordered event; every client
-applies the same event to its own copy. The core is deterministic, so all
-copies stay identical; a client that misses an event asks for a snapshot.
+The core is deterministic, so a run is its seed and the player's actions. In
+Telegram the server hands out every run (`POST /run` `start`: a run id and its
+world, made from a seed the server picks, or the day's for the daily dungeon).
+The device plays at once, with no wait for the network, and sends its actions
+in batches (`sync`: forty at a time, after eight seconds, on a new depth, when
+the app is put away, at the end) with a fingerprint of its world. The player's
+Durable Object (`server/src/player.ts`, logic in `runs.ts`) plays the same
+actions on its own copy: an action its copy refuses, or a fingerprint that
+differs, sends its copy back and the device takes it. The server never takes
+back what it has taken, so a death cannot be undone by reloading, and an
+edited device only ever sees its edits reverted. When the run ends the server
+scores it (`core/verify.ts runOutcome`), earns the badges (`core/badges.ts`),
+leaves the bones, updates the profile (records, history, streak) and puts the
+run on its boards (`boards.ts`); the answer carries the places. Outside
+Telegram the game is played on the device alone and counts nowhere.
 
-Co-op rooms (and the arena alone, unless turned off in the settings) play
-**live turns**, the tactical way. A player's action is an order (`plan`): walk
-to a cell (the way found afresh at every step), walk up to a monster and strike
-once, rest until healed, stride while a key is held, or any action once. While
-a depth is calm, orders are carried out a step a beat (150 ms) and nobody waits
-for anyone; with nothing to do, time stands still. Once a hero there is in
-danger (or the arena's wave is on), it is the original's turns: time goes on
-only when every hero in danger has said what to do — the monsters wait while a
-backpack is open — and the moves play out together in one beat, not one after
-another. A walking hero counts as having said. The room waits 15 s for someone
-who says nothing while a companion plays, and not at all for someone away.
-Heroes never fight by themselves. Solo games keep the original's classic turns.
+What it cannot stop: someone who knows the seed and the code can try moves out
+on a copy of their own before sending them (tool-assisted lookahead). The
+boards' prizes are trophies only, which keeps that not worth the trouble.
 
 ## Development
 
@@ -195,7 +196,7 @@ Heroes never fight by themselves. Solo games keep the original's classic turns.
 npm install
 npm test            # vitest
 npm run typecheck
-npm run server      # co-op server on ws://127.0.0.1:8787
+npm run server      # the server on http://127.0.0.1:8787 (development: no bot token, the device's id is taken)
 npm run dev         # client on http://127.0.0.1:5173
 ```
 
