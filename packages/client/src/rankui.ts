@@ -158,39 +158,81 @@ export function showBoards(options: BoardsOptions): void {
   select(current);
 }
 
-/** The player's card on the title: the streak's flame and days, the best and the runs (today's place once played), frosts and trophies. */
-export function profileCard(profile: Profile, onOpen: () => void): HTMLElement {
-  const streak = profile.streak.count;
-  const flame = el('span', { className: `pd-streak ${streak > 0 ? 'on' : 'off'}` }, rankIcon(streak > 0 ? 'flame' : 'flame-off'), streak > 0 ? el('b', { textContent: String(streak) }) : null);
+/** When the day's board closes (ms): the end of the UTC day. */
+export function boardCloses(now: number): number {
+  return Math.floor(now / 86_400_000 + 1) * 86_400_000;
+}
+
+/** «2 дн 7 ч», «5 ч 12 мин», «9 мин»; the last minute is «a moment». */
+export function countdown(ms: number): string {
+  const minutes = Math.max(0, Math.ceil(ms / 60_000));
+  const u = t.camp.units;
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (minutes < 1) return u.soon;
+  return days > 0 ? `${days} ${u.d} ${hours} ${u.h}` : hours > 0 ? `${hours} ${u.h} ${minutes % 60} ${u.m}` : `${minutes} ${u.m}`;
+}
+
+/** What the camp's card says of a player the server does not know (outside Telegram): the device's own table. */
+export interface CardFallback {
+  best: number;
+  games: number;
+}
+
+export interface CardOptions {
+  /** The name shown. */
+  name: string;
+  /** The hero on the scene, in avatars.png. */
+  avatar: number;
+  /** The portrait frame worn (Pixel-Mart). */
+  frame?: string;
+  profile: Profile | null;
+  fallback?: CardFallback;
+  onOpen(): void;
+}
+
+/**
+ * The player's card at the top of the camp: the portrait in the frame worn, the name, the streak's flame and days, the best and
+ * the runs (today's place once played), frosts and trophies. Without the server's word it keeps to the name and the device's table.
+ */
+export function profileCard(options: CardOptions): HTMLElement {
+  const { profile } = options;
+  const streak = profile?.streak.count ?? 0;
+  const face = el('i');
+  face.style.setProperty('--av', String(options.avatar));
+  const portrait = el('span', { className: `pd-profile-face${options.frame ? ` frame-${options.frame}` : ''}` }, face);
   const facts: Node[] = [];
   const fact = (label: string, value: string, className = ''): void => {
     if (facts.length > 0) facts.push(document.createTextNode(' · '));
     // Each fact keeps to one line; the line breaks between them.
     facts.push(el('span', { className: 'pd-fact' }, `${label} `, el('b', { className, textContent: value })));
   };
-  if (profile.best > 0) fact(t.ranked.best, number(profile.best));
-  fact(t.ranked.games, String(profile.games));
-  if (profile.dailyDone && profile.places.daily) fact(t.ranked.today, `#${profile.places.daily}`, 'place');
+  const best = profile?.best ?? options.fallback?.best ?? 0;
+  const games = profile?.games ?? options.fallback?.games ?? 0;
+  if (best > 0) fact(t.ranked.best, number(best));
+  fact(t.ranked.games, String(games));
+  if (profile?.dailyDone && profile.places.daily) fact(t.ranked.today, `#${profile.places.daily}`, 'place');
   const side = el('span', { className: 'pd-profile-side' });
-  if (profile.streak.freezes > 0) {
+  if (profile && profile.streak.freezes > 0) {
     side.append(el('span', { className: 'pd-counter frost', title: t.ranked.freezeInfo }, rankIcon('frost'), String(profile.streak.freezes)));
   }
-  if (profile.trophies.length > 0) side.append(el('span', { className: 'pd-counter trophies' }, rankIcon('gold'), String(profile.trophies.length)));
+  if (profile && profile.trophies.length > 0) side.append(el('span', { className: 'pd-counter trophies' }, rankIcon('gold'), String(profile.trophies.length)));
   return el(
     'button',
     {
-      className: 'pd-profile',
-      ariaLabel: t.ranked.title,
+      className: 'pd-profile framed',
+      ariaLabel: t.camp.profileHint,
       onclick: () => {
         audio.play('click');
-        onOpen();
+        options.onOpen();
       },
     },
-    flame,
+    portrait,
     el(
       'span',
       { className: 'pd-profile-text' },
-      el('span', { className: 'pd-profile-streak', textContent: streak > 0 ? t.ranked.streak(streak) : t.ranked.streakNone }),
+      el('span', { className: 'pd-profile-name', textContent: options.name }),
+      profile ? el('span', { className: `pd-profile-streak${streak > 0 ? '' : ' off'}` }, rankIcon(streak > 0 ? 'flame' : 'flame-off', { x1: true }), streak > 0 ? t.ranked.streak(streak) : t.ranked.streakNone) : null,
       el('span', { className: 'pd-profile-facts' }, ...facts),
     ),
     side.childElementCount > 0 ? side : null,

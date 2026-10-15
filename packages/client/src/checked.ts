@@ -41,7 +41,44 @@ export interface SyncAnswer {
   reason?: string;
 }
 
+/** What a letter gives; kinds are added as rewards come (a server with a mailbox). */
+export type Gift = { type: 'trophy'; board: string; place: number };
+
+/** A letter of the mailbox: one a finished board the player placed on. */
+export interface Letter {
+  id: string;
+  kind: 'cup' | 'medal';
+  board: string;
+  place: number;
+  total?: number;
+  /** When the board closed. */
+  at: number;
+  gifts: Gift[];
+  read?: boolean;
+  claimed?: number;
+}
+
+/** How many letters wait to be claimed: the number on the camp's mail icon. */
+export const unclaimed = (letters: readonly Letter[]): number => letters.filter((letter) => letter.claimed === undefined).length;
+
 export type Trouble = 'offline' | 'unauthorized' | 'rules';
+
+/** A player's report of a problem: their words, and when attached, the run's last actions and the console's last errors (diag.ts). */
+export interface ProblemReport {
+  text: string;
+  attach: boolean;
+  info: {
+    version: string;
+    rules: number;
+    build: string;
+    run?: { id: string; seed: number; depth: number; slot: string; seq: number };
+    device: string;
+    platform: string;
+    lang: string;
+  };
+  actions?: string[];
+  errors?: string[];
+}
 
 export interface Profile {
   name: string;
@@ -58,6 +95,8 @@ export interface Profile {
   badges: BadgeProgress;
   history: RunSummary[];
   trophies: Array<{ board: string; place: number; at: number }>;
+  /** The mailbox: letters not yet expired. Only a server that keeps one sends it (the camp's mail icon waits for it). */
+  mail?: Letter[];
   places: Partial<Record<BoardKind, number | null>>;
   /** How many players each board holds now. */
   totals?: Partial<Record<BoardKind, number>>;
@@ -105,6 +144,10 @@ export interface RunApi {
   sync(meta: RunMeta, actions: readonly Action[], hash: string | null, keepalive?: boolean): Promise<SyncAnswer | Trouble>;
   get(slot: RunSlot): Promise<{ run: RunMeta | null; world?: World } | Trouble>;
   me(): Promise<Profile | null>;
+  /** The mailbox: read all, claim one (by its id) or claim all; the letters and trophies after it, or null. */
+  mail(op: 'readAll' | 'claim' | 'claimAll', id?: string): Promise<{ mail: Letter[]; trophies: Profile['trophies'] } | null>;
+  /** «Report a problem»: true once the server has it; false when it could not be sent. */
+  problem(report: ProblemReport): Promise<boolean>;
   board(kind: BoardKind): Promise<BoardView | null>;
 }
 
@@ -142,6 +185,28 @@ export function runApi(server: string, identity: () => Identity, development: bo
       post('/run', { op: 'sync', slot: meta.slot, run: meta.id, from: meta.seq, actions, hash }, keepalive),
     get: (slot) => post('/run', { op: 'get', slot }),
     me: () => quiet('/me', {}),
+    mail: (op, id) => quiet('/mail', { op, ...(id ? { letter: id } : {}) }),
+    problem: async (report) => {
+      // A report goes to the server's problem log (/report, the same that takes the game's own errors): the words, the version and the run in
+      // the message and the facts, the log of the run's last actions and the console's errors as the log. In the body only, never in an address.
+      const text = report.text || '(no words)';
+      const log = [
+        `text: ${text}`, `info: ${JSON.stringify(report.info)}`,
+        ...(report.errors?.length ? ['errors:', ...report.errors] : []), ...(report.actions?.length ? ['actions:', ...report.actions] : []),
+      ].join('\n');
+      try {
+        const response = await fetch(`${base}/report`, {
+          method: 'POST', headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            kind: 'coop-log', message: `problem report: ${text}`.slice(0, 500), log,
+            context: { version: report.info.version, build: report.info.build, platform: report.info.platform, lang: report.info.lang, rules: report.info.rules, ...(report.info.run ? { depth: report.info.run.depth, slot: report.info.run.slot } : {}) },
+          }),
+        });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
     card: async (png) => {
       try {
         const response = await fetch(`${base}/card`, { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Init-Data': identity().initData ?? '' }, body: png });

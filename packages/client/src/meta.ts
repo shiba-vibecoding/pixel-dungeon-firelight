@@ -1,7 +1,8 @@
-import { challengeMultiplier, type Hero, type Item, itemDef, type ItemKind, ITEMS, itemSprite, RoomType, T, type World } from '@pd/core';
+import { challengeMultiplier, createItem, HEAP_SPRITES, type Hero, type Item, itemDef, type ItemKind, ITEMS, itemSprite, RoomType, T, type World } from '@pd/core';
 import { audio } from './audio';
+import { CHALLENGE_MASKS, countChallenges } from './challenge-info';
 import { fx } from './fx';
-import { lang, locale, t } from './i18n';
+import { capitalize, lang, locale, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { smooth } from './pace';
 import { type FxMode, quality } from './quality';
@@ -135,6 +136,15 @@ function linkRow(label: string, onClick: () => void, external = false, sub?: str
   );
 }
 
+/** The hero's name as a field in a row of the settings. */
+function nameRow(name: { value: string; set(value: string): void }): HTMLElement {
+  const input = el('input', {
+    id: 'pd-name', className: 'pd-input', value: name.value, maxLength: 20, placeholder: t.yourName,
+    oninput: () => name.set(input.value),
+  });
+  return el('div', { className: 'pd-set-row stack' }, el('label', { className: 'pd-info', htmlFor: 'pd-name', textContent: t.nameRow }), input, el('span', { className: 'pd-set-value', textContent: t.nameNote }));
+}
+
 const group = (head: string | null, ...rows: Array<HTMLElement | null | false>): HTMLElement =>
   el('section', { className: 'pd-set-group' }, head && el('h3', { className: 'pd-set-head', textContent: head }), ...rows);
 
@@ -148,6 +158,12 @@ export interface SettingsOptions {
   onReset(): void;
   /** The bot's reminders (in Telegram): on now, and the switch; absent elsewhere. */
   reminders?: { on: boolean; set(on: boolean): void };
+  /** «What's new», the news of the version again. */
+  onNews?(): void;
+  /** «Report a problem»; absent without the server. */
+  onReport?(): void;
+  /** The hero's name, outside Telegram (where it is not known); the camp has no field for it. */
+  name?: { value: string; set(value: string): void };
 }
 
 /** The settings, from the title's corner or the menu in a run. */
@@ -189,6 +205,7 @@ export function showSettings(options: SettingsOptions): void {
       }),
       fxNote,
     ),
+    options.name ? nameRow(options.name) : null,
     switchRow(t.meta.smooth, t.meta.smoothNote, smooth.on, (on) => smooth.set(on)),
     // The questions before a trap or gas, and before the unknown (mistap.ts, riskyuse.ts): «don't ask again» lands here too.
     switchRow(t.safe.settings.danger, t.safe.settings.dangerNote, confirmDanger.on, (on) => confirmDanger.set(on)),
@@ -214,6 +231,8 @@ export function showSettings(options: SettingsOptions): void {
   const reopen = (): void => showSettings(options);
   const more = group(
     t.meta.more,
+    options.onNews ? linkRow(t.news.row, () => options.onNews!()) : null,
+    options.onReport ? linkRow(t.report.title, () => options.onReport!()) : null,
     linkRow(t.meta.about, () => showAbout(reopen)),
     linkRow(t.meta.privacy, () => openExternal(page('privacy.html')), true),
     linkRow(t.meta.terms, () => openExternal(page('terms.html')), true),
@@ -235,18 +254,6 @@ export function showSettings(options: SettingsOptions): void {
     ),
     options.onClose,
   );
-}
-
-/** Everything this game keeps on the device; purchases live on the server. */
-export function eraseDevice(): void {
-  try {
-    for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('pd-')) localStorage.removeItem(key);
-    }
-    sessionStorage.clear();
-  } catch {
-    // Nothing could be kept either.
-  }
 }
 
 function confirmReset(onCancel: () => void, onDone: () => void): void {
@@ -293,7 +300,7 @@ export function showAbout(onClose: () => void): void {
         el(
           'div',
           { className: 'pd-about-logo' },
-          el('img', { src: 'assets/banner-title.png', alt: 'Pixel Dungeon' }),
+          el('img', { src: 'assets/banner-title.png', alt: t.gameName }),
           el('span', { className: 'pd-logo-sub', textContent: t.meta.subtitle }),
           el('span', { className: 'pd-set-value', textContent: t.meta.basedOn }),
           el('span', { className: 'pd-build', textContent: t.meta.build(BUILD.commit, BUILD.date) }),
@@ -313,13 +320,6 @@ export function showAbout(onClose: () => void): void {
 }
 
 /* Challenges */
-
-/** The challenges in the original's order, as bits (Challenges.MASKS). */
-export const CHALLENGE_MASKS = [1, 2, 4, 8, 16, 32, 64] as const;
-
-export function countChallenges(mask: number): number {
-  return CHALLENGE_MASKS.filter((bit) => mask & bit).length;
-}
 
 export interface ChallengesOptions {
   mask: number;
@@ -453,22 +453,155 @@ export interface JournalOptions {
 }
 
 /** WndJournal and WndCatalogus in one window: the notes, and every potion, scroll, ring and wand. */
-export function showJournal(options: JournalOptions, tab: 'notes' | 'catalog' = 'notes', category = 0): void {
+export function showJournal(options: JournalOptions, tab: 'notes' | 'catalog' | 'guide' = 'notes', category = 0, entry?: string): void {
   const { world, hero } = options;
-  const reopen = (nextTab: 'notes' | 'catalog', nextCategory = category): void => showJournal(options, nextTab, nextCategory);
+  const reopen = (nextTab: 'notes' | 'catalog' | 'guide', nextCategory = category): void => showJournal(options, nextTab, nextCategory);
+  // A guide entry has a page of its own, with the way back to the list in this tab.
+  if (tab === 'guide' && entry) {
+    showGuideEntry(entry, () => reopen('guide'), options.onClose);
+    return;
+  }
   const tabs = el('div', { className: 'pd-tabs' });
   tabs.setAttribute('role', 'tablist');
-  for (const [id, label] of [['notes', t.meta.notes], ['catalog', t.meta.catalog]] as const) {
+  for (const [id, label] of [['notes', t.meta.notes], ['catalog', t.meta.catalog], ['guide', t.guide.tab]] as const) {
     const node = el('button', { className: 'pd-tab', textContent: label, onclick: () => (click(), reopen(id)) });
     node.setAttribute('role', 'tab');
     node.setAttribute('aria-selected', String(id === tab));
     tabs.append(node);
+  }
+  if (tab === 'guide') {
+    show(windowOf({ title: t.meta.journal, onClose: options.onClose, className: 'wide pd-guide-window' }, tabs, ...guideList((id) => showJournal(options, 'guide', category, id))), options.onClose);
+    return;
   }
   const body = tab === 'notes' ? notesView(world, hero) : catalogView(options, category, (next) => reopen('catalog', next));
   show(
     windowOf({ title: t.meta.journal, onClose: options.onClose, className: 'wide' }, tabs, el('div', { className: 'pd-scroll' }, body)),
     options.onClose,
   );
+}
+
+/** The guide alone, as the camp opens it (the journal's «Памятка» tab, without the world a run has). */
+export function showGuide(onClose: () => void, entry?: string): void {
+  if (entry) {
+    showGuideEntry(entry, () => showGuide(onClose), onClose);
+    return;
+  }
+  show(windowOf({ title: t.guide.tab, onClose, className: 'wide pd-guide-window' }, ...guideList((id) => showGuide(onClose, id))), onClose);
+}
+
+/** What the player has read of the guide, kept on this device (a gold dot marks the rest). */
+const GUIDE_READ_KEY = 'pd-guide-read';
+function guideRead(): Set<string> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(GUIDE_READ_KEY) ?? '[]');
+    return new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+function markGuideRead(id: string): void {
+  try {
+    const read = guideRead();
+    if (read.has(id)) return;
+    read.add(id);
+    localStorage.setItem(GUIDE_READ_KEY, JSON.stringify([...read]));
+  } catch {
+    // Private mode: the dots just stay.
+  }
+}
+
+/** The guide's entries: the questions asked most, and the trap colours last. */
+function guideItems(): ReadonlyArray<{ id: string; title: string; text: string }> {
+  const G = t.guide;
+  return [...G.entries, { id: 'traps', title: G.trapColourTitle, text: G.trapColourText }];
+}
+
+/** An entry's picture: an item of items.png (or the chest, for mimics), the well, the challenge cup or a trap's colour. */
+const GUIDE_ICONS: Readonly<Record<string, ItemKind | number>> = {
+  hunger: 'food.ration', ankh: 'ankh', curses: 'ring.mending', uncurse: 'scroll.removeCurse', haggler: 'ring.haggler', mimics: HEAP_SPRITES.mimic,
+  seeds: 'seed.sungrass', score: 'quest.amulet', vial: 'vial', alchemy: 'potion.healing', search: 'ring.detection',
+};
+function guideIcon(id: string, big: boolean): HTMLElement {
+  const icon = GUIDE_ICONS[id];
+  if (icon !== undefined) {
+    const node = el('i', { className: 'pd-item' });
+    node.dataset.i = String(typeof icon === 'number' ? icon : itemSprite(createItem(icon), {}));
+    node.style.setProperty('--u', big ? '3px' : '2px');
+    return node;
+  }
+  if (id === 'well') {
+    const node = el('i', { className: 'pd-guide-img' });
+    node.style.backgroundImage = 'var(--spr-guide-well)';
+    return node;
+  }
+  if (id === 'challenges') {
+    const node = el('i', { className: 'pd-guide-img' });
+    node.style.backgroundImage = 'var(--spr-challenge-on)';
+    return node;
+  }
+  const node = el('i', { className: 'pd-trapc' });
+  node.style.setProperty('--c', '1');
+  return node;
+}
+
+/** A text in sentences: a full stop, a space and a capital, a bracket or a quote begin the next. */
+function sentences(text: string): string[] {
+  return text.split(/(?<=[.!?])\s+(?=[A-ZА-ЯЁ«“(])/u).map((part) => part.trim()).filter(Boolean);
+}
+
+/** The list: a count line, then a row for each entry (icon, title with a gold dot while unread, a line, a chevron). */
+function guideList(open: (id: string) => void): HTMLElement[] {
+  const items = guideItems();
+  const read = guideRead();
+  const count = el('p', { className: 'pd-cat-count', textContent: t.guide.count(items.length, items.filter((item) => read.has(item.id)).length) });
+  const list = el('ul', { className: 'pd-guide-list' });
+  for (const item of items) {
+    const chev = el('i', { className: 'pd-chev' });
+    chev.setAttribute('aria-hidden', 'true');
+    const row = el(
+      'button',
+      { className: `pd-guide-row${read.has(item.id) ? ' read' : ''}`, onclick: () => (click(), open(item.id)) },
+      el('span', { className: 'pd-guide-ico' }, guideIcon(item.id, false)),
+      el('span', { className: 'pd-spell-text' }, el('b', { textContent: item.title }), el('small', { textContent: sentences(item.text)[0] ?? '' })),
+      chev,
+    );
+    list.append(el('li', {}, row));
+  }
+  sprites(list);
+  return [count, el('div', { className: 'pd-scroll' }, list)];
+}
+
+/** An entry's page: «‹ Guide» and the cross, the big picture and the title, then the text, points and notes (opened = read). */
+function showGuideEntry(id: string, back: () => void, onClose: () => void): void {
+  const G = t.guide;
+  const item = guideItems().find((entry) => entry.id === id);
+  if (!item) return back();
+  markGuideRead(id);
+  const body = el('div', { className: 'pd-scroll pd-guide-page' });
+  if (id === 'traps') {
+    body.append(info(G.trapColourText));
+    const legend = el('ul', { className: 'pd-trap-legend' });
+    // Trap.RED ... Trap.BLACK, as the swatches show them; the spent black one last.
+    G.trapColours.forEach(([name, what], i) => {
+      const swatch = el('i', { className: 'pd-trapc' });
+      swatch.style.setProperty('--c', String(i));
+      legend.append(el('li', { className: i === 8 ? 'spent' : '' }, swatch, el('span', {}, el('b', { textContent: capitalize(name) }), el('small', { textContent: capitalize(what) }))));
+    });
+    body.append(legend, info(G.trapColourNote, 'pd-note'));
+  } else {
+    const [lead, ...rest] = sentences(item.text);
+    body.append(info(lead ?? item.text));
+    if (rest.length > 1) body.append(el('ul', { className: 'pd-guide-points' }, ...rest.map((point) => el('li', { textContent: point }))));
+    else if (rest.length === 1) body.append(info(rest[0]!));
+  }
+  const iconBox = el('span', { className: 'pd-guide-ico big' }, guideIcon(id, true));
+  const box = windowOf(
+    { title: item.title, icon: iconBox, onClose, className: 'wide pd-guide-window' },
+    el('button', { className: 'pd-back', textContent: G.tab, onclick: () => (click(), back()) }),
+    body,
+  );
+  sprites(box);
+  show(box, onClose);
 }
 
 function notesView(world: World, hero: Hero): HTMLElement {

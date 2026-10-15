@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { addHero, createWorld, heroById, T, trapAt } from '@pd/core';
-import { SAFETY_EN, SAFETY_RU } from '../src/i18n-safety';
+import { SAFETY_EN } from '../src/i18n-safety';
+import { SAFETY_RU } from '../src/i18n-safety.ru';
 
 /** The i18n module reads the page's language at load: load it again for each. */
 async function strings(lang: 'en' | 'ru') {

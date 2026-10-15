@@ -1,3 +1,4 @@
+import './season';
 import {
   type Action, adjacent, blockers, liveBlockers, distance, type Mob, trapAt, buyPrice, cellX, cellY, createHero, createWorld, type Effect, exploredCells, F, findPath, hasFlag,
   HEAP_SPRITES,
@@ -31,11 +32,25 @@ import { bakeLevel, type Camera, patchLevel, render } from './render';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
   askDrink, onWindow, reopenWindow, type WindowState, windowState,
-  refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, showWaiting, slot, toast, type ShareChoice,
+  refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
-import { profileCard, rankingBlock, showBoards, trophyText } from './rankui';
+import { rankingBlock, showBoards, trophyText } from './rankui';
 import { mart } from './mart';
-import { eraseDevice, showChallenges, showJournal, showSettings } from './meta';
+import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta';
+import { eraseDevice } from './challenge-info';
+import { idle, lazy, load } from './lazy';
+import { loop, onResume } from './lifecycle';
+import { reloadForUpdate } from './update';
+import { type Camp, campClasses } from './camp';
+import { type DailyRulesView, showCamp } from './campui';
+import { showMail, unclaimed } from './mailui';
+import { markSeenHere, newsDue, seenHere } from './news';
+import { showNews } from './newsui';
+import { CURRENT } from './releases';
+import { type RunFacts, showErrorScreen, showReport } from './reportui';
+import { closeOffline, showOffline } from './offlineui';
+import { coachDone, type Rect, type StepId, Tutorial, veteranSkips } from './coach';
+import { watchErrors } from './diag';
 import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { quality } from './quality';
@@ -56,7 +71,7 @@ import {
   shareArena, shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen,
 } from './telegram';
-import { startReporting } from './report';
+import { report, startReporting } from './report';
 import { STEP_MS, TILE, View } from './view';
 import { boxOf, CamControl } from './camcontrol';
 import { Pace } from './pace';
@@ -79,8 +94,21 @@ const SOLO_SLOT = 'pd-solo';
 const ARENA_SLOT = 'pd-arena';
 const SERVER: string = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? `ws://${location.hostname}:8787` : '');
 
+/*
+ * The windows the first screen does not need (the settings, the challenges, the journal and the guide: meta.ts) are a chunk of their
+ * own, fetched when first asked for and, after the first screen, in the browser's spare time (lazy.ts).
+ */
+const metaMod = lazy(() => import('./meta'));
+const windowFailed = (): void => toast(t.offline.windowFailed, { tone: 'warn' });
+const showSettings = (options: SettingsOptions): void => load(metaMod, (m) => m.showSettings(options), windowFailed);
+const showChallenges = (options: ChallengesOptions): void => load(metaMod, (m) => m.showChallenges(options), windowFailed);
+const showJournal = (options: JournalOptions, tab?: 'notes' | 'catalog' | 'guide', category?: number, entry?: string): void =>
+  load(metaMod, (m) => m.showJournal(options, tab, category, entry), windowFailed);
+const showGuide = (onClose: () => void, entry?: string): void => load(metaMod, (m) => m.showGuide(onClose, entry), windowFailed);
+
 initTelegram('#1f1d1d');
 // What goes wrong reaches whoever looks after the game (report.ts): never who, only where.
+watchErrors();
 startReporting(import.meta.env.DEV ? '' : SERVER, () => {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
@@ -111,7 +139,7 @@ const progressText = document.createElement('p');
   progressText.className = 'pd-loading-text';
   progressText.textContent = t.loadingSprites(0);
   const logo = Object.assign(document.createElement('div'), { className: 'pd-logo' });
-  logo.append(Object.assign(document.createElement('img'), { src: 'assets/banner-title.png', alt: 'Pixel Dungeon' }));
+  logo.append(Object.assign(document.createElement('img'), { src: 'assets/banner-title.png', alt: t.gameName }));
   const runner = Object.assign(document.createElement('div'), { className: 'pd-runner' });
   const hint = Object.assign(document.createElement('p'), { className: 'pd-loading-tip' });
   hint.append(Object.assign(document.createElement('b'), { textContent: t.tip }), ` ${tip}`);
@@ -259,21 +287,24 @@ const mapControls = new MapControls(document.getElementById('ui')!, mapControlsA
 let coach: HTMLElement | null = null;
 let coached = stored('pd-moved') === '1';
 function coachMove(me: Hero): void {
-  if (coached) {
+  // The step tutorial's bubble is up: the first hint gives way.
+  if (coached || tutorial.visible) {
     coach?.remove();
     coach = null;
     return;
   }
   if (!coach) {
     coach = document.createElement('div');
-    coach.className = 'pd-coach';
+    coach.className = 'pd-movehint';
     coach.textContent = t.moveHint;
     document.getElementById('ui')!.append(coach);
   }
   const x = (cellX(me.pos) * TILE + TILE / 2 - camera.x) * camera.zoom / (canvas.width / canvas.clientWidth);
   const y = (cellY(me.pos) * TILE - camera.y) * camera.zoom / (canvas.height / canvas.clientHeight);
-  coach.style.left = `${Math.round(x / hud.scale)}px`;
-  coach.style.top = `${Math.round(y / hud.scale)}px`;
+  const left = `${Math.round(x / hud.scale)}px`;
+  const top = `${Math.round(y / hud.scale)}px`;
+  if (coach.style.left !== left) coach.style.left = left;
+  if (coach.style.top !== top) coach.style.top = top;
 }
 
 /**
@@ -286,6 +317,95 @@ function attackTarget(world: World, me: Hero): Mob | null {
   const rank = (m: Mob): number => (m.enemy === me.id && m.state === 'hunting' ? 0 : m.state === 'sleeping' ? 2 : 1) * 1000 + distance(m.pos, me.pos);
   return foes.sort((a, b) => rank(a) - rank(b) || (a.id < b.id ? -1 : 1))[0] ?? null;
 }
+/*
+ * The step tutorial (coach.ts) of the first run: an enemy, the stairs, the backpack, the quick slot, each when it comes up. It replaces the
+ * old «tap where to go» card and the hints for the enemy and the stairs while it is on. (None of its four steps is Shattered's alone.)
+ */
+const uiLayer = document.getElementById('ui')!;
+
+/** A box in the page's pixels as a place on the interface layer, `pad` wider all round. */
+function layerRect(box: DOMRect, pad: number): Rect | null {
+  if (box.width <= 0 || box.height <= 0) return null;
+  const layer = uiLayer.getBoundingClientRect();
+  const scale = hud.scale || 1;
+  return { x: (box.left - layer.left) / scale - pad, y: (box.top - layer.top) / scale - pad, w: box.width / scale + 2 * pad, h: box.height / scale + 2 * pad };
+}
+
+/** The renderer's cell on the interface layer (the camera's zoom and the canvas's own scale undone), `up` taller to take in a head. */
+function cellRect(pos: number, pad: number, up = 0): Rect | null {
+  const ratio = canvas.width / (canvas.clientWidth || 1);
+  const unit = camera.zoom / ratio / (hud.scale || 1);
+  const x = (cellX(pos) * TILE - camera.x) * unit;
+  const y = (cellY(pos) * TILE - camera.y) * unit;
+  const size = TILE * unit;
+  const layer = uiLayer.getBoundingClientRect();
+  const scale = hud.scale || 1;
+  // Off the screen: no ring.
+  if (x + size < 0 || y + size < 0 || x > layer.width / scale || y > layer.height / scale) return null;
+  return { x: x - pad, y: y - pad - up, w: size + 2 * pad, h: size + 2 * pad + up };
+}
+
+/** The first of a button's kind that is on screen (the toolbar's, or the monitor's islands'). */
+function buttonRect(selector: string): Rect | null {
+  for (const node of uiLayer.querySelectorAll<HTMLElement>(selector)) {
+    const rect = layerRect(node.getBoundingClientRect(), 2);
+    if (rect && !node.hidden) return rect;
+  }
+  return null;
+}
+
+const tutorialHost = {
+  root: uiLayer,
+  scale: () => hud.scale,
+  rectOf: (step: StepId): Rect | null => {
+    const world = session?.world;
+    const me = world && heroById(world, session!.myId);
+    if (!world || !me) return null;
+    switch (step) {
+      case 'enemy': {
+        const foe = attackTarget(world, me);
+        return foe ? cellRect(foe.pos, 4, 6) : null;
+      }
+      case 'stairs': {
+        const exit = levelAt(world, me.depth).exit;
+        return seenCells(world, me.depth)[exit] ? cellRect(exit, 4) : null;
+      }
+      case 'backpack':
+        return buttonRect('.pd-tool.bag');
+      case 'quick':
+        return buttonRect('.pd-tool.quick');
+    }
+  },
+  ready: (step: StepId): boolean => {
+    const world = session?.world;
+    const me = world && heroById(world, session!.myId);
+    if (!world || !me || !isAlive(me) || world.arena || session!.mode === 'online') return false;
+    switch (step) {
+      case 'enemy':
+        return attackTarget(world, me) !== null;
+      case 'stairs':
+        return me.depth < 26 && Boolean(seenCells(world, me.depth)[levelAt(world, me.depth).exit]);
+      case 'backpack':
+        return newLoot || world.turn > 200;
+      case 'quick':
+        return quickIndex(me, 0) >= 0 && attackTarget(world, me) === null;
+    }
+  },
+  noun: (step: StepId): string => {
+    const world = session?.world;
+    const me = world && heroById(world, session!.myId);
+    const foe = step === 'enemy' && world && me ? attackTarget(world, me) : null;
+    return foe ? (t.mobs[foe.kind] ?? '').toLowerCase() : '';
+  },
+  blocked: (): boolean => overlayOpen() || !session,
+  finished: (): void => undefined,
+};
+const tutorial = new Tutorial(tutorialHost);
+// Players from before the tutorial know the game; the hints it covers wait while it is on.
+veteranSkips();
+hints.suppress = (id) => tutorial.active && (id === 'monster' || id === 'stairs');
+hints.hold = () => tutorial.visible;
+
 const finds = new Finds(document.getElementById('ui')!);
 /** Something was picked up since the backpack was last opened. */
 let newLoot = false;
@@ -472,7 +592,23 @@ async function startRun(key: string, mode: 'dungeon' | 'arena', fresh: boolean, 
       ? { run: carried.run, world: carried.world }
       : await api.start(slot, heroClass, chosen);
     if (answer === 'rules') {
-      location.reload();
+      reloadForUpdate();
+      return;
+    }
+    if (answer === 'offline') {
+      // The server hands out every run that counts: with none to be had, the player may wait for it or play without ranking.
+      hideOverlay();
+      showOffline({
+        kind: 'start',
+        ping: async () => (await api.me()) !== null,
+        onBack: () => void startRun(key, mode, fresh, welcome),
+        onPlay: () => {
+          hideOverlay();
+          forgetSolo(key);
+          enterGame(local(), null, welcome);
+          dailyRun = slot === 'daily';
+        },
+      });
       return;
     }
     if (typeof answer === 'string') {
@@ -525,6 +661,10 @@ function settings(onClose: () => void): void {
   showSettings({
     onClose, onEffects: () => resize(), onReset: resetDevice,
     ...(api && inTelegram ? { reminders: { on: stored('pd-notify') === 'on', set: (on: boolean) => void setReminders(on) } } : {}),
+    onNews: () => showNews({ release: CURRENT, onClose: () => settings(onClose) }),
+    ...(api ? { onReport: () => showReport({ api, run: runFacts, onClose: () => settings(onClose) }) } : {}),
+    // Outside Telegram the name is not known, and the camp has no field for it.
+    ...(!inTelegram ? { name: { value: playerName, set: (value: string) => { playerName = value; store('pd-name', value); } } } : {}),
   });
 }
 
@@ -605,19 +745,94 @@ function announceTrophies(trophies: Profile['trophies']): void {
   if (fresh.length > 0) store('pd-trophies-seen', String(Math.max(...fresh.map((trophy) => trophy.at))));
 }
 
-/** Asks the server who the player is; the title shows their card once it answers. */
+/** The camp now on screen (camp.ts), drawn by the game's frame loop. */
+let activeCamp: Camp | null = null;
+/** How many letters waited when the mail was last counted: a new one is told by a soft sound and the icon's count. */
+let lettersCounted = -1;
+
+/** Asks the server who the player is; the camp shows their card and mail once it answers. */
 function refreshProfile(): void {
   void api?.me().then((answer) => {
-    if (!answer) return;
+    if (!answer) {
+      maybeNews(null);
+      return;
+    }
     profile = answer;
     adoptBadges(answer.badges);
     announceTrophies(answer.trophies);
-    if (!session && document.querySelector('.pd-title-screen')) {
+    const waiting = unclaimed(answer.mail ?? []);
+    if (lettersCounted >= 0 && waiting > lettersCounted) audio.play('item', 1.1, 0.5);
+    lettersCounted = waiting;
+    if (maybeNews(answer)) return;
+    if (!session && document.querySelector('.pd-camp')) {
       toTitle(false);
       askOnTitle();
     }
   });
 }
+
+/** The run on now, as far as a problem report may say (reportui.ts). */
+function runFacts(): RunFacts | null {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return null;
+  return { id: session!.checked?.meta.id ?? '', seed: world.run.seed, depth: me.depth, slot: dailyRun ? 'daily' : 'dungeon', seq: session!.checked?.meta.seq ?? 0 };
+}
+
+/** «Что нового» is looked at once a launch: shown to a player who has played before the update, once per version (news.ts). */
+let newsChecked = false;
+function maybeNews(answer: Profile | null): boolean {
+  if (newsChecked || session || !document.querySelector('.pd-camp')) return false;
+  newsChecked = true;
+  const veteran = openings > 1 || stored('pd-moved') === '1' || coachDone() || loadSolo(SOLO_SLOT) !== null || Boolean(answer && (answer.games > 0 || answer.history.length > 0));
+  const due = newsDue({ local: seenHere(), veteran, current: CURRENT.version });
+  if (due === 'none') return false;
+  if (due === 'mark') {
+    markSeenHere();
+    return false;
+  }
+  showNews({
+    release: CURRENT,
+    onClose: () => {
+      // «Play» and the cross both record the version.
+      markSeenHere();
+      toTitle(false);
+      askOnTitle();
+    },
+  });
+  return true;
+}
+
+/** The mail window; back to the camp when closed. */
+function openMail(): void {
+  if (!api) return;
+  showMail({
+    letters: profile?.mail ?? [],
+    api,
+    onChange: (mail, trophies) => {
+      if (!profile) return;
+      profile.mail = mail;
+      profile.trophies = trophies;
+      lettersCounted = unclaimed(mail);
+    },
+    onClose: () => toTitle(false),
+  });
+}
+
+/** Today's rules of the daily dungeon for the camp: the hardship's place in the challenges' sheet and name, the boon's item and words. */
+function dailyRulesView(): DailyRulesView {
+  const rules = core.dailyRules(core.dayOf(Date.now()));
+  const index = core.CHALLENGES.findIndex((challenge) => challenge.mask === rules.challenge);
+  const [boon, info] = t.ranked.boons[rules.boon] ?? [rules.boon, ''];
+  const item = BOON_ITEMS[rules.boon] ?? 'gold';
+  return {
+    hardship: { index: Math.max(0, index), name: t.meta.challengeList[index]?.[0] ?? '', info: t.meta.challengeList[index]?.[1] ?? '' },
+    boon: { sprite: itemSprite(core.createItem(item), {}), name: boon, info },
+  };
+}
+const BOON_ITEMS: Record<string, core.ItemKind> = {
+  alchemist: 'potion.healing', scholar: 'scroll.identify', purse: 'gold', supplies: 'food.ration', whetstone: 'scroll.upgrade', cartographer: 'scroll.mapping',
+};
 
 /** Replacing a saved run wants a hold of this long (ms): the run is lost for good. */
 const HOLD_TO_REPLACE_MS = 1200;
@@ -647,17 +862,23 @@ function toTitle(ask = true): void {
   const saved = loadSolo(SOLO_SLOT)?.heroes[0] ?? (away?.heroClass ? { heroClass: away.heroClass, lvl: away.lvl, depth: away.depth } : undefined);
   // A run an update can no longer carry on is not dropped unannounced.
   const stale = saved ? null : staleSolo(SOLO_SLOT);
-  showTitle({
+  // With a run to continue, the scene opens on its hero; a swipe then picks the class of a new game (and is kept as before).
+  if (saved && (campClasses() as readonly string[]).includes(saved.heroClass)) heroClass = saved.heroClass;
+  const records = rankings();
+  const look = mart.look(heroClass);
+  const camp = showCamp({
     heroClass,
     save: saved ? { heroClass: saved.heroClass, lvl: saved.lvl, depth: saved.depth } : null,
-    askName: inTelegram ? null : playerName,
+    name: profile?.name || (inTelegram ? telegramName() : playerName.trim()) || t.heroDefault,
+    profile,
+    fallback: { best: records.reduce((best, record) => Math.max(best, record.score), 0), games: records.length },
+    scene: 'outdoor',
+    skinOf: (name) => mart.look(name as HeroClass).skin,
+    ...(look.effect ? { effect: look.effect } : {}),
+    ...(look.frame ? { frame: look.frame } : {}),
     onClass: (value) => {
-      heroClass = value;
+      heroClass = value as HeroClass;
       store('pd-class', value);
-    },
-    onName: (value) => {
-      playerName = value;
-      store('pd-name', value);
     },
     onContinue: () => startSolo('continue'),
     // A new game over a saved one asks first: the saved run is lost.
@@ -668,13 +889,15 @@ function toTitle(ask = true): void {
     onDaily: () => startSolo('daily'),
     onDailyBoard: api ? () => openBoards('daily') : undefined,
     dailyState: dailyState(),
-    dailyRules: todayRules((hardship, boon, info) => t.ranked.rulesLine(hardship, boon, info)),
+    rules: dailyRulesView(),
+    onNewDay: () => toTitle(false),
     onPractice: () => startSolo('daily'),
-    profile: profile ? profileCard(profile, () => openBoards()) : undefined,
     onRankings: () => openBoards(),
     onMart: () => showMart({ heroClass, onClose: toTitle }),
     onSettings: () => settings(toTitle),
+    mail: api && profile?.mail ? { count: unclaimed(profile.mail), onOpen: openMail } : undefined,
     challenges: challengesOpen() ? challenges : 0,
+    onGuide: () => showGuide(toTitle),
     onChallenges: () =>
       showChallenges({
         mask: challenges,
@@ -686,6 +909,7 @@ function toTitle(ask = true): void {
         onClose: toTitle,
       }),
   });
+  activeCamp = camp.camp;
 }
 
 /** The journal and catalog; from the menu it goes back to the menu, from the corner button to the game. */
@@ -773,6 +997,7 @@ function toggleQuickslot(slot = 0): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!me) return;
+  tutorial.did('quick');
   if (aim) {
     // QuickSlotButton.onClick: the slot that is aiming at a marked target, tapped again, fires at it.
     if (aim.marked && aim.slot === slot && fireMarked()) return;
@@ -838,6 +1063,8 @@ function send(action: Parameters<Session['send']>[0], now: number): void {
   }
   walk.lastSent = now;
   session!.send(action);
+  if (action.type === 'attack') tutorial.did('enemy');
+  else if (action.type === 'descend') tutorial.did('stairs');
   // The first thing done: the first game's hint has done its job.
   if (!coached) {
     coached = true;
@@ -1447,6 +1674,7 @@ function openBackpack(): void {
   walk.reset();
   aim = null;
   newLoot = false;
+  tutorial.did('backpack');
   showBackpack(backpackOptions(world, me));
 }
 
@@ -1509,9 +1737,7 @@ function recoverWindow(): void {
 addEventListener('orientationchange', () => setTimeout(recoverWindow, 50));
 addEventListener('resize', () => setTimeout(recoverWindow, 50));
 addEventListener('pageshow', recoverWindow);
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) recoverWindow();
-});
+onResume(recoverWindow);
 
 /** A run is under way: alive, not over (Telegram then keeps swipes off and asks before closing). */
 function runUnderway(): boolean {
@@ -2194,7 +2420,6 @@ function noteFrame(now: number): void {
 }
 
 function frame(now: number): void {
-  requestAnimationFrame(frame);
   noteFrame(now);
   if (session && windowOverMap()) {
     if (now - lastUnderWindow < UNDER_WINDOW_MS) return;
@@ -2202,10 +2427,67 @@ function frame(now: number): void {
     // These slow frames are on purpose: «auto» effects must not take them for a struggling phone.
     lastFrame = now;
   }
-  tick(now);
-  guardRun(runUnderway());
-  syncWindowMemo();
+  if (crashed) return;
+  try {
+    tick(now);
+    guardRun(runUnderway());
+    syncWindowMemo();
+    loopFailures = 0;
+  } catch (error) {
+    // A frame that fails now and then is only reported; one that fails again and again leaves the game stuck: the error screen.
+    report('error', `frame: ${(error as Error).message}`, (error as Error).stack);
+    if (++loopFailures >= 5) showCrash();
+  }
+  netStrip();
 }
+
+let loopFailures = 0;
+let crashed = false;
+
+/** «Something went wrong»: «Restart» loads the page again (the run is kept), «Report a problem» where the server can take one. */
+function showCrash(): void {
+  if (crashed) return;
+  crashed = true;
+  session?.close();
+  showErrorScreen({ api, run: runFacts, restart: () => location.reload() });
+}
+
+/*
+ * The strip under the HUD while the connection is down (.pd-net-badge): a run the server handed out says it will count later; a run
+ * played on the device alone (begun offline or past a refusal) says it is not ranked.
+ */
+const netBadge = Object.assign(document.createElement('span'), { className: 'pd-net-badge', hidden: true });
+netBadge.setAttribute('role', 'status');
+document.getElementById('ui')!.append(netBadge);
+function netStrip(): void {
+  const checked = session?.checked;
+  const text = !session || session.mode !== 'solo' || !api ? '' : checked ? (checked.offline ? t.offline.strip : '') : t.offline.stripLocal;
+  if (netBadge.textContent !== text) netBadge.textContent = text;
+  netBadge.hidden = text === '' || overlayOpen();
+}
+
+/** The connection went or came back (session.ts): once a run, the window says so; the strip stays while it lasts. */
+let offlineShownFor = '';
+addEventListener('pd-net', (event) => {
+  const state = (event as CustomEvent<string>).detail;
+  const checked = session?.checked;
+  if (state === 'online') {
+    if (closeOffline()) hideOverlay();
+    toast(t.offline.back, { tone: 'good' });
+    return;
+  }
+  if (!checked || overlayOpen() || offlineShownFor === checked.meta.id) return;
+  offlineShownFor = checked.meta.id;
+  showOffline({
+    kind: 'live',
+    ping: async () => (await api?.me()) !== null,
+    onBack: () => {
+      hideOverlay();
+      session?.checked?.retry();
+    },
+    onPlay: hideOverlay,
+  });
+});
 
 /**
  * What the last turn did, shown: the view takes the effects in, then the sounds, particles, windows and notices that
@@ -2285,7 +2567,10 @@ const MAX_LEAD_MS = 20;
 function tick(now: number): void {
   if (!session) {
     forgetSight();
-    drawBackdrop(now);
+    // The camp covers a phone's whole screen; behind a wide screen's column the dungeon is still shown.
+    if (activeCamp?.canvas.isConnected) activeCamp.frame(now);
+    else activeCamp = null;
+    if (!activeCamp || innerWidth > 480) drawBackdrop(now);
     return;
   }
   const world = session.world;
@@ -2566,6 +2851,7 @@ function tick(now: number): void {
       : walk.queue.length === 0 && !walk.chase && !session.busy),
   );
   coachMove(me);
+  tutorial.frame(now);
 
   // Who the dungeon is waiting for, once my action has been queued for a moment. Under live turns, the
   // companions a fight waits for once I have made my move (and none while it waits for mine).
@@ -2705,7 +2991,7 @@ function tick(now: number): void {
       return {
         name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, level: me.lvl, depth: deepestNow, score: scoreNow,
         place: reply?.places?.daily ?? reply?.places?.week ?? null, won: victory, cause: killer ? capitalize(t.killedBy(killer)) : t.soloFell(me.depth),
-        title: dailyRun ? undefined : 'Pixel Dungeon',
+        title: dailyRun ? undefined : t.gameName,
       };
     }, shareText, 'daily');
     window.setTimeout(() => {
@@ -2930,7 +3216,7 @@ function shareChoices(card: () => Promise<ShareCard>, text: string, start: 'dail
   return choices;
 }
 
-requestAnimationFrame(frame);
+loop(frame);
 
 addEventListener('pd-run-restored', () => toast(t.ranked.restored));
 
@@ -2939,13 +3225,17 @@ if (launchedForDaily()) {
   startSolo('daily');
 } else {
   toTitle();
+  // Without the server there is no profile to ask: the news are judged by this device alone.
+  if (!api) maybeNews(null);
 }
 
 
 // Badges and the rankings from the player's other devices: on the title at once, once they come.
+// The windows the camp opens are fetched in the spare time after the first screen.
+idle(() => load(metaMod, () => undefined));
 void pullCloud().then(() => {
   reloadBadges();
-  if (!session && document.querySelector('.pd-title-screen')) toTitle(false);
+  if (!session && document.querySelector('.pd-camp')) toTitle(false);
   pushCloud();
 });
 
@@ -2965,5 +3255,6 @@ if (import.meta.env.DEV) {
       await new Promise((resolve) => setTimeout(resolve, 33));
     }
   };
+  Object.assign(window, { __release: { news: () => showNews({ release: CURRENT, onClose: () => toTitle(false) }), report: () => api && showReport({ api, run: runFacts, onClose: () => toTitle(false) }), crash: showCrash } });
   Object.assign(window, { __pd: { cam, pace: drawPace, get session() { return session; }, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, audio, tick, held, tapCell } });
 }

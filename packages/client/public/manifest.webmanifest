@@ -1,0 +1,15 @@
+{
+  "name": "Pixel Dungeon: Firelight",
+  "short_name": "PD: Firelight",
+  "description": "A port of the original Pixel Dungeon 1.9.2a for Telegram. RU: Pixel Dungeon: У костра.",
+  "lang": "en",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0b09",
+  "theme_color": "#0b0b09",
+  "icons": [
+    { "src": "assets/banner-title.png", "sizes": "any", "type": "image/png", "purpose": "any" }
+  ]
+}
