@@ -3,6 +3,9 @@ import {
   itemAt, itemSprite, type ItemKind, levelKnown, maxExp, type MobKind, SUBCLASSES, visiblyCursed, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
+import { adjacentFoes, backpackMustClose, keepsOpen, resolveDrop, SNAP_BACK_MS } from './bagflow';
+import { seenEnemies } from './sight';
+import { haptic } from './telegram';
 import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
 import { ARENA_BADGES, BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
@@ -1108,15 +1111,135 @@ type BagChoice = { index: number } | { worn: 'weapon' | 'armor' } | { ring: numb
 type BagFilter = 'all' | 'potions' | 'scrolls' | 'gear';
 
 /** The backpack open now, what is chosen in it and how it is filtered, so it can be drawn again as the world changes. */
-let openBag: { options: BackpackOptions; choice: BagChoice | null; filter: BagFilter } | null = null;
+let openBag: { options: BackpackOptions; choice: BagChoice | null; filter: BagFilter; adjacent: ReadonlySet<string> } | null = null;
 
-/** Draws the open backpack again (after an action that keeps it open, or anything that changed the pack). */
+/** The filter of a backpack that stepped aside for a question (a window over it), to put back with it. */
+let pausedFilter: { hero: Hero; filter: BagFilter } | null = null;
+
+/** Steps the backpack aside for a question; what it was filtered by is kept for its return. */
+function pauseBag(): void {
+  if (openBag) pausedFilter = { hero: openBag.options.hero, filter: openBag.filter };
+  openBag = null;
+}
+
+/** The backpack is closed for good (the dungeon answers, or the player left). */
+function closeBag(): void {
+  openBag = null;
+  pausedFilter = null;
+}
+
+/** Whether the backpack (and not a question over it) is on screen. */
+export function backpackOpen(): boolean {
+  return openBag !== null && overlayOpen() && root.querySelector('.pd-window.bag') !== null;
+}
+
+/**
+ * Draws the open backpack again (after an action that keeps it open, or anything that changed the pack). It closes instead
+ * if the hero has gone or a foe has come next to them since it was drawn last (bagflow.ts mustClose): the player is not
+ * left in a menu while something bites.
+ */
 export function refreshBackpack(world: World, hero: Hero): void {
   if (!openBag || !overlayOpen() || !root.querySelector('.pd-window.bag')) {
-    openBag = null;
+    closeBag();
     return;
   }
-  showBackpack({ ...openBag.options, world, hero }, openBag.choice);
+  const { options } = openBag;
+  if (backpackMustClose(world, hero, openBag.adjacent)) {
+    closeBag();
+    options.onClose();
+    return;
+  }
+  showBackpack({ ...options, world, hero }, openBag.choice);
+}
+
+/* Feedback in the backpack: what was just done, shown on the slots the next drawing makes (it is drawn anew after each action). */
+
+type FxKind =
+  /** A thing put on or taken off: the slot flashes gold with a shine. */
+  | 'equip'
+  /** A drop that landed: the slot bounces. */
+  | 'land'
+  /** An item used: its icon pops, the count ticks down; if it is gone, its icon pops and fades where it was. */
+  | 'used'
+  /** A flourish over the slot of the thing a scroll was read on, with a flash. */
+  | 'plus';
+
+interface BagFx {
+  kind: FxKind;
+  /** The item whose slot it is, as the core holds it (the world is changed in place, so it is the same object after the action). */
+  item?: Item;
+  text?: string;
+  /** For a used item that is gone: its sprite and where its slot was among the loose ones. */
+  sprite?: number;
+  pos?: number;
+  at: number;
+}
+
+/** How long (ms) a note of what was done lives on, over all the drawings that follow. */
+const FX_MS = 600;
+const NOTE_MS = 2600;
+let bagFx: BagFx[] = [];
+/** The result of the last action, said inside the backpack (the log is behind it). */
+let bagNote: { text: string; at: number } | null = null;
+
+const addFx = (fx: Omit<BagFx, 'at'>): void => {
+  bagFx.push({ ...fx, at: performance.now() });
+};
+
+/** Says what happened in the backpack's own line, for a moment. */
+export function bagSay(text: string): void {
+  if (text) bagNote = { text, at: performance.now() };
+}
+
+/** Where an item is now: a pack slot, the weapon in hand, the armour, a ring; null if it is gone. */
+function locate(hero: Hero, item: Item): BagChoice | null {
+  const i = hero.items.indexOf(item);
+  if (i >= 0) return { index: i };
+  if (hero.weapon === item) return { worn: 'weapon' };
+  if (hero.armor === item) return { worn: 'armor' };
+  const ring = hero.rings.indexOf(item);
+  return ring >= 0 ? { ring } : null;
+}
+
+/** An item's place among the loose ones of the grid (those not in another bag), or undefined. */
+function loosePosition(hero: Hero, index: number): number | undefined {
+  const item = hero.items[index];
+  if (!item || inBag(hero, item)) return undefined;
+  return hero.items.slice(0, index).filter((other) => !inBag(hero, other)).length;
+}
+
+/** What a scroll adds on the slot of the thing it was read on. */
+function flourish(kind: ItemKind): string | undefined {
+  return kind === 'scroll.upgrade' ? t.bagPlus : kind === 'scroll.identify' ? t.bagIdentified : kind === 'scroll.enchantment' ? t.bagEnchanted : undefined;
+}
+
+/**
+ * An action done in the backpack that leaves it open (bagflow.ts keepsOpen): done, then the pack drawn anew with the thing it
+ * was about still chosen (`follow`, or what a scroll was read on, or what was used if some is left), and the slots saying what
+ * happened. `fx` is what the caller knows to say besides.
+ */
+function keepOpen(options: BackpackOptions, action: Action, follow?: Item | null, fx: Array<Omit<BagFx, 'at'>> = []): void {
+  const { hero, world } = options;
+  const used = action.type === 'use' ? hero.items[action.item] : undefined;
+  const kind = used?.kind;
+  const qty = used?.qty ?? 0;
+  const sprite = used ? itemSprite(used, world.run.labels) : undefined;
+  const pos = used && action.type === 'use' ? loosePosition(hero, action.item) : undefined;
+  const target = action.type === 'use' && action.on !== undefined ? itemAt(hero, action.on) : undefined;
+  options.onAction(action);
+  // A use the core refused changed nothing: nothing to celebrate.
+  const spent = used !== undefined && (!hero.items.includes(used) || used.qty < qty);
+  if (used && spent) addFx({ kind: 'used', item: used, sprite, pos });
+  const text = kind && spent ? flourish(kind) : undefined;
+  if (target && text) addFx({ kind: 'plus', item: target, text });
+  for (const one of fx) addFx(one);
+  const chosen = follow ?? target ?? (used && hero.items.includes(used) ? used : undefined);
+  const choice = chosen ? locate(hero, chosen) : null;
+  const frozen = openBag;
+  if (frozen) frozen.choice = choice;
+  // Drawn anew: from the open backpack, or (after a question, a pick) from the options in hand.
+  if (frozen) refreshBackpack(world, hero);
+  else showBackpack(options, choice);
 }
 
 /**
@@ -1187,10 +1310,18 @@ function passes(filter: BagFilter, item: Item): boolean {
 export function showBackpack(options: BackpackOptions, choice: BagChoice | null = null): void {
   const { world, hero, pick } = options;
   const targets = new Set((pick?.targets ?? []).map(String));
-  const filter: BagFilter = !pick && openBag && openBag.options.hero === hero ? openBag.filter : 'all';
-  if (!pick) openBag = { options, choice, filter };
+  const filter: BagFilter = pick ? 'all'
+    : openBag && openBag.options.hero === hero ? openBag.filter
+    : pausedFilter && pausedFilter.hero === hero ? pausedFilter.filter
+    : 'all';
+  if (!pick) {
+    openBag = { options, choice, filter, adjacent: new Set(adjacentFoes(world, hero)) };
+    pausedFilter = null;
+  }
   // A choice that no longer holds (the item went) is forgotten.
   if (!chosenItem(hero, choice)) choice = null;
+  /** The slot drawn for each item, for the feedback of what was just done (bagFx). */
+  const slotOf = new Map<Item, HTMLElement>();
   const choose = (next: BagChoice): void => {
     if (pick) {
       const ref: ItemRef = 'index' in next ? next.index : 'ring' in next ? (next.ring === 0 ? 'ring0' : 'ring1') : next.worn;
@@ -1203,6 +1334,7 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   /** The chosen item framed in gold; filtered out or no target, dimmed; a target, blinking. */
   const mark = (node: HTMLElement, ref: ItemRef, here: BagChoice, item: Item): HTMLElement => {
     if (node.tagName !== 'BUTTON') return node;
+    slotOf.set(item, node);
     if (pick) node.classList.add(targets.has(String(ref)) ? 'can' : 'dim');
     else {
       if (same(choice, here)) node.classList.add('selected');
@@ -1233,13 +1365,15 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   }
   const coin = picture('coin', 16, 14);
   const close = pick ? pick.onCancel : (): void => {
-    openBag = null;
+    closeBag();
     options.onClose();
   };
   const head = el(
     'header',
     { className: 'pd-bag-head' },
     el('h2', { className: 'pd-heading', textContent: t.backpack }),
+    // A foe in view while the pack is open: a small pulsing reminder that the dungeon is not waiting politely.
+    seenEnemies(world, hero).length > 0 && el('span', { className: 'pd-bag-foe', role: 'status', textContent: t.bagFoe }),
     el('span', { className: 'pd-stat gold' }, coin, String(hero.gold)),
     el('span', { className: 'pd-stat' }, el('span', { className: 'pd-stat-label', textContent: t.strength }), String(hero.str)),
     closeButton(close),
@@ -1309,12 +1443,91 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   // Where a dragged item is let go of to drop it on the floor (shown only while dragging).
   const away = el('div', { className: 'pd-bag-away', textContent: t.dragToDrop });
   away.dataset.drop = 'away';
-  const box = el('section', { className: `pd-window bag${pick ? ' targeting' : ''}` }, head, bar, el('div', { className: 'pd-bag-body' }, side, panel), away);
+  // The quick slots, as places to let a dragged item go (shown only while dragging).
+  const wide = Boolean(document.querySelector('#ui.pd-wide'));
+  const quicks = el('div', { className: 'pd-bag-quick' });
+  for (const n of wide ? [0, 1] : [0]) {
+    const held = hero.items[quickIndex(hero, n)];
+    const place = el('div', { className: 'pd-slot pd-quick-drop', ariaLabel: wide ? t.quickslotN(n + 1) : t.quickslotShort }, held ? itemIcon(world, held) : el('span', { className: 'pd-quick-bolt' }));
+    place.dataset.drop = `quick${n}`;
+    quicks.append(place, el('span', { className: 'pd-quick-name', textContent: wide ? t.quickslotN(n + 1) : t.quickslotShort }));
+  }
+  const dock = el('div', { className: 'pd-bag-dock' }, quicks, away);
+  const note = bagNote && performance.now() - bagNote.at < NOTE_MS ? bagNote : null;
+  const body = el('div', { className: 'pd-bag-body' }, side, panel);
+  const box = el(
+    'section',
+    { className: `pd-window bag${pick ? ' targeting' : ''}${quality.light ? ' lite' : ''}` },
+    head,
+    bar,
+    body,
+    dock,
+  );
   box.setAttribute('role', 'dialog');
   if (!pick) dragAndDrop(box, options);
+  // What was just done, shown on the slots it was done to; the drawings that follow carry it on from where it stood.
+  const floats = showFx(body, slotOf, grid, note);
   // Drawn again over itself (a choice, an action), it does not come in again.
   if (root.querySelector('.pd-window.bag')) box.classList.add('still');
   show(box, close);
+  placeFloats(box, floats);
+}
+
+/** A flourish waiting to be set over a slot once the window is laid out. */
+interface Float {
+  node: HTMLElement;
+  text: string;
+  age: number;
+}
+
+/**
+ * Applies the live feedback (bagFx) to the slots just drawn: classes on the slot the animation runs on, each started at its
+ * age so a drawing in the middle of one carries it on instead of starting it over; the pack's note of the last result.
+ */
+function showFx(body: HTMLElement, slotOf: ReadonlyMap<Item, HTMLElement>, grid: HTMLElement, note: { text: string; at: number } | null): Float[] {
+  const now = performance.now();
+  bagFx = bagFx.filter((fx) => now - fx.at < FX_MS);
+  const floats: Float[] = [];
+  for (const fx of bagFx) {
+    const age = Math.round(now - fx.at);
+    const node = fx.item ? slotOf.get(fx.item) : undefined;
+    if (node) node.style.setProperty('--age', String(age));
+    if (fx.kind === 'equip' && node) node.classList.add('fx-equip');
+    else if (fx.kind === 'land' && node) node.classList.add('fx-land');
+    else if (fx.kind === 'plus' && node) {
+      node.classList.add('fx-plus');
+      if (fx.text) floats.push({ node, text: fx.text, age });
+    } else if (fx.kind === 'used') {
+      if (node) node.classList.add('fx-used');
+      else if (fx.sprite !== undefined && fx.pos !== undefined && grid.children[fx.pos]) {
+        // The last of a stack: its icon pops and fades where it was.
+        const ghost = el('i', { className: 'pd-item pd-vanish' });
+        ghost.dataset.i = String(fx.sprite);
+        ghost.style.setProperty('--age', String(age));
+        grid.children[fx.pos]!.append(ghost);
+      }
+    }
+  }
+  if (note) {
+    const line = el('div', { className: 'pd-bag-note', textContent: note.text, role: 'status' });
+    line.style.setProperty('--age', String(Math.round(now - note.at)));
+    body.append(line);
+  }
+  return floats;
+}
+
+/** Sets the floating flourishes over their slots (a slot clips what rises out of it, so they live on the window). */
+function placeFloats(box: HTMLElement, floats: readonly Float[]): void {
+  const frame = box.getBoundingClientRect();
+  for (const { node, text, age } of floats) {
+    const at = node.getBoundingClientRect();
+    if (at.width === 0) continue;
+    const word = el('span', { className: 'pd-float', textContent: text });
+    word.style.left = `${at.left - frame.left - box.clientLeft + at.width / 2}px`;
+    word.style.top = `${at.top - frame.top - box.clientTop + at.height * 0.2}px`;
+    word.style.setProperty('--age', String(age));
+    box.append(word);
+  }
 }
 
 /** Marks an empty place as somewhere a dragged item can be let go of. */
@@ -1333,41 +1546,71 @@ function withDrop(node: HTMLElement, key: string): HTMLElement {
 function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
   const { world, hero } = options;
   const SLOP = 8;
-  let drag: { from: BagChoice; item: Item; node: HTMLElement; x: number; y: number; ghost: HTMLElement | null; ok: Map<string, Action> } | null = null;
+  /** What letting go on a place does: an action for the dungeon, or setting a quick slot. */
+  type Drop = { act: Action } | { quick: number };
+  let drag: { from: BagChoice; item: Item; node: HTMLElement; x: number; y: number; ghost: HTMLElement | null; ok: Map<string, Drop> } | null = null;
+  const reduced = (): boolean => quality.reducedMotion;
   /** What letting go of `from` on each place would do. */
-  const dropsFor = (from: BagChoice, item: Item): Map<string, Action> => {
-    const drops = new Map<string, Action>();
+  const dropsFor = (from: BagChoice, item: Item): Map<string, Drop> => {
+    const drops = new Map<string, Drop>();
+    const act = (action: Action): Drop => ({ act: action });
     if ('ring' in from) {
-      drops.set('pack', { type: 'remove', ring: from.ring });
-      hero.items.forEach((_, i) => drops.set(String(i), { type: 'remove', ring: from.ring }));
+      drops.set('pack', act({ type: 'remove', ring: from.ring }));
+      hero.items.forEach((_, i) => drops.set(String(i), act({ type: 'remove', ring: from.ring })));
       return drops;
     }
     // The weapon in hand back into the pack.
     if ('worn' in from && from.worn === 'weapon') {
-      drops.set('pack', { type: 'unequip' });
-      hero.items.forEach((_, i) => drops.set(String(i), { type: 'unequip' }));
+      drops.set('pack', act({ type: 'unequip' }));
+      hero.items.forEach((_, i) => drops.set(String(i), act({ type: 'unequip' })));
       return drops;
     }
     if (!('index' in from)) return drops;
     const index = from.index;
     const category = itemDef(item.kind).category;
-    if (category === 'weapon') drops.set('weapon', { type: 'equip', item: index });
-    if (category === 'armor') drops.set('armor', { type: 'equip', item: index });
+    if (category === 'weapon') drops.set('weapon', act({ type: 'equip', item: index }));
+    if (category === 'armor') drops.set('armor', act({ type: 'equip', item: index }));
     if (category === 'ring') {
-      drops.set('ring0', { type: 'equip', item: index });
-      drops.set('ring1', { type: 'equip', item: index });
+      drops.set('ring0', act({ type: 'equip', item: index }));
+      drops.set('ring1', act({ type: 'equip', item: index }));
     }
     if (category === 'scroll' && isKnown(world, item) && (TARGETED_SCROLLS as readonly string[]).includes(item.kind)) {
-      for (const ref of scrollTargets(world, hero, item.kind)) drops.set(String(ref), { type: 'use', item: index, on: ref });
+      for (const ref of scrollTargets(world, hero, item.kind)) drops.set(String(ref), act({ type: 'use', item: index, on: ref }));
     }
-    drops.set('away', { type: 'drop', item: index });
+    // The quick slots take what has a use (and on a phone there is one).
+    if (quickUse(item.kind)) {
+      const wide = Boolean(document.querySelector('#ui.pd-wide'));
+      for (const n of wide ? [0, 1] : [0]) drops.set(`quick${n}`, { quick: n });
+    }
+    drops.set('away', act({ type: 'drop', item: index }));
     return drops;
   };
-  const end = (): void => {
-    drag?.ghost?.remove();
+  /** Ends the drag: the places stop glowing; the ghost goes (or, `home`, flies back to where the item came from). */
+  const end = (home?: HTMLElement): void => {
+    const lifted = drag?.node;
+    const ghost = drag?.ghost;
     box.classList.remove('dragging');
     box.querySelectorAll('.drop-ok, .drop-over').forEach((node) => node.classList.remove('drop-ok', 'drop-over'));
     drag = null;
+    if (!ghost) return;
+    const settle = (): void => {
+      ghost.remove();
+      lifted?.classList.remove('lifted');
+      if (home) {
+        home.classList.remove('fx-land');
+        void home.offsetWidth;
+        home.classList.add('fx-land');
+      }
+    };
+    if (!home || reduced() || !home.isConnected) {
+      settle();
+      return;
+    }
+    // Not taken: it flies back to its slot.
+    const at = home.getBoundingClientRect();
+    ghost.style.transition = `transform ${SNAP_BACK_MS}ms cubic-bezier(0.2, 0.8, 0.3, 1)`;
+    ghost.style.transform = `translate(${at.left + at.width / 2}px, ${at.top + at.height / 2}px) scale(1)`;
+    window.setTimeout(settle, SNAP_BACK_MS + 20);
   };
   const placeAt = (x: number, y: number): HTMLElement | null => {
     const under = document.elementFromPoint(x, y);
@@ -1388,30 +1631,33 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
       // It is a drag: no hold, no tap; the places that take it light up.
       drag.node.dispatchEvent(new Event('pointercancel'));
       drag.node.setPointerCapture?.(event.pointerId);
-      const ghost = el('div', { className: 'pd-drag-ghost' }, slot(world, drag.item, { hero }));
+      const size = drag.node.getBoundingClientRect().width || 62;
+      const ghost = el('div', { className: `pd-drag-ghost${quality.light ? ' lite' : ''}` }, slot(world, drag.item, { hero }));
+      ghost.style.setProperty('--size', `${size}px`);
       sprites(ghost);
       document.body.append(ghost);
       drag.ghost = ghost;
+      drag.node.classList.add('lifted');
       box.classList.add('dragging');
+      haptic('tick');
       box.querySelectorAll<HTMLElement>('[data-drop]').forEach((place) => {
         if (drag!.ok.has(place.dataset.drop!)) place.classList.add('drop-ok');
       });
     }
-    drag.ghost!.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
-    box.querySelectorAll('.drop-over').forEach((place) => place.classList.remove('drop-over'));
-    const place = placeAt(event.clientX, event.clientY);
-    if (place && drag.ok.has(place.dataset.drop!)) place.classList.add('drop-over');
+    drag.ghost!.style.transform = `translate(${event.clientX}px, ${event.clientY}px) scale(1.1)`;
+    const over = placeAt(event.clientX, event.clientY);
+    box.querySelectorAll('.drop-over').forEach((place) => place !== over && place.classList.remove('drop-over'));
+    if (over && drag.ok.has(over.dataset.drop!) && !over.classList.contains('drop-over')) over.classList.add('drop-over');
   });
   const release = (event: PointerEvent): void => {
     if (!drag?.ghost) {
       drag = null;
       return;
     }
-    const place = placeAt(event.clientX, event.clientY);
-    const action = place ? drag.ok.get(place.dataset.drop!) : undefined;
+    const placeNode = placeAt(event.clientX, event.clientY);
+    const result = resolveDrop(drag.ok, placeNode?.dataset.drop);
     const node = drag.node;
     const dragged = drag.item;
-    end();
     // The click that ends a drag is not a tap on the item.
     const swallow = (click: Event): void => {
       click.stopImmediatePropagation();
@@ -1419,24 +1665,46 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
     };
     node.addEventListener('click', swallow, { capture: true, once: true });
     window.setTimeout(() => node.removeEventListener('click', swallow, { capture: true }), 50);
-    if (!action) return;
+    if (result.type === 'snap') {
+      end(node);
+      return;
+    }
+    end();
     audio.play('click');
+    const drop = result.value;
+    if ('quick' in drop) {
+      // Kept one tap away: the place it was let go on bounces; the pack is drawn again once that has been seen.
+      chooseQuickslot(dragged.kind, drop.quick);
+      haptic('success');
+      if (placeNode) {
+        placeNode.classList.add('fx-land');
+        box.classList.add('landing');
+      }
+      window.setTimeout(() => {
+        addFx({ kind: 'land', item: dragged });
+        if (openBag) refreshBackpack(options.world, options.hero);
+      }, reduced() ? 0 : 200);
+      return;
+    }
+    const action = drop.act;
     const back = (): void => showBackpack(options, null);
     if (action.type === 'use') {
-      // Reading a scroll: asked first what it will do to the item, then the dungeon answers and the backpack closes.
-      const done = (): void => {
-        openBag = null;
-        options.onAction(action);
-        options.onClose();
-      };
+      // Reading a scroll: asked first what it will do to the item, then the dungeon answers; the backpack stays.
+      const done = (): void => keepOpen(options, action);
       if (action.on !== undefined) askTarget(options, dragged.kind, action.on, done, back);
       else done();
       return;
     }
     const go = (): void => {
-      if (openBag) openBag.choice = null;
-      options.onAction(action);
-      refreshBackpack(options.world, options.hero);
+      if (keepsOpen(action)) {
+        if (action.type === 'equip') haptic('success');
+        keepOpen(options, action, dragged, [{ kind: 'equip', item: dragged }, { kind: 'land', item: dragged }]);
+      } else {
+        // A drop onto the floor: the dungeon answers.
+        closeBag();
+        options.onAction(action);
+        options.onClose();
+      }
     };
     if (action.type === 'equip') askEquip(dragged, options.world, go, back);
     else go();
@@ -1489,7 +1757,7 @@ function holdToUse(node: HTMLElement, name: () => string | null, act: () => void
   let label: HTMLElement | null = null;
   const reset = (): void => {
     window.clearTimeout(timer);
-    node.classList.remove('holding');
+    node.classList.remove('holding', 'charging');
     label?.remove();
     label = null;
   };
@@ -1498,9 +1766,13 @@ function holdToUse(node: HTMLElement, name: () => string | null, act: () => void
     reset();
     const what = name();
     if (!what) return;
+    // A pixel ring fills round the slot while the finger stays (game.css).
+    node.classList.add('charging');
     timer = window.setTimeout(() => {
       held = true;
+      node.classList.remove('charging');
       node.classList.add('holding');
+      haptic('hit');
       label = el('span', { className: 'pd-hold-label', textContent: what });
       node.append(label);
     }, 400);
@@ -1585,7 +1857,7 @@ function askEquip(item: Item, world: World, go: () => void, back: () => void): v
     return;
   }
   const F = t.safe.ask;
-  openBag = null;
+  pauseBag();
   showConfirm(
     F.putOnTitle(itemName(world, item)), F.putOnText(t.items['scroll.identify'], t.items['scroll.removeCurse']), F.putOn, F.cancel, go, back,
     { label: F.putOnNever, onPress: () => confirmRisky.set(false) }, { calm: true },
@@ -1602,7 +1874,7 @@ export function askDrink(world: World, hero: Hero, item: Item, drink: () => void
     return;
   }
   const F = t.safe.ask;
-  openBag = null;
+  pauseBag();
   showConfirm(
     F.drinkTitle(itemName(world, item)), F.drinkText, F.drink, F.cancel, drink, back,
     { label: F.drinkNever, onPress: () => confirmRisky.set(false) }, { calm: true, extras: [{ label: F.throwInstead, onPress: throwIt }] },
@@ -1625,7 +1897,7 @@ function askTarget(options: BackpackOptions, kind: ItemKind, on: ItemRef, go: ()
   const F = t.safe.target;
   const name = itemName(world, target);
   const never = { label: t.safe.ask.never, onPress: () => confirmRisky.set(false) };
-  openBag = null;
+  pauseBag();
   if (effect === 'upgrade') {
     // ScrollOfUpgrade: the enchantment may be driven out. The exact chance gives the level away, so it is told only when the level is known.
     const loss = levelKnown(target) ? enchantLossChance(target) : 0;
@@ -1651,19 +1923,23 @@ function showItem(options: ItemOptions): void {
 function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLElement[]; danger: HTMLElement[] } {
   const { world, hero, item, index } = options;
   const category = itemDef(item.kind).category;
+  /**
+   * Done. The backpack stays open if the action only changes the hero or the pack (bagflow.ts keepsOpen), the item chosen
+   * and the slots saying what happened; else it closes for the dungeon to answer.
+   */
   const act = (action: Action): void => {
-    openBag = null;
+    if (keepsOpen(action, { kind: item.kind, known: isKnown(world, item) })) {
+      keepOpen(options, action, action.type === 'use' ? undefined : item);
+      return;
+    }
+    closeBag();
     options.onAction(action);
     options.onClose();
   };
-  /** Done, the backpack stays open, drawn anew once the pack has changed (see refreshBackpack). */
-  const stay = (action: Action, next: BagChoice | null = null): void => {
-    if (openBag) openBag.choice = next;
-    options.onAction(action);
-    refreshBackpack(options.world, options.hero);
-  };
+  /** Putting on or taking off: the item stays chosen, wherever it went, and its slot flashes gold. */
+  const stay = (action: Action): void => keepOpen(options, action, item, [{ kind: 'equip', item }]);
   const aimWith = (kind: 'throw' | 'zap' | 'special', at: number): void => {
-    openBag = null;
+    closeBag();
     options.onClose();
     options.onAim(at, kind);
   };
@@ -1689,7 +1965,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (item.kind === 'weapon.pickaxe') use(t.mine, () => act({ type: 'mine' }));
     if (item.kind === 'quest.amulet') {
       use(t.amuletEndGame, () => {
-        openBag = null;
+        closeBag();
         showAmulet(world, hero, false, () => options.onAction({ type: 'endGame' }), options.onClose);
       });
     }
@@ -1719,9 +1995,8 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
       }
     }
     if (category === 'weapon' || category === 'armor' || category === 'ring') {
-      const worn: BagChoice = category === 'ring' ? { ring: hero.rings.length < 2 ? hero.rings.length : 0 } : { worn: category === 'armor' ? 'armor' : 'weapon' };
       use(category === 'ring' ? t.putOn : t.equip, () =>
-        askEquip(item, world, () => stay({ type: 'equip', item: index }, worn), () => showBackpack(options, { index })));
+        askEquip(item, world, () => stay({ type: 'equip', item: index }), () => showBackpack(options, { index })));
     }
     if (category === 'beacon') {
       // LloydsBeacon: set it here, or go back to where it was set.
@@ -1731,7 +2006,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'weightstone' && hero.weapon) {
       // Weightstone.WndBalance: the weapon in hand, balanced the way it is not yet.
       for (const imbue of ['speed', 'accuracy'] as const) {
-        if (hero.weapon.imbue !== imbue) use(t.balanceFor[imbue], () => stay({ type: 'balance', item: index, imbue }, { worn: 'weapon' }));
+        if (hero.weapon.imbue !== imbue) use(t.balanceFor[imbue], () => keepOpen(options, { type: 'balance', item: index, imbue }, hero.weapon));
       }
     }
     if (category === 'wipeout') use(t.read, () => act({ type: 'use', item: index }));
@@ -1757,7 +2032,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
         }));
       }
     }
-    danger.push(button(t.dropItem, () => stay({ type: 'drop', item: index }), 'danger'));
+    danger.push(button(t.dropItem, () => act({ type: 'drop', item: index }), 'danger'));
   } else if (options.ring !== undefined) {
     const ring = options.ring;
     use(t.takeOff, () => stay({ type: 'remove', ring }));

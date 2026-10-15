@@ -32,7 +32,7 @@ import { bakeLevel, type Camera, patchLevel, render } from './render';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
   askDrink, onWindow, reopenWindow, type WindowState, windowState,
-  refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
+  backpackOpen, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
 import { rankingBlock, showBoards, trophyText } from './rankui';
 import { mart } from './mart';
@@ -2515,7 +2515,10 @@ function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: nu
     effects = effects.slice(0, answerAt);
   }
   drawPace.effect(now);
+  const lastLine = view.log[view.log.length - 1];
   view.apply(effects, world, session!.myId, vnow);
+  // What an action done in the open backpack came to is told in the backpack too (the log is behind it).
+  if (backpackOpen()) bagSay(view.log.slice(view.log.lastIndexOf(lastLine!) + 1).map((line) => line.text).slice(-2).join(' '));
   // The backpack, if open, shows the pack as it is now (an item put on, dropped, picked up).
   const mine = session!.myId;
   if (effects.some((e) => ('hero' in e && e.hero === mine) || ('who' in e && e.who === mine))) refreshBackpack(world, me);

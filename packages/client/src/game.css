@@ -122,20 +122,109 @@ canvas#game {
 body:has(#ui.pd-wide) #game { cursor: var(--spr-cursor) 0 0, default; }
 
 /* Dragging in the backpack: the slots keep the finger (no scrolling under it), the places that would
-   take the item glow, the one under the finger brightly, and a strip to drop it appears at the bottom. */
+   take the item glow softly, the one under the finger brightly, and a dock to let it go on appears at the bottom:
+   the quick slots, and a strip to drop it. */
 .pd-window.bag [data-from] { touch-action: none; }
+.pd-bag-dock { display: none; }
+.pd-window.bag.dragging .pd-bag-dock, .pd-window.bag.landing .pd-bag-dock { display: flex; align-items: stretch; gap: var(--space-2); }
+.pd-bag-quick { display: flex; align-items: center; gap: 6px; flex: none; }
+.pd-quick-drop { --slot: 52px; }
+.pd-quick-bolt { width: 21px; height: 27px; background: var(--spr-bolt) center / contain no-repeat; image-rendering: pixelated; opacity: .5; }
+.pd-quick-name { font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); max-width: 72px; }
+.pd-window.bag.dragging .pd-quick-drop:not(.drop-ok) { opacity: .4; }
 .pd-bag-away { display: none; }
 .pd-window.bag.dragging .pd-bag-away {
-  display: grid; place-items: center; min-height: 52px; border: 2px dashed var(--danger, #e05a4a); color: var(--danger, #e05a4a);
+  flex: 1; display: grid; place-items: center; min-height: 52px; border: 2px dashed var(--danger, #e05a4a); color: var(--danger, #e05a4a);
   font: var(--text-body, 400 18px/24px var(--font-ui)); background: rgba(160, 40, 30, 0.12);
 }
 .pd-window.bag.dragging .pd-bag-away.drop-over { background: rgba(160, 40, 30, 0.35); color: var(--ink); }
-.pd-window.bag.dragging .drop-ok:not(.pd-bag-away) { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void); }
-.pd-window.bag.dragging .drop-over:not(.pd-bag-away) { background: var(--stone-500); box-shadow: inset 0 0 0 3px var(--gold), inset 0 0 0 5px var(--void); }
+.pd-window.bag.dragging .drop-ok:not(.pd-bag-away) { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void); animation: pd-glow .8s ease-in-out infinite alternate; }
+.pd-window.bag.dragging .drop-over:not(.pd-bag-away) { background: var(--stone-500); filter: brightness(1.3); box-shadow: inset 0 0 0 3px var(--gold), inset 0 0 0 5px var(--void), inset 0 0 10px 2px rgba(255, 210, 90, .5); animation: none; }
+@keyframes pd-glow {
+  from { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void), inset 0 0 2px 0 rgba(255, 200, 64, 0); }
+  to { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void), inset 0 0 9px 2px rgba(255, 200, 64, .38); }
+}
 .pd-window.bag.dragging [data-from]:not(.drop-ok) { opacity: 0.7; }
-.pd-drag-ghost { position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; margin: -32px 0 0 -32px; opacity: 0.9; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
-.pd-drag-ghost .pd-slot { --slot: 64px; }
+/* The slot it came from while it is lifted: hollow, a dashed outline. */
+.pd-window.bag .pd-slot.lifted { background: var(--stone-900); box-shadow: none; opacity: 1; animation: none; }
+.pd-window.bag .pd-slot.lifted > * { visibility: hidden; }
+.pd-window.bag .pd-slot.lifted::after { content: ""; position: absolute; inset: 4px; border: 2px dashed var(--stone-400); pointer-events: none; }
+/* The lifted item: 1.1 times, a small shadow, following the finger. */
+.pd-drag-ghost { position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; margin: calc(var(--size, 64px) / -2) 0 0 calc(var(--size, 64px) / -2); opacity: 0.95; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); will-change: transform; }
+.pd-drag-ghost.lite { filter: none; }
+.pd-drag-ghost .pd-slot { --slot: var(--size, 64px); animation: pd-lift .12s ease-out backwards; }
 .pd-drag-ghost .pd-slot .pd-item { --u: 3px; }
+@keyframes pd-lift { from { transform: scale(.91); } }
+
+/* Slots in the backpack: a press dips them a pixel and darkens; a gentle pulse frames the chosen one. */
+.pd-window.bag button.pd-slot:active { transform: translateY(1px); filter: brightness(.82); }
+.pd-window.bag .pd-slot.selected { animation: pd-sel 1.2s ease-in-out infinite; }
+@keyframes pd-sel {
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void); }
+  50% { box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 0 4px var(--void), inset 0 0 6px 2px rgba(255, 200, 64, .3); }
+}
+/* Holding for the quick action: a pixel ring fills round the slot, then the slot pops. */
+@property --ring { syntax: '<number>'; inherits: false; initial-value: 0; }
+.pd-window.bag .pd-slot.charging::after {
+  content: ""; position: absolute; inset: 0; z-index: 2; padding: 3px; pointer-events: none;
+  background: conic-gradient(var(--gold) calc(var(--ring) * 1%), transparent 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: pd-ring .3s steps(10, end) .1s both;
+}
+@keyframes pd-ring { from { --ring: 0; } to { --ring: 100; } }
+/* the notch would clip the action's name above the slot */
+.pd-window.bag .pd-slot.holding { clip-path: none; animation: pd-pop .14s steps(3) both; }
+@keyframes pd-pop { 50% { transform: scale(1.12); } }
+
+/* What was just done, on the slots (screens.ts showFx): each runs from its age, so a redraw does not start it over. */
+.pd-window.bag .pd-slot.fx-land, .pd-window.bag .pd-slot.fx-plus { animation: pd-land .24s ease-out backwards; animation-delay: calc(var(--age, 0) * -1ms); }
+@keyframes pd-land { 0% { transform: scale(.86); } 45% { transform: scale(1.12) translateY(-2px); } 75% { transform: scale(.97); } 100% { transform: none; } }
+.pd-window.bag .pd-slot.selected.fx-land, .pd-window.bag .pd-slot.selected.fx-plus {
+  animation: pd-sel 1.2s ease-in-out infinite, pd-land .24s ease-out backwards; animation-delay: 0s, calc(var(--age, 0) * -1ms);
+}
+.pd-window.bag .pd-slot.selected.holding { animation: pd-sel 1.2s ease-in-out infinite, pd-pop .14s steps(3) both; }
+.pd-window.bag .pd-slot.fx-equip::before, .pd-window.bag .pd-slot.fx-plus::before {
+  content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 244, 190, .95) 50%, transparent 65%), rgba(255, 196, 60, .5);
+  background-size: 260% 100%, 100% 100%; background-repeat: no-repeat;
+  animation: pd-flash .26s steps(5, end) both; animation-delay: calc(var(--age, 0) * -1ms);
+}
+@keyframes pd-flash { from { background-position: 130% 0, 0 0; opacity: 1; } to { background-position: -30% 0, 0 0; opacity: 0; } }
+.pd-window.bag .pd-slot.fx-used .pd-item { animation: pd-use-pop .22s steps(4) backwards; animation-delay: calc(var(--age, 0) * -1ms); }
+.pd-window.bag .pd-slot.fx-used .pd-qty { animation: pd-bump .2s steps(3) backwards; animation-delay: calc(var(--age, 0) * -1ms); }
+@keyframes pd-use-pop { 40% { transform: scale(1.18); filter: brightness(1.4); } }
+@keyframes pd-bump { 0% { transform: translateY(-4px) scale(1.35); color: var(--gold); } }
+.pd-window.bag .pd-slot > .pd-vanish { position: absolute; left: 50%; top: 50%; translate: -50% -50%; z-index: 4; pointer-events: none; animation: pd-vanish .22s steps(4) both; animation-delay: calc(var(--age, 0) * -1ms); }
+@keyframes pd-vanish { 0% { scale: 1; opacity: 1; } 45% { scale: 1.25; opacity: 1; } 100% { scale: 1.4; opacity: 0; } }
+.pd-window.bag .pd-float {
+  position: absolute; z-index: 6; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+  font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--gold); text-shadow: var(--text-outline);
+  animation: pd-float .42s steps(7, end) both; animation-delay: calc(var(--age, 0) * -1ms);
+}
+@keyframes pd-float { 0% { translate: 0 6px; opacity: 0; } 20% { opacity: 1; } 60% { opacity: 1; } 100% { translate: 0 -26px; opacity: 0; } }
+/* The result of the last action, in the backpack itself. */
+.pd-bag-body { position: relative; }
+.pd-bag-note {
+  position: absolute; left: 0; right: 0; bottom: 2px; z-index: 5; padding: 2px 8px; pointer-events: none; text-align: center;
+  font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); background: rgba(10, 8, 6, .86); clip-path: var(--notch);
+  animation: pd-note 2.6s linear both; animation-delay: calc(var(--age, 0) * -1ms);
+}
+@keyframes pd-note { 0% { opacity: 0; } 6% { opacity: 1; } 84% { opacity: 1; } 100% { opacity: 0; } }
+/* A foe in view while the pack is open. */
+.pd-bag-foe { flex: none; padding: 0 6px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--bad, #ff5a4a); border: 2px solid currentColor; animation: pd-foe 1s steps(2, jump-none) infinite; }
+@keyframes pd-foe { from { background: rgba(160, 40, 30, .1); } to { background: rgba(160, 40, 30, .45); } }
+@keyframes pd-fade { to { opacity: 0; } }
+/* The light mode and reduced motion: the feedback stays, the loops and sweeps go. */
+.pd-window.bag.lite .pd-slot.selected, .pd-window.bag.lite.dragging .drop-ok:not(.pd-bag-away), .pd-window.bag.lite .pd-bag-foe { animation: none; }
+.pd-window.bag.lite .pd-slot.fx-equip::before, .pd-window.bag.lite .pd-slot.fx-plus::before { background: rgba(255, 196, 60, .5); }
+@media (prefers-reduced-motion: reduce) {
+  .pd-window.bag :not(.pd-bag-note):not(.pd-float), .pd-window.bag *::before, .pd-window.bag *::after, .pd-drag-ghost .pd-slot { animation: none !important; }
+  .pd-window.bag button.pd-slot:active { transform: none; }
+  .pd-window.bag .pd-slot.fx-equip::before, .pd-window.bag .pd-slot.fx-plus::before { background: rgba(255, 196, 60, .35); }
+  .pd-window.bag .pd-float { translate: 0 -10px; animation: pd-fade .5s linear .3s both; }
+  .pd-window.bag .pd-slot > .pd-vanish { display: none; }
+}
 
 /* The learning card on a phone keeps clear of the map's buttons down the right edge (design system v13 centres it). */
 #ui:not(.pd-wide) .pd-hint { left: 12px; transform: none; width: min(380px, calc(100% - 12px - 44px - 20px)); }
