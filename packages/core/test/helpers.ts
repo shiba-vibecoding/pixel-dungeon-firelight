@@ -46,7 +46,8 @@ export function botAction(world: World, id: string, deepest = 4): Action {
     if (!path || path.length === 0) return { type: 'wait' };
     const inTheWay = floor.mobs.find((mob) => mob.pos === path[0]);
     if (swapsWithHero(inTheWay)) return { type: 'move', to: path[0]! };
-    if (inTheWay?.state === 'passive') return { type: 'wait' };
+    // (A tap on a mirror image or a bee ally swaps places with it; the rest of the passive ones are waited out.)
+    if (inTheWay?.state === 'passive') return inTheWay.kind === 'mirror' || inTheWay.kind === 'bee' ? { type: 'attack', target: inTheWay.id } : { type: 'wait' };
     return inTheWay ? { type: 'attack', target: inTheWay.id } : { type: 'move', to: path[0]! };
   };
 

@@ -77,6 +77,11 @@ function marked(text: string): Array<string | HTMLElement> {
 /** Seen through or skipped, on this device. */
 export const coachDone = (): boolean => (doneKnown ??= read(DONE) === '1');
 
+/** The server says it is done (another device, or before the cache was cleared). */
+export function markCoachDone(): void {
+  write(DONE, '1');
+}
+
 /** A player who has played before the tutorial existed does not need it. */
 export function veteranSkips(): boolean {
   if (coachDone() || read(SEEN) === '1') return false;

@@ -49,7 +49,7 @@ import { showNews } from './newsui';
 import { CURRENT } from './releases';
 import { type RunFacts, showErrorScreen, showReport } from './reportui';
 import { closeOffline, showOffline } from './offlineui';
-import { coachDone, type Rect, type StepId, Tutorial, veteranSkips } from './coach';
+import { coachDone, markCoachDone, type Rect, type StepId, Tutorial, veteranSkips } from './coach';
 import { watchErrors } from './diag';
 import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
@@ -398,7 +398,7 @@ const tutorialHost = {
     return foe ? (t.mobs[foe.kind] ?? '').toLowerCase() : '';
   },
   blocked: (): boolean => overlayOpen() || !session,
-  finished: (): void => undefined,
+  finished: (): void => void api?.coachDone(),
 };
 const tutorial = new Tutorial(tutorialHost);
 // Players from before the tutorial know the game; the hints it covers wait while it is on.
@@ -760,6 +760,9 @@ function refreshProfile(): void {
     profile = answer;
     adoptBadges(answer.badges);
     announceTrophies(answer.trophies);
+    // The tutorial's end is kept with the profile, for every device (and told to it from here, if only this device knew).
+    if (answer.coachDone) markCoachDone();
+    else if (coachDone()) void api?.coachDone();
     const waiting = unclaimed(answer.mail ?? []);
     if (lettersCounted >= 0 && waiting > lettersCounted) audio.play('item', 1.1, 0.5);
     lettersCounted = waiting;
@@ -785,17 +788,19 @@ function maybeNews(answer: Profile | null): boolean {
   if (newsChecked || session || !document.querySelector('.pd-camp')) return false;
   newsChecked = true;
   const veteran = openings > 1 || stored('pd-moved') === '1' || coachDone() || loadSolo(SOLO_SLOT) !== null || Boolean(answer && (answer.games > 0 || answer.history.length > 0));
-  const due = newsDue({ local: seenHere(), veteran, current: CURRENT.version });
+  const due = newsDue({ local: seenHere(), ...(answer ? { server: answer.newsSeen ?? null } : {}), veteran, current: CURRENT.version });
   if (due === 'none') return false;
   if (due === 'mark') {
     markSeenHere();
+    void api?.news(CURRENT.version);
     return false;
   }
   showNews({
     release: CURRENT,
     onClose: () => {
-      // «Play» and the cross both record the version.
+      // «Play» and the cross both record the version, here and with the profile.
       markSeenHere();
+      void api?.news(CURRENT.version);
       toTitle(false);
       askOnTitle();
     },
