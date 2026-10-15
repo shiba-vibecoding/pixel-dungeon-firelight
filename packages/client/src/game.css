@@ -512,3 +512,22 @@ html.pd-paused *, html.pd-paused *::before, html.pd-paused *::after { animation-
 #overlay.bare > .pd-camp { flex: 1 1 auto; align-self: stretch; width: 100%; min-width: 0; }
 .pd-daily-rules[role="button"] { cursor: pointer; }
 .pd-news-banner { flex: none; }
+
+/* Hero quips (quipsys.ts): a bubble over the hero's head in the camp bubble's look. It follows the camera; it pops in (not under
+   reduced motion), holds, then fades out. The tail points at the hero: --tail is his x inside the bubble. */
+.pd-quip { position: absolute; left: 0; top: 0; z-index: var(--z-hud, 10); width: max-content; max-width: min(320px, calc(100% - 16px)); pointer-events: none; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .5)); }
+.pd-quip[hidden] { display: none; }
+.pd-quip.out { opacity: 0; transition: opacity .2s linear; }
+.pd-quip-body {
+  padding: 6px 10px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); text-align: center; text-wrap: balance;
+  background: var(--stone-700); border: var(--u) solid var(--stone-200); clip-path: var(--notch);
+}
+.pd-quip::after { content: ""; position: absolute; left: var(--tail, 50%); bottom: -8px; width: 10px; height: 8px; margin-left: -5px; background: var(--stone-200); clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.pd-quip.last .pd-quip-body { border-color: var(--bad, #ff4444); }
+.pd-quip.last::after { background: var(--bad, #ff4444); }
+@media (prefers-reduced-motion: no-preference) {
+  .pd-quip.pop .pd-quip-body { transform-origin: 50% 100%; animation: pd-quip-pop .12s steps(3) both; }
+}
+@keyframes pd-quip-pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.pd-log-line.quip { color: var(--ink-muted); font-style: italic; }
+.pd-seg.fit .pd-seg-opt { flex: 1 1 auto; padding: 0 var(--space-2); }

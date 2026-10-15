@@ -5,6 +5,7 @@ import { fx } from './fx';
 import { capitalize, lang, locale, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { smooth } from './pace';
+import { QUIP_MODES, quipMode } from './quips';
 import { type FxMode, quality } from './quality';
 import { el, info, show, sprites, windowOf } from './screens';
 import { canFullscreen, haptics, isFullscreen, openExternal, setFullscreen } from './telegram';
@@ -181,6 +182,9 @@ export function showSettings(options: SettingsOptions): void {
     stepsRow(t.soundVolume, () => level(audio.soundVolume), louder((v) => audio.setSoundVolume(v)), () => audio.play('coin', 1, 0.6)),
     switchRow(t.meta.vibration, t.meta.vibrationNote, haptics.on, (on) => haptics.set(on)),
   );
+  // The three words are of unequal length: the buttons take what they need, not a third each.
+  const quipChoice = segments(QUIP_MODES.map((m) => [m, t.meta.quipModes[m]] as const), quipMode.value, (mode) => quipMode.set(mode));
+  quipChoice.classList.add('fit');
   const modes: ReadonlyArray<readonly [FxMode, string]> = (['auto', 'full', 'light'] as const).map((m) => [m, t.meta.fxModes[m]] as const);
   const learning = group(
     t.meta.learning,
@@ -206,6 +210,13 @@ export function showSettings(options: SettingsOptions): void {
       fxNote,
     ),
     options.name ? nameRow(options.name) : null,
+    el(
+      'div',
+      { className: 'pd-set-row stack' },
+      el('span', { className: 'pd-info', textContent: t.meta.quips }),
+      quipChoice,
+      info(t.meta.quipsNote, 'pd-note'),
+    ),
     switchRow(t.meta.smooth, t.meta.smoothNote, smooth.on, (on) => smooth.set(on)),
     // The questions before a trap or gas, and before the unknown (mistap.ts, riskyuse.ts): «don't ask again» lands here too.
     switchRow(t.safe.settings.danger, t.safe.settings.dangerNote, confirmDanger.on, (on) => confirmDanger.set(on)),

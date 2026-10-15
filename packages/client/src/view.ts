@@ -145,7 +145,7 @@ export interface LogLine {
 
 /** Log colours of the original (GLog), as the design system's line tones. */
 const TONES: Record<string, string> = {
-  '#44ff44': 'good', '#ff4444': 'bad', '#ff8800': 'warn', '#ffff44': 'hl', '#cccccc': 'muted',
+  '#44ff44': 'good', '#ff4444': 'bad', '#ff8800': 'warn', '#ffff44': 'hl', '#cccccc': 'muted', '#9a9a8c': 'quip',
 };
 
 /** How many messages the history keeps. */

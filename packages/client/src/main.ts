@@ -39,6 +39,7 @@ import { mart } from './mart';
 import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta';
 import { eraseDevice } from './challenge-info';
 import { idle, lazy, load } from './lazy';
+import { QUIP_LOG_COLOR, quipSys } from './quipsys';
 import { loop, onResume } from './lifecycle';
 import { reloadForUpdate } from './update';
 import { type Camp, campClasses } from './camp';
@@ -322,6 +323,8 @@ function attackTarget(world: World, me: Hero): Mob | null {
  * old «tap where to go» card and the hints for the enemy and the stairs while it is on. (None of its four steps is Shattered's alone.)
  */
 const uiLayer = document.getElementById('ui')!;
+// The hero's quips: the bubble lives on the interface layer, the line goes to the log in a muted colour (quipsys.ts).
+quipSys.init(uiLayer, (text) => view.say(text, QUIP_LOG_COLOR));
 
 /** A box in the page's pixels as a place on the interface layer, `pad` wider all round. */
 function layerRect(box: DOMRect, pad: number): Rect | null {
@@ -1344,6 +1347,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
   const world = session?.world;
   const me = world && heroById(world, myId);
   if (world && me) announceBadges([...countGame(world.run.seed), ...checkBadges(world, me, effects)]);
+  if (world && me) quipSys.effects(effects, me, world.turn, performance.now());
   for (const effect of effects) {
     if (effect.type === 'yell' && effect.line === 'notice' && MUSIC_BOSSES.has(effect.kind) && session && me && effect.depth === me.depth) {
       bossFight = { session, generation: session.generation, depth: effect.depth };
@@ -2624,6 +2628,7 @@ function tick(now: number): void {
       resetTargeting();
     }
     seenGeneration = session.generation;
+    quipSys.reset();
     view.reset(me.depth);
     fx.reset();
     heroWasAlive = true;
@@ -2660,6 +2665,8 @@ function tick(now: number): void {
         const feeling = t.feelings[level.feeling];
         if (feeling && me.depth > lastPlace.depth) view.say(feeling, '#ffff44');
       }
+      // Going down to a new floor, now and then, is worth a word.
+      if (!world.arena && !justFell && me.depth > lastPlace.depth) quipSys.offer('descend', me.heroClass, now);
       justFell = false;
     } else if (me.pos !== lastPlace.pos) {
       footfall(level, me, lastPlace.pos, vnow);
@@ -2857,6 +2864,13 @@ function tick(now: number): void {
   );
   coachMove(me);
   tutorial.frame(now);
+  // The hero's quip follows his head as the camera moves; the map is drawn at full pace while it is up (pace.ts).
+  if (quipSys.active) {
+    drawPace.effect(now);
+    const unit = camera.zoom / (canvas.width / (canvas.clientWidth || 1)) / (hud.scale || 1);
+    const layer = uiLayer.getBoundingClientRect();
+    quipSys.frame(now, { x: (at.x + TILE / 2 - camera.x) * unit, y: (at.y - camera.y) * unit, w: layer.width / (hud.scale || 1), h: layer.height / (hud.scale || 1) }, overlayOpen());
+  }
 
   // Who the dungeon is waiting for, once my action has been queued for a moment. Under live turns, the
   // companions a fight waits for once I have made my move (and none while it waits for mine).
@@ -3042,7 +3056,7 @@ function tick(now: number): void {
         onBoards: api ? () => openBoards(dailyRun ? 'daily' : 'week') : undefined,
         share,
       });
-    }, 1200);
+    }, 1200 + quipSys.deathDelay());
   }
 }
 
