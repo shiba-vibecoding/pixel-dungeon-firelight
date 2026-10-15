@@ -366,6 +366,10 @@ export function heroSprite(assets: Assets, heroClass: HeroClass, skin?: string):
   return assets.heroes[heroClass];
 }
 
+declare const __BUILD__: { commit: string; date: string } | undefined;
+/** The build's mark on every sheet's address: a new build's art is fetched, never an old one kept by the webview's cache. */
+const VERSION = typeof __BUILD__ !== 'undefined' ? __BUILD__.commit : 'dev';
+
 export async function loadAssets(base: string, onProgress?: (done: number) => void): Promise<Assets> {
   assetBase = base;
   const names = [
@@ -379,7 +383,9 @@ export async function loadAssets(base: string, onProgress?: (done: number) => vo
   const images = Object.fromEntries(
     await Promise.all(
       names.map(async (name) => {
-        const image = await loadImage(`${base}${name}.png`);
+        const image = await loadImage(`${base}${name}.png?v=${VERSION}`);
+        // The windows' CSS draws the same sheets (--atlas-items and the like): the same fresh address there.
+        document.documentElement.style.setProperty(`--atlas-${name}`, `url("${base}${name}.png?v=${VERSION}")`);
         onProgress?.(++loaded / names.length);
         return [name, image] as const;
       }),
