@@ -65,7 +65,7 @@ class QuipSystem {
 
   /** How much longer the death window waits, ms: the last words are still being said. */
   deathDelay(): number {
-    return this.shown && this.last ? 1500 : 0;
+    return this.shown && this.last ? 2300 : 0;
   }
 
   /** The effects of a turn: what the hero did in them may be worth a word. */
