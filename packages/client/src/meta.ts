@@ -3,6 +3,7 @@ import { audio } from './audio';
 import { fx } from './fx';
 import { lang, locale, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
+import { smooth } from './pace';
 import { type FxMode, quality } from './quality';
 import { el, info, show, sprites, windowOf } from './screens';
 import { canFullscreen, haptics, isFullscreen, openExternal, setFullscreen } from './telegram';
@@ -186,6 +187,7 @@ export function showSettings(options: SettingsOptions): void {
       }),
       fxNote,
     ),
+    switchRow(t.meta.smooth, t.meta.smoothNote, smooth.on, (on) => smooth.set(on)),
     stepsRow(t.meta.shake, () => quality.shake, (v) => quality.setShake(v), () => fx.shake(3, 240, fx.now)),
     canFullscreen() && switchRow(t.fullscreen, null, isFullscreen(), (on) => setFullscreen(on)),
     el(

@@ -205,6 +205,12 @@ export class Motion {
     }
   }
 
+  /** Whether a door swings, a chest opens, a heap drops or flies, a ring spreads or a coin falls (pace.ts). */
+  moving(): boolean {
+    return this.tiles.length > 0 || this.ghosts.length > 0 || this.ripples.length > 0 || this.flashes.length > 0 ||
+      this.coins.length > 0 || this.searches.length > 0 || this.launches.length > 0 || this.sway.size > 0 || this.arrivals.size > 0;
+  }
+
   /** What I picked up this frame, to fly into the backpack. */
   takeLaunches(): Launch[] {
     const out = this.launches;

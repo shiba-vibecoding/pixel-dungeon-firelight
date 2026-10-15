@@ -1,7 +1,8 @@
-import { type Effect, HEIGHT, type Level, type MobKind, T, visibleCells, WIDTH, type World } from '@pd/core';
+import { type Effect, HEIGHT, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
 import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
+import { seenCells } from './sight';
 import { duration, levelRegion } from './sprites';
 
 /*
@@ -393,7 +394,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       if (effect.mob) {
         // Under a monster, where the party can see it: the same plate going off, without shaking the screen
         // (LightningTrap: sparks and arcs; the rest a puff of dust off the plate).
-        if (!visibleCells(world, view.depth)[effect.pos]) return;
+        if (!seenCells(world, view.depth)[effect.pos]) return;
         const at = cellCentre(effect.pos);
         if (effect.kind === 'lightning') {
           fx.burst(at.x, at.y, now, { count: 18, colors: BOLT_GLOW.lightning!, glow: true, speed: [40, 120], life: [200, 450], drag: 0.2, size: [1, 2] });
@@ -496,7 +497,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       return;
     case 'mobFell': {
       // A little dust off the edge after it.
-      if (!here(effect.depth) || !visibleCells(world, view.depth)[effect.pos]) return;
+      if (!here(effect.depth) || !seenCells(world, view.depth)[effect.pos]) return;
       const at = cellCentre(effect.pos);
       fx.burst(at.x, at.y + 4, now, { count: 8, colors: DUST, speed: [10, 40], life: [300, 700], gravity: 260, size: [1, 2] });
       return;

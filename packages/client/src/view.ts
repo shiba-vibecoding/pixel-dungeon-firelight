@@ -1,12 +1,13 @@
 import {
   adjacent, cellX, cellY, type Effect, F, terrainFlags, type Enchantment, heroById, isAlive, itemDef, type ItemKind, itemSprite, LENGTH, type MobKind,
-  visibleCells, WIDTH, type World,
+  WIDTH, type World,
   type Look,
 } from '@pd/core';
 import { audio } from './audio';
 import { capitalize, t } from './i18n';
 import { itemName, plainName } from './itemtext';
 import { type AnimName, type Assets, type CharSprite, duration, heroSprite } from './sprites';
+import { seenCells } from './sight';
 import { haptic } from './telegram';
 import { DEPTH_CARD_MS } from './cards';
 
@@ -234,6 +235,8 @@ export class View {
   readonly puppets = new Map<string, Puppet>();
   /** How long a step takes on screen (ms): STEP_MS, or under live turns the room's beat, so walks never pause. */
   stepMs = STEP_MS;
+  /** While a step just taken is being shown (main.ts): walkers set off this many ms before `now`, so it is already under way on the first frame. */
+  lead = 0;
   floaters: Floater[] = [];
   /** Cells lit up for a moment: discoveries and traps, or tinted clouds of gas and flame. */
   flashes: Array<{ cell: number; start: number; color?: string; duration?: number }> = [];
@@ -247,6 +250,8 @@ export class View {
   bossIntro: { kind: MobKind; start: number } | null = null;
   /** My level-up card: the new level, and when it appeared. */
   levelCard: { lvl: number; start: number } | null = null;
+  /** «Depth 4» over the middle of the view on arriving at a floor (render.ts floorTitle). */
+  floorTitle: { text: string; start: number } | null = null;
   /** A new region's card on the way down: the depth, and when it appeared. */
   /** The descent's card; `intro` on a region's first visit on this device, with its few lines of text. */
   depthCard: { depth: number; start: number; intro: boolean; title?: string; sub?: string; region?: number } | null = null;
@@ -266,7 +271,33 @@ export class View {
     this.bannerStart = 0;
     this.bossIntro = null;
     this.levelCard = null;
+    this.floorTitle = null;
     this.projectiles = [];
+  }
+
+  /**
+   * Whether anything on the map is moving or about to (pace.ts): a step, a blow, a bolt in flight, a number floating, a card,
+   * a body falling. What only breathes (an idle sprite, a burning hero's embers) is not counted.
+   */
+  moving(now: number): boolean {
+    if (
+      this.floaters.length > 0 || this.flashes.length > 0 || this.projectiles.length > 0 ||
+      this.bossIntro !== null || this.levelCard !== null || this.floorTitle !== null || this.depthCard !== null ||
+      this.waveCard !== null || this.bannerStart > 0
+    ) return true;
+    for (const p of this.puppets.values()) {
+      if (!p.alive) {
+        if (!p.laid && now < p.removeAt + 100) return true;
+        continue;
+      }
+      if (
+        now - p.moveStart < (p.moveDur ?? this.stepMs) + WALK_GRACE_MS + 40 || (p.queue !== undefined && p.queue.length > 0) ||
+        now < p.flashUntil || now < p.alertUntil || p.anim !== 'idle' ||
+        (p.lungeStart !== undefined && now - p.lungeStart < 700) || (p.knockStart !== undefined && now - p.knockStart < 700) ||
+        (p.fallStart !== undefined && now - p.fallStart < FALL_MS + 100)
+      ) return true;
+    }
+    return false;
   }
 
   /** Coming into a region (or setting out): its card, over the band in the middle. */
@@ -363,7 +394,7 @@ export class View {
           puppet.aim = pos;
           puppet.queue = [];
           puppet.bend = adjacent(pos, puppet.from) ? cornerBend(map, puppet.from, pos) : undefined;
-          puppet.moveStart = now;
+          puppet.moveStart = now - this.lead;
           puppet.moveDur = this.stepMs;
         }
         puppet.to = pos;
@@ -522,8 +553,8 @@ export class View {
     const mobKind = (depth: number, id: string, fallback: MobKind): MobKind =>
       world.floors[depth]?.mobs.find((mob) => mob.id === id)?.kind ?? fallback;
     // What the party sees on the depth shown, worked out only if something needs it.
-    let sight: boolean[] | undefined;
-    const seen = (cell: number): boolean => (sight ??= visibleCells(world, this.depth))[cell] === true;
+    let sight: readonly boolean[] | undefined;
+    const seen = (cell: number): boolean => (sight ??= seenCells(world, this.depth))[cell] === true;
     for (const effect of effects) {
       switch (effect.type) {
         case 'attack': {
@@ -540,8 +571,14 @@ export class View {
             const toHero = !effect.target.startsWith('#');
             this.float(effect.target, String(effect.damage), toHero ? COLORS.negative : COLORS.warning, now);
             audio.play('hit', 0.8 + Math.random() * 0.45, 1, this.placeOf(effect.target, now));
-            if (effect.target === myId) haptic('hurt');
-            else if (effect.attacker === myId) haptic('hit');
+            if (effect.target === myId) {
+              // A light tap for a hit taken, a heavy one for a crushing blow (a quarter of my health or more).
+              const me = heroById(world, myId);
+              haptic(me && effect.damage >= me.ht * 0.25 ? 'slam' : 'hit');
+            } else if (effect.attacker === myId) {
+              // My blow lands as a soft tap; one that kills as a light one.
+              haptic(target && target.hp - effect.damage <= 0 ? 'hit' : 'tick');
+            }
           } else {
             this.float(effect.target, t.miss, COLORS.neutral, now);
             audio.play('miss', 1, 1, this.placeOf(effect.target, now));

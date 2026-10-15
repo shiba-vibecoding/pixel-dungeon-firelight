@@ -10,6 +10,7 @@
 import { F, HEIGHT, terrainFlags, WIDTH } from '@pd/core';
 import { FLOOR, type Gib, gibTurned, stepGib, type Surface, SWALLOW, WALL } from './gibs';
 import { quality } from './quality';
+import { haptic } from './telegram';
 
 const TILE = 16;
 
@@ -226,6 +227,8 @@ class Fx {
   shake(power: number, ms: number, now: number): void {
     // Reduced motion (the system setting): the view never shakes.
     if (quality.reducedMotion || quality.shake <= 0) return;
+    // A hard shake (a boss's slam, a heavy blow taken, a quake) is felt in the hand as well.
+    if (power >= 5) haptic('slam');
     // As hard as the player likes it (the settings' shake, 0 to 1; 0.6 is the old strength).
     power *= quality.shake / 0.6;
     // A stronger or longer shake takes over; a weaker one does not cut a strong one short.
@@ -235,6 +238,11 @@ class Fx {
       this.shakeStart = now;
       this.shakeUntil = now + ms;
     }
+  }
+
+  /** Whether the screen is shaking, flashing or slashed at (pace.ts); particles and chunks are covered by the effects that threw them. */
+  moving(now: number): boolean {
+    return now < this.shakeUntil || this.flashes.length > 0 || this.slashes.length > 0;
   }
 
   /** How far the camera is thrown this frame, in world pixels. */
