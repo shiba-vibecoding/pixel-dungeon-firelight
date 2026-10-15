@@ -17,7 +17,7 @@ import type { RunSummary } from './runs';
  */
 
 /** The world's season: 1 before Firelight, 2 from it. Raised for the next fresh start. */
-export const SEASON = 2;
+export const SEASON = 3;
 
 /** The Durable Object name of a board, in this season. */
 export const boardObject = (name: string, season: number = SEASON): string => `s${season}:${name}`;
