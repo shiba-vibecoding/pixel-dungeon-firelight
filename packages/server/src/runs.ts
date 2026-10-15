@@ -2,6 +2,7 @@ import {
   act, type Action, addHero, applyBoon, type BadgeId, type BadgeProgress, type Bones, checkBadges, countGame, createWorld, dailyRules, deriveSeed,
   emptyBadgeProgress, fingerprint, giveBones, type HeroClass, heroById, leaveBones, Rng, type RunOutcome, runOutcome, type World,
 } from '@pd/core';
+import type { Letter } from './mail';
 
 /*
  * A player's checked runs and what they add up to. The device plays a run at once, with no
@@ -91,6 +92,18 @@ export interface Profile {
   trophies: Trophy[];
   /** Boards already looked at for trophies (their names). */
   claimed: string[];
+  /** The boards of a day or week this player's runs went onto (mail.ts makes their letters once they close). */
+  entered: string[];
+  /** The letters of the mailbox (mail.ts). */
+  mail: Letter[];
+  /** The step tutorial has been seen through or skipped, on any device (a setting: kept through a season's wipe). */
+  coachDone: boolean;
+  /** The last version of the news the player has seen, on any device (news.ts; a setting: kept through a season's wipe). */
+  newsSeen?: string;
+  /** Honours the admin gave: 'bughunter' for a confirmed report (problem.ts). */
+  honors?: string[];
+  /** The problem reports sent today, for the daily limit (problem.ts). */
+  problems?: { day: string; count: number };
 }
 
 export const MAX_FREEZES = 2;
@@ -99,33 +112,66 @@ const HISTORY = 20;
 export function emptyProfile(name = 'Hero'): Profile {
   return {
     name, games: 0, wins: 0, deepest: 0, best: 0, bestByClass: {}, arenaWaves: 0, arenaBest: 0,
-    streak: { last: null, count: 0, best: 0, freezes: 0 }, dailyDate: null, badges: emptyBadgeProgress(), bones: null, history: [], trophies: [], claimed: [],
+    streak: { last: null, count: 0, best: 0, freezes: 0 }, dailyDate: null, badges: emptyBadgeProgress(), bones: null, history: [], trophies: [], claimed: [], entered: [], mail: [], coachDone: false,
   };
 }
 
 /** The days between two dates (YYYY-MM-DD), b after a. */
 const daysBetween = (a: string, b: string): number => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
+/** The day after `day` (YYYY-MM-DD). */
+const nextDay = (day: string): string => new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+
+/** A gap longer than this many days is a broken streak whatever the outages (and keeps the day-by-day walk short). */
+const LONGEST_GAP = 400;
+
+const asSet = (days: ReadonlySet<string> | readonly string[]): ReadonlySet<string> => (days instanceof Set ? days : new Set(days as readonly string[]));
+
 /**
  * The streak once a daily dungeon is begun on `today`: a day on from the last goes on; a gap the
- * freezes can cover goes on too, spending them; a longer one starts afresh.
+ * freezes can cover goes on too, spending them; a longer one starts afresh. A day the server was down
+ * (`outages`, outages.ts) counts as played: it neither breaks the streak nor spends a freeze, and adds
+ * its day to the count as a day played does (the seventh day of a streak earns its freeze all the same).
  */
-export function keepStreak(streak: Streak, today: string): Streak {
+export function keepStreak(streak: Streak, today: string, outages: ReadonlySet<string> | readonly string[] = []): Streak {
   if (streak.last === today) return streak;
   const gap = streak.last ? daysBetween(streak.last, today) : Infinity;
   if (gap < 1) return streak;
-  const missed = gap - 1;
-  const count = missed <= streak.freezes ? streak.count + 1 : 1;
-  const freezes = missed <= streak.freezes ? streak.freezes - missed : 0;
+  const down = asSet(outages);
+  let { count, freezes } = streak;
+  if (streak.last && gap <= LONGEST_GAP) {
+    // Day by day, in order: a missed day takes a freeze or breaks the streak; a day of outage is a day played.
+    for (let day = nextDay(streak.last); day < today; day = nextDay(day)) {
+      if (down.has(day)) {
+        count++;
+        if (count % 7 === 0) freezes = Math.min(MAX_FREEZES, freezes + 1);
+      } else if (freezes > 0) {
+        freezes--;
+      } else {
+        count = 0;
+      }
+    }
+    count++;
+  } else {
+    count = 1;
+    freezes = 0;
+  }
   // Every seventh day of a streak earns a freeze.
   const earned = count % 7 === 0 ? 1 : 0;
   return { last: today, count, best: Math.max(streak.best, count), freezes: Math.min(MAX_FREEZES, freezes + earned) };
 }
 
-/** A streak as it stands on `today` without anything played: broken if the freezes cannot cover the gap. */
-export function streakNow(streak: Streak, today: string): Streak {
+/**
+ * A streak as it stands on `today` without anything played: broken if the freezes cannot cover the gap. The
+ * server's outage days are no gap (the next daily dungeon adds them to the count).
+ */
+export function streakNow(streak: Streak, today: string, outages: ReadonlySet<string> | readonly string[] = []): Streak {
   if (!streak.last) return streak;
-  const missed = daysBetween(streak.last, today) - 1;
+  const gap = daysBetween(streak.last, today);
+  if (gap > LONGEST_GAP) return { ...streak, count: 0 };
+  const down = asSet(outages);
+  let missed = 0;
+  for (let day = nextDay(streak.last); day < today; day = nextDay(day)) if (!down.has(day)) missed++;
   return missed > streak.freezes ? { ...streak, count: 0 } : streak;
 }
 
@@ -143,6 +189,8 @@ export interface StartOptions {
   now: number;
   /** Today (YYYY-MM-DD, UTC). */
   today: string;
+  /** The days the server was down (outages.ts): the daily streak takes them as played. */
+  outages?: readonly string[];
 }
 
 export interface SyncReply {
@@ -204,7 +252,7 @@ export class PlayerLogic {
     }
     if (daily && ranked) {
       this.profile.dailyDate = today;
-      this.profile.streak = keepStreak(this.profile.streak, today);
+      this.profile.streak = keepStreak(this.profile.streak, today, options.outages);
     }
     this.profile.name = options.name;
     this.profile.games++;

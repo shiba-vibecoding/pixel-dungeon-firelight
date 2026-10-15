@@ -97,6 +97,12 @@ export interface Profile {
   trophies: Array<{ board: string; place: number; at: number }>;
   /** The mailbox: letters not yet expired. Only a server that keeps one sends it (the camp's mail icon waits for it). */
   mail?: Letter[];
+  /** The step tutorial has been seen through on any device. */
+  coachDone?: boolean;
+  /** The last version of the news seen on any device. */
+  newsSeen?: string | null;
+  /** Honours the admin gave: 'bughunter' for a confirmed problem report. */
+  honors?: string[];
   places: Partial<Record<BoardKind, number | null>>;
   /** How many players each board holds now. */
   totals?: Partial<Record<BoardKind, number>>;
@@ -146,7 +152,11 @@ export interface RunApi {
   me(): Promise<Profile | null>;
   /** The mailbox: read all, claim one (by its id) or claim all; the letters and trophies after it, or null. */
   mail(op: 'readAll' | 'claim' | 'claimAll', id?: string): Promise<{ mail: Letter[]; trophies: Profile['trophies'] } | null>;
-  /** «Report a problem»: true once the server has it; false when it could not be sent. */
+  /** The step tutorial is done: kept with the profile, for every device. */
+  coachDone(): Promise<boolean>;
+  /** The news of this version have been seen: kept with the profile, for every device. */
+  news(version: string): Promise<boolean>;
+  /** «Report a problem»: true once the server has it; false when it could not be sent (or five went today). */
   problem(report: ProblemReport): Promise<boolean>;
   board(kind: BoardKind): Promise<BoardView | null>;
 }
@@ -185,23 +195,13 @@ export function runApi(server: string, identity: () => Identity, development: bo
       post('/run', { op: 'sync', slot: meta.slot, run: meta.id, from: meta.seq, actions, hash }, keepalive),
     get: (slot) => post('/run', { op: 'get', slot }),
     me: () => quiet('/me', {}),
+    coachDone: async () => (await quiet<{ coachDone: boolean }>('/me', { coachDone: true }))?.coachDone === true,
+    news: async (version) => (await quiet<{ news: string }>('/me', { news: version }))?.news !== undefined,
     mail: (op, id) => quiet('/mail', { op, ...(id ? { letter: id } : {}) }),
     problem: async (report) => {
-      // A report goes to the server's problem log (/report, the same that takes the game's own errors): the words, the version and the run in
-      // the message and the facts, the log of the run's last actions and the console's errors as the log. In the body only, never in an address.
-      const text = report.text || '(no words)';
-      const log = [
-        `text: ${text}`, `info: ${JSON.stringify(report.info)}`,
-        ...(report.errors?.length ? ['errors:', ...report.errors] : []), ...(report.actions?.length ? ['actions:', ...report.actions] : []),
-      ].join('\n');
+      // The report goes in the body only (never in an address), and is sent whatever rules this build runs: an old build is the likeliest to need it.
       try {
-        const response = await fetch(`${base}/report`, {
-          method: 'POST', headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({
-            kind: 'coop-log', message: `problem report: ${text}`.slice(0, 500), log,
-            context: { version: report.info.version, build: report.info.build, platform: report.info.platform, lang: report.info.lang, rules: report.info.rules, ...(report.info.run ? { depth: report.info.run.depth, slot: report.info.run.slot } : {}) },
-          }),
-        });
+        const response = await fetch(`${base}/problem`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...identity(), ...report }) });
         return response.ok;
       } catch {
         return false;

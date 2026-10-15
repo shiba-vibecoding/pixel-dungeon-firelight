@@ -35,6 +35,17 @@ describe('the season wipe', () => {
     expect(loaded.profile.streak).toEqual({ last: null, count: 0, best: 0, freezes: 0 });
   });
 
+  it('keeps the settings: the tutorial seen, the news seen, the bug hunter’s honour, the day’s problem count', () => {
+    const { profile, runs } = veteran();
+    Object.assign(profile, { coachDone: true, newsSeen: '3.1', honors: ['bughunter'], problems: { day: '2026-10-14', count: 2 } });
+    const loaded = loadPlayer(new Map(Object.entries(toEntries(profile, runs))));
+    expect(loaded.wiped).toBe(true);
+    expect(loaded.profile).toEqual({
+      ...emptyProfile('Alice'), season: SEASON, coachDone: true, newsSeen: '3.1', honors: ['bughunter'], problems: { day: '2026-10-14', count: 2 },
+    });
+    expect(loaded.profile.mail).toEqual([]);
+  });
+
   it('leaves a profile of this season, and a new player, as they are', () => {
     const { profile, runs } = veteran();
     profile.season = SEASON;

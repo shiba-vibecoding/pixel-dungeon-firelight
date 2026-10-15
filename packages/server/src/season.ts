@@ -9,7 +9,8 @@ import { fromEntries } from './run-store';
  * lazily, on first contact after the update, when what it holds was written in an earlier season (Profile.season;
  * absent: season 1).
  *
- * What a reset keeps: who the player is (the name). Everything bought in Pixel-Mart is not in the profile at all: it
+ * What a reset keeps: who the player is and their settings (the name, the tutorial seen, the news seen, the bug
+ * hunter's honour, the day's problem-report count). Everything bought in Pixel-Mart is not in the profile at all: it
  * lives in the player's wallet, a Durable Object of its own (WalletStore, index.ts: owned looks and effects, patronage,
  * the charges, i.e. the Stars history), which a season never touches. There is no pioneer cup.
  *
@@ -23,6 +24,10 @@ export const needsWipe = (profile: Pick<Profile, 'season'>): boolean => (profile
 export function startSeason(old: Profile): Profile {
   const fresh = emptyProfile(old.name);
   fresh.season = SEASON;
+  fresh.coachDone = old.coachDone;
+  if (old.newsSeen !== undefined) fresh.newsSeen = old.newsSeen;
+  if (old.honors !== undefined) fresh.honors = old.honors;
+  if (old.problems !== undefined) fresh.problems = old.problems;
   return fresh;
 }
 
