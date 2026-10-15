@@ -12,7 +12,7 @@ import { type Delivery, RoomLogic, type RoomState } from './room-logic';
 import {
   ADDRESS_HEADER, addReport, MAX_REPORT_BYTES, parseReport, type Report, REPORT_WINDOW_MS, REPORTS_PER_WINDOW,
 } from './reports';
-import { boardTtl } from './boards';
+import { boardObject, boardTtl } from './boards';
 import { CORS, json, jsonBody } from './http';
 import { boardRoute, meRoute, Player, runRoute } from './player';
 import { Card, cardRoute, challengeRoute } from './sharing';
@@ -64,6 +64,11 @@ export interface Env {
   REPORTS: DurableObjectNamespace<ReportStore>;
   /** Secret that reads the reports back: GET /reports with Authorization: Bearer <REPORT_KEY>. */
   REPORT_KEY?: string;
+  /**
+   * Secret the daily dungeon's seed is derived from (daily-seed.ts); `npx wrangler secret put DAILY_SECRET`.
+   * Without it (wrangler dev, tests) a fixed development value is used, which is public: set it in production.
+   */
+  DAILY_SECRET?: string;
 }
 
 /** A room left without players this long is deleted, dungeon and all. */
@@ -748,7 +753,7 @@ async function publicEntries(entries: DailyEntry[], env: Env, date: string): Pro
 
 async function daily(request: Request, env: Env, date: string): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
-  const board = env.DAILY.get(env.DAILY.idFromName(date));
+  const board = env.DAILY.get(env.DAILY.idFromName(boardObject(date)));
   if (request.method === 'GET') {
     const me = new URL(request.url).searchParams.get('me');
     const response = await board.fetch(`https://board/?date=${date}${me ? `&me=${encodeURIComponent(me)}` : ''}`);

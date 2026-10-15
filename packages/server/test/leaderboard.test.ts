@@ -21,6 +21,30 @@ describe('daily leaderboard', () => {
     expect(board.entries()).toHaveLength(2);
   });
 
+  it('ranks equal scores by fewer turns, and only then by who finished earlier', () => {
+    const board = new Leaderboard();
+    const entry = (id: string, turns: number | undefined, at: number) => ({ ...run(2, 2, 100), id, name: id, score: 500, at, ...(turns === undefined ? {} : { turns }) });
+    board.put(entry('slow', 900, 1));
+    board.put(entry('fast', 400, 3));
+    board.put(entry('same-late', 400, 5));
+    board.put(entry('unknown', undefined, 0));
+    expect(board.top(10).map((e) => e.id)).toEqual(['fast', 'same-late', 'slow', 'unknown']);
+    // A higher score still beats any number of turns.
+    board.put({ ...entry('rich', 5000, 9), score: 501 });
+    expect(board.rank('rich')).toBe(1);
+  });
+
+  it('lets a player better their own run on the same score by fewer turns', () => {
+    const board = new Leaderboard();
+    const entry = (turns: number, at: number) => ({ ...run(2, 2, 100), id: 'a', name: 'A', score: 500, at, turns });
+    board.put(entry(900, 1));
+    board.put(entry(1200, 2));
+    expect(board.entries()[0]!.turns).toBe(900);
+    board.put(entry(700, 3));
+    expect(board.entries()).toHaveLength(1);
+    expect(board.entries()[0]!.turns).toBe(700);
+  });
+
   it('stays bounded', () => {
     const board = new Leaderboard();
     for (let i = 0; i < BOARD_SIZE + 20; i++) board.submit(`p${i}`, 'P', run(1, 1, i), i);

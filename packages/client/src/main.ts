@@ -340,8 +340,11 @@ function playerId(): string {
   return id;
 }
 
-/** Same seed for everyone on the same (UTC) day. */
-const dailySeed = (): number => core.dailySeed(core.dayOf(Date.now()));
+/**
+ * Without the server the day's dungeon is only practice: its real seed is the server's secret and comes with the run it
+ * starts, so a device cannot play the day's dungeon ahead of time.
+ */
+const dailySeed = (): number => core.practiceSeed(core.dayOf(Date.now()));
 
 const randomSeed = (): number => Math.floor(Math.random() * 2 ** 31);
 

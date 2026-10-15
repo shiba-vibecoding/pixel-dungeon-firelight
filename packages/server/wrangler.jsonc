@@ -36,7 +36,7 @@
     "ADMIN_CHAT_ID": "364316344"
   },
   // Secrets: npx wrangler secret put BOT_TOKEN, and WEBHOOK_SECRET for the bot's webhook (/telegram/webhook);
-  // REPORT_KEY reads the error reports back (scripts/reports.mjs).
+  // REPORT_KEY reads the error reports back (scripts/reports.mjs); DAILY_SECRET derives the daily dungeon's seed (daily-seed.ts): set it before release.
   // Logs: what the server itself logs (console.error) is kept; Cloudflare's invocation logs are off, because
   // they record each request's URL, and a room's WebSocket URL carries the player's Telegram init data.
   "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } }

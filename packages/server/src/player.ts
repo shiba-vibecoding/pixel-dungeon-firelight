@@ -1,11 +1,13 @@
 import { DurableObject } from 'cloudflare:workers';
 import { type Action, dayOf, type HeroClass, isPatron, RULES_VERSION, type Wallet } from '@pd/core';
-import { BOARD_KINDS, type BoardKind, boardName, boardOfRun, boardsFor, finishedBoards, trophyPlaces } from './boards';
+import { BOARD_KINDS, type BoardKind, boardName, boardObject, boardOfRun, boardsFor, finishedBoards, trophyPlaces } from './boards';
+import { secretDailySeed } from './daily-seed';
 import { CORS, json, jsonBody } from './http';
 import type { Env } from './index';
 import { type DailyEntry, publicId } from './leaderboard';
 import { sanitizeAction } from './messages';
-import { EntryWriter, fromEntries, toEntries } from './run-store';
+import { loadPlayer } from './season';
+import { EntryWriter, toEntries } from './run-store';
 import { describe, ended, MAX_SYNC_ACTIONS, parseSlot, PlayerLogic, type RunSlot, type RunSummary, streakNow } from './runs';
 import { notifierStub } from './notifier';
 import { verifyInitData, WEEK_SECONDS } from './telegram-auth';
@@ -48,7 +50,7 @@ async function who(body: Record<string, unknown>, env: Env): Promise<Who | null>
 }
 
 const playerStub = (env: Env, key: string): DurableObjectStub<Player> => env.PLAYER.get(env.PLAYER.idFromName(key));
-const boardStub = (env: Env, name: string): DurableObjectStub => env.DAILY.get(env.DAILY.idFromName(name));
+const boardStub = (env: Env, name: string): DurableObjectStub => env.DAILY.get(env.DAILY.idFromName(boardObject(name)));
 /** The key a board's public ids are made with: a server secret, so they cannot be worked back to accounts. */
 const boardKey = (env: Env): string => env.BOT_TOKEN ?? 'development';
 
@@ -103,8 +105,10 @@ export class Player extends DurableObject<Env> {
     if (!this.logic) {
       const entries = await this.ctx.storage.list<string>();
       this.writer.loaded(entries);
-      const { profile, runs } = fromEntries(entries);
-      this.logic = new PlayerLogic(profile, runs);
+      // A player of an earlier season is started afresh (season.ts), and that is written out at once, runs under way and all.
+      const loaded = loadPlayer(entries);
+      this.logic = new PlayerLogic(loaded.profile, loaded.runs);
+      if (loaded.wiped) await this.persist(new Set(), new Map());
     }
     return this.logic;
   }
@@ -140,6 +144,7 @@ export class Player extends DurableObject<Env> {
         const challenges = Number.isInteger(body.challenges) ? (body.challenges as number) & 0xff : 0;
         const run = logic.start({
           slot, heroClass, challenges, name: body.player.name, seed: crypto.getRandomValues(new Uint32Array(1))[0]! >>> 1,
+          ...(slot === 'daily' ? { dailySeed: await secretDailySeed(this.env.DAILY_SECRET, dayOf(now)) } : {}),
           id: crypto.randomUUID(), now, today: dayOf(now),
         });
         await this.persist(new Set([slot]), new Map());
@@ -195,7 +200,7 @@ export class Player extends DurableObject<Env> {
       const entry: DailyEntry = {
         id: await publicId(boardKey(this.env), name, player.key), owner: player.key, name: player.name,
         heroClass: summary.heroClass, depth: summary.depth, level: summary.level, gold: summary.gold, won: summary.won,
-        score: summary.score, kills: summary.kills, at: now, ...(patron ? { patron } : {}),
+        score: summary.score, turns: summary.turns, kills: summary.kills, at: now, ...(patron ? { patron } : {}),
       };
       try {
         const response = await boardStub(this.env, name).fetch(`https://board/put?name=${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify(entry) });

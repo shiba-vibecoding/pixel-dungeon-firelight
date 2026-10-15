@@ -128,10 +128,14 @@ export function runOutcome(world: World, hero: Hero): RunOutcome {
   return { ...base, mode: 'dungeon', score, depth, won: world.victory };
 }
 
-/** The daily dungeon's seed: the same for everyone on the same (UTC) day, `date` as YYYY-MM-DD. */
-export function dailySeed(date: string): number {
+/**
+ * The seed of the daily dungeon played as practice (no server, or not the day's counted run): the same for everyone on the
+ * same (UTC) day, `date` as YYYY-MM-DD. It is deliberately not the day's real seed: that one comes from the server's
+ * secret (server/daily-seed.ts) and goes only to the player who starts the counted run, so nobody can scout it.
+ */
+export function practiceSeed(date: string): number {
   let hash = 2166136261;
-  for (const char of date) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  for (const char of `practice:${date}`) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   return (hash >>> 1) % 2147483648;
 }
 
