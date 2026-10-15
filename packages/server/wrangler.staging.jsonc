@@ -29,7 +29,7 @@
     // Players outside Telegram (a plain browser) may join rooms as guests.
     "ALLOW_GUESTS": "true",
     // The Mini App's t.me link: the bot's play button.
-    "APP_LINK": "https://t.me/pixel_dungeon_gamebot/pixel_dungeon",
+    "APP_LINK": "https://t.me/ton_school_bot",
     // The terms page the bot's /terms points to (the client's public/terms.html).
     "TERMS_URL": "https://shiba-vibecoding.github.io/pixel-dungeon-telegram/terms.html",
     // The admin's Telegram chat: error alerts and what players write after /paysupport come here, and only
