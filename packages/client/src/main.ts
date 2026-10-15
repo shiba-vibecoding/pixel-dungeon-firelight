@@ -78,7 +78,7 @@ import { boxOf, CamControl } from './camcontrol';
 import { Pace } from './pace';
 import { forgetSight, seenCells, seenEnemies } from './sight';
 import { interruptWalk, tookDamage, type Vitals, vitalsOf } from './interrupt';
-import { confirmDanger, firstDanger, gasCells, gasKindAt, knownTrap, stepDanger } from './mistap';
+import { confirmDanger, firstDanger, gasCells, gasKindAt, stepDanger } from './mistap';
 import { causeName, causeNote, packLine } from './deathcopy';
 import { labelWords, runLabel } from './labels';
 import { clearMemo, loadMemo, type Memo, memoValid, saveMemo } from './windowmemo';
@@ -1621,20 +1621,20 @@ function tapCell(cell: number, quiet = false): void {
     }
     return;
   }
-  // Mis-tap protection (mistap.ts): a step onto a known trap or into a cloud in sight is asked about first; with a walk
-  // ahead of it, the hero stops short and the next tap on the spot asks.
-  const peril = confirmDanger.on ? firstDanger(world, me, level, walk.queue) : null;
+  // Mis-tap protection (mistap.ts): a step into a cloud in sight is asked about first; with a walk ahead of it, the hero
+  // stops short and the next tap on the spot asks. (A known trap is not asked about: the walk goes round it, or onto it.)
+  const peril = confirmDanger.on ? firstDanger(world, me, walk.queue) : null;
   if (peril) {
     const way = walk.queue;
     if (peril.index > 0) {
       walk.queue = way.slice(0, peril.index);
-      view.say(peril.danger === 'trap' ? t.trapInTheWay : t.safe.danger.gasAhead, '#ff8800');
+      view.say(t.safe.danger.gasAhead, '#ff8800');
       if (!quiet) feedback.aim(walk.queue[walk.queue.length - 1]!, false, vnow);
       return;
     }
     walk.queue = [];
     held.code = '';
-    askDanger(world, me, level, peril.danger, way[0]!, () => {
+    askDanger(world, me, way[0]!, () => {
       const now = session?.world && heroById(session.world, session.myId);
       if (now && isAlive(now) && now.pos === me.pos) walk.queue = way;
     });
@@ -1648,18 +1648,9 @@ function tapCell(cell: number, quiet = false): void {
   else if (cell === level.entrance && (me.depth > 1 || hasAmulet(me))) walk.stairs = 'ascend';
 }
 
-/**
- * The question before a step onto a known trap or into a cloud: the trap's own name and what it does (PD 1.9's
- * traps, i18n-safety.ts), or the gas; «Cancel» at the left, the verb at the right, «Don't ask again» under them.
- */
-function askDanger(world: World, me: Hero, level: Level, danger: 'trap' | 'gas', cell: number, onStep: () => void): void {
+/** The question before a step into a cloud: the gas's name and what it does (i18n-safety.ts); «Cancel» at the left, «Walk in» at the right. */
+function askDanger(world: World, me: Hero, cell: number, onStep: () => void): void {
   const never = { label: t.safe.ask.never, onPress: () => confirmDanger.set(false) };
-  if (danger === 'trap') {
-    const kind = knownTrap(world, me, level, cell);
-    const [name, effect] = kind ? t.safe.trap[kind] : [t.safe.danger.step, ''];
-    showConfirm(name, effect + t.safe.danger.trapAsk, t.safe.danger.step, t.safe.ask.cancel, onStep, hideOverlay, never);
-    return;
-  }
   const [name, effect] = t.safe.danger.gas[gasKindAt(world.floors[me.depth], cell) ?? 'toxic'];
   showConfirm(name, effect + t.safe.danger.gasAsk, t.safe.danger.walkIn, t.safe.ask.cancel, onStep, hideOverlay, never);
 }
@@ -2142,7 +2133,7 @@ addEventListener('keydown', (event) => {
       held.dy = dir[1];
       const next = me.pos + dir[0] + dir[1] * WIDTH;
       const there = seenCells(world, me.depth)[next] ? charAt(world, me.depth, next) : undefined;
-      const perilous = confirmDanger.on && stepDanger(world, me, levelAt(world, me.depth), next) !== null;
+      const perilous = confirmDanger.on && stepDanger(world, me, next) !== null;
       if (session!.beatMs !== null && !aim && !perilous && !(there && 'kind' in there && !swapsWithHero(there)) && !heapAt(world, me.depth, next)) {
         // Live turns: the hero strides on while the key is down (see keyup); never into a fight.
         walk.reset();

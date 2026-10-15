@@ -1,5 +1,5 @@
-import type { Effect, MobKind } from '@pd/core';
-import type { Moment, QuipClass } from './quips';
+import { type Effect, HUNGRY, type ItemKind, type MobKind, STARVING, type TrapKind } from '@pd/core';
+import type { Moment, Occasion, QuipClass } from './quips';
 
 /*
  * What the hero's last turn was, for his quips: read out of the effects the client gets after each turn (a kill, a blow, a bolt,
@@ -15,7 +15,23 @@ export interface WatchHero {
   ht: number;
   /** All kills so far, this turn's included (Hero.kills). */
   kills: number;
+  /** Hunger.level after the turn, if known: it tells when the hero is starving (the reminder) and was hungry (a meal). */
+  hunger?: number;
 }
+
+/** A trap's moment, one for each of PD 1.9's traps. */
+export const TRAP_MOMENT: Record<TrapKind, Occasion> = {
+  poison: 'trapPoison', fire: 'trapFire', toxic: 'trapToxic', paralytic: 'trapParalytic', lightning: 'trapLightning',
+  gripping: 'trapGripping', alarm: 'trapAlarm', summoning: 'trapSummoning',
+};
+/** A food's moment, for the foods that have lines of their own; any other food is a plain «ate». */
+export const FOOD_MOMENT: Partial<Record<ItemKind, Occasion>> = {
+  'food.ration': 'ateRation', 'food.overpriced': 'ateOverpriced', 'food.pasty': 'atePasty', 'food.meat': 'ateMeat',
+  'food.steak': 'ateSteak', 'food.carpaccio': 'ateCarpaccio',
+};
+/** While starving, a reminder every this many turns (a roll between the two). */
+export const NAG_MIN_TURNS = 30;
+export const NAG_MAX_TURNS = 40;
 
 /** Bosses, each with a moment of their own. */
 const BOSSES: Partial<Record<MobKind, Moment>> = { goo: 'goo', tengu: 'tengu', dm300: 'dm300', king: 'king', yog: 'yog' };
@@ -29,8 +45,11 @@ const THIEVES: ReadonlySet<MobKind> = new Set<MobKind>(['thief', 'bandit']);
 
 /** Which moment wins when one turn has several (the first of these). */
 const PRIORITY: readonly Moment[] = [
-  'death', 'amulet', 'goo', 'tengu', 'dm300', 'king', 'yog', 'nearDeath', 'firstBlood', 'streak',
-  'thief', 'wand', 'ranged', 'oneHit', 'cursed', 'hungry', 'trivial', 'kill',
+  'death', 'amulet',
+  'trapAlarm', 'trapSummoning', 'trapLightning', 'trapGripping', 'trapFire', 'trapToxic', 'trapParalytic', 'trapPoison', 'trap',
+  'goo', 'tengu', 'dm300', 'king', 'yog', 'nearDeath', 'firstBlood', 'streak',
+  'thief', 'wand', 'ranged', 'oneHit', 'cursed', 'starving', 'hungry',
+  'ateMeat', 'ateCarpaccio', 'ateSteak', 'ateOverpriced', 'atePasty', 'ateRation', 'ate', 'starvingNag', 'trivial', 'kill',
 ];
 
 /** «Near death» is a win with less than this part of the health left. */
@@ -46,11 +65,24 @@ export class QuipWatch {
   /** Thieves that stole from this hero. */
   private thieves = new Set<string>();
   private kills: number[] = [];
+  /** Whether the hero was hungry at the last look (a meal then is a relief). */
+  private hungry = false;
+  /** The turn of the next reminder while starving; null when not starving. */
+  private nagAt: number | null = null;
+
+  /** @param random Math.random: the client's own dice (the reminder's wait) */
+  constructor(private readonly random: () => number = Math.random) {}
 
   reset(): void {
     this.hits.clear();
     this.thieves.clear();
     this.kills = [];
+    this.hungry = false;
+    this.nagAt = null;
+  }
+
+  private nextNag(turn: number): number {
+    return turn + NAG_MIN_TURNS + Math.floor(this.random() * (NAG_MAX_TURNS - NAG_MIN_TURNS + 1));
   }
 
   /** The moment this turn deserves a word for, if any. */
@@ -73,7 +105,22 @@ export class QuipWatch {
           if (effect.hero === me.id) this.thieves.add(effect.mob);
           break;
         case 'hunger':
-          if (effect.hero === me.id && effect.state === 'hungry') found.add('hungry');
+          if (effect.hero !== me.id) break;
+          this.hungry = true;
+          if (effect.state === 'hungry') found.add('hungry');
+          else {
+            found.add('starving');
+            this.nagAt = this.nextNag(turn);
+          }
+          break;
+        case 'ate':
+          // A meal that ends a hunger; any other meal is nothing to remark on.
+          if (effect.hero !== me.id) break;
+          if (effect.kind.startsWith('food.') && this.hungry) found.add(FOOD_MOMENT[effect.kind] ?? 'ate');
+          this.hungry = false;
+          break;
+        case 'trap':
+          if (effect.hero === me.id && here(effect.depth)) found.add(TRAP_MOMENT[effect.kind]);
           break;
         case 'amulet':
           if (effect.hero === me.id && effect.first) found.add('amulet');
@@ -119,6 +166,17 @@ export class QuipWatch {
         default:
           break;
       }
+    }
+    // The hunger after the turn: a reminder while starving (health is going), and whether a meal would be a relief.
+    if (me.hunger !== undefined) {
+      this.hungry = me.hunger >= HUNGRY;
+      if (me.hunger >= STARVING && me.hp > 0) {
+        this.nagAt ??= this.nextNag(turn);
+        if (turn >= this.nagAt) {
+          found.add('starvingNag');
+          this.nagAt = this.nextNag(turn);
+        }
+      } else this.nagAt = null;
     }
     return PRIORITY.find((m) => found.has(m)) ?? null;
   }

@@ -1,17 +1,18 @@
-import { exploredCells, F, type Floor, hasFlag, type Hero, type Level, trapAt, type TrapKind, type World } from '@pd/core';
+import type { Floor, Hero, World } from '@pd/core';
 import { seenCells } from './sight';
 
 /*
- * Mis-tap protection: on a phone a thumb lands a cell off about one time in ten, and one death in ten is such a
- * tap. A tap that would put the hero straight onto a trap they know of, or into a cloud of gas they can see, asks
- * first (the chasm's question, main.ts); the answer «don't ask again» is kept in the settings, on this device.
- * Pure rules here; the question and the settings switch live with the other windows.
+ * Mis-tap protection: a tap that would put the hero straight into a cloud of gas they can see asks first (the
+ * chasm's question, main.ts); the answer «don't ask again» is kept in the settings, on this device. Pure rules here;
+ * the question and the settings switch live with the other windows.
  *
- * (PD 1.9 has no standing flames: a fire trap or a potion of liquid flame burns whoever is near at once and the
- * grass turns to embers, so there is no fire to step into; the clouds of toxic and paralytic gas are what lingers.)
+ * A known trap is no longer asked about (the owner: stepping on traps is fun): the route of a tap goes round one
+ * when an equally short way exists (findPath), and that is all. And PD 1.9 has no standing flames: a fire trap or a
+ * potion of liquid flame burns whoever is near at once and the grass turns to embers; the clouds of toxic and
+ * paralytic gas are what lingers.
  */
 
-export type Danger = 'trap' | 'gas';
+export type Danger = 'gas';
 
 const KEY = 'pd-confirm-danger';
 
@@ -58,30 +59,20 @@ export function gasCells(world: World, depth: number): Set<number> {
   return cells;
 }
 
-/** The trap a cell holds if the hero knows of it (a hidden one is not known, a spent one is none). */
-export function knownTrap(world: World, hero: Hero, level: Level, cell: number): TrapKind | undefined {
-  const terrain = level.map[cell];
-  if (terrain === undefined || hasFlag(terrain, F.SECRET) || !exploredCells(world, hero.depth)[cell]) return undefined;
-  return trapAt(terrain);
-}
-
 /**
- * What stepping onto a cell would be: a trap the hero knows of, or a cloud in sight; a hero floating over the floor
- * fears no trap, one already in a cloud (getting out of it) or immune to gases fears no cloud. Null: nothing the hero could
- * not see coming.
+ * What stepping onto a cell would be: into a cloud in sight. One already in a cloud (getting out of it) or immune to
+ * gases fears no cloud. Null: nothing the hero could not see coming.
  */
-export function stepDanger(world: World, hero: Hero, level: Level, cell: number): Danger | null {
-  // Floating over the floor passes a trap by, but not a cloud: gas is breathed in the air.
-  if ((hero.levitating ?? 0) <= 0 && knownTrap(world, hero, level, cell)) return 'trap';
+export function stepDanger(world: World, hero: Hero, cell: number): Danger | null {
   const floor = world.floors[hero.depth];
   if ((hero.gasImmune ?? 0) <= 0 && seenCells(world, hero.depth)[cell] && gassed(floor, cell) && !gassed(floor, hero.pos)) return 'gas';
   return null;
 }
 
 /** The first danger on a walk, with its place in it. */
-export function firstDanger(world: World, hero: Hero, level: Level, path: readonly number[]): { index: number; danger: Danger } | null {
+export function firstDanger(world: World, hero: Hero, path: readonly number[]): { index: number; danger: Danger } | null {
   for (let index = 0; index < path.length; index++) {
-    const danger = stepDanger(world, hero, level, path[index]!);
+    const danger = stepDanger(world, hero, path[index]!);
     if (danger) return { index, danger };
   }
   return null;

@@ -1,16 +1,27 @@
-import type { Effect } from '@pd/core';
+import type { Effect, ItemKind, TrapKind } from '@pd/core';
 import { describe, expect, it } from 'vitest';
 import {
-  CHANCE, COOLDOWN_MS, FADE_MS, HOLD_MAX_MS, HOLD_MIN_MS, holdFor, LAST_WORDS_HOLD_MS, LONGEST_LINE, type Moment, OCCASIONS, poolOf, POP_MS,
+  CHANCE, COOLDOWN_MS, GENERAL, TRAP_GAP_MS, FADE_MS, HOLD_MAX_MS, HOLD_MIN_MS, holdFor, LAST_WORDS_HOLD_MS, LONGEST_LINE, type Moment, type Occasion, OCCASIONS, poolOf, POP_MS,
   QUIP_CLASSES, type QuipData, type QuipLang, type QuipMode, QuipPicker, type QuipSet, RECENT, type Register,
 } from '../src/quips';
 import { enQuips } from '../src/quips-en';
 import { ruQuips } from '../src/quips-ru';
-import { QuipWatch, type WatchHero } from '../src/quipwatch';
+import { FOOD_MOMENT, NAG_MAX_TURNS, NAG_MIN_TURNS, QuipWatch, TRAP_MOMENT, type WatchHero } from '../src/quipwatch';
 
 const LANGS: ReadonlyArray<readonly [QuipLang, QuipData]> = [['ru', ruQuips], ['en', enQuips]];
 const REGISTERS: readonly Register[] = ['foul', 'clean'];
 const MOMENTS: readonly Moment[] = ['kill', ...OCCASIONS];
+/** The eight traps of PD 1.9 (core traps.ts) and the moment of each. */
+const TRAPS = Object.entries(TRAP_MOMENT) as Array<[TrapKind, Occasion]>;
+const FOODS = Object.entries(FOOD_MOMENT) as Array<[ItemKind, Occasion]>;
+/** Moments with lines for any hero only (no line of a class's own is required). */
+const SHARED_ONLY: ReadonlySet<Moment> = new Set<Moment>([...TRAPS.map(([, m]) => m), ...FOODS.map(([, m]) => m)]);
+/** How many lines a set needs for a moment (shared ones, for any hero). */
+const AT_LEAST: Partial<Record<Moment, number>> = {
+  trap: 10, hungry: 10, starving: 10, starvingNag: 10, ate: 8,
+  ...Object.fromEntries(TRAPS.map(([, m]) => [m, 8])),
+  ...Object.fromEntries(FOODS.map(([, m]) => [m, 3])),
+};
 
 /** Every line of a set, with where it is. */
 function linesOf(set: QuipSet): string[] {
@@ -41,12 +52,22 @@ describe('the lines', () => {
 
         it('has lines for every occasion, shared and for every class', () => {
           for (const occasion of OCCASIONS) {
-            expect(set.shared[occasion].length, occasion).toBeGreaterThanOrEqual(4);
+            expect(set.shared[occasion].length, occasion).toBeGreaterThanOrEqual(SHARED_ONLY.has(occasion) ? 3 : 4);
             for (const heroClass of QUIP_CLASSES) {
-              expect(set.own[occasion]?.[heroClass]?.length, `${occasion} ${heroClass}`).toBeGreaterThan(0);
-              expect(poolOf(set, occasion, heroClass).length, `${occasion} ${heroClass}`).toBeGreaterThanOrEqual(5);
+              if (!SHARED_ONLY.has(occasion)) expect(set.own[occasion]?.[heroClass]?.length, `${occasion} ${heroClass}`).toBeGreaterThan(0);
+              expect(poolOf(set, occasion, heroClass).length, `${occasion} ${heroClass}`).toBeGreaterThanOrEqual(SHARED_ONLY.has(occasion) ? 3 : 5);
             }
           }
+        });
+
+        it('has the lines the hunger and the traps need: 8 or more for each trap, 10 for any trap, 10 for each hunger stage', () => {
+          for (const [moment, least] of Object.entries(AT_LEAST) as Array<[Moment, number]>) {
+            for (const heroClass of QUIP_CLASSES) expect(poolOf(set, moment, heroClass).length, `${moment} ${heroClass}`).toBeGreaterThanOrEqual(least);
+          }
+          for (const [kind, moment] of TRAPS) expect(set.shared[moment].length, kind).toBeGreaterThanOrEqual(8);
+          expect(set.shared.trap.length).toBeGreaterThanOrEqual(10);
+          // The classes have a few lines of their own about a trap.
+          for (const heroClass of QUIP_CLASSES) expect(set.own.trap?.[heroClass]?.length, heroClass).toBeGreaterThanOrEqual(3);
         });
 
         it('has pools big enough that the last eight lines never exhaust a kill pool, and no line twice in one pool', () => {
@@ -167,7 +188,7 @@ describe('the picker', () => {
   });
 
   it('speaks the other moments about half the time, and a new depth rarely', () => {
-    for (const moment of ['trivial', 'oneHit', 'ranged', 'wand', 'thief', 'cursed', 'hungry'] as const) {
+    for (const moment of ['trivial', 'oneHit', 'ranged', 'wand', 'thief', 'cursed'] as const) {
       expect(rate(moment), moment).toBeGreaterThan(0.45);
       expect(rate(moment), moment).toBeLessThan(0.55);
     }
@@ -179,6 +200,56 @@ describe('the picker', () => {
     for (const moment of ['goo', 'tengu', 'dm300', 'king', 'yog', 'nearDeath', 'streak', 'firstBlood', 'amulet', 'death'] as const) {
       expect(CHANCE[moment]).toBe(1);
       expect(rate(moment, 300), moment).toBe(1);
+    }
+  });
+
+  it('always speaks a trap set off, becoming hungry, starving, and the reminder', () => {
+    for (const moment of ['trap', ...TRAPS.map(([, m]) => m), 'hungry', 'starving', 'starvingNag'] as const) {
+      expect(CHANCE[moment], moment).toBe(1);
+      expect(rate(moment, 300), moment).toBe(1);
+    }
+  });
+
+  it('lets a trap or a pang cut in after 2 s but not sooner, and the reminder not before 6 s', () => {
+    for (const moment of ['trapFire', 'trap', 'hungry', 'starving'] as const) {
+      const p = new QuipPicker(ruQuips, () => 'foul', () => 0);
+      expect(p.offer('kill', 'mage', 10_000)).not.toBeNull();
+      expect(p.offer(moment, 'mage', 10_000 + TRAP_GAP_MS - 1), moment).toBeNull();
+      expect(p.offer(moment, 'mage', 10_000 + TRAP_GAP_MS), moment).not.toBeNull();
+    }
+    const nag = new QuipPicker(ruQuips, () => 'foul', () => 0);
+    expect(nag.offer('kill', 'mage', 10_000)).not.toBeNull();
+    expect(nag.offer('starvingNag', 'mage', 10_000 + COOLDOWN_MS - 1)).toBeNull();
+    expect(nag.offer('starvingNag', 'mage', 10_000 + COOLDOWN_MS)).not.toBeNull();
+    // An ordinary kill still waits its 6 s after a trap's bubble.
+    const trap = new QuipPicker(ruQuips, () => 'foul', () => 0);
+    expect(trap.offer('trapAlarm', 'mage', 10_000)).not.toBeNull();
+    expect(trap.offer('kill', 'mage', 10_000 + COOLDOWN_MS - 1)).toBeNull();
+  });
+
+  it('says a trap\'s own lines most of the time and a general one now and then', () => {
+    for (const [, moment] of TRAPS) {
+      expect(GENERAL[moment]?.[0], moment).toBe('trap');
+      const own = new Set(poolOf(ruQuips.foul, moment, 'warrior'));
+      const general = new Set(poolOf(ruQuips.foul, 'trap', 'warrior'));
+      const p = picker('foul', dice(11));
+      let fromOwn = 0;
+      let fromGeneral = 0;
+      for (let i = 0; i < 600; i++) {
+        const line = p.offer(moment, 'warrior', i * 10_000)!;
+        if (own.has(line)) fromOwn++;
+        else if (general.has(line)) fromGeneral++;
+      }
+      expect(fromOwn + fromGeneral, moment).toBe(600);
+      expect(fromOwn, moment).toBeGreaterThan(600 * 0.65);
+      expect(fromGeneral, moment).toBeGreaterThan(600 * 0.1);
+    }
+  });
+
+  it('speaks after a meal half the time', () => {
+    for (const moment of ['ate', 'ateRation', 'atePasty', 'ateMeat', 'ateSteak', 'ateCarpaccio', 'ateOverpriced'] as const) {
+      expect(rate(moment), moment).toBeGreaterThan(0.45);
+      expect(rate(moment), moment).toBeLessThan(0.55);
     }
   });
 
@@ -258,11 +329,12 @@ describe('the picker', () => {
   });
 });
 
+const me: WatchHero & { heroClass: string } = { id: 'h1', pos: 40, depth: 3, hp: 20, ht: 20, kills: 7, heroClass: 'warrior' };
+const died = (who: string, kind: string, by = 'h1', depth = 3): Effect => ({ type: 'died', depth, who, pos: 41, kind, by }) as unknown as Effect;
+const hit = (target: string, damage = 5): Effect => ({ type: 'attack', depth: 3, attacker: 'h1', target, hit: true, damage });
+const watch = () => new QuipWatch();
+
 describe('what the hero\'s turn was', () => {
-  const me: WatchHero & { heroClass: string } = { id: 'h1', pos: 40, depth: 3, hp: 20, ht: 20, kills: 7, heroClass: 'warrior' };
-  const died = (who: string, kind: string, by = 'h1', depth = 3): Effect => ({ type: 'died', depth, who, pos: 41, kind, by }) as unknown as Effect;
-  const hit = (target: string, damage = 5): Effect => ({ type: 'attack', depth: 3, attacker: 'h1', target, hit: true, damage });
-  const watch = () => new QuipWatch();
 
   it('knows an ordinary kill, a rat and a boss', () => {
     expect(watch().read([hit('#1'), hit('#1'), died('#1', 'gnoll')], me, 10)).toBe('kill');
@@ -343,7 +415,7 @@ describe('what the hero\'s turn was', () => {
     expect(watch().read([{ type: 'amulet', hero: 'h1', first: true }], me, 10)).toBe('amulet');
     expect(watch().read([{ type: 'amulet', hero: 'h1', first: false }], me, 10)).toBeNull();
     expect(watch().read([{ type: 'hunger', hero: 'h1', state: 'hungry' }], me, 10)).toBe('hungry');
-    expect(watch().read([{ type: 'hunger', hero: 'h1', state: 'starving' }], me, 10)).toBeNull();
+    expect(watch().read([{ type: 'hunger', hero: 'h1', state: 'starving' }], me, 10)).toBe('starving');
     expect(watch().read([{ type: 'hunger', hero: 'h2', state: 'hungry' }], me, 10)).toBeNull();
     const cursed = { kind: 'weapon.sword', cursed: true } as never;
     const unseen = { kind: 'weapon.sword', cursed: true, curseUnknown: true } as never;
@@ -358,5 +430,109 @@ describe('what the hero\'s turn was', () => {
     expect(watch().read([hit('#1', 99), died('#1', 'tengu')], { ...me, hp: 1 }, 10)).toBe('tengu');
     // Death outranks all.
     expect(watch().read([died('#1', 'gnoll'), { type: 'died', depth: 3, who: 'h1', pos: 40 }], me, 10)).toBe('death');
+  });
+});
+
+describe('the watch: traps', () => {
+  const kinds = Object.keys(TRAP_MOMENT) as TrapKind[];
+
+  it('maps each of the eight traps to its own moment, with lines for it', () => {
+    expect([...kinds].sort()).toEqual(['alarm', 'fire', 'gripping', 'lightning', 'paralytic', 'poison', 'summoning', 'toxic']);
+    expect(new Set(Object.values(TRAP_MOMENT)).size).toBe(8);
+    for (const kind of kinds) {
+      expect(watch().read([{ type: 'trap', depth: 3, pos: 41, kind, hero: 'h1' }], me, 10), kind).toBe(TRAP_MOMENT[kind]);
+      expect(OCCASIONS).toContain(TRAP_MOMENT[kind]);
+    }
+  });
+
+  it('means a trap the hero sets off, on his floor, not a monster\'s, another hero\'s or another floor\'s', () => {
+    expect(watch().read([{ type: 'trap', depth: 3, pos: 41, kind: 'fire', hero: '', mob: '#4' }], me, 10)).toBeNull();
+    expect(watch().read([{ type: 'trap', depth: 3, pos: 41, kind: 'fire', hero: 'h2' }], me, 10)).toBeNull();
+    expect(watch().read([{ type: 'trap', depth: 4, pos: 41, kind: 'fire', hero: 'h1' }], me, 10)).toBeNull();
+  });
+
+  it('puts a trap above a kill of the same turn, but death above a trap', () => {
+    const trap: Effect = { type: 'trap', depth: 3, pos: 41, kind: 'alarm', hero: 'h1' };
+    expect(watch().read([hit('#1', 30), died('#1', 'gnoll'), trap], me, 10)).toBe('trapAlarm');
+    expect(watch().read([trap, { type: 'died', depth: 3, who: 'h1', pos: 40 }], me, 10)).toBe('death');
+  });
+
+  it('says it through the picker for every trap, class and set, and nothing when switched off', () => {
+    for (const [, data] of LANGS) {
+      for (const mode of ['foul', 'clean'] as const) {
+        for (const kind of kinds) {
+          for (const heroClass of QUIP_CLASSES) {
+            const p = new QuipPicker(data, () => mode, dice(5));
+            const line = p.offer(TRAP_MOMENT[kind], heroClass, 50_000);
+            expect(line, `${mode} ${kind} ${heroClass}`).not.toBeNull();
+            expect([...poolOf(data[mode], TRAP_MOMENT[kind], heroClass), ...poolOf(data[mode], 'trap', heroClass)]).toContain(line);
+          }
+        }
+      }
+      const off = new QuipPicker(data, () => 'off', dice(5));
+      for (const kind of kinds) expect(off.offer(TRAP_MOMENT[kind], 'mage', 50_000)).toBeNull();
+    }
+  });
+});
+
+describe('the watch: hunger and meals', () => {
+  const hunger = (state: 'hungry' | 'starving'): Effect => ({ type: 'hunger', hero: 'h1', state });
+  const ate = (kind: ItemKind): Effect => ({ type: 'ate', hero: 'h1', kind, outcome: null });
+  const fed = { ...me, hunger: 0 };
+  const hungryHero = { ...me, hunger: 300 };
+  const starvingHero = { ...me, hunger: 360 };
+
+  it('knows hungry and starving, and only the hero\'s own', () => {
+    expect(watch().read([hunger('hungry')], hungryHero, 10)).toBe('hungry');
+    expect(watch().read([hunger('starving')], starvingHero, 10)).toBe('starving');
+    expect(watch().read([{ type: 'hunger', hero: 'h2', state: 'starving' }], fed, 10)).toBeNull();
+  });
+
+  it('reminds every 30 to 40 turns while starving, and stops when fed or dead', () => {
+    const w = new QuipWatch(() => 0);
+    expect(w.read([hunger('starving')], starvingHero, 100)).toBe('starving');
+    const idle: Effect[] = [{ type: 'hurt', depth: 3, who: 'h2', damage: 1 }];
+    for (let turn = 101; turn < 100 + NAG_MIN_TURNS; turn++) expect(w.read(idle, starvingHero, turn), String(turn)).toBeNull();
+    expect(w.read(idle, starvingHero, 100 + NAG_MIN_TURNS)).toBe('starvingNag');
+    // The next one is another wait away.
+    expect(w.read(idle, starvingHero, 101 + NAG_MIN_TURNS)).toBeNull();
+    expect(w.read(idle, starvingHero, 100 + 2 * NAG_MIN_TURNS)).toBe('starvingNag');
+    // The longest wait (the top of the dice) is 40.
+    const late = new QuipWatch(() => 0.999);
+    late.read([hunger('starving')], starvingHero, 100);
+    expect(late.read(idle, starvingHero, 100 + NAG_MAX_TURNS - 1)).toBeNull();
+    expect(late.read(idle, starvingHero, 100 + NAG_MAX_TURNS)).toBe('starvingNag');
+    // Fed, no reminder; dead, none either.
+    const fedUp = new QuipWatch(() => 0);
+    fedUp.read([hunger('starving')], starvingHero, 100);
+    expect(fedUp.read(idle, fed, 100 + NAG_MIN_TURNS + 5)).toBeNull();
+    const dying = new QuipWatch(() => 0);
+    dying.read([hunger('starving')], starvingHero, 100);
+    expect(dying.read(idle, { ...starvingHero, hp: 0 }, 100 + NAG_MIN_TURNS + 5)).toBeNull();
+  });
+
+  it('remarks on a meal only if the hero was hungry, with the food\'s own moment', () => {
+    for (const [kind, moment] of FOODS) {
+      const w = watch();
+      w.read([hunger('hungry')], hungryHero, 10);
+      expect(w.read([ate(kind)], fed, 11), kind).toBe(moment);
+    }
+    const w = watch();
+    w.read([hunger('starving')], starvingHero, 10);
+    expect(w.read([ate('food.ration')], fed, 11)).toBe('ateRation');
+    // Not hungry: a snack is nothing; nor is a fish; nor another hero's meal.
+    expect(watch().read([ate('food.ration')], fed, 11)).toBeNull();
+    const h = watch();
+    h.read([hunger('hungry')], hungryHero, 10);
+    expect(h.read([{ type: 'ate', hero: 'h1', kind: 'quest.fish', outcome: 'invisible' }], fed, 11)).toBeNull();
+    const other = watch();
+    other.read([hunger('hungry')], hungryHero, 10);
+    expect(other.read([{ type: 'ate', hero: 'h2', kind: 'food.ration', outcome: null }], fed, 11)).toBeNull();
+    // A meal that leaves the hero hungry still counts; the next one after a full belly does not.
+    const again = watch();
+    again.read([hunger('starving')], starvingHero, 10);
+    expect(again.read([ate('food.meat')], hungryHero, 11)).toBe('ateMeat');
+    expect(again.read([ate('food.ration')], fed, 12)).toBe('ateRation');
+    expect(again.read([ate('food.ration')], fed, 13)).toBeNull();
   });
 });

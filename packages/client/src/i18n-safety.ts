@@ -1,7 +1,7 @@
 import type { TrapKind } from '@pd/core';
 
 /*
- * The texts of the safety stream: the questions asked before a step onto a trap or into gas, before putting on the unknown,
+ * The texts of the safety stream: the questions asked before a step into gas, before putting on the unknown,
  * drinking an unknown potion among enemies, or reading a scroll that changes an item for good; the verbs of the
  * confirmations; the labels of a run («counts», «repeat», «not counted»); and the death window's notes. Every rule stated
  * here is checked against this build's core (traps.ts, gas.ts, scrolls.ts, combat.ts), which is Pixel Dungeon 1.9's.
@@ -37,9 +37,7 @@ export const SAFETY_EN = {
     enchantReplace: 'It takes a new enchantment, and the one it has now is replaced. The scroll is spent only if you agree.',
   },
   danger: {
-    step: 'Step',
     walkIn: 'Walk in',
-    trapAsk: ' Step onto it anyway?',
     gasAsk: ' Walk into it anyway?',
     gas: {
       toxic: ['Toxic gas', 'A cloud of toxic gas lies ahead: it hurts everyone who breathes it.'],
@@ -47,7 +45,7 @@ export const SAFETY_EN = {
     } as Record<'toxic' | 'paralytic', readonly [string, string]>,
     gasAhead: 'A cloud of gas bars the way. Tap again to walk in.',
   },
-  /** PD 1.9's traps (levels/traps): the name, and what it does when stepped on (core traps.ts). */
+  /** PD 1.9's traps (levels/traps): the name, and what it does when stepped on (core traps.ts); the guide's colour table is checked against the names. */
   trap: {
     toxic: ['Toxic gas trap', 'A cloud of toxic gas bursts from it and spreads: it hurts everyone who breathes it.'],
     fire: ['Fire trap', 'It bursts into flame: whoever stands there catches fire, and the grass around burns.'],
@@ -61,8 +59,8 @@ export const SAFETY_EN = {
   /** The notice while aiming from a quick slot with a target marked. */
   aimAgain: 'Tap the slot again to fire at the marked target',
   settings: {
-    danger: 'Ask before a trap or gas',
-    dangerNote: 'A step onto a known trap or into a cloud of gas in sight asks first',
+    danger: 'Ask before gas',
+    dangerNote: 'A step into a cloud of gas in sight asks first',
     risky: 'Ask before risky use',
     riskyNote: 'Putting on an unidentified thing, drinking an unknown potion with an enemy in sight, or reading upgrade and enchantment scrolls asks first',
   },
