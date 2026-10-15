@@ -1,0 +1,44 @@
+// The test server for Firelight: the same code under another name, its own Durable Objects and secrets, and the test bot.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "pd-firelight-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM", "class_name": "Room" },
+      { "name": "DAILY", "class_name": "DailyBoard" },
+      { "name": "WALLET", "class_name": "WalletStore" },
+      { "name": "REPORTS", "class_name": "ReportStore" },
+      { "name": "PLAYER", "class_name": "Player" },
+      { "name": "CARD", "class_name": "Card" },
+      { "name": "NOTIFIER", "class_name": "Notifier" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["DailyBoard"] },
+    { "tag": "v3", "new_sqlite_classes": ["WalletStore"] },
+    { "tag": "v4", "new_sqlite_classes": ["ReportStore"] },
+    { "tag": "v5", "new_sqlite_classes": ["Player"] },
+    { "tag": "v6", "new_sqlite_classes": ["Card", "Notifier"] }
+  ],
+  // Every hour: the bot's reminders that are due (notifier.ts).
+  "triggers": { "crons": ["0 * * * *"] },
+  "vars": {
+    // Players outside Telegram (a plain browser) may join rooms as guests.
+    "ALLOW_GUESTS": "true",
+    // The Mini App's t.me link: the bot's play button.
+    "APP_LINK": "https://t.me/pixel_dungeon_gamebot/pixel_dungeon",
+    // The terms page the bot's /terms points to (the client's public/terms.html).
+    "TERMS_URL": "https://shiba-vibecoding.github.io/pixel-dungeon-telegram/terms.html",
+    // The admin's Telegram chat: error alerts and what players write after /paysupport come here, and only
+    // here do /refund, /payments and /reply work.
+    "ADMIN_CHAT_ID": "364316344"
+  },
+  // Secrets: npx wrangler secret put BOT_TOKEN, and WEBHOOK_SECRET for the bot's webhook (/telegram/webhook);
+  // REPORT_KEY reads the error reports back (scripts/reports.mjs); DAILY_SECRET derives the daily dungeon's seed (daily-seed.ts): set it before release.
+  // Logs: what the server itself logs (console.error) is kept; Cloudflare's invocation logs are off, because
+  // they record each request's URL, and a room's WebSocket URL carries the player's Telegram init data.
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } }
+}

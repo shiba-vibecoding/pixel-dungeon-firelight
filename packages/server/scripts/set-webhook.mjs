@@ -78,7 +78,8 @@ console.log(`Bot: @${bot.username}`);
 
 if (newSecret) {
   console.log('Storing a new WEBHOOK_SECRET in the Worker...');
-  const config = join(dirname(fileURLToPath(import.meta.url)), '..', 'wrangler.jsonc');
+  // WRANGLER_CONFIG picks another Worker (the test server: wrangler.staging.jsonc); the live one otherwise.
+  const config = join(dirname(fileURLToPath(import.meta.url)), '..', process.env.WRANGLER_CONFIG ?? 'wrangler.jsonc');
   let stored = false;
   for (let attempt = 1; attempt <= 3 && !stored; attempt++) {
     const result = spawnSync('npx', ['wrangler', 'secret', 'put', 'WEBHOOK_SECRET', '--config', `"${config}"`], {
