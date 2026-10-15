@@ -1,6 +1,6 @@
 import {
   type Action, BACKPACK_SIZE, scrollTargets, isBroken, isIdentified, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
-  itemSprite, levelKnown, maxExp, type MobKind, SUBCLASSES, visiblyCursed, type World, CLASS_ARMOR_OF,
+  itemAt, itemSprite, type ItemKind, levelKnown, maxExp, type MobKind, SUBCLASSES, visiblyCursed, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
 import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
@@ -9,6 +9,9 @@ import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import { mart } from './mart';
+import { labelWords } from './labels';
+import { confirmRisky, drinkRisk, enchantLossChance, equipRisk, hasMagic, targetEffect } from './riskyuse';
+import { quality } from './quality';
 import { rankIcon, trophyKind } from './trophyicons';
 import { countChallenges } from './meta';
 import type { RunRecord } from './rankings';
@@ -92,6 +95,14 @@ export function show(content: HTMLElement, onClose: (() => void) | null, bare = 
   root.classList.add('open');
   root.classList.toggle('bare', bare);
   sprites(content);
+  windowListener?.(onClose !== null);
+}
+
+let windowListener: ((closable: boolean) => void) | null = null;
+
+/** Told whenever a window is put up: whether it can be closed (Telegram's back button closes it on the title screen). */
+export function onWindow(listener: (closable: boolean) => void): void {
+  windowListener = listener;
 }
 
 export function hideOverlay(): void {
@@ -536,29 +547,45 @@ export interface MenuOptions {
   onSettings(): void;
   onMart(): void;
   onTreat(): void;
+  /** How this run counts (labels.ts) as a chip, and the rest of the subtitle («Daily dungeon · d7»); absent in co-op. */
+  run?: { label: ReturnType<typeof labelWords>; sub: string };
   /** Sends the co-op session's log with a word from the player; absent alone. */
   onReport?: () => void;
   onExit(): void;
 }
 
+/**
+ * The run label's chip (`.pd-runtag`): «counts» green, «repeat» blue, «own seed» purple, «not counted» grey; the full
+ * meaning is its title and its aria-label.
+ */
+export function runTag(label: ReturnType<typeof labelWords>): HTMLElement {
+  const ix = { counted: 0, repeat: 1, custom: 2, local: 3 }[label.kind];
+  const cls = { counted: 'ranked', repeat: 'replay', custom: 'seed', local: 'unranked' }[label.kind];
+  const dot = el('i');
+  dot.style.setProperty('--ix', String(ix));
+  const tag = el('span', { className: `pd-runtag ${cls}`, title: label.note }, dot, label.word);
+  tag.setAttribute('aria-label', label.note);
+  return tag;
+}
+
 export function showMenu(options: MenuOptions): void {
-  show(
-    windowOf(
-      { title: t.menu, onClose: options.onResume, narrow: true },
-      el(
-        'div',
-        { className: 'pd-menu-list' },
-        button(t.resume, options.onResume, 'primary'),
-        el('div', { className: 'pd-row' }, button(t.meta.journal, options.onJournal), button(t.help, options.onHelp)),
-        el('div', { className: 'pd-row' }, button(t.badges, options.onBadges), button(t.mart, options.onMart)),
-        button(t.meta.settings, options.onSettings),
-        options.onReport && button(t.reportProblem, options.onReport, 'quiet'),
-        button(t.treat, options.onTreat, 'quiet'),
-        button(t.toMenu, options.onExit, 'quiet'),
-      ),
+  const box = windowOf(
+    { title: t.menu, onClose: options.onResume, narrow: true },
+    el(
+      'div',
+      { className: 'pd-menu-list' },
+      button(t.resume, options.onResume, 'primary'),
+      el('div', { className: 'pd-row' }, button(t.meta.journal, options.onJournal), button(t.help, options.onHelp)),
+      el('div', { className: 'pd-row' }, button(t.badges, options.onBadges), button(t.mart, options.onMart)),
+      button(t.meta.settings, options.onSettings),
+      options.onReport && button(t.reportProblem, options.onReport, 'quiet'),
+      button(t.treat, options.onTreat, 'quiet'),
+      button(t.toMenu, options.onExit, 'quiet'),
     ),
-    options.onResume,
   );
+  // The subtitle: the chip, then where the run is.
+  if (options.run) box.querySelector('.pd-titles')?.append(el('span', { className: 'pd-sub pd-menu-sub' }, runTag(options.run.label), options.run.sub));
+  show(box, options.onResume);
 }
 
 /* Badges */
@@ -692,7 +719,8 @@ export function showTrade(options: TradeOptions): void {
   buy.disabled = short;
   const head = windowOf(
     { title: capitalize(itemName(world, item)), icon: slot(world, item, { hero }), onClose: options.onClose },
-    ...describedItem(world, hero, item),
+    // A long description scrolls; the price and «Buy» stay in reach.
+    el('div', { className: 'pd-scroll pd-stack' }, ...describedItem(world, hero, item)),
     actions([buy], []),
     info(t.yourGold(hero.gold), 'pd-note center'),
   );
@@ -785,8 +813,8 @@ export function showQuest(options: QuestOptions): void {
     );
   const box = windowOf(
     { title: capitalize(t.mobs[options.who]), icon: portrait(options.who), onClose: answers.length > 0 ? undefined : options.onClose },
-    info(options.text, 'pd-speech'),
-    offers.length > 0 && el('div', { className: 'pd-rewards' }, ...offers.map(card)),
+    // The words and the rewards scroll on a short screen; the answers stay in reach below.
+    el('div', { className: 'pd-scroll pd-stack' }, info(options.text, 'pd-speech'), offers.length > 0 && el('div', { className: 'pd-rewards' }, ...offers.map(card))),
     answerRow,
   );
   show(box, answers.length > 0 ? null : options.onClose);
@@ -893,10 +921,12 @@ export function showReforge(options: ReforgeOptions): void {
   show(
     windowOf(
       { title: capitalize(t.mobs.blacksmith), icon: portrait('blacksmith'), onClose: options.onClose },
-      info(options.text, 'pd-speech'),
-      pairs.length === 0
-        ? info(t.nothingToReforge, 'pd-note')
-        : el('div', { className: 'pd-scroll' }, el('div', { className: 'pd-rewards pd-reforges' }, ...pairs.map(card))),
+      el(
+        'div',
+        { className: 'pd-scroll pd-stack' },
+        info(options.text, 'pd-speech'),
+        pairs.length === 0 ? info(t.nothingToReforge, 'pd-note') : el('div', { className: 'pd-rewards pd-reforges' }, ...pairs.map(card)),
+      ),
     ),
     options.onClose,
   );
@@ -914,22 +944,120 @@ export function showSign(text: string, onClose: () => void): void {
   };
 }
 
-/** Chasm.heroJump's WndOptions: a question with a yes and a no; the yes is dangerous here. */
-export function showConfirm(title: string, text: string, yes: string, no: string, onYes: () => void, onClose: () => void): void {
+/** An extra answer under the two of a confirmation. `then`: the confirmed action follows (a «don't ask again» does the action too). */
+export interface ConfirmExtra {
+  label: string;
+  onPress: () => void;
+  then?: boolean;
+}
+
+export interface ConfirmOptions {
+  /** More answers under the others, such as «Throw it instead». */
+  extras?: readonly ConfirmExtra[];
+  /** The action wants a hold of this many ms (a run being replaced): a tap fills a bar and does nothing else. */
+  hold?: number;
+  /** The action is no danger: a plain button rather than a red one. */
+  calm?: boolean;
+}
+
+/**
+ * Hold to confirm: while a finger (or Space / Enter) stays down the fill climbs in 12 steps over `ms` (3 with reduced
+ * motion); letting go early empties it at once; at the top the button turns, says «Replaced», and the action follows 300 ms
+ * later. A bare tap only makes the hint under the row blink.
+ */
+function holdButton(label: string, ms: number, done: () => void, className: string, hint: HTMLElement): HTMLButtonElement {
+  const fillBar = el('span', { className: 'pd-hold-fill' });
+  fillBar.setAttribute('aria-hidden', 'true');
+  const text = el('span', { className: 'pd-hold-text', textContent: label });
+  const node = el('button', { className: `pd-button hold ${className}`.trim() }, fillBar, text);
+  node.style.setProperty('--p', '0');
+  node.setAttribute('aria-label', label);
+  node.setAttribute('aria-description', t.safe.verbs.holdHint);
+  const steps = quality.reducedMotion ? 3 : 12;
+  let step = 0;
+  let timer = 0;
+  let finished = false;
+  const stop = (): void => {
+    if (finished) return;
+    window.clearInterval(timer);
+    timer = 0;
+    step = 0;
+    node.classList.remove('holding');
+    node.style.setProperty('--p', '0');
+    text.textContent = label;
+  };
+  const tick = (): void => {
+    step++;
+    node.style.setProperty('--p', String(step / steps));
+    if (step < steps) return;
+    window.clearInterval(timer);
+    finished = true;
+    node.classList.remove('holding');
+    node.classList.add('done');
+    text.textContent = t.safe.verbs.replaced;
+    audio.play('click');
+    window.setTimeout(done, 300);
+  };
+  const begin = (): void => {
+    if (timer || finished) return;
+    node.classList.add('holding');
+    text.textContent = t.safe.verbs.holding;
+    timer = window.setInterval(tick, ms / steps);
+  };
+  node.addEventListener('pointerdown', begin);
+  for (const event of ['pointerup', 'pointerleave', 'pointercancel', 'blur'] as const) node.addEventListener(event, stop);
+  node.addEventListener('keydown', (event) => {
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
+      begin();
+    }
+  });
+  node.addEventListener('keyup', stop);
+  // A bare click (a tap, a screen reader, a script) does nothing: the hold is the confirmation; the hint blinks once.
+  node.addEventListener('click', (event) => {
+    event.preventDefault();
+    hint.classList.remove('blink');
+    void hint.offsetWidth;
+    hint.classList.add('blink');
+  });
+  return node;
+}
+
+/**
+ * A question with two answers (Chasm.heroJump's WndOptions and the rest): a quiet cancel at the left sized to its word, the
+ * action at the right as a verb; more answers under a rule, a whole row each (`options.extras`, the «don't ask again» of
+ * `never`). `onClose` runs on any answer first.
+ */
+export function showConfirm(
+  title: string, text: string, yes: string, no: string, onYes: () => void, onClose: () => void,
+  /** A third answer under the others: «don't ask again». */
+  never?: { label: string; onPress: () => void },
+  options: ConfirmOptions = {},
+): void {
+  const tone = options.calm ? 'primary' : 'danger';
+  const doIt = (): void => {
+    onClose();
+    onYes();
+  };
+  const hint = options.hold ? el('p', { className: 'pd-hold-hint', textContent: t.safe.holdFor((options.hold / 1000).toFixed(1)) }) : null;
+  // The hold button is the window's one action; a plain answer is red only if it is a danger.
+  const answer = hint ? holdButton(yes, options.hold!, doIt, 'danger', hint) : button(yes, doIt, tone);
+  const extras: ConfirmExtra[] = [...(options.extras ?? []), ...(never ? [{ ...never, then: true }] : [])];
   show(
     windowOf(
-      { narrow: true },
+      { narrow: true, className: 'pd-confirm2' },
       el('h2', { className: 'pd-heading center', textContent: title }),
       info(text, 'pd-info center'),
-      // One above the other, so a long answer is never cut off.
-      el(
+      el('div', { className: 'pd-confirm-row' }, button(no, onClose, 'quiet'), answer),
+      hint,
+      extras.length > 0 && el(
         'div',
-        { className: 'pd-confirm-actions' },
-        button(yes, () => {
+        { className: 'pd-confirm-more' },
+        ...extras.map((extra) => button(extra.label, () => {
           onClose();
-          onYes();
-        }, 'danger'),
-        button(no, onClose, 'quiet'),
+          extra.onPress();
+          if (extra.then) onYes();
+        })),
       ),
     ),
     onClose,
@@ -1017,6 +1145,10 @@ export interface EndOptions {
   title: string;
   /** What befell the hero: where and by what. */
   cause: string;
+  /** What that cause means, and what the pack held (deathcopy.ts): a line each, under the cause. */
+  notes?: readonly string[];
+  /** How the run counted — «counts», «repeat», «not counted» — and what that means for the boards (labels.ts). */
+  label?: ReturnType<typeof labelWords>;
   hero: { name: string; heroClass: HeroClass; lvl: number; depth: number; gold: number; kills: number };
   onRestart: () => void;
   restartLabel: string;
@@ -1049,17 +1181,25 @@ export function showRunEnd(options: EndOptions): void {
     el(
       'section',
       { className: `pd-window pd-runend${options.victory ? ' win' : ''}` },
-      el('h2', { className: 'pd-display', textContent: options.title }),
-      options.cause && el('p', { className: 'pd-cause', textContent: options.cause }),
-      options.place && !options.ranking ? el('p', { className: 'pd-info center pd-gold', textContent: options.place === 1 ? t.newRecord : t.rankPlace(options.place) }) : null,
+      // Everything above the buttons scrolls on a short screen, so «Again», «Boards» and «Menu» always stay in reach.
       el(
         'div',
-        { className: 'pd-runend-hero' },
-        el('div', { className: 'pd-avatar' }, avatar),
-        el('div', { className: 'pd-info', textContent: `${hero.name} · ${t.classes[hero.heroClass]}` }),
+        { className: 'pd-scroll' },
+        el('h2', { className: 'pd-display', textContent: options.title }),
+        // Under the title: how the run counted, as a chip with its meaning beside it.
+        options.label && el('div', { className: 'pd-runtag-line' }, runTag(options.label), el('span', { textContent: options.label.note })),
+        options.cause && el('p', { className: 'pd-cause', textContent: options.cause }),
+        ...(options.notes ?? []).filter(Boolean).map((note) => el('p', { className: 'pd-info center pd-note', textContent: note })),
+        options.place && !options.ranking ? el('p', { className: 'pd-info center pd-gold', textContent: options.place === 1 ? t.newRecord : t.rankPlace(options.place) }) : null,
+        el(
+          'div',
+          { className: 'pd-runend-hero' },
+          el('div', { className: 'pd-avatar' }, avatar),
+          el('div', { className: 'pd-info', textContent: `${hero.name} · ${t.classes[hero.heroClass]}` }),
+        ),
+        stats(rows),
+        options.ranking,
       ),
-      stats(rows),
-      options.ranking,
       actions(
         [button(options.restartLabel, options.onRestart, 'primary')],
         [...(options.share?.length ? [shareButton(options.share)] : []), ...(options.onBoards ? [button(t.ranked.title, options.onBoards)] : [])],
@@ -1160,6 +1300,47 @@ export function refreshBackpack(world: World, hero: Hero): void {
     return;
   }
   showBackpack({ ...openBag.options, world, hero }, openBag.choice);
+}
+
+/**
+ * The window that is open now, as far as it can be put back: the backpack with its choice and filter, or a target being
+ * picked (the item and the button of its panel that asked) — a pending pick is never lost to a turn of the phone, a reload
+ * of the Mini App or a window that went away. A question asked in the middle of either (put on? upgrade?) is part of it.
+ * Null: no such window.
+ */
+export type WindowState =
+  | { w: 'bag'; choice: BagChoice | null; filter: BagFilter }
+  | { w: 'pick'; index: number; button: number };
+
+/** The item panel's last pressed button, and the one that opened the pick now. */
+let lastUse: { index: number; button: number } | null = null;
+let pickOrigin: { index: number; button: number } | null = null;
+
+export function windowState(): WindowState | null {
+  if (!overlayOpen()) return null;
+  if (root.querySelector('.pd-window.bag.targeting')) return pickOrigin && pickOrigin.button >= 0 ? { w: 'pick', ...pickOrigin } : null;
+  if (root.querySelector('.pd-window.bag') && openBag) return { w: 'bag', choice: openBag.choice, filter: openBag.filter };
+  return null;
+}
+
+/** Puts a window back as it was (windowState); false if the item it is about is not what it was. */
+export function reopenWindow(state: WindowState, options: BackpackOptions, kind?: ItemKind): boolean {
+  if (state.w === 'pick') {
+    const item = options.hero.items[state.index];
+    if (!item || (kind && item.kind !== kind)) return false;
+    showBackpack(options, { index: state.index });
+    const { main, more } = itemActions({ ...options, item, index: state.index });
+    const node = [...main, ...more][state.button];
+    if (node instanceof HTMLButtonElement) node.click();
+    return true;
+  }
+  if (state.choice && !chosenItem(options.hero, state.choice)) state = { ...state, choice: null };
+  showBackpack(options, state.choice);
+  if (openBag && state.filter !== 'all') {
+    openBag.filter = state.filter;
+    showBackpack(options, state.choice);
+  }
+  return true;
 }
 
 /** The item a choice points at, if it is still there. */
@@ -1412,6 +1593,7 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
     const place = placeAt(event.clientX, event.clientY);
     const action = place ? drag.ok.get(place.dataset.drop!) : undefined;
     const node = drag.node;
+    const dragged = drag.item;
     end();
     // The click that ends a drag is not a tap on the item.
     const swallow = (click: Event): void => {
@@ -1422,16 +1604,25 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
     window.setTimeout(() => node.removeEventListener('click', swallow, { capture: true }), 50);
     if (!action) return;
     audio.play('click');
+    const back = (): void => showBackpack(options, null);
     if (action.type === 'use') {
-      // Reading a scroll: the dungeon answers, the backpack closes.
-      openBag = null;
-      options.onAction(action);
-      options.onClose();
+      // Reading a scroll: asked first what it will do to the item, then the dungeon answers and the backpack closes.
+      const done = (): void => {
+        openBag = null;
+        options.onAction(action);
+        options.onClose();
+      };
+      if (action.on !== undefined) askTarget(options, dragged.kind, action.on, done, back);
+      else done();
       return;
     }
-    if (openBag) openBag.choice = null;
-    options.onAction(action);
-    refreshBackpack(options.world, options.hero);
+    const go = (): void => {
+      if (openBag) openBag.choice = null;
+      options.onAction(action);
+      refreshBackpack(options.world, options.hero);
+    };
+    if (action.type === 'equip') askEquip(dragged, options.world, go, back);
+    else go();
   };
   box.addEventListener('pointerup', release);
   box.addEventListener('pointercancel', (event) => {
@@ -1567,6 +1758,69 @@ function firstAction(options: ItemOptions): void {
   if (first instanceof HTMLButtonElement) first.click();
 }
 
+/**
+ * Putting on what is not known not to be cursed asks first (riskyuse.ts): a cursed thing will not come off. `go` puts it
+ * on; `back` is where a no returns to.
+ */
+function askEquip(item: Item, world: World, go: () => void, back: () => void): void {
+  if (!confirmRisky.on || !equipRisk(item)) {
+    go();
+    return;
+  }
+  const F = t.safe.ask;
+  openBag = null;
+  showConfirm(
+    F.putOnTitle(itemName(world, item)), F.putOnText(t.items['scroll.identify'], t.items['scroll.removeCurse']), F.putOn, F.cancel, go, back,
+    { label: F.putOnNever, onPress: () => confirmRisky.set(false) }, { calm: true },
+  );
+}
+
+/**
+ * An unknown potion with an enemy in sight asks first (riskyuse.ts): drink, cancel, or throw it instead. `back` is where
+ * a no returns to (the backpack, or nothing when it was a quick slot).
+ */
+export function askDrink(world: World, hero: Hero, item: Item, drink: () => void, throwIt: () => void, back: () => void): void {
+  if (!confirmRisky.on || !drinkRisk(world, hero, item)) {
+    drink();
+    return;
+  }
+  const F = t.safe.ask;
+  openBag = null;
+  showConfirm(
+    F.drinkTitle(itemName(world, item)), F.drinkText, F.drink, F.cancel, drink, back,
+    { label: F.drinkNever, onPress: () => confirmRisky.set(false) }, { calm: true, extras: [{ label: F.throwInstead, onPress: throwIt }] },
+  );
+}
+
+/**
+ * «Upgrade X?» before a scroll does for good what it does to the item picked: the scroll stays in the pack until the
+ * answer is yes. Nothing is sent to the dungeon before it, so a cancel (or a window lost to a turn of the phone) spends
+ * nothing: the core takes a scroll only with the action that reads it. `again` is where a no returns to.
+ */
+function askTarget(options: BackpackOptions, kind: ItemKind, on: ItemRef, go: () => void, again: () => void): void {
+  const { world, hero } = options;
+  const effect = confirmRisky.on ? targetEffect(kind) : undefined;
+  const target = itemAt(hero, on);
+  if (!effect || !target) {
+    go();
+    return;
+  }
+  const F = t.safe.target;
+  const name = itemName(world, target);
+  const never = { label: t.safe.ask.never, onPress: () => confirmRisky.set(false) };
+  openBag = null;
+  if (effect === 'upgrade') {
+    // ScrollOfUpgrade: the enchantment may be driven out. The exact chance gives the level away, so it is told only when the level is known.
+    const loss = levelKnown(target) ? enchantLossChance(target) : 0;
+    const maybe = loss > 0 ? F.upgradeLoss(loss) : !levelKnown(target) && hasMagic(target) ? F.upgradeMaybe : '';
+    showConfirm(F.upgradeTitle(name), F.upgradeText + maybe, F.upgrade, t.safe.ask.cancel, go, again, never, { calm: true });
+    return;
+  }
+  showConfirm(
+    F.enchantTitle(name), hasMagic(target) ? F.enchantReplace : F.enchantPlain, F.enchant, t.safe.ask.cancel, go, again, never, { calm: true },
+  );
+}
+
 /** The old item window, kept for what still opens an item on its own: now the backpack with it chosen. */
 function showItem(options: ItemOptions): void {
   const choice: BagChoice = options.index !== null ? { index: options.index } : options.ring !== undefined ? { ring: options.ring } : { worn: options.item === options.hero.armor ? 'armor' : 'weapon' };
@@ -1600,10 +1854,18 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
   const more: HTMLElement[] = [];
   const danger: HTMLElement[] = [];
   const use = (label: string, onClick: () => void): void => {
-    (main.length === 0 ? main : more).push(button(label, onClick, main.length === 0 ? 'primary' : ''));
+    // Which button of the item's panel was pressed, for a window that must come back (windowState).
+    const node: HTMLButtonElement = button(label, () => {
+      lastUse = options.index === null ? null : { index: options.index, button: [...main, ...more].indexOf(node) };
+      onClick();
+    }, main.length === 0 ? 'primary' : '');
+    (main.length === 0 ? main : more).push(node);
   };
   if (index !== null) {
-    if (category === 'potion') use(t.drink, () => act({ type: 'use', item: index }));
+    if (category === 'potion') {
+      const back = (): void => showBackpack(options, { index });
+      use(t.drink, () => askDrink(world, hero, item, () => act({ type: 'use', item: index }), () => aimWith('throw', index), back));
+    }
     if (category === 'food' || item.kind === 'quest.fish') use(t.eat, () => act({ type: 'use', item: index }));
     if (category === 'torch') use(t.light, () => act({ type: 'use', item: index }));
     if (category === 'tome') use(t.readTome, () => showWays(options, index, act));
@@ -1621,23 +1883,28 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
       const targeted = isKnown(world, item) && (TARGETED_SCROLLS as readonly string[]).includes(item.kind);
       const targets = targeted ? scrollTargets(world, hero, item.kind) : [];
       if (targeted) {
-        use(t.readOn, () =>
+        /** The pick of a target, then «Upgrade X?» (askTarget): a no goes back to the pick; the scroll is spent by the yes alone. */
+        const pickSure = (): void => {
+          pickOrigin = lastUse;
           showBackpack({
             ...options,
             pick: {
               title: t.pickTitle[item.kind as 'scroll.upgrade' | 'scroll.enchantment' | 'scroll.identify'] ?? t.read,
               targets,
-              onPick: (on) => act({ type: 'use', item: index, on }),
+              onPick: (on) => askTarget(options, item.kind, on, () => act({ type: 'use', item: index, on }), pickSure),
               onCancel: () => showBackpack(options, { index }),
             },
-          }));
+          });
+        };
+        use(t.readOn, pickSure);
       } else {
         use(t.read, () => act({ type: 'use', item: index }));
       }
     }
     if (category === 'weapon' || category === 'armor' || category === 'ring') {
       const worn: BagChoice = category === 'ring' ? { ring: hero.rings.length < 2 ? hero.rings.length : 0 } : { worn: category === 'armor' ? 'armor' : 'weapon' };
-      use(category === 'ring' ? t.putOn : t.equip, () => stay({ type: 'equip', item: index }, worn));
+      use(category === 'ring' ? t.putOn : t.equip, () =>
+        askEquip(item, world, () => stay({ type: 'equip', item: index }, worn), () => showBackpack(options, { index })));
     }
     if (category === 'beacon') {
       // LloydsBeacon: set it here, or go back to where it was set.

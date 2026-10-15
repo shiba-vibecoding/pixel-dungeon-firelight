@@ -193,3 +193,69 @@ body:has(#overlay.open) .pd-mapctl { visibility: hidden; }
 .pd-profile-facts .pd-fact { white-space: nowrap; }
 /* The daily dungeon's rules of the day (core daily.ts). */
 .pd-daily-rules { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--gold); }
+
+/* ---------- Safety, convenience and Telegram (client part 2) ---------- */
+
+/* A scroll area whose parts keep the window's own gaps (a quest giver's words and rewards, a shop item's long description). */
+.pd-window > .pd-scroll.pd-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+/* The death window's scroll keeps the gaps it had as a column. */
+.pd-runend > .pd-scroll { display: flex; flex-direction: column; gap: var(--space-3); }
+/* The safety net: a window whose content still outgrows the screen scrolls as a whole instead of spilling off it
+   (windows with a scroll area of their own never reach it). */
+.pd-window { overflow-y: auto; overscroll-behavior: contain; }
+
+/* A question: cancel at the left, the action at the right as a verb; more answers under a rule, a whole row each. */
+:root { --atlas-run-tags: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAJCAYAAABaMo5wAAABVUlEQVR4nJ2Uv2vCUBDHv09cXu4P6eruJIKUDHZwUOpgIVMc2l3ndHepU0CHQjoUaociheDk3Kxu/SeSjNfpQn68p8WDQO7Hu/vcvUsUrhQizWmaq2v8RJrrNolt/6ewzbfYM69GDuqFiTTfvd5gNz01oIg0h+G6kcvzfE7TXFk7lMOzYw/b7gFP75k1rgwlMCK76aniE5jJ5KGoLXbP88/DzBOXibT1WeyZTRMk0nz/0Wn4iDRH0cZoi6INE2lu2RLKZNI0V9KhvIv+fKuU6UrO6XVfGK4r02rNjr3KoTpMOYFMROLL0xI9DjLEQYbH3x/Egf2aTTAA0H7pfKl54vK2e2AAMMEQaZYdMu3SauQUMADw+f0GABgOxoiDDP2lw/V8JhgAKAzzxGUAxsmUoVYjx9p1HGQFjMhwMEZ/6RgXuyye56PxlV36t1yKse3LpT0rx/wBt1jqSyMDVkEAAAAASUVORK5CYII="); }
+.pd-confirm2 { gap: var(--space-2); }
+.pd-confirm-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+.pd-confirm2 .pd-button { min-width: 0; white-space: normal; height: auto; min-height: var(--tap-min, 44px); text-overflow: clip; line-height: 1.2; padding-top: 4px; padding-bottom: 4px; }
+.pd-confirm-more { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 2px solid var(--stone-500); }
+.pd-confirm-more .pd-button { width: 100%; }
+
+/* Hold to confirm (replacing a saved run): the fill climbs left to right in 12 steps while the finger stays down; letting go early empties it. */
+.pd-button.hold { position: relative; overflow: hidden; isolation: isolate; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pd-hold-fill { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--p, 0) * 100%); background: repeating-linear-gradient(90deg, rgba(255, 220, 160, .38) 0 6px, rgba(255, 220, 160, .3) 6px 8px); z-index: -1; pointer-events: none; }
+.pd-button.hold::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(0, 0, 0, .35); }
+.pd-button.hold .pd-hold-text { position: relative; }
+.pd-button.hold.done { --b-bg: var(--gold-deep); --b-hi: var(--gold); --b-lo: #6a4810; --b-ink: var(--stone-900); }
+.pd-button.hold.done .pd-hold-fill { width: 100%; background: rgba(255, 255, 255, .12); }
+.pd-confirm2 .pd-hold-hint { margin: -4px 0 0; align-self: flex-end; text-align: right; font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); }
+.pd-hold-hint.blink { animation: pd-hint-blink .6s steps(2) 1; }
+@keyframes pd-hint-blink { 50% { color: var(--gold); } }
+@media (prefers-reduced-motion: reduce) { .pd-hold-hint.blink { animation: none; color: var(--gold); } }
+
+/* How a run counts: a chip (green, blue, purple, grey) in the menu's subtitle and under the death window's title. */
+.pd-runtag { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px 0 4px; font: var(--text-caption, 400 15px/22px var(--font-small)); white-space: nowrap; clip-path: var(--notch); background: var(--stone-900); box-shadow: inset 0 0 0 1px currentColor; vertical-align: middle; }
+.pd-runtag i { flex: none; width: 18px; height: 18px; background: var(--atlas-run-tags) no-repeat; background-size: 72px 18px; background-position: calc(var(--ix, 0) * -18px) 0; image-rendering: pixelated; }
+.pd-runtag.ranked { color: var(--good); } .pd-runtag.replay { color: #7ab8ff; } .pd-runtag.seed { color: #c890ff; } .pd-runtag.unranked { color: var(--ink-muted); }
+.pd-runtag-line { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 8px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+.pd-menu-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+
+/* Telegram's own controls at the top in full screen (telegram.ts applySafeTop): never under «Закрыть» and «⋮». */
+:root { --safe-t: max(env(safe-area-inset-top, 0px), calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)), var(--pd-tg-top, 0px)); }
+
+/* Backpack, narrow view: the grid gives way (the pack scrolls), but the item panel never collapses below its min-height. */
+.pd-bag-side { display: flex; flex-direction: column; gap: var(--space-2); flex: 0 2 auto; min-height: 96px; overflow-y: auto; overscroll-behavior: contain; }
+.pd-pick { flex: 1 1 auto; min-height: 188px; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-1); }
+/* In the game the windows sit in #overlay, which is not a container (only the cards' .pd-overlay is), so ui.css's container query
+   never matched there: the item's description sat in a narrow scrolling box under the grid. From 760 px the panel goes to the right. */
+@media (min-width: 760px) {
+  #overlay .pd-window.bag { --window-max: 860px; height: auto; }
+  #overlay .pd-bag-body { flex-direction: row; align-items: stretch; gap: var(--space-4); }
+  #overlay .pd-bag-side { flex: none; min-height: 0; }
+  #overlay .pd-pick { flex: 1 1 0; min-height: 0; padding: 0 0 0 var(--space-4); border-left: var(--u) solid var(--stone-500); }
+  #overlay .pd-pick-head .pd-heading { font: var(--text-title, 400 24px/28px var(--font-ui)); }
+  #overlay .pd-pick-actions > .primary .pd-btn-sub { display: block; }
+}
+/* Bigger cells while the height allows (below 700 px they stay compact). */
+@media (min-width: 760px) and (min-height: 701px) {
+  #overlay .pd-window.bag { --cell: 72px; }
+  #overlay :is(.pd-bag-equip, .pd-bag-grid) .pd-slot .pd-item { --u: 4px; }
+}
+/* Backpack, narrow view with nothing chosen: the hint is one short line and the grid gets the room (the item panel's
+   min-height is for an item's description, not for the «touch an item» line and the hold demo). */
+@media (max-width: 759px) {
+  .pd-pick.empty { flex: none; min-height: 0; padding-top: 0; }
+  .pd-pick.empty .pd-hold-hint { display: none; }
+  .pd-pick.empty .pd-info, .pd-pick.empty p { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); }
+}

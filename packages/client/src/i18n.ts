@@ -1,5 +1,6 @@
 import type { EmoteKind, Enchantment, Glyph, HeroClass, ItemKind, MobKind, PlantKind, SubClass, TrapKind } from '@pd/core';
 import type { BuffName } from './hud';
+import { SAFETY_EN, SAFETY_RU } from './i18n-safety';
 
 /* Interface text in Russian and English; the language follows Telegram or the browser. */
 
@@ -853,6 +854,8 @@ const en = {
     combo: 'Combo', fury: 'Fury', barkskin: 'Barkskin', levitation: 'Levitating', immunity: 'Immune to gases',
     blindness: 'Blinded', deferred: 'Deferred damage', bleeding: 'Bleeding', sacrifice: 'Marked for sacrifice',
   } as Record<BuffName, string>,
+  /** The safety stream's questions, labels and death notes (i18n-safety.ts). */
+  safe: SAFETY_EN,
   causes: {
     poison: 'poison', burning: 'fire', ooze: 'caustic ooze', lightning: 'lightning', gripping: 'a gripping trap', hunger: 'starvation',
     bones: 'an explosion of bones', gas: 'toxic gas', fall: 'a fall into the chasm', deferred: 'deferred damage', bleeding: 'bleeding', multiplicity: 'armour of multiplicity', bomb: 'a bomb',
@@ -1941,6 +1944,7 @@ const ru: Strings = {
     combo: 'Комбо', fury: 'Ярость', barkskin: 'Кора', levitation: 'Левитация', immunity: 'Невосприимчивость к газам',
     blindness: 'Слепота', deferred: 'Отложенный урон', bleeding: 'Кровотечение', sacrifice: 'Отмечен для жертвы',
   },
+  safe: SAFETY_RU,
   causes: {
     poison: 'яд', burning: 'огонь', ooze: 'едкая слизь', lightning: 'молния', gripping: 'капкан', hunger: 'голод',
     bones: 'взрыв костей', gas: 'ядовитый газ', fall: 'падение в пропасть', deferred: 'отложенный урон', bleeding: 'кровотечение', multiplicity: 'доспех множественности', bomb: 'взрыв бомбы',

@@ -30,6 +30,7 @@ import { chargesOf, itemInfo, itemName, wearOf } from './itemtext';
 import { bakeLevel, type Camera, patchLevel, render } from './render';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
+  askDrink, onWindow, reopenWindow, type WindowState, windowState,
   refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTitle, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
 import { profileCard, rankingBlock, showBoards, trophyText } from './rankui';
@@ -51,7 +52,7 @@ import { type BoardKind, type Profile, type RunMeta, type RunSlot, runApi, type 
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
+  backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
   shareArena, shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen,
 } from './telegram';
@@ -61,6 +62,11 @@ import { boxOf, CamControl } from './camcontrol';
 import { Pace } from './pace';
 import { forgetSight, seenCells, seenEnemies } from './sight';
 import { interruptWalk, tookDamage, type Vitals, vitalsOf } from './interrupt';
+import { confirmDanger, firstDanger, gasCells, gasKindAt, knownTrap, stepDanger } from './mistap';
+import { causeName, causeNote, packLine } from './deathcopy';
+import { labelWords, runLabel } from './labels';
+import { clearMemo, loadMemo, type Memo, memoValid, saveMemo } from './windowmemo';
+import { lastTargetIn, refreshTarget, rememberTarget, resetTargeting, shotPath, startTargeting, fireAtTarget, usesTargeting } from './targeting';
 
 /*
  * Pixel Dungeon client: title screen, then a solo run (kept in local storage),
@@ -238,6 +244,7 @@ const mapControlsActions = {
     const target = world && me ? attackTarget(world, me) : null;
     if (!world || !me || !target || session!.busy) return;
     walk.reset();
+    rememberTarget(target);
     if (adjacent(me.pos, target.pos)) send({ type: 'attack', target: target.id }, performance.now());
     else walk.chase = target.id;
   },
@@ -369,8 +376,12 @@ function enterGame(next: Session, roomId: string | null, welcome = t.welcome): v
   view.log = [];
   view.say(welcome);
   hideOverlay();
-  // The very first game opens with how to play.
-  if (!stored('pd-seen-help')) {
+  // A window that was open when the Mini App went away (a reload, a turn of the phone) comes back if the game allows it.
+  const kept = loadMemo();
+  const restored = !!kept && restoreWindow(kept as Memo<WindowState>);
+  if (kept && !restored) clearMemo();
+  // The very first game opens with how to play (not over a window that came back).
+  if (!restored && !stored('pd-seen-help')) {
     store('pd-seen-help', '1');
     showHelp(hideOverlay);
   }
@@ -546,7 +557,7 @@ function askOnTitle(): void {
     }, () => {
       store('pd-notify-asked', '1');
       toTitle(false);
-    });
+    }, undefined, { calm: true });
     return;
   }
   if (openings >= 3 && !stored('pd-home-asked')) {
@@ -557,7 +568,7 @@ function askOnTitle(): void {
       showConfirm(t.ranked.homeAsk, t.ranked.homeAskText, t.ranked.homeYes, t.ranked.notNow, () => {
         addToHomeScreen();
         toTitle(false);
-      }, () => toTitle(false));
+      }, () => toTitle(false), undefined, { calm: true });
     });
   }
 }
@@ -608,6 +619,15 @@ function refreshProfile(): void {
   });
 }
 
+/** Replacing a saved run wants a hold of this long (ms): the run is lost for good. */
+const HOLD_TO_REPLACE_MS = 1200;
+
+// Telegram's back button on the title screen closes the window that is open (settings, boards, the Mart...); the title itself has none.
+// In a run it opens the menu or closes the window (enterGame).
+onWindow((closable) => {
+  if (!session) backButton(closable ? () => void closeOverlay() : null);
+});
+
 function toTitle(ask = true): void {
   session?.close();
   session = null;
@@ -642,8 +662,8 @@ function toTitle(ask = true): void {
     onContinue: () => startSolo('continue'),
     // A new game over a saved one asks first: the saved run is lost.
     onSolo: () =>
-      saved ? showConfirm(t.meta.newRunTitle, t.meta.newRunText, t.meta.newRunYes, t.meta.cancel, () => startSolo('new'), toTitle)
-      : stale ? showConfirm(t.meta.newRunTitle, t.meta.staleRunText(stale.depth, t.classes[stale.heroClass]), t.meta.newRunYes, t.meta.cancel, () => startSolo('new'), toTitle)
+      saved ? showConfirm(t.meta.newRunTitle, t.meta.newRunText, t.meta.newRunYes, t.meta.cancel, () => startSolo('new'), toTitle, undefined, { hold: HOLD_TO_REPLACE_MS })
+      : stale ? showConfirm(t.meta.newRunTitle, t.meta.staleRunText(stale.depth, t.classes[stale.heroClass]), t.meta.newRunYes, t.meta.cancel, () => startSolo('new'), toTitle, undefined, { hold: HOLD_TO_REPLACE_MS })
       : startSolo('new'),
     onDaily: () => startSolo('daily'),
     onDailyBoard: api ? () => openBoards('daily') : undefined,
@@ -676,7 +696,11 @@ function openJournal(onClose: () => void = hideOverlay): void {
 }
 
 function openMenu(): void {
+  const labelled = session?.mode === 'solo' ? labelWords(runLabel({ checked: !!session.checked, ranked: session.checked?.meta.ranked ?? true })) : null;
+  const here = session?.world && session.myId !== null ? heroById(session.world, session.myId)?.depth : undefined;
+  const depthText = here === undefined || session?.world?.arena ? '' : t.newDepth(here);
   showMenu({
+    ...(labelled ? { run: { label: labelled, sub: [dailyRun ? t.daily : '', depthText].filter(Boolean).join(' · ') } } : {}),
     onResume: hideOverlay,
     onHelp: () => showHelp(hideOverlay),
     onBadges: () => showBadges(hideOverlay),
@@ -725,14 +749,33 @@ const walk = {
 const heapAt = (world: World, depth: number, pos: number): boolean =>
   (world.floors[depth]?.heaps ?? []).some((heap) => heap.pos === pos && heap.kind !== 'hidden');
 
-/** Aiming a thrown weapon or a wand: the next tap on the map picks the target. */
-let aim: { index: number; kind: 'throw' | 'zap' | 'special' } | null = null;
+/**
+ * Aiming a thrown weapon or a wand: the next tap on the map picks the target. Aiming from a quick slot (`slot`) may
+ * have the last target marked: the same slot tapped again fires at it (targeting.ts).
+ */
+let aim: { index: number; kind: 'throw' | 'zap' | 'special'; slot?: number; marked?: boolean } | null = null;
+
+/** The aim from a quick slot is on a marked target: fire at it (autoAim: angled round what is in the way, if need be). False: it is gone. */
+function fireMarked(): boolean {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me || !aim?.marked || !isAlive(me)) return false;
+  const shot = fireAtTarget(world, levelAt(world, me.depth), me);
+  if (!shot) {
+    aim.marked = false;
+    return false;
+  }
+  tapCell(shot.cell);
+  return true;
+}
 
 function toggleQuickslot(slot = 0): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!me) return;
   if (aim) {
+    // QuickSlotButton.onClick: the slot that is aiming at a marked target, tapped again, fires at it.
+    if (aim.marked && aim.slot === slot && fireMarked()) return;
     aim = null;
     return;
   }
@@ -746,8 +789,15 @@ function toggleQuickslot(slot = 0): void {
   }
   walk.reset();
   const use = quickUse(item.kind);
-  if (use === 'use') send({ type: 'use', item: index }, performance.now());
-  else if (use) aim = { index, kind: use };
+  if (use === 'use') {
+    // An unknown potion with an enemy in sight asks first (riskyuse.ts): drink, cancel, or throw it instead.
+    askDrink(world, me, item, () => send({ type: 'use', item: index }, performance.now()), () => {
+      aim = { index, kind: 'throw' };
+    }, hideOverlay);
+  } else if (use) {
+    // QuickSlotButton.useTargeting: a throw or a wand offers the last target, marked, for the slot to be tapped again.
+    aim = usesTargeting(item.kind) ? { index, kind: use, slot, marked: startTargeting(world, me) } : { index, kind: use };
+  }
 }
 
 /** Awake monsters the party could see last frame (a rest goes no further while there are any). */
@@ -1240,6 +1290,11 @@ function tapCell(cell: number, quiet = false): void {
   if (aim) {
     const shot = aim;
     aim = null;
+    // Item.cast and its kin: whoever the shot is aimed at is the last target (QuickSlotButton.target).
+    if (shot.kind === 'throw' || shot.kind === 'zap') {
+      const end = shotPath(world, level, me.depth, me.pos, cell).at(-1);
+      rememberTarget(seenEnemies(world, me).find((m) => m.pos === end));
+    }
     if (shot.kind === 'special') send({ type: 'special', target: cell }, performance.now());
     else if (cell !== me.pos && me.items[shot.index]) send({ type: shot.kind, item: shot.index, target: cell }, performance.now());
     return;
@@ -1259,6 +1314,7 @@ function tapCell(cell: number, quiet = false): void {
   const mob = world.floors[me.depth]?.mobs.find((m) => m.pos === cell);
   if (mob && visible[cell]) {
     walk.chase = mob.id;
+    rememberTarget(seenEnemies(world, me).find((m) => m.id === mob.id));
     if (!quiet) feedback.aim(cell, true, vnow, mob.id);
     return;
   }
@@ -1311,7 +1367,10 @@ function tapCell(cell: number, quiet = false): void {
   }
   // The alchemy pot: what it is for, then walk up to it as usual.
   if (level.map[cell] === T.ALCHEMY) view.say(t.alchemyPot, '#ffff44');
-  walk.queue = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating) ?? [];
+  // The way goes round monsters in sight, known traps (findPath) and clouds of gas in sight, where another way exists.
+  const occupied = occupiedCells(world, me.depth);
+  const clouds = new Set([...occupied, ...gasCells(world, me.depth)]);
+  walk.queue = findPath(level, me.pos, cell, clouds, explored, floating) ?? findPath(level, me.pos, cell, occupied, explored, floating) ?? [];
   if (walk.queue.length === 0) {
     // No way around a known trap: walk up to it and say so; a tap on the trap itself steps onto it.
     const risky = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating, true);
@@ -1326,12 +1385,47 @@ function tapCell(cell: number, quiet = false): void {
     }
     return;
   }
+  // Mis-tap protection (mistap.ts): a step onto a known trap or into a cloud in sight is asked about first; with a walk
+  // ahead of it, the hero stops short and the next tap on the spot asks.
+  const peril = confirmDanger.on ? firstDanger(world, me, level, walk.queue) : null;
+  if (peril) {
+    const way = walk.queue;
+    if (peril.index > 0) {
+      walk.queue = way.slice(0, peril.index);
+      view.say(peril.danger === 'trap' ? t.trapInTheWay : t.safe.danger.gasAhead, '#ff8800');
+      if (!quiet) feedback.aim(walk.queue[walk.queue.length - 1]!, false, vnow);
+      return;
+    }
+    walk.queue = [];
+    held.code = '';
+    askDanger(world, me, level, peril.danger, way[0]!, () => {
+      const now = session?.world && heroById(session.world, session.myId);
+      if (now && isAlive(now) && now.pos === me.pos) walk.queue = way;
+    });
+    return;
+  }
   if (!quiet && walk.queue.length > 1) feedback.aim(cell, false, vnow);
   if (!quiet) walk.goal = cell;
   walk.pickup = heapAt(world, me.depth, cell);
   if (world.arena) return;
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && (me.depth > 1 || hasAmulet(me))) walk.stairs = 'ascend';
+}
+
+/**
+ * The question before a step onto a known trap or into a cloud: the trap's own name and what it does (PD 1.9's
+ * traps, i18n-safety.ts), or the gas; «Cancel» at the left, the verb at the right, «Don't ask again» under them.
+ */
+function askDanger(world: World, me: Hero, level: Level, danger: 'trap' | 'gas', cell: number, onStep: () => void): void {
+  const never = { label: t.safe.ask.never, onPress: () => confirmDanger.set(false) };
+  if (danger === 'trap') {
+    const kind = knownTrap(world, me, level, cell);
+    const [name, effect] = kind ? t.safe.trap[kind] : [t.safe.danger.step, ''];
+    showConfirm(name, effect + t.safe.danger.trapAsk, t.safe.danger.step, t.safe.ask.cancel, onStep, hideOverlay, never);
+    return;
+  }
+  const [name, effect] = t.safe.danger.gas[gasKindAt(world.floors[me.depth], cell) ?? 'toxic'];
+  showConfirm(name, effect + t.safe.danger.gasAsk, t.safe.danger.walkIn, t.safe.ask.cancel, onStep, hideOverlay, never);
 }
 
 function openHero(): void {
@@ -1353,7 +1447,12 @@ function openBackpack(): void {
   walk.reset();
   aim = null;
   newLoot = false;
-  showBackpack({
+  showBackpack(backpackOptions(world, me));
+}
+
+/** The backpack as the map's button opens it (also to put it back, see restoreWindow). */
+function backpackOptions(world: World, me: Hero): Parameters<typeof showBackpack>[0] {
+  return {
     world,
     hero: me,
     onAction: (action) => send(action, performance.now()),
@@ -1361,7 +1460,64 @@ function openBackpack(): void {
       aim = { index, kind };
     },
     onClose: hideOverlay,
-  });
+  };
+}
+
+/* Windows that come back (windowmemo.ts) */
+
+/** The run the window is open in: its seed, and the server's id for it when it is a checked one. */
+const runKey = (world: World): string => `${world.run.seed}:${session?.checked?.meta.id ?? ''}`;
+
+/** The window last seen open, kept while it is: it comes back after a turn of the phone, a resize or a return to the game. */
+let lastWindow: Memo<WindowState> | null = null;
+
+/** Puts a kept window back, if the game still allows it (the same run and turn, the hero alive, the item what it was). */
+function restoreWindow(memo: Memo<WindowState>): boolean {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me || overlayOpen() || !memoValid(memo, runKey(world), world.turn, isAlive(me), world.over)) return false;
+  walk.reset();
+  aim = null;
+  return reopenWindow(memo.state, backpackOptions(world, me), memo.kind as core.ItemKind | undefined);
+}
+
+/** Every frame: the open backpack or pick is noted on the device; a closed one is forgotten. */
+function syncWindowMemo(): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  if (world.over || !isAlive(me) || !overlayOpen()) {
+    if (lastWindow) clearMemo();
+    lastWindow = null;
+    return;
+  }
+  // Another window in the middle of the pick (a question): the pick it belongs to is kept.
+  const state = windowState();
+  if (!state) return;
+  const index = state.w === 'pick' ? state.index : state.choice && 'index' in state.choice ? state.choice.index : -1;
+  const kind = me.items[index]?.kind;
+  if (lastWindow && lastWindow.turn === world.turn && JSON.stringify(lastWindow.state) === JSON.stringify(state)) return;
+  lastWindow = { run: runKey(world), turn: world.turn, ...(kind ? { kind } : {}), state };
+  saveMemo(lastWindow);
+}
+
+/** The game is back in view or its size changed: a window that was open and is gone is opened again. */
+function recoverWindow(): void {
+  if (!session || !lastWindow || overlayOpen()) return;
+  if (!restoreWindow(lastWindow)) lastWindow = null;
+}
+addEventListener('orientationchange', () => setTimeout(recoverWindow, 50));
+addEventListener('resize', () => setTimeout(recoverWindow, 50));
+addEventListener('pageshow', recoverWindow);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) recoverWindow();
+});
+
+/** A run is under way: alive, not over (Telegram then keeps swipes off and asks before closing). */
+function runUnderway(): boolean {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  return !!me && isAlive(me) && !world.over;
 }
 
 /* Zoom and looking around: the camera is camcontrol.ts (drag to look about, pinch or wheel to zoom, the whole level, back to the hero). */
@@ -1750,7 +1906,8 @@ addEventListener('keydown', (event) => {
       held.dy = dir[1];
       const next = me.pos + dir[0] + dir[1] * WIDTH;
       const there = seenCells(world, me.depth)[next] ? charAt(world, me.depth, next) : undefined;
-      if (session!.beatMs !== null && !aim && !(there && 'kind' in there && !swapsWithHero(there)) && !heapAt(world, me.depth, next)) {
+      const perilous = confirmDanger.on && stepDanger(world, me, levelAt(world, me.depth), next) !== null;
+      if (session!.beatMs !== null && !aim && !perilous && !(there && 'kind' in there && !swapsWithHero(there)) && !heapAt(world, me.depth, next)) {
         // Live turns: the hero strides on while the key is down (see keyup); never into a fight.
         walk.reset();
         held.striding = true;
@@ -2046,6 +2203,8 @@ function frame(now: number): void {
     lastFrame = now;
   }
   tick(now);
+  guardRun(runUnderway());
+  syncWindowMemo();
 }
 
 /**
@@ -2170,7 +2329,10 @@ function tick(now: number): void {
   lastVisual = vnow;
 
   if (session.generation !== seenGeneration || me.depth !== view.depth) {
-    if (session.generation !== seenGeneration) deathShown = -1;
+    if (session.generation !== seenGeneration) {
+      deathShown = -1;
+      resetTargeting();
+    }
     seenGeneration = session.generation;
     view.reset(me.depth);
     fx.reset();
@@ -2245,6 +2407,8 @@ function tick(now: number): void {
     }
     threats = awake;
     enemiesInSight = enemies.map((m) => m.id);
+    // Hero.checkVisibleMobs: with no fair last target, the nearest enemy a shot can reach becomes it.
+    if (isAlive(me)) refreshTarget(world, level, me);
   }
 
   // Blows held back to follow mine, when their moment has come.
@@ -2366,6 +2530,8 @@ function tick(now: number): void {
       },
       over: (c: CanvasRenderingContext2D) => {
         motion.drawOver(c, vnow);
+        // QuickSlotButton.crossM: aiming from a slot, the target the slot tapped again fires at is marked on the map.
+        feedback.mark(aim?.marked && isAlive(me) ? lastTargetIn(seenEnemies(world, me))?.id ?? null : null);
         feedback.draw(
           c, walk.queue, (id) => mobById(world, me.depth, id)?.pos,
           walk.queue.length === 0 && !walk.chase && !session!.busy, vnow,
@@ -2458,7 +2624,7 @@ function tick(now: number): void {
   const status: HudStatus | null =
     session.status ? { kind: session.status === t.reconnecting ? 'reconnecting' : 'connecting', text: session.status }
     : !isAlive(me) && !world.over ? { kind: 'dead', text: `${t.youDied}. ${world.arena ? t.arena.fallenCoop : t.youDiedCoop}` }
-    : aim ? { kind: 'target', text: t.chooseTarget, cancel: { label: t.cancel, onClick: cancelChoice }, ...(aimed ? { item: itemSprite(aimed, world.run.labels) } : {}) }
+    : aim ? { kind: 'target', text: aim.marked ? t.safe.aimAgain : t.chooseTarget, cancel: { label: t.cancel, onClick: cancelChoice }, ...(aimed ? { item: itemSprite(aimed, world.run.labels) } : {}) }
     : examining ? { kind: 'examine', text: t.examinePrompt, cancel: { label: t.cancel, onClick: cancelChoice } }
     : waitingFor.length > 0 ? { kind: 'waiting', text: t.waitingShort, names: waitingFor }
     : holdingFelt ? { kind: 'waiting', text: t.partyWaitsForYou }
@@ -2532,7 +2698,7 @@ function tick(now: number): void {
     const deepestNow = Object.keys(world.levels).length;
     // Scored as the server scores it (core verify.ts runOutcome: challenges raise it).
     const scoreNow = core.runOutcome(world, me).score;
-    const killer = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
+    const killer = causeName(me.killedBy);
     const shareText = dailyRun ? t.shareText(scoreNow, deepestNow) : t.shareTextRun(scoreNow, deepestNow);
     const share = shareChoices(async () => {
       const reply = answer ? await answer : null;
@@ -2545,7 +2711,7 @@ function tick(now: number): void {
     window.setTimeout(() => {
       if (!session?.world?.over) return;
       if (!victory) haptic('error');
-      const cause = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
+      const cause = causeName(me.killedBy);
       // Rankings: the run takes its place among this device's best.
       const deepest = Object.keys(world.levels).length;
       const gold = me.stats?.gold ?? me.gold;
@@ -2570,6 +2736,9 @@ function tick(now: number): void {
         victory,
         title: victory ? (world.ending === 'surface' ? t.happyEnd : t.victory) : solo ? t.youDied : t.partyFell,
         cause: victory ? (world.ending === 'surface' ? t.happyEndText : t.victoryText) : [t.soloFell(me.depth), cause ? t.killedBy(cause) : ''].filter(Boolean).join(' '),
+        // What the cause means when it was no monster's blow, and what the pack held (deathcopy.ts).
+        ...(victory ? {} : { notes: [causeNote(me.killedBy), packLine(me)] }),
+        ...(solo ? { label: labelWords(runLabel({ checked: !!session.checked, ranked: session.checked?.meta.ranked ?? true })) } : {}),
         hero: { name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, lvl: me.lvl, depth: me.depth, gold: me.gold, kills: me.kills },
         restartLabel: victory ? t.newRun : solo ? t.tryAgain : t.restartRun,
         onRestart: () => {

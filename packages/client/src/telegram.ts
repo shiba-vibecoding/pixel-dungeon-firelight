@@ -11,6 +11,10 @@ interface WebApp {
   expand(): void;
   isVersionAtLeast?(version: string): boolean;
   disableVerticalSwipes?(): void;
+  enableVerticalSwipes?(): void;
+  /** Bot API 6.2: Telegram asks before the app is closed. */
+  enableClosingConfirmation?(): void;
+  disableClosingConfirmation?(): void;
   setHeaderColor?(color: string): void;
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
@@ -65,7 +69,6 @@ export function initTelegram(background: string): void {
   webApp.ready();
   webApp.expand();
   const at = (version: string): boolean => webApp.isVersionAtLeast?.(version) ?? false;
-  if (at('7.7')) webApp.disableVerticalSwipes?.();
   if (at('6.1')) {
     webApp.setHeaderColor?.(background);
     webApp.setBackgroundColor?.(background);
@@ -74,14 +77,39 @@ export function initTelegram(background: string): void {
   // Bot API 8.0: on a phone the game takes the whole screen however it was opened (BotFather's full-screen
   // setting reaches only the profile's «Open» button), unless the player turned that off in the settings.
   if (at('8.0') && /^(ios|android)/.test(webApp.platform) && wantsFullscreen()) webApp.requestFullscreen?.();
+  // On a computer the full-screen mode (BotFather's setting, or a link's mode=fullscreen) is meant for phones: Telegram
+  // Desktop then makes a window larger than what shows, cut off at the screen's edge and with no frame to move it by.
+  // So there the game leaves it at once, for an ordinary window.
+  else if (at('8.0') && !/^(ios|android)/.test(webApp.platform) && webApp.isFullscreen) webApp.exitFullscreen?.();
 }
 
-/** The player's choice about the whole screen, kept on this device: on unless turned off. */
+/*
+ * During a run a swipe down must not close the Mini App, and closing it asks first (a thumb sliding down the map ends
+ * runs). Outside a run both are off, so the title and the lists behave as Telegram's own do.
+ */
+let guarded = false;
+
+/** Whether a run is under way: swipes disabled and the closing confirmation on while it is; both undone when it is not. */
+export function guardRun(on: boolean): void {
+  if (!webApp || !inTelegram || guarded === on) return;
+  guarded = on;
+  const at = (version: string): boolean => webApp.isVersionAtLeast?.(version) ?? false;
+  if (at('7.7')) {
+    if (on) webApp.disableVerticalSwipes?.();
+    else webApp.enableVerticalSwipes?.();
+  }
+  if (at('6.2')) {
+    if (on) webApp.enableClosingConfirmation?.();
+    else webApp.disableClosingConfirmation?.();
+  }
+}
+
+/** The player's choice about the whole screen, kept on this device: off unless the player turns it on (Telegram's full screen covers the game's top with its own buttons). */
 function wantsFullscreen(): boolean {
   try {
-    return localStorage.getItem('pd-fullscreen') !== 'off';
+    return localStorage.getItem('pd-fullscreen') === 'on';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -95,6 +123,27 @@ export function backButton(handler: (() => void) | null): void {
   onBack = handler;
   if (handler) button.show();
   else button.hide();
+}
+
+/**
+ * The room Telegram's own controls take at the top (`--pd-tg-top`, joined into `--safe-t` in game.css). In full screen on a
+ * phone Telegram lays «Закрыть» and «⋮» over the page; its CSS variables for that may be missing or late, and then a window's
+ * cross sat under those buttons. So the inset is worked out here from the Web App's numbers, with 56 px kept for the buttons
+ * when Telegram gives none.
+ */
+function applySafeTop(): void {
+  if (!webApp || !inTelegram) return;
+  const app = webApp as unknown as { safeAreaInset?: { top?: number }; contentSafeAreaInset?: { top?: number } };
+  const safe = app.safeAreaInset?.top ?? 0;
+  const content = app.contentSafeAreaInset?.top ?? 0;
+  let top = safe + content;
+  if (webApp.isFullscreen && /^(ios|android)/.test(webApp.platform) && content === 0) top = Math.max(top, safe + 56);
+  document.documentElement.style.setProperty('--pd-tg-top', `${top}px`);
+}
+
+if (webApp && inTelegram) {
+  applySafeTop();
+  for (const event of ['safeAreaChanged', 'contentSafeAreaChanged', 'fullscreenChanged', 'viewportChanged']) webApp.onEvent?.(event, applySafeTop);
 }
 
 /** Calls back when Telegram changes the safe areas or the viewport. */
@@ -176,7 +225,7 @@ async function share(
   startParam: string, query: Record<string, string>, text: string,
 ): Promise<'shared' | 'copied' | 'failed'> {
   if (inTelegram && webApp!.openTelegramLink) {
-    const link = `${APP_LINK}?startapp=${encodeURIComponent(startParam)}&mode=fullscreen`;
+    const link = `${APP_LINK}?startapp=${encodeURIComponent(startParam)}`;
     webApp!.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
     return 'shared';
   }
@@ -284,7 +333,7 @@ export function openLink(url: string): void {
 const at = (version: string): boolean => inTelegram && (webApp?.isVersionAtLeast?.(version) ?? false);
 
 /** The game's t.me link, opening at `start` (daily, arena) or at the title. */
-export const appLink = (start?: string): string => `${APP_LINK}?${start ? `startapp=${encodeURIComponent(start)}&` : ''}mode=fullscreen`;
+export const appLink = (start?: string): string => (start ? `${APP_LINK}?startapp=${encodeURIComponent(start)}` : APP_LINK);
 
 /** Whether this Telegram can post a story from the game. */
 export const canShareStory = (): boolean => at('7.8') && typeof webApp?.shareToStory === 'function';

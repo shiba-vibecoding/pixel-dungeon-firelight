@@ -8,6 +8,8 @@ import { type FxMode, quality } from './quality';
 import { el, info, show, sprites, windowOf } from './screens';
 import { canFullscreen, haptics, isFullscreen, openExternal, setFullscreen } from './telegram';
 import { hints } from './hints';
+import { confirmDanger } from './mistap';
+import { confirmRisky } from './riskyuse';
 
 /*
  * The windows around the game rather than in it (design system v9): the
@@ -188,6 +190,9 @@ export function showSettings(options: SettingsOptions): void {
       fxNote,
     ),
     switchRow(t.meta.smooth, t.meta.smoothNote, smooth.on, (on) => smooth.set(on)),
+    // The questions before a trap or gas, and before the unknown (mistap.ts, riskyuse.ts): «don't ask again» lands here too.
+    switchRow(t.safe.settings.danger, t.safe.settings.dangerNote, confirmDanger.on, (on) => confirmDanger.set(on)),
+    switchRow(t.safe.settings.risky, t.safe.settings.riskyNote, confirmRisky.on, (on) => confirmRisky.set(on)),
     stepsRow(t.meta.shake, () => quality.shake, (v) => quality.setShake(v), () => fx.shake(3, 240, fx.now)),
     canFullscreen() && switchRow(t.fullscreen, null, isFullscreen(), (on) => setFullscreen(on)),
     el(
@@ -253,7 +258,8 @@ function confirmReset(onCancel: () => void, onDone: () => void): void {
     info(t.meta.resetKeep, 'pd-note center'),
     el(
       'div',
-      { className: 'pd-actions' },
+      { className: 'pd-confirm-row' },
+      cancel,
       el('button', {
         className: 'pd-button danger',
         textContent: t.meta.resetYes,
@@ -262,9 +268,9 @@ function confirmReset(onCancel: () => void, onDone: () => void): void {
           onDone();
         },
       }),
-      cancel,
     ),
   );
+  box.classList.add('pd-confirm2');
   show(box, onCancel);
   cancel.focus();
 }
