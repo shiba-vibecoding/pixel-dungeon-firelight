@@ -1987,8 +1987,9 @@ canvas.addEventListener('pointermove', (event) => {
   if (cell < 0) return;
   const kind = hoverKind(cell);
   hover.frame.className = `pd-hover${kind === 'foe' ? ' foe' : ''}`;
-  hover.frame.style.display = kind ? '' : 'none';
-  placeHover();
+  // No frame follows the mouse (the owner's wish): the cell is still tracked for the right button, not drawn.
+  hover.frame.style.display = 'none';
+  void kind;
 });
 canvas.addEventListener('pointerleave', hideHover);
 canvas.addEventListener('pointerdown', hideHover);
