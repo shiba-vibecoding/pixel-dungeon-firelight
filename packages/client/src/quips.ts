@@ -80,13 +80,13 @@ export const RECENT = 8;
 /** The bubble: pops in, holds (longer for a longer line), fades. */
 export const POP_MS = 120;
 export const FADE_MS = 200;
-export const HOLD_MIN_MS = 1600;
-export const HOLD_MAX_MS = 2400;
+export const HOLD_MIN_MS = 3000;
+export const HOLD_MAX_MS = 5000;
 /** The last words are quick: the death window waits only for them. */
-export const LAST_WORDS_HOLD_MS = 1300;
+export const LAST_WORDS_HOLD_MS = 2200;
 export const LONGEST_LINE = 80;
 
-export const holdFor = (text: string): number => Math.min(HOLD_MAX_MS, Math.max(HOLD_MIN_MS, HOLD_MIN_MS + (text.length - 24) * 16));
+export const holdFor = (text: string): number => Math.min(HOLD_MAX_MS, Math.max(HOLD_MIN_MS, HOLD_MIN_MS + (text.length - 20) * 45));
 
 /** Every line that can be said for the moment by the class. */
 export function poolOf(set: QuipSet, moment: Moment, heroClass: QuipClass): readonly string[] {
