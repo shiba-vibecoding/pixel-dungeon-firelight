@@ -9,13 +9,24 @@ import { F, hasFlag } from './level/terrain';
 
 export const MAX_VIEW_DISTANCE = 8;
 
-/** rounding[r][p]: how far a row p cells out extends within a circle of radius r. */
-const rounding: number[][] = (() => {
+/** The table is filled to 20, as far as any sight reaches. */
+const ROUNDING_MAX = 20;
+
+/**
+ * rounding[r][p]: how far a row p cells out extends within a circle of radius r, which the original takes as
+ * min(p, round(r cos(asin(p / (r + 0.5))))). Done in integers so that no engine's trigonometry can differ:
+ * r cos(asin(q)) is r sqrt((2r+1)^2 - 4p^2) / (2r+1), and round(v) is the greatest k with (2k-1)(2r+1) <= 2r sqrt(D),
+ * i.e. (2k-1)^2 (2r+1)^2 <= 4 r^2 D. The test pins the table.
+ */
+export const rounding: number[][] = (() => {
   const table: number[][] = [[]];
-  for (let r = 1; r <= MAX_VIEW_DISTANCE; r++) {
+  for (let r = 1; r <= ROUNDING_MAX; r++) {
     const row = new Array<number>(r + 1).fill(0);
     for (let p = 1; p <= r; p++) {
-      row[p] = Math.min(p, Math.round(r * Math.cos(Math.asin(p / (r + 0.5)))));
+      const d = (2 * r + 1) * (2 * r + 1) - 4 * p * p;
+      let k = 0;
+      while ((2 * k + 1) * (2 * k + 1) * (2 * r + 1) * (2 * r + 1) <= 4 * r * r * d) k++;
+      row[p] = Math.min(p, k);
     }
     table.push(row);
   }
