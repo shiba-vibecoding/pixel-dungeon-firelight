@@ -132,7 +132,7 @@ export function runOutcome(world: World, hero: Hero): RunOutcome {
 export function dailySeed(date: string): number {
   let hash = 2166136261;
   for (const char of date) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
-  return (hash >>> 1) % 2 ** 31;
+  return (hash >>> 1) % 2147483648;
 }
 
 /** A day as the daily dungeon counts them (UTC), YYYY-MM-DD. */

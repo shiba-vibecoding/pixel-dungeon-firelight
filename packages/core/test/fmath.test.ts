@@ -33,3 +33,29 @@ describe('integer maths', () => {
     expect(Math.abs(dlog(10) - Math.LN10)).toBeLessThan(1e-14);
   });
 });
+
+describe('no inexact maths in the rules', () => {
+  it('core/src has no Math.hypot/pow/exp/log/trigonometry, no cbrt, and no ** (use fmath)', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (path.endsWith('.ts') && !path.endsWith('fmath.ts')) files.push(path);
+      }
+    };
+    walk(join(__dirname, '..', 'src'));
+    expect(files.length).toBeGreaterThan(20);
+    const forbidden = /Math\.(hypot|pow|exp|expm1|log|log1p|log2|log10|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|cbrt)\b|\*\*(?!\/)/;
+    const found: string[] = [];
+    for (const file of files) {
+      readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
+        const code = line.replace(/^\s*(\/\*|\*|\/\/).*$/, '').replace(/\/\*.*?\*\//g, '').replace(/\/\/.*$/, '').replace(/'[^']*'|"[^"]*"|`[^`]*`/g, '');
+        if (forbidden.test(code)) found.push(`${file}:${i + 1}: ${line.trim()}`);
+      });
+    }
+    expect(found).toEqual([]);
+  });
+});

@@ -2,6 +2,7 @@ import { effectiveLevel } from './wear';
 import { armorStats, createItem, type Item, type ItemKind, missileStats, type WeaponStats, weaponStats } from './items';
 import type { Rng } from './rng';
 import type { Action, PlanStep } from './world';
+import { ipow } from './fmath';
 
 /*
  * Heroes and monsters as plain data, with the numbers of the original:
@@ -225,20 +226,20 @@ export function heroWeapon(hero: Hero): WeaponStats {
 export function heroAttackSkill(hero: Hero): number {
   const weapon = heroWeapon(hero);
   const encumbrance = weapon.str - heroStr(hero);
-  const factor = encumbrance > 0 ? f32(weapon.accuracy / 1.5 ** encumbrance) : f32(weapon.accuracy);
+  const factor = encumbrance > 0 ? f32(weapon.accuracy / ipow(1.5, encumbrance)) : f32(weapon.accuracy);
   // RingOfAccuracy: 1.4 times as accurate a level.
   const bonus = ringBonus(hero, 'ring.accuracy');
-  const accuracy = bonus === 0 ? 1 : f32(1.4 ** bonus);
+  const accuracy = bonus === 0 ? 1 : f32(ipow(1.4, bonus));
   return Math.trunc(f32(f32(hero.attackSkill * accuracy) * factor));
 }
 
 export function heroDefenseSkill(hero: Hero): number {
   // RingOfEvasion: 1.2 times as evasive a level.
   const bonus = ringBonus(hero, 'ring.evasion');
-  const defense = Math.trunc(f32(hero.defenseSkill * (bonus === 0 ? 1 : f32(1.2 ** bonus))));
+  const defense = Math.trunc(f32(hero.defenseSkill * (bonus === 0 ? 1 : f32(ipow(1.2, bonus)))));
   const encumbrance = armorStats(hero.armor).str - heroStr(hero);
   if (encumbrance > 0) {
-    return Math.trunc(defense / 1.5 ** encumbrance);
+    return Math.trunc(defense / ipow(1.5, encumbrance));
   }
   // Rogues turn spare strength into evasion; a freerunner on the move is twice as hard to hit.
   if (hero.heroClass !== 'rogue') return defense;
@@ -254,7 +255,7 @@ export function heroRangedSkill(hero: Hero, item: Item, pointBlank: boolean): nu
   let encumbrance = missileStats(item).str - heroStr(hero);
   if (hero.heroClass === 'warrior') encumbrance += 3;
   if (hero.heroClass === 'huntress') encumbrance -= 2;
-  let factor = encumbrance > 0 ? f32(1 / 1.5 ** encumbrance) : 1;
+  let factor = encumbrance > 0 ? f32(1 / ipow(1.5, encumbrance)) : 1;
   if (pointBlank) factor = f32(factor * 0.5);
   return Math.trunc(f32(hero.attackSkill * factor));
 }
@@ -265,7 +266,7 @@ export function heroSpeed(hero: Hero): number {
   // Char.speed: crippled, half as fast; a freerunner who is not starving nor weighed down, much faster.
   const crippled = hero.crippled > 0 ? 0.5 : 1;
   const running = hero.subclass === 'freerunner' && !isStarving(hero) && encumbrance <= 0 ? 1.6 : 1;
-  return (encumbrance > 0 ? 1.3 ** -encumbrance : 1) * crippled * running;
+  return (encumbrance > 0 ? ipow(1.3, -encumbrance) : 1) * crippled * running;
 }
 
 export function heroDamageRoll(hero: Hero, rng: Rng): number {
@@ -285,12 +286,12 @@ export function heroDamageRoll(hero: Hero, rng: Rng): number {
 export function heroAttackDelay(hero: Hero): number {
   const weapon = heroWeapon(hero);
   const encumbrance = weapon.str - heroStr(hero);
-  return encumbrance > 0 ? f32(weapon.delay * 1.2 ** encumbrance) : weapon.delay;
+  return encumbrance > 0 ? f32(weapon.delay * ipow(1.2, encumbrance)) : weapon.delay;
 }
 
 /** Chance to notice a hidden door or trap next to the hero, as Hero.updateAwareness. */
 export function awareness(hero: Hero): number {
-  return 1 - (hero.heroClass === 'rogue' ? 0.85 : 0.9) ** ((1 + Math.min(hero.lvl, 9)) * 0.5);
+  return 1 - ipow(Math.sqrt(hero.heroClass === 'rogue' ? 0.85 : 0.9), 1 + Math.min(hero.lvl, 9));
 }
 
 /** Hero.dr: the armour's, and a warden's bark. */

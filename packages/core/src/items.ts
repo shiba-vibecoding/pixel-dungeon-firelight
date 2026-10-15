@@ -8,6 +8,7 @@ import { F, hasFlag } from './level/terrain';
 import { deriveSeed, Rng } from './rng';
 import type { RunState } from './run';
 import { lootCount } from './party';
+import { ipow } from './fmath';
 
 /*
  * Items, as data: every item family of the original вЂ” gold, potions,
@@ -335,9 +336,9 @@ export function itemPrice(item: Item, known: boolean): number {
     // Enchanted, half as much again.
     case 'weapon':
       if (item.kind === 'weapon.pickaxe') return 0;
-      return levelled(Math.trunc(20 * 2 ** (def.tier! - 1) * (item.enchant ? 1.5 : 1)));
+      return levelled(Math.trunc(20 * ipow(2, def.tier! - 1) * (item.enchant ? 1.5 : 1)));
     case 'armor':
-      return levelled(Math.trunc(10 * 2 ** (itemDef(item.base ?? item.kind).tier! - 1) * (item.glyph ? 1.5 : 1)));
+      return levelled(Math.trunc(10 * ipow(2, itemDef(item.base ?? item.kind).tier! - 1) * (item.glyph ? 1.5 : 1)));
     case 'potion':
       return (known ? POTION_PRICES[item.kind] ?? 20 : 20) * item.qty;
     case 'scroll':

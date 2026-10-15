@@ -35,6 +35,7 @@ import { deriveSeed, Rng, seedRng, Stream } from './rng';
 import { createRun, type RunState } from './run';
 import { isChallenged, NO_HERBALISM, underChallenges } from './challenges';
 import { arenaJoined, arenaLevelAt, arenaPick, arenaProblem, arenaReady, type ArenaState, arenaTurn, newArena } from './arena';
+import { ipow } from './fmath';
 
 /*
  * The shared game world. Every change goes through act(), so a server can run
@@ -816,12 +817,12 @@ function spend(ctx: Ctx, hero: Hero, time: number): void {
   // Slowed, everything takes twice as long (Char.spend); a ring of haste speeds it all up.
   if (hero.slowed > 0) time *= 2;
   const haste = ringBonus(hero, 'ring.haste');
-  if (haste !== 0) time *= 1.1 ** -haste;
+  if (haste !== 0) time *= ipow(1.1, -haste);
   hero.time += time;
   hero.regen += time;
   if (hero.depth === ctx.depth) altarMarksHero(ctx, hero, time);
   // Regeneration: a ring of mending makes wounds close faster.
-  const regenDelay = REGENERATION_DELAY / 1.2 ** ringBonus(hero, 'ring.mending');
+  const regenDelay = REGENERATION_DELAY / ipow(1.2, ringBonus(hero, 'ring.mending'));
   while (hero.regen >= regenDelay) {
     hero.regen -= regenDelay;
     // A starving body does not heal (Regeneration).

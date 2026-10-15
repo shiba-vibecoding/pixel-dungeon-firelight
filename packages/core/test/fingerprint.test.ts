@@ -3,7 +3,7 @@ import { act, type Action, addHero, createItem, createWorld, fingerprint, ITEMS,
 
 /*
  * Found by the soak (server/test/soak.test.ts): a copy of a run and its replay must hash alike whatever one of them did
- * to the lazily made containers of the world (`hero.buffs ??= {}`), and a refused action, which is never sent to the
+ * to the lazily made containers of the world (`hero.plan ??= []`), and a refused action, which is never sent to the
  * server, must leave no trace the fingerprint could see.
  */
 
@@ -11,16 +11,16 @@ describe('the fingerprint', () => {
   it('takes an empty container for none at all, and a missing key for an undefined one', () => {
     const world = createWorld(5);
     const hero = addHero(world, { id: 'me', name: 'Me', heroClass: 'warrior' });
-    delete hero.buffs;
+    delete hero.plan;
     const bare = fingerprint(world);
-    hero.buffs = {};
+    hero.plan = [];
     expect(fingerprint(world)).toBe(bare);
-    (hero as unknown as Record<string, unknown>).plan = [];
+    (hero as unknown as Record<string, unknown>).wounds = {};
     expect(fingerprint(world)).toBe(bare);
     (hero as unknown as Record<string, unknown>).wound = undefined;
     expect(fingerprint(world)).toBe(bare);
     // A container with something in it is state.
-    hero.buffs = { levitating: 5 } as never;
+    hero.plan = [{ type: 'go', to: hero.pos + 1 }];
     expect(fingerprint(world)).not.toBe(bare);
   });
 
@@ -48,7 +48,7 @@ describe('the fingerprint', () => {
       hero.items = (Object.keys(ITEMS) as ItemKind[])
         .filter((kind) => ['scroll', 'potion', 'seed', 'wand', 'ring'].includes(itemDef(kind).category))
         .map((kind) => createItem(kind));
-      delete hero.buffs;
+      delete hero.plan;
       const cell = hero.pos + 3;
       const actions: Action[] = [
         { type: 'ascend' }, { type: 'impReward' }, { type: 'reward', choice: 'weapon' }, { type: 'wandReward', choice: 'battle' }, { type: 'faceCurse' },

@@ -66,7 +66,7 @@ export function zapWand(ctx: Ctx, hero: Hero, wand: Item, target: number): void 
       if (charAt(world, depth, end) && !mobAt(ctx, end)) return;
       const victim = mobAt(ctx, end);
       burst(ctx, end, 'fire', 0);
-      if (victim && isAlive(victim)) strike(victim, rng.intBetween(1, Math.trunc(2 * power ** 1.5) + 6));
+      if (victim && isAlive(victim)) strike(victim, rng.intBetween(1, Math.trunc(2 * power * Math.sqrt(power)) + 6));
       return;
     }
 
