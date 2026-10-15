@@ -4,7 +4,7 @@ import { lang } from './i18n';
 /*
  * The learning mode: while it is on (the settings; on at first), the game says
  * a word about each thing the first time the player meets it — a monster, an
- * unknown potion, a trap, hunger, a locked door, the stairs — simply and
+ * unknown potion, a trap, a locked door, the stairs — simply and
  * once. Hints come one at a time on a small card that never covers the hero (design system v13);
  * the ones seen are kept on this device, and can be shown again from the
  * settings.
@@ -12,7 +12,7 @@ import { lang } from './i18n';
 
 export type HintId =
   | 'monster' | 'attacked' | 'lowHealth' | 'floorItem' | 'container' | 'trap' | 'lockedDoor' | 'stairs' | 'secret'
-  | 'hungry' | 'levelUp' | 'well' | 'altar' | 'alchemy' | 'shop' | 'npc' | 'boss' | 'companion' | 'waiting' | 'examine'
+  | 'levelUp' | 'well' | 'altar' | 'alchemy' | 'shop' | 'npc' | 'boss' | 'companion' | 'waiting' | 'examine'
   | 'potion' | 'scroll' | 'weapon' | 'armor' | 'ring' | 'wand' | 'food' | 'seed' | 'missile' | 'bomb' | 'key' | 'gold'
   | 'dew' | 'vial' | 'bag' | 'ankh' | 'honeypot' | 'torch' | 'tome' | 'kit' | 'beacon' | 'weightstone' | 'arena' | 'live';
 
@@ -28,7 +28,6 @@ const RU: Record<HintId, Text> = {
   lockedDoor: ['Запертая дверь', 'Нужен железный ключ с этой глубины: он лежит где-то на уровне. С ключом дверь откроется сама.'],
   stairs: ['Лестница вниз', 'Чем глубже — тем опаснее и тем лучше добыча. Сначала стоит осмотреть уровень.'],
   secret: ['Тайники', 'Если уровень кажется тупиком, ищите у стен: подземелье прячет двери и ловушки.'],
-  hungry: ['Голод', 'Оранжевая полоса — сытость. Голодный герой не лечится, а потом теряет здоровье.'],
   levelUp: ['Новый уровень', 'Герой стал сильнее: больше здоровья, точнее удары. Опыт — жёлтая полоса под здоровьем.'],
   well: ['Колодец', 'Магический колодец: здоровья, знания или превращений. Встаньте в него, чтобы испить, или бросьте предмет в колодец превращений.'],
   altar: ['Алтарь', 'Жертвенный огонь притягивает монстров. Убитые на нём засчитываются как жертва, и алтарь наградит вас.'],
@@ -75,7 +74,6 @@ const EN: Record<HintId, Text> = {
   lockedDoor: ['A locked door', 'It wants an iron key from this depth: one lies somewhere on the level. With the key, the door opens by itself.'],
   stairs: ['Stairs down', 'Deeper is more dangerous, and richer. Look around the level first.'],
   secret: ['Hidden things', 'If a level seems a dead end, search by the walls: the dungeon hides doors and traps.'],
-  hungry: ['Hunger', 'The orange bar is how fed you are. A hungry hero does not heal, then starts losing health.'],
   levelUp: ['Level up', 'The hero grew stronger: more health, surer blows. Experience is the yellow bar under health.'],
   well: ['A well', 'A magic well: of health, awareness or transmutation. Step into it to drink, or throw an item into the well of transmutation.'],
   altar: ['An altar', 'The sacrificial fire draws monsters in. Those slain in it count as offerings, and the altar rewards you.'],
@@ -194,7 +192,6 @@ const HOW: Partial<Record<HintId, How>> = {
     key: 'X',
     target: 'examine',
   }),
-  hungry: EAT,
   food: EAT,
   weapon: equip('в слот оружия', 'to the weapon slot'),
   armor: equip('в слот брони', 'to the armour slot'),

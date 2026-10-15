@@ -2,6 +2,7 @@ import { type Effect, HEIGHT, type Level, type MobKind, T, WIDTH, type World } f
 import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
+import { quality } from './quality';
 import { seenCells } from './sight';
 import { duration, levelRegion } from './sprites';
 
@@ -329,6 +330,42 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
         view.levelCard = { lvl: effect.lvl, start: now };
       }
       return;
+    }
+    case 'scroll': {
+      // The shouts and hushes of the scrolls (the others only log a line).
+      const at = centreOf(view, effect.hero, now);
+      if (!at) return;
+      const mine = effect.hero === myId;
+      const calm = quality.reducedMotion;
+      switch (effect.kind) {
+        case 'challenge': {
+          // «Оглушительный рёв»: red-orange shockwaves racing out, the view jolted, the hero's scream in specks.
+          fx.wave(at.x, at.y, now, { colors: ['#e0402a', '#ff7a3a'], rings: 4, tiles: 6, duration: 700, width: 2.5 });
+          burst(at, now, { count: 28, colors: ['#e0402a', '#ff7a3a', '#ffb070'], glow: true, speed: [50, 130], life: [300, 600], drag: 0.08, size: [1, 2], spread: 3 });
+          // No roar among the sounds: the blast, low and heavy, stands in.
+          audio.play('blast', 0.55, 0.9);
+          if (mine) {
+            fx.shake(3, 300, now);
+            fx.flash('224, 64, 42', 0.3, 500, now, true);
+          }
+          return;
+        }
+        case 'terror':
+          fx.wave(at.x, at.y, now, { colors: ['#5a2a8a', '#3a1a60'], rings: 3, tiles: 5, duration: 1100, stagger: 200, width: 2.5 });
+          burst(at, now, { count: 14, colors: VOID, speed: [10, 40], life: [500, 1000], drag: 0.3, size: [1, 2], spread: 4 });
+          if (mine) fx.flash('30, 0, 50', 0.35, 700, now, true);
+          return;
+        case 'lullaby':
+          fx.wave(at.x, at.y, now, { colors: ['#bfe0ff', '#dff0ff'], rings: 3, tiles: 5, duration: 1500, stagger: 260, width: 2 });
+          burst(at, now, { count: 8, colors: ['#dff0ff', '#a8d0ff'], glow: true, speed: [4, 14], life: [900, 1500], rise: 18, drag: 0.4, size: [1, 2], spread: 6 });
+          return;
+        case 'psionic':
+          fx.wave(at.x, at.y, now, { colors: '#ffffff', rings: 1, tiles: 8, duration: 350, width: 3 });
+          if (mine && !calm) fx.flash('255, 255, 255', 0.45, 220, now);
+          return;
+        default:
+          return;
+      }
     }
     case 'healed': case 'dew': case 'vial': {
       const at = centreOf(view, effect.hero, now);

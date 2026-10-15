@@ -1382,12 +1382,6 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (world && me) learnFromEffect(world, me, effect);
     // Goo winding up: a warning nobody can miss, while there is still time to step back.
     if (effect.type === 'pumped' && me && effect.depth === me.depth) toast(t.gooPumpsTip, { tone: 'warn' });
-    // Hunger kills quietly in the original's log: here it says what to do, and with what.
-    if (effect.type === 'hunger' && effect.hero === myId && world && me) {
-      const food = me.items.find((item) => itemDef(item.kind).category === 'food');
-      const tip = effect.state === 'starving' ? t.starvingTip : t.hungryTip;
-      toast(food ? `${tip} ${t.eatThis(itemName(world, food))}` : tip, { tone: 'warn', ...(food ? { item: itemSprite(food, world.run.labels) } : {}) });
-    }
     const hurt =
       (effect.type === 'attack' && effect.target === myId) ||
       (effect.type === 'hurt' && effect.who === myId) ||
@@ -1930,7 +1924,6 @@ function learnFromEffect(world: World, me: Hero, effect: Effect): void {
   }
   if ((effect.type === 'dew' || effect.type === 'dewCollected') && effect.hero === mine) hints.first('dew');
   if (effect.type === 'attack' && effect.target === mine && effect.hit && effect.damage > 0) hints.first('attacked');
-  if (effect.type === 'hunger' && effect.hero === mine) hints.first('hungry');
   if (effect.type === 'levelUp' && effect.hero === mine) hints.first('levelUp');
   if (effect.type === 'shop' && effect.hero === mine) hints.first('shop');
   void me;

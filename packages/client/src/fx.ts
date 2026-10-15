@@ -111,6 +111,34 @@ export interface Decal {
   born: number;
 }
 
+export interface WaveOptions {
+  /** One colour for every ring, or a list the rings take in turn. */
+  colors: string | readonly string[];
+  /** Rings sent out (the light quality and reduced motion send fewer). */
+  rings: number;
+  /** How far the last ring goes, in tiles. */
+  tiles: number;
+  /** How long each ring lives, ms. */
+  duration: number;
+  /** Stroke width in screen pixels (not world ones: the rings stay crisp at any zoom). Default 2. */
+  width?: number;
+  /** Gap between one ring and the next, ms. Default 120. */
+  stagger?: number;
+}
+
+/** Rings of a wave: set out from a point, each a little behind the last. */
+interface Wave {
+  x: number;
+  y: number;
+  born: number;
+  colors: readonly string[];
+  rings: number;
+  radius: number;
+  duration: number;
+  width: number;
+  stagger: number;
+}
+
 /** The white streak of a heavy blow across whoever took it. */
 interface Slash {
   x: number;
@@ -119,6 +147,10 @@ interface Slash {
   sin: number;
   born: number;
 }
+
+/** Expanding rings around a point (a scroll's shout, a hush, a pulse): how many are alive at once. */
+const MAX_WAVES = 6;
+const MAX_WAVES_LIGHT = 3;
 
 const MAX_PARTICLES = 600;
 /** Chunks in the air (or embers on the floor) at once. */
@@ -187,6 +219,7 @@ class Fx {
   decals: Decal[] = [];
   corpses: Corpse[] = [];
   slashes: Slash[] = [];
+  waves: Wave[] = [];
   /** The level's map, for where chunks may land. */
   floor: readonly number[] | null = null;
   private shakeUntil = 0;
@@ -242,7 +275,7 @@ class Fx {
 
   /** Whether the screen is shaking, flashing or slashed at (pace.ts); particles and chunks are covered by the effects that threw them. */
   moving(now: number): boolean {
-    return now < this.shakeUntil || this.flashes.length > 0 || this.slashes.length > 0;
+    return now < this.shakeUntil || this.flashes.length > 0 || this.slashes.length > 0 || this.waves.length > 0;
   }
 
   /** How far the camera is thrown this frame, in world pixels. */
@@ -330,6 +363,20 @@ class Fx {
         spin: 50 + Math.random() * 60,
       });
     }
+  }
+
+  /**
+   * Rings spreading out along the floor from a point (world pixels): crisp strokes, a little squashed because the floor is
+   * seen from above, fading as they go. Reduced motion sends one ring, the light quality half of them.
+   */
+  wave(x: number, y: number, now: number, o: WaveOptions): void {
+    const rings = quality.reducedMotion ? 1 : quality.light ? Math.max(1, Math.ceil(o.rings / 2)) : o.rings;
+    const cap = quality.light ? MAX_WAVES_LIGHT : MAX_WAVES;
+    if (this.waves.length >= cap) this.waves.splice(0, this.waves.length - cap + 1);
+    this.waves.push({
+      x, y, born: now, colors: typeof o.colors === 'string' ? [o.colors] : o.colors, rings, radius: o.tiles * TILE,
+      duration: o.duration, width: o.width ?? 2, stagger: o.stagger ?? 120,
+    });
   }
 
   /** A body lying where it fell, darkened, with a pool spreading under it. */
@@ -452,6 +499,9 @@ class Fx {
     this.particles.length = n;
     this.updateGibs(now, step);
     n = 0;
+    for (const w of this.waves) if (now - w.born < w.duration + (w.rings - 1) * w.stagger) this.waves[n++] = w;
+    this.waves.length = n;
+    n = 0;
     for (const s of this.slashes) if (now - s.born < SLASH_MS) this.slashes[n++] = s;
     this.slashes.length = n;
     n = 0;
@@ -512,6 +562,30 @@ class Fx {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     this.drawSlashes(ctx, now, visible);
+    this.drawWaves(ctx, now, visible);
+  }
+
+  /** Each ring runs out fast and slows, fading as it goes; the stroke is `width` screen pixels whatever the zoom. */
+  private drawWaves(ctx: CanvasRenderingContext2D, now: number, visible: (x: number, y: number) => boolean): void {
+    if (this.waves.length === 0) return;
+    const zoom = ctx.getTransform().a || 1;
+    ctx.globalCompositeOperation = 'source-over';
+    for (const w of this.waves) {
+      if (!visible(w.x, w.y)) continue;
+      ctx.lineWidth = w.width / zoom;
+      for (let i = 0; i < w.rings; i++) {
+        const k = (now - w.born - i * w.stagger) / w.duration;
+        if (k <= 0 || k >= 1) continue;
+        const eased = 1 - (1 - k) * (1 - k);
+        ctx.globalAlpha = 0.9 * (1 - k) * (1 - k * 0.4);
+        ctx.strokeStyle = w.colors[i % w.colors.length]!;
+        ctx.beginPath();
+        // Floor seen from above: a little flatter than it is wide.
+        ctx.ellipse(w.x, w.y, Math.max(0.5, w.radius * eased), Math.max(0.4, w.radius * eased * 0.8), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   private drawGibs(ctx: CanvasRenderingContext2D, now: number, visible: (x: number, y: number) => boolean, glow: boolean): void {
@@ -585,6 +659,7 @@ class Fx {
     this.decals = [];
     this.corpses = [];
     this.slashes = [];
+    this.waves = [];
     this.flashes = [];
     this.shakeUntil = 0;
   }
