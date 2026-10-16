@@ -31,7 +31,7 @@ import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
 import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
-import { bakePools, LightRig, type Source, sourcesOf } from './lightrig';
+import { bakePools, doorGlow, LightRig, type Source, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
@@ -357,7 +357,7 @@ export class World3D {
     this.renderer.setClearColor(this.air.uBg.value, 1);
     this.fires = sourcesOf(this.kit, a.region, this.geom, true);
     this.rig.configure(L, this.fires, this.tier.shadowLights);
-    this.fog.setPools(bakePools(this.fires, this.geom.kinds));
+    this.fog.setPools(bakePools([...this.fires, ...doorGlow(this.geom.terrain)], this.geom.kinds));
     this.lightBase = { ambient: L.ambient.intensity, hemi: L.hemi.intensity };
     this.bright = 0;
     if (a.accent) this.rig.setAccent(hex(a.accent.color), a.accent.intensity * 2.2);
@@ -424,7 +424,7 @@ export class World3D {
     if (change !== 'patched') {
       this.rig.shadowsStale = true;
       // A wall or a door went: the pools of the fixed fires reach differently.
-      this.fog.setPools(bakePools(this.fires, geom.kinds));
+      this.fog.setPools(bakePools([...this.fires, ...doorGlow(geom.terrain)], geom.kinds));
     }
   }
 

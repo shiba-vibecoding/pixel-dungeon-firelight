@@ -7,7 +7,7 @@
 import { Color, PointLight, type Scene } from 'three';
 import { HEIGHT, LENGTH, T, WIDTH } from '@pd/core';
 import { type Kit, type Lights, type RegionKit, hex } from './kit';
-import { K_WALL, K_WATER, type LevelGeom } from './levelgeom';
+import { isDoorTile, K_WALL, K_WATER, type LevelGeom } from './levelgeom';
 
 /** A source of light in the level, from which the nearest are lit. */
 export interface Source {
@@ -312,5 +312,19 @@ export function bakePools(sources: readonly Source[], kinds: Uint8Array, out: Ui
     }
   }
   for (let i = 0; i < out.length; i++) out[i] = Math.round(Math.min(1, sum[i]!) * 255);
+  return out;
+}
+
+/** A faint warm rim round every door (cold for a locked one): not a light, only a source of the baked pools, so a door in view reads in the dark. */
+export function doorGlow(terrain: Uint8Array): Source[] {
+  const out: Source[] = [];
+  for (let cell = 0; cell < LENGTH; cell++) {
+    const t = terrain[cell]!;
+    if (!isDoorTile(t)) continue;
+    out.push({
+      x: (cell % WIDTH) + 0.5, y: 0.8, z: Math.trunc(cell / WIDTH) + 0.5, cell, color: t === T.LOCKED_DOOR ? 0x9ab4e8 : 0xffa860, intensity: 0.6,
+      distance: 3, decay: 1, hz: 0, amp: 0, torch: false,
+    });
+  }
   return out;
 }

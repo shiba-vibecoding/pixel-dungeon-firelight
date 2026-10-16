@@ -9,6 +9,8 @@
  *             door's leaf), statues, shelves and wells as lower blocks, and the edges of chasms that fall away three cells. Only
  *             what can be seen or cast a shadow, and only beside open ground. Rewritten, into the same arrays, when a box
  *             appears or goes (a door opens).
+ *   doors   - dressed in code (writeDoor): a lit frame (jambs, lintel) round every door in the wall line, the slab seen from above,
+ *             a lock's straps and plate on a locked one, and an open door's leaf swung aside, turned a quarter. Part of `boxes`.
  *   water   - a quad under every water cell, for the drifting water texture.
  *   decals  - the kit's contact shadows on the floor along the foot of every wall.
  *
@@ -16,6 +18,7 @@
  * and from cell to cell.
  */
 import { F, HEIGHT, LENGTH, T, terrainFlags, WIDTH } from '@pd/core';
+import { DOOR_FRAME, DOOR_IRON, DOOR_LEAF, DOOR_LOCK_H, DOOR_LOCK_V, DOOR_TOP_H, DOOR_TOP_V } from './doorart';
 import { CAP_FIRST, EDGE_LIP, EDGE_ROCK, FACE_DECO, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from './tilemap';
 
 export const K_FLOOR = 0;
@@ -81,6 +84,16 @@ export function shapesFor(kit: GeomKit): readonly Shape[] {
 
 /** The shapes of the kit's own heights. */
 export const SHAPES: readonly Shape[] = shapesFor(DEFAULT_GEOM);
+
+/** A door, closed, locked or open: the cells the 3D dressing of doors is for. */
+export const isDoorTile = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR || terrain === T.OPEN_DOOR;
+/** The most quads a door's dressing takes (a locked door's frame, straps and plate, or an open door's frame and leaf). */
+const DOOR_QUADS = 40;
+/** The wood of a door's frame and slab is lit: its colours are lifted above the plain, warm for wood and cool for steel. */
+const WOOD_LIT = [1.45, 1.22, 0.98];
+const STEEL_LIT = [1.2, 1.25, 1.4];
+const LEAF_LIT = [1.5, 1.35, 1.2];
+const LEAF_LIT_LOCKED = [1.4, 1.4, 1.45];
 
 /** Plain wall: no floor under it, and nothing ever changes it but a rebuild. */
 const isPlainWall = (terrain: number): boolean => terrain === T.WALL || terrain === T.WALL_DECO;
@@ -381,6 +394,7 @@ export class LevelGeom {
       else if (kind === K_LOW) box += 1 + 4 * 2;
       else if (kind === K_CHASM) box += 4 * 2;
       if (kind === K_FLOOR || kind === K_LOW) decal += 4;
+      if (isDoorTile(this.terrain[i]!)) box += DOOR_QUADS;
     }
     return { box, water, decal };
   }
@@ -410,6 +424,7 @@ export class LevelGeom {
       else if (kind === K_LOW) this.writeBox(i);
       else if (kind === K_CHASM) this.writeEdges(i);
       if (kind === K_FLOOR || kind === K_LOW) this.writeShadows(i);
+      if (isDoorTile(this.terrain[i]!)) this.writeDoor(i);
     }
     this.quads.boxes = this.boxes.verts / 4;
     this.quads.water = this.water.verts / 4;
@@ -499,7 +514,14 @@ export class LevelGeom {
     // The top: a cap by the sides that have floor (darker if none does), or the block's own.
     let tile = shape.top;
     let shade = 1;
-    if (tile === -1) {
+    let tint: ArrayLike<number> = WHITE;
+    const terrain = this.terrain[cell]!;
+    if (terrain === T.DOOR || terrain === T.LOCKED_DOOR) {
+      // The slab of the door, seen from above: planks along the wall line, lit (steel straps and a lock plate if it is locked).
+      const across = this.doorAcross(x, z);
+      tile = terrain === T.LOCKED_DOOR ? (across ? DOOR_LOCK_H : DOOR_LOCK_V) : across ? DOOR_TOP_H : DOOR_TOP_V;
+      tint = terrain === T.LOCKED_DOOR ? STEEL_LIT : WOOD_LIT;
+    } else if (tile === -1) {
       const mask = this.capMask(x, z);
       tile = CAP_FIRST + mask;
       if (mask === 0) shade = BURIED_SHADE;
@@ -507,7 +529,7 @@ export class LevelGeom {
     tileRect(tile, this.cols, this.rows, rect);
     set12(x, h, z + 1, x + 1, h, z + 1, x + 1, h, z, x, h, z);
     shades.fill(shade);
-    quad(b, corners, 0, 1, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+    quad(b, corners, 0, 1, 0, shades, tint, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
     for (const [dx, dz, side] of SIDES) {
       const nx = x + dx;
       const nz = z + dz;
@@ -521,7 +543,8 @@ export class LevelGeom {
         this.face(dx, dz, x, z, bottom, lowerTop);
         shades[0] = shades[1] = side * FACE_FOOT;
         shades[2] = shades[3] = side;
-        quad(b, corners, dx, 0, dz, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+        // A door's leaf is lit a little, so it reads in a dark corridor.
+        quad(b, corners, dx, 0, dz, shades, terrain === T.DOOR ? LEAF_LIT : terrain === T.LOCKED_DOOR ? LEAF_LIT_LOCKED : WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
       }
       if (shape.upper >= 0 && h > lowerTop) {
         // The rest of the wall's height: the upper half of the kit's face-top tile.
@@ -538,6 +561,86 @@ export class LevelGeom {
       }
     }
     shades.fill(1);
+  }
+
+  /**
+   * Whether a door's wall line runs east-west, so that its face looks south at the camera (the passage is north-south): true if
+   * floor lies to its north or south, or if it has no floor beside it at all.
+   */
+  doorAcross(x: number, z: number): boolean {
+    const open = (cx: number, cz: number): boolean => cx >= 0 && cz >= 0 && cx < WIDTH && cz < HEIGHT && this.kinds[cx + cz * WIDTH] !== K_WALL;
+    return open(x, z - 1) || open(x, z + 1) || !(open(x - 1, z) || open(x + 1, z));
+  }
+
+  /** A solid block of a door's dressing, with the faces the camera and the lights see (top, then south, east, west by the bits of `sides`). */
+  private block(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, tile: number, tint: ArrayLike<number>, sides = 7): void {
+    const b = this.boxes;
+    tileRect(tile, this.cols, this.rows, rect);
+    const u0 = rect[0]!;
+    const v0 = rect[1]!;
+    const u1 = rect[2]!;
+    const v1 = rect[3]!;
+    shades.fill(1);
+    set12(x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0);
+    quad(b, corners, 0, 1, 0, shades, tint, u0, v0, u1, v1);
+    shades[0] = shades[1] = FACE_FOOT;
+    shades[2] = shades[3] = 1;
+    if (sides & 1) {
+      set12(x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1);
+      quad(b, corners, 0, 0, 1, shades, tint, u0, v0, u1, v1);
+    }
+    shades[0] = shades[1] = FACE_FOOT * 0.85;
+    shades[2] = shades[3] = 0.85;
+    if (sides & 2) {
+      set12(x1, y0, z1, x1, y0, z0, x1, y1, z0, x1, y1, z1);
+      quad(b, corners, 1, 0, 0, shades, tint, u0, v0, u1, v1);
+    }
+    if (sides & 4) {
+      set12(x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0);
+      quad(b, corners, -1, 0, 0, shades, tint, u0, v0, u1, v1);
+    }
+    shades.fill(1);
+  }
+
+  /**
+   * A door in the wall line, as a piece you can read from above. The closed door's slab is its top (writeBox); here its frame: two
+   * jambs and a lintel standing out of the wall, in lit wood (their glow is warm, doorart.ts). A locked door gets steel straps and
+   * a lock plate over its leaf. An open door has the leaf swung aside, turned a quarter, standing beside the opening. In a wall line
+   * that runs north-south the camera sees only the tops: the lintel is a beam across, and the leaf stands along the line of the wall.
+   */
+  private writeDoor(cell: number): void {
+    const x = cell % WIDTH;
+    const z = Math.trunc(cell / WIDTH);
+    const terrain = this.terrain[cell]!;
+    const open = terrain === T.OPEN_DOOR;
+    const p = 0.1;
+    const jw = 0.14;
+    if (this.doorAcross(x, z)) {
+      const front = z + 1;
+      this.block(x - 0.03, 0, z + 0.55, x + jw, 1.3, front + p, DOOR_FRAME, WOOD_LIT);
+      this.block(x + 1 - jw, 0, z + 0.55, x + 1.03, 1.3, front + p, DOOR_FRAME, WOOD_LIT);
+      this.block(x - 0.03, 1.2, z + 0.55, x + 1.03, 1.42, front + p, DOOR_FRAME, WOOD_LIT);
+      if (terrain === T.LOCKED_DOOR) {
+        this.block(x + jw, 0.26, front, x + 1 - jw, 0.37, front + 0.05, DOOR_IRON, STEEL_LIT);
+        this.block(x + jw, 0.78, front, x + 1 - jw, 0.89, front + 0.05, DOOR_IRON, STEEL_LIT);
+        this.block(x + 0.36, 0.42, front, x + 0.64, 0.72, front + 0.09, DOOR_IRON, STEEL_LIT);
+      } else if (open) {
+        // The leaf, hinged on one jamb (alternating), swung a quarter turn into the room on the camera's side.
+        const left = ((x + z) & 1) === 0;
+        const lx = left ? x + jw : x + 1 - jw - 0.1;
+        this.block(lx, 0, front + 0.03, lx + 0.1, 1.12, front + 0.86, DOOR_LEAF, WOOD_LIT);
+      }
+    } else {
+      // A wall line running north-south: a lintel beam across the opening, and the leaf standing out along the wall's line.
+      this.block(x + 0.38, 1.2, z, x + 0.62, 1.42, z + 1, DOOR_FRAME, WOOD_LIT);
+      if (terrain === T.LOCKED_DOOR) {
+        this.block(x + 0.3, 1.0, z + 0.3, x + 0.7, 1.12, z + 0.7, DOOR_IRON, STEEL_LIT);
+      } else if (open) {
+        const east = ((x + z) & 1) === 0;
+        const lx = east ? x + 1.02 : x - 0.86;
+        this.block(lx, 0, z + 0.78, lx + 0.84, 1.12, z + 0.9, DOOR_LEAF, WOOD_LIT);
+      }
+    }
   }
 
   /** The corners of a face of the box on cell (x, z), from height `y0` up to `y1`, on the side (dx, dz). */
