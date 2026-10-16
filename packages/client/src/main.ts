@@ -3009,6 +3009,8 @@ function netStrip(): void {
   const text = !session || session.mode !== 'solo' || !api ? '' : checked ? (checked.offline ? t.offline.strip : '') : t.offline.stripLocal;
   if (netBadge.textContent !== text) netBadge.textContent = text;
   netBadge.hidden = text === '' || overlayOpen();
+  // Toasts come under the strip, not over it.
+  document.documentElement.style.setProperty('--net-strip', netBadge.hidden ? '0px' : '34px');
 }
 
 /** The connection went or came back (session.ts): once a run, the window says so; the strip stays while it lasts. */

@@ -62,7 +62,7 @@ canvas#game {
 .pd-reforges .pd-reforge .pd-slot { width: var(--slot); height: var(--slot); }
 
 /* Toasts sit just under the HUD, however tall it has grown (main.ts sets --hud-bottom). */
-#toast { top: max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))); }
+#toast { top: calc(max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))) + var(--net-strip, 0px)); }
 
 /* The day's ranks keep their own alignment inside the centred end-of-run window. */
 .pd-runend .pd-ranks { text-align: left; }
@@ -856,3 +856,19 @@ body.pd-3d canvas#game { position: relative; z-index: 1; }
 #overlay .pd-window.settings .pd-step { flex: 1 1 0; width: auto; min-width: 0; }
 #overlay .pd-window.settings .pd-step { padding-bottom: 6px; }
 #overlay .pd-window.settings .pd-step::before { width: min(70%, 30px); height: calc(8px + var(--n, 1) * 5px); }
+
+/* A short screen (360 x 640): the room between the card and the sheet holds three icons a column, so the camera moves to the left edge (campui.ts fit),
+   the icons and the logo are a little smaller, and a day's block opened wide scrolls inside the sheet rather than pushing the buttons off the screen. */
+.pd-camp.tight .pd-camp-top { --fl-logo: 1.5; }
+.pd-camp.tight .pd-camp-edge { top: 6px; gap: 2px; }
+.pd-camp.tight .pd-camp-icon { width: 44px; height: 44px; }
+.pd-camp-top { flex: none; }
+.pd-camp-edges { min-height: 0; }
+.pd-camp-sheet { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+/* The shop's cards on a narrow screen: a title's plate keeps inside its card (the name is under it in full), and a long word wraps rather than runs out. */
+.fl-card-art { grid-template-columns: minmax(0, 1fr); }
+.fl-card-art .pd-item-art.title { width: 100%; display: flex; justify-content: center; }
+.fl-card-art .fl-title-plate { max-width: calc(100% - 8px); box-sizing: border-box; font-size: 15px; padding-right: 6px; }
+.fl-card-art .fl-title-plate > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-card-name { overflow-wrap: anywhere; hyphens: auto; }
