@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { OrthographicCamera, Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { HEIGHT, LENGTH, T, WIDTH, createWorld, levelAt } from '@pd/core';
 import { CELLS, LEAN_STRETCH, LEAN, PITCH, TILE_PX, WALL_H, YS, groundToScreen, pickCell, screenToGround, toVirtualY } from '../src/r3d/project';
-import { K_FLOOR, K_WALL, LevelGeom, SHAPES, TORCH_SPACING, pickTorches } from '../src/r3d/levelgeom';
+import { CAP_TILE, K_FLOOR, K_WALL, LevelGeom, SHAPES, TORCH_SPACING, pickShafts, pickTorches, tileRect } from '../src/r3d/levelgeom';
 import { Governor, RefreshMeter, TIERS } from '../src/r3d/governor';
 import { Beta3D, covers3D } from '../src/r3d/setting';
 
 const COLS = 16;
-const ROWS = 8;
+/** The sheet as the renderer lays it out: the tiles' own eight rows and eight more for the tiles made from them. */
+const ROWS = 16;
 
 /** A level of solid wall with the given cells carved out. */
 function mapOf(carve: ReadonlyArray<readonly [number, number, number]>): number[] {
@@ -221,6 +222,70 @@ describe('a level as geometry', () => {
     }
     expect(pickTorches(level.map)).toEqual(geom.torches);
     expect(CELLS).toBe(LENGTH);
+  });
+});
+
+describe('how a level reads: walls against floor', () => {
+  const room = (): LevelGeom => {
+    const carve: Array<[number, number, number]> = [];
+    for (let y = 10; y <= 14; y++) for (let x = 10; x <= 14; x++) carve.push([x, y, T.EMPTY]);
+    return new LevelGeom(mapOf(carve), COLS, ROWS);
+  };
+  const cornerColor = (geom: LevelGeom, x: number, z: number, corner: number): number => {
+    const v = geom.slot[x + z * WIDTH]! * 4 + corner;
+    return geom.floor.color[v * 3 + 1]!;
+  };
+
+  it('is a whole tile high, and its top is a cap tile of its own, not the brick', () => {
+    expect(WALL_H).toBe(1);
+    expect(SHAPES[T.WALL]!.top).toBe(CAP_TILE);
+    expect(SHAPES[T.DOOR]!.top).toBe(CAP_TILE);
+    expect(SHAPES[T.WALL]!.side).toBe(T.WALL);
+    // The cap lies in the sheet's second half (the renderer makes it there), beyond every tile of the original.
+    const cap = new Float32Array(4);
+    tileRect(CAP_TILE, 16, 16, cap);
+    expect(cap[3]!).toBeLessThanOrEqual(0.5);
+  });
+
+  it('darkens the floor at the foot of a wall: corners by how many walls touch them', () => {
+    const geom = room();
+    // Cell (12, 12) is in the middle of the room: its corners touch no wall. Cell (10, 12) is on the west wall's edge: its two west corners do.
+    for (let k = 0; k < 4; k++) expect(cornerColor(geom, 12, 12, k)).toBeCloseTo(cornerColor(geom, 12, 12, 0), 6);
+    const open = cornerColor(geom, 12, 12, 0);
+    // Corners 0 and 3 are the west ones (bottom-left, top-left).
+    expect(cornerColor(geom, 10, 12, 0)).toBeLessThan(open);
+    expect(cornerColor(geom, 10, 12, 3)).toBeLessThan(open);
+    expect(cornerColor(geom, 10, 12, 1)).toBeCloseTo(open, 6);
+    // A room's own corner (two walls and the one between) is the darkest.
+    expect(cornerColor(geom, 10, 10, 3)).toBeLessThan(cornerColor(geom, 10, 12, 3));
+  });
+
+  it('darkens a wall face toward its foot, and keeps the fog read at each vertex', () => {
+    const geom = new LevelGeom(mapOf([[20, 20, T.EMPTY]]), COLS, ROWS);
+    const b = geom.boxes;
+    let faces = 0;
+    for (let v = 0; v < b.verts; v += 4) {
+      if (b.normal[v * 3 + 2] !== 1) continue;
+      faces++;
+      // Corners 0, 1 are the foot (y = 0), 2, 3 the head.
+      expect(b.pos[v * 3 + 1]).toBe(0);
+      expect(b.pos[(v + 2) * 3 + 1]).toBe(WALL_H);
+      expect(b.color[v * 3]!).toBeLessThan(b.color[(v + 2) * 3]!);
+      // The fog is looked up where the vertex stands on the map: x / 48 and z / 48.
+      for (let k = 0; k < 4; k++) {
+        expect(b.fog[(v + k) * 2]).toBeCloseTo(b.pos[(v + k) * 3]! / WIDTH, 6);
+        expect(b.fog[(v + k) * 2 + 1]).toBeCloseTo(b.pos[(v + k) * 3 + 2]! / HEIGHT, 6);
+      }
+    }
+    // The wall north of the cell shows its south face to it.
+    expect(faces).toBe(1);
+  });
+
+  it('places up to two shafts of light, in the middle of rooms', () => {
+    const level = levelAt(createWorld(7), 1);
+    const shafts = pickShafts(level.map);
+    expect(shafts.length).toBeLessThanOrEqual(2);
+    for (const cell of shafts) for (const d of [0, 1, -1, WIDTH, -WIDTH, WIDTH + 1, -WIDTH - 1]) expect(SHAPES[level.map[cell + d]!]!.kind).toBe(K_FLOOR);
   });
 });
 

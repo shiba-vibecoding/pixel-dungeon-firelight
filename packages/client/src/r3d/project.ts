@@ -23,10 +23,10 @@ export const LEAN = (LEAN_DEG * Math.PI) / 180;
  * (a rat is as wide and tall on screen as it is in 2D).
  */
 export const LEAN_STRETCH = 1 / Math.cos(PITCH - LEAN);
-/** A wall's height, in tiles: low enough that a walker beside it is never buried (the far edge of its top reaches about a third of a tile). */
-export const WALL_H = 0.8;
+/** A wall's height, in tiles: a whole one, so its south face reads as a wall at 70 degrees (the far edge of its top reaches 0.36 of a tile; the feet stand clear of that). */
+export const WALL_H = 1.0;
 /** Where a walker's feet are in its cell, art pixels from the cell's top: a little south of the middle, so a wall to its south never buries them. */
-export const FEET_PX = 9;
+export const FEET_PX = 8;
 
 export interface View2 {
   /** The world pixel at the virtual screen's top-left corner, and device pixels per art pixel. */

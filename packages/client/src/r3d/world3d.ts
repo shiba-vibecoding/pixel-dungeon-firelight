@@ -15,14 +15,14 @@ import {
   AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DataTexture, DoubleSide,
   DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, LinearFilter, Mesh, MeshBasicMaterial,
   MeshLambertMaterial, NearestFilter, OrthographicCamera, PCFShadowMap, PlaneGeometry, PointLight, Points, PointsMaterial,
-  RedFormat, RepeatWrapping, Scene, SRGBColorSpace, Texture, UnsignedByteType, WebGLRenderer,
+  NeutralToneMapping, RedFormat, RepeatWrapping, Scene, SRGBColorSpace, Texture, UnsignedByteType, WebGLRenderer,
 } from 'three';
 import { HEIGHT, LENGTH, type Level, WIDTH } from '@pd/core';
 import { type Assets, frameAt, levelRegion } from '../sprites';
 import { sheet as worldSheet } from '../worldsheets';
 import { knockback, LUNGE_MS } from '../render';
 import { FALL_MS, type Puppet, TILE, type View } from '../view';
-import { LevelGeom, type Buffers } from './levelgeom';
+import { CAP_TILE, LevelGeom, type Buffers } from './levelgeom';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH, WALL_H, YS } from './project';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
@@ -54,18 +54,30 @@ export interface Shown {
   y: number;
 }
 
+/** The wall's tile in the sheet (T.WALL). */
+const T_WALL = 4;
 const ATLAS_W = 2048;
 const ATLAS_H = 1024;
 const MAX_SPRITES = 160;
 const MAX_BLOBS = 64;
+const SIN_PITCH = Math.sin(PITCH);
+const COS_PITCH = Math.cos(PITCH);
 const SIN_LEAN = Math.sin(LEAN);
 const COS_LEAN = Math.cos(LEAN);
 /** The soft hero light, and the torches: warm. */
-const TORCH_COLOR = 0xff9448;
-const HERO_COLOR = 0xffe2b0;
-const TORCH_HEIGHT = 0.62;
-/** The frames of a torch flame (ambient1.png's «torch»), and the size drawn, in tiles. */
-const FLAME_SIZE = 0.8;
+const TORCH_COLOR = 0xff8a3a;
+/** The hero's light is firelight, warm and wide, never white: the warm light the camp fire throws. */
+const HERO_COLOR = 0xffa65a;
+/** A torch light hangs this high and this far out from the wall: its pool lies on the floor in front, not along the foot of the wall. */
+const TORCH_HEIGHT = 1.45;
+const TORCH_OUT = 1.7;
+/** The size a wall sconce is drawn, in tiles (the art is 16 pixels with a little torch in it), and the halo round its flame. */
+const FLAME_SIZE = 1.15;
+const HALO_SIZE = 2.6;
+const MAX_HALOS = 6;
+/** The sky and the ground of the ambient light: cool and dark, so that the warm lights read as warm. */
+const SKY_COLOR = 0xa0aad2;
+const GROUND_COLOR = 0x5e5c7c;
 
 /** Fog of war: how dark each state is (the 2D renderer's own numbers, render.ts). */
 const FOG_REMEMBERED = 0.55;
@@ -204,7 +216,7 @@ function withFog(material: MeshLambertMaterial | MeshBasicMaterial, fog: { value
         {
           float lum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
           float rem = clamp(vFog / ${FOG_REMEMBERED.toFixed(2)}, 0.0, 1.0);
-          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(lum) * 0.5, rem * 0.78);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(lum) * vec3(0.44, 0.49, 0.62), rem * 0.8);
           gl_FragColor.rgb *= 1.0 - smoothstep(0.52, 1.0, vFog);
         }`,
       );
@@ -229,17 +241,33 @@ function attrs(geometry: BufferGeometry, b: Buffers, dynamic: boolean): void {
   geometry.setDrawRange(0, b.indices);
 }
 
-/** A soft round dark spot, for a character's shadow (blended: the only blended things in the scene besides dust). */
+/** A soft round spot, white in the middle and black at the rim: the alpha of a character's shadow (its colour is a plain dark). */
 function blobTexture(): CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 32;
   const g = c.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 32, 32);
   const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-  grad.addColorStop(0, 'rgba(0,0,0,0.62)');
-  grad.addColorStop(0.55, 'rgba(0,0,0,0.34)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  grad.addColorStop(0, '#fff');
+  grad.addColorStop(0.5, '#a0a0a0');
+  grad.addColorStop(1, '#000');
   g.fillStyle = grad;
   g.fillRect(0, 0, 32, 32);
+  return new CanvasTexture(c);
+}
+
+/** A warm halo, white-hot in the middle: round the flame of a torch. */
+function haloTexture(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
   const texture = new CanvasTexture(c);
   texture.colorSpace = SRGBColorSpace;
   return texture;
@@ -309,6 +337,9 @@ export class World3D {
   private readonly fogUniform = { value: this.fog.texture as Texture };
   private readonly blob = blobTexture();
   private readonly blobMist = mistTexture();
+  private readonly halo = haloTexture();
+  private readonly halos: InstancedMesh;
+  private haloCount = 0;
   private readonly dot = dotTexture();
 
   // Terrain.
@@ -316,6 +347,8 @@ export class World3D {
   private levelKey = '';
   private region = -1;
   private tiles: Texture | null = null;
+  private tileCols = 16;
+  private tileRows = 16;
   private waterTex: Texture | null = null;
   private floorMesh: Mesh | null = null;
   private boxMesh: Mesh | null = null;
@@ -337,8 +370,8 @@ export class World3D {
   private readonly at = { x: 0, y: 0 };
 
   // Lights.
-  private readonly hemi = new HemisphereLight(0xdde3ff, 0x8a90ac, 2.5);
-  private readonly heroLight = new PointLight(HERO_COLOR, 6, 6.5, 1.5);
+  private readonly hemi = new HemisphereLight(SKY_COLOR, GROUND_COLOR, 3.7);
+  private readonly heroLight = new PointLight(HERO_COLOR, 4.6, 7.5, 1.2);
   private readonly torchLights: PointLight[] = [];
   /** The torch (a cell of the level) each light stands at, or -1. */
   private readonly assigned = [-1, -1, -1];
@@ -371,6 +404,8 @@ export class World3D {
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance', stencil: false });
     this.renderer.setPixelRatio(1);
     this.renderer.setClearColor(0x000000, 1);
+    // Nothing blows out to white: light is compressed above 0.8, as the demo does, and the pixel art keeps its colours below.
+    this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.info.autoReset = false;
     this.shadowsOn = options.tier.shadowLights > 0;
     this.renderer.shadowMap.enabled = this.shadowsOn;
@@ -390,7 +425,7 @@ export class World3D {
 
     this.scene.add(this.hemi, this.heroLight);
     for (let i = 0; i < 3; i++) {
-      const light = new PointLight(TORCH_COLOR, 0, 9, 1.3);
+      const light = new PointLight(TORCH_COLOR, 0, 10.5, 1.2);
       this.torchLights.push(light);
       this.scene.add(light);
     }
@@ -412,12 +447,27 @@ export class World3D {
     this.scene.add(this.sprites);
 
     const flat = new PlaneGeometry(1, 1);
-    this.blobs = new InstancedMesh(flat, new MeshBasicMaterial({ map: this.blob, transparent: true, depthWrite: false }), MAX_BLOBS);
+    this.blobs = new InstancedMesh(
+      flat, new MeshBasicMaterial({ color: 0x05060c, alphaMap: this.blob, transparent: true, opacity: 0.62, depthWrite: false }), MAX_BLOBS,
+    );
     this.blobs.instanceMatrix.setUsage(DynamicDrawUsage);
     this.blobs.frustumCulled = false;
     this.blobs.renderOrder = 2;
     this.blobs.count = 0;
     this.scene.add(this.blobs);
+
+    // The halos round the flames of the torches in sight: soft, added on, a few small quads.
+    const haloQuad = new PlaneGeometry(1, 1);
+    this.halos = new InstancedMesh(
+      haloQuad, new MeshBasicMaterial({ map: this.halo, color: 0xff9a4a, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }), MAX_HALOS,
+    );
+    this.halos.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.halos.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_HALOS * 3).fill(1), 3);
+    this.halos.instanceColor.setUsage(DynamicDrawUsage);
+    this.halos.frustumCulled = false;
+    this.halos.renderOrder = 4;
+    this.halos.count = 0;
+    this.scene.add(this.halos);
 
     for (let i = 0; i < MAX_SPRITES; i++) this.shown.push({ puppet: undefined as unknown as Puppet, x: 0, y: 0 });
     this.puppetPass = (puppet) => this.addPuppet(puppet);
@@ -466,14 +516,35 @@ export class World3D {
     this.renderer.setSize(width, height, false);
   }
 
-  private tileTexture(region: number): Texture {
+  /**
+   * The region's tile sheet on a canvas twice as tall (a power of two), with one more tile made from it: the wall's brick turned into
+   * a dark, cool cap for the tops of walls, so a wall can never be taken for floor (the tile CAP_TILE).
+   */
+  private tileTexture(region: number): { texture: Texture; cols: number; rows: number } {
     const image = this.assets.tiles[region]!;
-    const texture = new Texture(image);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height * 2;
+    const g = canvas.getContext('2d', { willReadFrequently: true })!;
+    g.drawImage(image, 0, 0);
+    const cols = image.width / TILE;
+    const wall = g.getImageData((T_WALL % cols) * TILE, Math.trunc(T_WALL / cols) * TILE, TILE, TILE);
+    const px = wall.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const lum = (px[i]! * 0.3 + px[i + 1]! * 0.59 + px[i + 2]! * 0.11) / 255;
+      // A dark slate with the brick's outline still faintly in it.
+      const v = 0.2 + (lum - 0.5) * 0.36;
+      px[i] = Math.max(0, Math.min(255, (v * 0.9 + 0.04) * 255));
+      px[i + 1] = Math.max(0, Math.min(255, (v * 0.97 + 0.045) * 255));
+      px[i + 2] = Math.max(0, Math.min(255, (v * 1.12 + 0.07) * 255));
+      px[i + 3] = 255;
+    }
+    g.putImageData(wall, (CAP_TILE % cols) * TILE, Math.trunc(CAP_TILE / cols) * TILE);
+    const texture = new CanvasTexture(canvas);
     texture.colorSpace = SRGBColorSpace;
     texture.magFilter = texture.minFilter = NearestFilter;
     texture.generateMipmaps = false;
-    texture.needsUpdate = true;
-    return texture;
+    return { texture, cols, rows: canvas.height / TILE };
   }
 
   /** A new floor (or run): the geometry of its map, torches, a fresh fog. `key` tells one floor from another. */
@@ -484,7 +555,10 @@ export class World3D {
     if (region !== this.region || !this.tiles) {
       this.tiles?.dispose();
       this.waterTex?.dispose();
-      this.tiles = this.tileTexture(region);
+      const made = this.tileTexture(region);
+      this.tiles = made.texture;
+      this.tileCols = made.cols;
+      this.tileRows = made.rows;
       const water = new Texture(this.assets.water[region]!);
       water.colorSpace = SRGBColorSpace;
       water.magFilter = water.minFilter = NearestFilter;
@@ -501,8 +575,7 @@ export class World3D {
       withFog(this.waterMaterial, this.fogUniform, 'attribute');
       this.dropMeshes();
     }
-    const image = this.assets.tiles[region]!;
-    this.geom = new LevelGeom(level.map, image.width / TILE, image.height / TILE);
+    this.geom = new LevelGeom(level.map, this.tileCols, this.tileRows);
     this.makeMeshes();
     this.assigned.fill(-1);
     this.shadowDirty = true;
@@ -626,7 +699,7 @@ export class World3D {
     const o = this.blobCount++ * 16;
     // Lying on the floor: its up (local y) runs north, its face looks up.
     m[o] = size; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
-    m[o + 4] = 0; m[o + 5] = 0; m[o + 6] = -size * 0.62; m[o + 7] = 0;
+    m[o + 4] = 0; m[o + 5] = 0; m[o + 6] = -size * 0.7; m[o + 7] = 0;
     m[o + 8] = 0; m[o + 9] = 1; m[o + 10] = 0; m[o + 11] = 0;
     m[o + 12] = x; m[o + 13] = 0.015; m[o + 14] = z; m[o + 15] = 1;
   }
@@ -665,7 +738,7 @@ export class World3D {
     const tx = px / TILE;
     const tz = py / TILE;
     this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, hover / TILE, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint);
-    if (puppet.alive || !puppet.laid) this.shadow(tx, tz, (hover ? 0.7 : 0.95) * Math.max(0.4, sheet.w / 14));
+    if (puppet.alive || !puppet.laid) this.shadow(tx, tz, (hover ? 0.75 : 1.1) * Math.max(0.45, sheet.w / 14));
     const mark = this.shown[this.shownCount++]!;
     mark.puppet = puppet;
     mark.x = pos.x;
@@ -708,7 +781,7 @@ export class World3D {
     if (free < 0) return;
     slots[free] = cell;
     const light = this.torchLights[free]!;
-    light.position.set((cell % WIDTH) + 0.5, TORCH_HEIGHT, Math.trunc(cell / WIDTH) + 1.15);
+    light.position.set((cell % WIDTH) + 0.5, TORCH_HEIGHT, Math.trunc(cell / WIDTH) + TORCH_OUT);
     if (free < this.tier.shadowLights) this.shadowDirty = true;
   }
 
@@ -742,7 +815,7 @@ export class World3D {
     this.assignTorches(hx, hz, f.explored);
 
     // Lights: the hero's, and the torches' flicker (intensity only: the shadow maps are not redrawn for it).
-    this.heroLight.position.set(hx, 1.1, hz + 0.6);
+    this.heroLight.position.set(hx, 1.9, hz + 0.35);
     const now = f.now;
     for (let i = 0; i < 3; i++) {
       const cell = this.assigned[i]!;
@@ -751,7 +824,7 @@ export class World3D {
         light.intensity = 0;
         continue;
       }
-      light.intensity = 9 * (0.86 + 0.14 * Math.sin(now / 70 + cell) * Math.sin(now / 23 + cell * 3));
+      light.intensity = 15 * (0.84 + 0.16 * Math.sin(now / 70 + cell) * Math.sin(now / 23 + cell * 3));
     }
 
     // Sprites: characters, then what lies about, then flames.
@@ -772,6 +845,13 @@ export class World3D {
     this.spriteUv.clearUpdateRanges();
     this.spriteUv.addUpdateRange(0, this.spriteCount * 4);
     this.spriteUv.needsUpdate = true;
+    this.halos.count = this.haloCount;
+    this.halos.instanceMatrix.clearUpdateRanges();
+    this.halos.instanceMatrix.addUpdateRange(0, this.haloCount * 16);
+    this.halos.instanceMatrix.needsUpdate = true;
+    this.halos.instanceColor!.clearUpdateRanges();
+    this.halos.instanceColor!.addUpdateRange(0, this.haloCount * 3);
+    this.halos.instanceColor!.needsUpdate = true;
     this.blobs.instanceMatrix.clearUpdateRanges();
     this.blobs.instanceMatrix.addUpdateRange(0, this.blobCount * 16);
     this.blobs.instanceMatrix.needsUpdate = true;
@@ -830,20 +910,36 @@ export class World3D {
     }
   }
 
+  /** The wall sconces: a torch standing on the lip of each wall the party has seen, and a halo round the flames in sight. */
   private addFlames(f: Frame3D): void {
+    this.haloCount = 0;
     const sheet = worldSheet('ambient1');
     const frames = sheet?.anims.torch;
     if (!sheet || !frames || frames.length === 0) return;
     const torches = this.geom!.torches;
     const cycle = f.now * 0.01;
+    const m = this.halos.instanceMatrix.array as Float32Array;
+    const c = this.halos.instanceColor!.array as Float32Array;
     for (let i = 0; i < torches.length; i++) {
       const cell = torches[i]!;
       if (!f.explored[cell]) continue;
       const frame = frames[Math.floor(cycle + cell) % frames.length]!;
-      this.sprite(
-        sheet.image, frame.x, frame.y, frame.w, frame.h, false,
-        (cell % WIDTH) + 0.5, WALL_H - 0.04, Math.trunc(cell / WIDTH) + 0.97, FLAME_SIZE, FLAME_SIZE, 1.9,
-      );
+      const x = (cell % WIDTH) + 0.5;
+      const z = Math.trunc(cell / WIDTH) + 0.94;
+      this.sprite(sheet.image, frame.x, frame.y, frame.w, frame.h, false, x, WALL_H - 0.02, z, FLAME_SIZE, FLAME_SIZE, 1.3);
+      if (!f.visible[cell] || this.haloCount >= MAX_HALOS) continue;
+      // A halo faces the camera: its up runs along the view's up, its face looks at the lens.
+      const flicker = 0.5 + 0.24 * Math.sin(f.now / 70 + cell) * Math.sin(f.now / 23 + cell * 3);
+      const o = this.haloCount * 16;
+      m[o] = HALO_SIZE; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
+      m[o + 4] = 0; m[o + 5] = HALO_SIZE * COS_PITCH; m[o + 6] = -HALO_SIZE * SIN_PITCH; m[o + 7] = 0;
+      m[o + 8] = 0; m[o + 9] = SIN_PITCH; m[o + 10] = COS_PITCH; m[o + 11] = 0;
+      m[o + 12] = x; m[o + 13] = WALL_H + 0.42; m[o + 14] = z - 0.14; m[o + 15] = 1;
+      const k = this.haloCount * 3;
+      c[k] = flicker;
+      c[k + 1] = flicker * 0.9;
+      c[k + 2] = flicker * 0.8;
+      this.haloCount++;
     }
   }
 
@@ -1024,6 +1120,10 @@ export class World3D {
       (this.shaftMesh[0].material as MeshBasicMaterial).dispose();
     }
     this.blobMist.dispose();
+    this.halo.dispose();
+    this.halos.geometry.dispose();
+    (this.halos.material as MeshBasicMaterial).dispose();
+    this.halos.dispose();
     for (const light of this.torchLights) light.shadow.dispose();
     this.renderer.dispose();
     if (!this.lost) this.renderer.forceContextLoss();

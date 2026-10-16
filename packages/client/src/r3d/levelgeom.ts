@@ -33,8 +33,12 @@ export interface Shape {
   tint: number;
 }
 
-/** The tile whose art the tops of walls and doors take. */
-const WALL_TOP = T.WALL;
+/**
+ * The tile the tops of walls and doors take: not in the sheet but made from it (world3d.ts darkens the wall's brick into a cool, dark
+ * cap), one row under the sheet's own eight.
+ */
+export const CAP_TILE = 128;
+const WALL_TOP = CAP_TILE;
 /** Where a chasm's floor lies, in tiles. */
 export const CHASM_DEPTH = -0.6;
 export const WATER_DEPTH = -0.04;
@@ -50,7 +54,7 @@ export const SHAPES: readonly Shape[] = (() => {
     if (t >= T.WATER_TILES && t <= T.WATER) shape = { kind: K_WATER, h: WATER_DEPTH, side: t, top: t, tint: 1 };
     else if (flags & F.PIT) shape = { kind: K_CHASM, h: CHASM_DEPTH, side: t, top: t, tint: 1 };
     else if (flags & F.SOLID && flags & F.LOS_BLOCKING) {
-      shape = { kind: K_WALL, h: WALL_H, side: t, top: WALLS.has(t) ? WALL_TOP : t, tint: WALLS.has(t) ? 0.62 : 1 };
+      shape = { kind: K_WALL, h: WALL_H, side: t, top: WALLS.has(t) ? WALL_TOP : t, tint: 1 };
     } else if (flags & F.SOLID) shape = { kind: K_LOW, h: 0.55, side: t, top: t, tint: 1 };
     else if (t === T.WELL) shape = { kind: K_LOW, h: 0.4, side: t, top: t, tint: 1 };
     shapes.push(shape);
@@ -102,12 +106,15 @@ function makeBuffers(vertexCapacity: number, indexCapacity: number): Buffers {
 
 const rect = new Float32Array(4);
 const corners = new Float32Array(12);
-const fogs = new Float32Array(8);
 
-/** Writes one quad; corners run bottom-left, bottom-right, top-right, top-left of the face, counter-clockwise seen from the normal. */
+/**
+ * Writes one quad; corners run bottom-left, bottom-right, top-right, top-left of the face, counter-clockwise seen from the normal.
+ * `shade` is each corner's brightness (ambient occlusion, a face's darkening toward its foot); the fog of war is read at each
+ * corner's own place on the map, so the darkness fades across the face and from cell to cell.
+ */
 function quad(
-  b: Buffers, c: Float32Array, nx: number, ny: number, nz: number, shade: number,
-  u0: number, v0: number, u1: number, v1: number, fog: Float32Array,
+  b: Buffers, c: Float32Array, nx: number, ny: number, nz: number, shade: ArrayLike<number>, tint: ArrayLike<number>,
+  u0: number, v0: number, u1: number, v1: number,
 ): void {
   const v = b.verts;
   for (let k = 0; k < 4; k++) {
@@ -118,9 +125,11 @@ function quad(
     b.normal[p] = nx;
     b.normal[p + 1] = ny;
     b.normal[p + 2] = nz;
-    b.color[p] = b.color[p + 1] = b.color[p + 2] = shade;
-    b.fog[(v + k) * 2] = fog[k * 2]!;
-    b.fog[(v + k) * 2 + 1] = fog[k * 2 + 1]!;
+    b.color[p] = shade[k]! * tint[0]!;
+    b.color[p + 1] = shade[k]! * tint[1]!;
+    b.color[p + 2] = shade[k]! * tint[2]!;
+    b.fog[(v + k) * 2] = c[k * 3]! / WIDTH;
+    b.fog[(v + k) * 2 + 1] = c[k * 3 + 2]! / HEIGHT;
   }
   const t = v * 2;
   b.uv[t] = u0; b.uv[t + 1] = v0;
@@ -137,22 +146,6 @@ function quad(
 const set12 = (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number): void => {
   corners[0] = a; corners[1] = b; corners[2] = c; corners[3] = d; corners[4] = e; corners[5] = f;
   corners[6] = g; corners[7] = h; corners[8] = i; corners[9] = j; corners[10] = k; corners[11] = l;
-};
-
-const fogCentre = (cell: number): void => {
-  const u = ((cell % WIDTH) + 0.5) / WIDTH;
-  const v = (Math.trunc(cell / WIDTH) + 0.5) / HEIGHT;
-  for (let k = 0; k < 4; k++) {
-    fogs[k * 2] = u;
-    fogs[k * 2 + 1] = v;
-  }
-};
-
-const fogCorners = (x: number, z: number): void => {
-  fogs[0] = x / WIDTH; fogs[1] = (z + 1) / HEIGHT;
-  fogs[2] = (x + 1) / WIDTH; fogs[3] = (z + 1) / HEIGHT;
-  fogs[4] = (x + 1) / WIDTH; fogs[5] = z / HEIGHT;
-  fogs[6] = x / WIDTH; fogs[7] = z / HEIGHT;
 };
 
 /** Wall cells within reach of open ground: the only ones whose tops and faces can be seen. */
@@ -215,11 +208,25 @@ export function pickShafts(map: ArrayLike<number>): number[] {
   return picked;
 }
 
+/** The neighbours of each floor corner (bottom-left, bottom-right, top-right, top-left of the quad), as steps from the cell. */
+const CORNER_DX = [-1, 1, 1, -1];
+const CORNER_DZ = [1, 1, -1, -1];
+/** Brightness of a floor corner by how many walls touch it (ambient occlusion). */
+const AO = [1, 0.8, 0.6, 0.46];
+/** The floor's warm tone (the demo's floors are warm against its cool walls), the walls' cool one, the water's. */
+const FLOOR_TINT = [1.0, 0.93, 0.84];
+const FACE_TINT = [0.95, 0.98, 1.06];
+const WATER_TINT = [0.78, 0.95, 1.0];
+/** How dark a wall face is at its foot against its head. */
+const FACE_FOOT = 0.62;
+const ONE = [1, 1, 1, 1];
+const shades = [1, 1, 1, 1];
+
 const SIDES: ReadonlyArray<readonly [number, number, number]> = [
   [0, 1, 1], // south: what the camera sees
-  [1, 0, 0.82], // east
-  [-1, 0, 0.82], // west
-  [0, -1, 0.72], // north
+  [1, 0, 0.8], // east
+  [-1, 0, 0.8], // west
+  [0, -1, 0.7], // north
 ];
 
 export class LevelGeom {
@@ -274,7 +281,15 @@ export class LevelGeom {
     this.grew = true;
   }
 
-  /** The floor quad of a cell: flat at its depth, the cell's tile, fog read at its corners. */
+  /** Whether a cell is a tall box (a wall or a door): what darkens the corners of the floor beside it. */
+  private tall(x: number, z: number): number {
+    return x >= 0 && z >= 0 && x < WIDTH && z < HEIGHT && this.kinds[x + z * WIDTH] === K_WALL ? 1 : 0;
+  }
+
+  /**
+   * The floor quad of a cell: flat at its depth, the cell's tile, warm in tone, and darkened at each corner by the walls around that
+   * corner (ambient occlusion baked into the vertex colours: the foot of every wall is in shadow). The fog is read at the corners.
+   */
   private writeFloor(cell: number): void {
     const b = this.floor;
     const slot = this.slot[cell]!;
@@ -286,7 +301,6 @@ export class LevelGeom {
     const tile = shape.kind === K_WALL || shape.kind === K_LOW ? T.EMPTY : shape.kind === K_CHASM ? T.CHASM : this.terrain[cell]!;
     tileRect(tile, this.cols, this.rows, rect);
     set12(x, y, z + 1, x + 1, y, z + 1, x + 1, y, z, x, y, z);
-    fogCorners(x, z);
     const v = slot * 4;
     for (let k = 0; k < 4; k++) {
       const p = (v + k) * 3;
@@ -296,9 +310,19 @@ export class LevelGeom {
       b.normal[p] = 0;
       b.normal[p + 1] = 1;
       b.normal[p + 2] = 0;
-      b.color[p] = b.color[p + 1] = b.color[p + 2] = 1;
-      b.fog[(v + k) * 2] = fogs[k * 2]!;
-      b.fog[(v + k) * 2 + 1] = fogs[k * 2 + 1]!;
+      // The corner's neighbours: the two cells beside it and the one across.
+      const dx = CORNER_DX[k]!;
+      const dz = CORNER_DZ[k]!;
+      const s1 = this.tall(x + dx, z);
+      const s2 = this.tall(x, z + dz);
+      const diagonal = this.tall(x + dx, z + dz);
+      const occluded = s1 && s2 ? 3 : s1 + s2 + diagonal;
+      const ao = AO[occluded]!;
+      b.color[p] = ao * FLOOR_TINT[0]!;
+      b.color[p + 1] = ao * FLOOR_TINT[1]!;
+      b.color[p + 2] = ao * FLOOR_TINT[2]!;
+      b.fog[(v + k) * 2] = corners[k * 3]! / WIDTH;
+      b.fog[(v + k) * 2 + 1] = corners[k * 3 + 2]! / HEIGHT;
     }
     const t = v * 2;
     b.uv[t] = rect[0]!; b.uv[t + 1] = rect[1]!;
@@ -340,9 +364,8 @@ export class LevelGeom {
     const x = cell % WIDTH;
     const z = Math.trunc(cell / WIDTH);
     set12(x, WATER_DEPTH, z + 1, x + 1, WATER_DEPTH, z + 1, x + 1, WATER_DEPTH, z, x, WATER_DEPTH, z);
-    fogCorners(x, z);
     // The water texture is 32 art pixels across: two tiles.
-    quad(this.water, corners, 0, 1, 0, 1, x / 2, (z + 1) / 2, (x + 1) / 2, z / 2, fogs);
+    quad(this.water, corners, 0, 1, 0, ONE, WATER_TINT, x / 2, (z + 1) / 2, (x + 1) / 2, z / 2);
   }
 
   private writeBox(cell: number): void {
@@ -351,12 +374,11 @@ export class LevelGeom {
     const z = Math.trunc(cell / WIDTH);
     const shape = SHAPES[this.terrain[cell]!]!;
     const h = shape.h;
-    fogCentre(cell);
     tileRect(shape.top, this.cols, this.rows, rect);
     set12(x, h, z + 1, x + 1, h, z + 1, x + 1, h, z, x, h, z);
-    quad(b, corners, 0, 1, 0, shape.tint, rect[0]!, rect[1]!, rect[2]!, rect[3]!, fogs);
+    quad(b, corners, 0, 1, 0, ONE, ONE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
     tileRect(shape.side, this.cols, this.rows, rect);
-    for (const [dx, dz, shade] of SIDES) {
+    for (const [dx, dz, side] of SIDES) {
       const nx = x + dx;
       const nz = z + dz;
       if (nx < 0 || nz < 0 || nx >= WIDTH || nz >= HEIGHT) continue;
@@ -367,7 +389,11 @@ export class LevelGeom {
       else if (dz === -1) set12(x + 1, bottom, z, x, bottom, z, x, h, z, x + 1, h, z);
       else if (dx === 1) set12(x + 1, bottom, z + 1, x + 1, bottom, z, x + 1, h, z, x + 1, h, z + 1);
       else set12(x, bottom, z, x, bottom, z + 1, x, h, z + 1, x, h, z);
-      quad(b, corners, dx, 0, dz, shade, rect[0]!, rect[1]!, rect[2]!, rect[3]!, fogs);
+      // Darker toward the foot of the wall, where the floor's own shadow gathers.
+      const foot = side * FACE_FOOT;
+      shades[0] = shades[1] = foot;
+      shades[2] = shades[3] = side;
+      quad(b, corners, dx, 0, dz, shades, FACE_TINT, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
     }
   }
 
@@ -378,6 +404,7 @@ export class LevelGeom {
   patch(map: ArrayLike<number>): 'same' | 'patched' | 'solids' | 'rebuilt' {
     let tiles = false;
     let solids = false;
+    const changed: number[] = [];
     for (let i = 0; i < LENGTH; i++) {
       const next = map[i]!;
       const prev = this.terrain[i]!;
@@ -390,11 +417,21 @@ export class LevelGeom {
       const now = SHAPES[next]!;
       this.terrain[i] = next;
       this.kinds[i] = now.kind;
-      if (this.slot[i]! >= 0) this.writeFloor(i);
+      changed.push(i);
       tiles = true;
       // Boxes and water are rewritten when one comes or goes, or a box's art or height changes; a floor tile alone is patched in place.
       const box = now.kind === K_WALL || now.kind === K_LOW;
       if (was.kind !== now.kind || (box && (was.side !== now.side || was.top !== now.top || was.h !== now.h))) solids = true;
+    }
+    // A cell's tile and the shade at the corners of the floor round a wall that came or went.
+    for (const i of changed) {
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const x = (i % WIDTH) + dx;
+          const z = Math.trunc(i / WIDTH) + dz;
+          if (x >= 0 && z >= 0 && x < WIDTH && z < HEIGHT && this.slot[x + z * WIDTH]! >= 0) this.writeFloor(x + z * WIDTH);
+        }
+      }
     }
     if (solids) this.rebuildSolids();
     if (tiles) this.floorVersion++;
