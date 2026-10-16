@@ -384,8 +384,8 @@ body:has(#overlay.open) .pd-mapctl { visibility: hidden; }
 .pd-profile-streak .pd-tro { display: inline-block; vertical-align: -2px; margin-right: 2px; }
 .pd-profile-streak.off { color: var(--ink-muted); }
 
-.pd-camp-edges { position: relative; flex: 1; }
-.pd-camp-edge { position: absolute; top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.pd-camp-edges { position: relative; flex: 1; pointer-events: none; }  /* the room between the card and the sheet is the camp's: the hero and his arrows are tapped through it */
+.pd-camp-edge { pointer-events: auto; position: absolute; top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .pd-camp-edge.left { left: 6px; } .pd-camp-edge.right { right: 6px; }
 .pd-camp-icon { position: relative; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; background: none; border: 0; color: var(--ink); font: var(--text-caption, 400 15px/16px var(--font-small)); text-shadow: 0 2px 0 var(--void), 2px 0 0 var(--void), -2px 0 0 var(--void), 0 -2px 0 var(--void); }
 .pd-camp-icon i { width: 40px; height: 40px; display: grid; place-items: center; background: rgba(20, 21, 18, 0.72); border: var(--u) solid var(--stone-400); clip-path: var(--notch); }
