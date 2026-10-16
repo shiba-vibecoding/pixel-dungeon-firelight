@@ -1,6 +1,6 @@
 import { type Hero, isShopkeeper, maxExp, type Mob, mobStats } from './actors';
 import { hurt } from './combat';
-import { type Char, type Ctx, dropItem, isHero, leaveCell } from './floor';
+import { type Char, type Ctx, dispelInvisibility, dropItem, isHero, leaveCell } from './floor';
 import { createItem } from './items';
 
 /*
@@ -76,7 +76,7 @@ const BOSSES = new Set(['goo', 'tengu', 'dm300', 'king', 'yog', 'burningFist', '
  * quest givers) and the heroes' allies are spared.
  */
 export function wipeOut(ctx: Ctx, hero: Hero): void {
-  hero.invisible = 0;
+  dispelInvisibility(ctx.world, hero);
   ctx.effects.push({ type: 'wipedOut', depth: ctx.depth, hero: hero.id });
   for (const mob of [...ctx.floor.mobs]) {
     if (BOSSES.has(mob.kind) || !ctx.floor.mobs.includes(mob)) continue;

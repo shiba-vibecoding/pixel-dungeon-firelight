@@ -5,7 +5,7 @@ import {
   maxExp, type Mob, MOBS, mobStats, ringBonus,
 } from './actors';
 import {
-  charAt, type Char, type Ctx, dropItem, enterCell, freeCellNear, heroesOn, isHero, isPassable, isWater, landItem, leaveCell,
+  charAt, type Char, type Ctx, dispelInvisibility, dropItem, enterCell, freeCellNear, heroesOn, isHero, isPassable, isWater, landItem, leaveCell,
   observe,
 } from './floor';
 import { createItem, type Item, itemDef, ItemGenerator, randomRing, rollGold, wandMaxCharges } from './items';
@@ -60,8 +60,8 @@ export interface AttackOverride {
 
 /** One blow or shot; returns whether it hit. */
 export function attack(ctx: Ctx, attacker: Char, defender: Char, override: AttackOverride = {}): boolean {
-  // Striking gives an invisible hero away.
-  if (isHero(attacker)) attacker.invisible = 0;
+  // Hero.onAttackComplete: a melee blow gives an invisible hero away when an enemy is in sight (a thrown weapon does not: Hero.shoot).
+  if (isHero(attacker) && override.damage === undefined) dispelInvisibility(ctx.world, attacker);
   const skill = override.attack ?? attackSkill(attacker);
   const hit = ctx.rng.floatMax(skill) >= ctx.rng.floatMax(defenseSkill(defender));
   if (!hit) {

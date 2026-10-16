@@ -804,6 +804,13 @@ export const en = {
   zap: 'Zap',
   chooseTarget: 'Choose a target',
   readOn: 'Read on…',
+  /** ArmorKit and Weightstone: WndBag's selector titles, and Weightstone.WndBalance. */
+  pickKit: 'Select an armour to upgrade',
+  pickWeapon: 'Select a weapon to balance',
+  balance: 'Balance…',
+  balanceAsk: (name: string) => `How would you like to balance your ${name}?`,
+  balanceImbue: { speed: 'For speed', accuracy: 'For accuracy' },
+  balanceNever: 'Never mind',
   /** WndBag's selector titles: what the scroll is to be read on. */
   pickTitle: {
     'scroll.upgrade': 'Upgrade an item', 'scroll.enchantment': 'Enchant an item', 'scroll.identify': 'Identify an item',

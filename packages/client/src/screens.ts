@@ -1,5 +1,5 @@
 import {
-  type Action, BACKPACK_SIZE, scrollTargets, isBroken, isIdentified, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
+  type Action, BACKPACK_SIZE, balanceTargets, kitTargets, scrollTargets, isBroken, isIdentified, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
   itemAt, itemSprite, type ItemKind, levelKnown, maxExp, type MobKind, SUBCLASSES, visiblyCursed, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
@@ -1964,6 +1964,72 @@ function askTarget(options: BackpackOptions, kind: ItemKind, on: ItemRef, go: ()
   );
 }
 
+/**
+ * WndBag's selector for an item's own action (the armour kit, the weightstone): the backpack with only what the item can act on
+ * to tap; a tap does `done` with it, «cancel» goes back to the item. Returns what the item's button does.
+ */
+function chooseFrom(options: ItemOptions, index: number, title: string, targets: readonly ItemRef[], done: (on: ItemRef) => void): () => void {
+  const pick = (): void => {
+    // The button of the item's panel that asked, for the window to come back after a reload (windowState).
+    pickOrigin = lastUse;
+    showBackpack({ ...options, pick: { title, targets, onPick: done, onCancel: () => showBackpack(options, { index }) } });
+  };
+  return pick;
+}
+
+/** Weightstone.WndBalance: how the weapon chosen is to be balanced, the way it is not yet; «never mind» goes back to the pack. */
+function showBalance(options: ItemOptions, index: number, on: ItemRef): void {
+  const { world, hero } = options;
+  const weapon = itemAt(hero, on);
+  if (!weapon) return;
+  const back = (): void => showBackpack(options, { index });
+  const balance = (imbue: 'speed' | 'accuracy'): void => {
+    // A weapon in hand is the stone's default; one in the pack is named.
+    keepOpen(options, { type: 'balance', item: index, imbue, ...(typeof on === 'number' ? { weapon: on } : {}) }, weapon);
+  };
+  show(
+    windowOf(
+      { title: capitalize(itemName(world, weapon)), icon: el('div', { className: 'pd-slot' }, itemIcon(world, weapon)) },
+      info(t.balanceAsk(itemName(world, weapon)), 'pd-info'),
+      ...(['speed', 'accuracy'] as const).filter((imbue) => weapon.imbue !== imbue).map((imbue) => button(t.balanceImbue[imbue], () => balance(imbue), 'primary')),
+      button(t.balanceNever, back, 'quiet'),
+    ),
+    back,
+  );
+}
+
+/**
+ * A known scroll of upgrade, enchantment or identify asked for from outside the backpack (a quick slot): the same selector of items
+ * the backpack opens, and the scroll read on the one chosen; «cancel» leaves the scroll where it is. False if the item is no such scroll.
+ */
+export function askKnownScroll(options: BackpackOptions, index: number): boolean {
+  const { world, hero } = options;
+  const item = hero.items[index];
+  if (!item || !isKnown(world, item) || !(TARGETED_SCROLLS as readonly string[]).includes(item.kind)) return false;
+  const kind = item.kind as (typeof TARGETED_SCROLLS)[number];
+  pickOrigin = null;
+  const again = (): void => {
+    askKnownScroll(options, index);
+  };
+  showBackpack({
+    ...options,
+    pick: {
+      title: t.pickTitle[kind],
+      targets: scrollTargets(world, hero, kind),
+      onPick: (on) => askTarget(options, kind, on, () => {
+        closeBag();
+        options.onAction({ type: 'use', item: index, on });
+        options.onClose();
+      }, again),
+      onCancel: () => {
+        closeBag();
+        options.onClose();
+      },
+    },
+  });
+  return true;
+}
+
 /** The old item window, kept for what still opens an item on its own: now the backpack with it chosen. */
 function showItem(options: ItemOptions): void {
   const choice: BagChoice = options.index !== null ? { index: options.index } : options.ring !== undefined ? { ring: options.ring } : { worn: options.item === options.hero.armor ? 'armor' : 'weapon' };
@@ -2023,7 +2089,10 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
         showAmulet(world, hero, false, () => options.onAction({ type: 'endGame' }), options.onClose);
       });
     }
-    if (category === 'kit') use(t.applyKit, () => act({ type: 'use', item: index, target: 'armor' }));
+    // ArmorKit: WndBag's selector of armours, worn and in the pack; the kit goes on the one chosen.
+    if (category === 'kit') {
+      use(t.applyKit, chooseFrom(options, index, t.pickKit, kitTargets(hero), (on) => act({ type: 'use', item: index, on })));
+    }
     if (category === 'seed') use(t.plantSeed, () => aimWith('throw', index));
     if (category === 'scroll') {
       // A known scroll that acts on one thing asks which, from the whole pack and what is worn (WndBag's selector).
@@ -2057,11 +2126,9 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
       if (item.returnTo) use(t.beaconReturn, () => act({ type: 'beacon', item: index, mode: 'return' }));
       use(t.beaconSet, () => act({ type: 'beacon', item: index, mode: 'set' }));
     }
-    if (category === 'weightstone' && hero.weapon) {
-      // Weightstone.WndBalance: the weapon in hand, balanced the way it is not yet.
-      for (const imbue of ['speed', 'accuracy'] as const) {
-        if (hero.weapon.imbue !== imbue) use(t.balanceFor[imbue], () => keepOpen(options, { type: 'balance', item: index, imbue }, hero.weapon));
-      }
+    if (category === 'weightstone') {
+      // Weightstone: WndBag's selector of weapons, the one in hand and those in the pack, then WndBalance for the one chosen.
+      use(t.balance, chooseFrom(options, index, t.pickWeapon, balanceTargets(hero), (on) => showBalance(options, index, on)));
     }
     if (category === 'wipeout') use(t.read, () => act({ type: 'use', item: index }));
     if (category === 'vial' && item.volume) use(t.drink, () => act({ type: 'use', item: index }));

@@ -128,18 +128,21 @@ export const TARGET_PROBLEMS: Readonly<Record<TargetedScroll, string>> = {
 };
 
 /**
- * When a known scroll is read with no item chosen (an old client): the weapon in hand, else the armour,
- * if the scroll can act on them; for identify, the first unknown potion or
- * scroll in the pack, else the first thing held that is not identified.
- * Undefined if there is none: the scroll is wasted.
+ * WndBag.Mode.ARMOR for the armour kit: any armour held, worn or in the pack, but class armour (a kit makes that, it is not made
+ * of it).
  */
-export function defaultTarget(world: World, hero: Hero, kind: TargetedScroll): Item | undefined {
-  if (kind === 'scroll.identify') {
-    const unknown = heldRefs(hero).map((ref) => itemAt(hero, ref)!).filter((item) => isUnidentified(world, item, kind));
-    return unknown.find((item) => ['potion', 'scroll'].includes(itemDef(item.kind).category)) ?? unknown[0];
-  }
-  return [hero.weapon, hero.armor].find((item): item is Item => !!item && canTarget(world, kind, item));
+export function kitTargets(hero: Hero): ItemRef[] {
+  return heldRefs(hero).filter((ref) => isKitTarget(itemAt(hero, ref)!));
 }
+
+export const isKitTarget = (item: Item): boolean => itemDef(item.kind).category === 'armor' && !CLASS_ARMOR.includes(item.kind);
+
+/** WndBag.Mode.WEAPON for the weightstone: the melee weapon in hand and those in the pack (the pickaxe is no MeleeWeapon). */
+export function balanceTargets(hero: Hero): ItemRef[] {
+  return heldRefs(hero).filter((ref) => isBalanceTarget(itemAt(hero, ref)!));
+}
+
+export const isBalanceTarget = (item: Item): boolean => itemDef(item.kind).category === 'weapon' && item.kind !== 'weapon.pickaxe';
 
 /** ScrollOfRemoveCurse.uncurse on the one item. */
 const uncurse = (item: Item): void => {

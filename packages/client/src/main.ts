@@ -39,7 +39,7 @@ import { covers3D, forgetOld3dChoice } from './r3d/setting';
 import { brightness } from './brightness';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
-  askDrink, askPendingScroll, onWindow, reopenWindow, type WindowState, windowState,
+  askDrink, askKnownScroll, askPendingScroll, onWindow, reopenWindow, type WindowState, windowState,
   backpackOpen, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
 import { rankingBlock, showBoards, trophyText } from './rankui';
@@ -1280,6 +1280,8 @@ function toggleQuickslot(slot = 0): void {
   }
   walk.reset();
   const use = quickUse(item.kind);
+  // A known scroll of upgrade, enchantment or identify asks which item, as in the backpack (never one chosen for the player).
+  if (use === 'use' && askKnownScroll(backpackOptions(world, me), index)) return;
   if (use === 'use') {
     // An unknown potion with an enemy in sight asks first (riskyuse.ts): drink, cancel, or throw it instead.
     askDrink(world, me, item, () => send({ type: 'use', item: index }, performance.now()), () => {

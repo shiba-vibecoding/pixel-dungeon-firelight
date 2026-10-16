@@ -15,7 +15,7 @@ export { charAt, type Effect, type Floor, heroesOn, heroSight, isWater, swapsWit
 
 export { ORE_WANTED, type SmithLine, type SmithQuest } from './smith';
 export {
-  canTarget, isEnchantable, isItemRef, isUnidentified, isUpgradable, itemAt, type ItemRef, scrollTargets, type TargetedScroll,
+  balanceTargets, canTarget, isEnchantable, kitTargets, isItemRef, isUnidentified, isUpgradable, itemAt, type ItemRef, scrollTargets, type TargetedScroll,
 } from './scrolls';
 export { type ImpQuest, TOKENS_WANTED } from './imp';
 export { CLASS_ARMOR, CLASS_ARMOR_OF } from './classArmor';

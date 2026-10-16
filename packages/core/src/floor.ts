@@ -319,6 +319,23 @@ export function heroView(world: World, hero: Hero): boolean[] {
   return fov;
 }
 
+/**
+ * Hero.visibleEnemies (checkVisibleMobs): the hostile monsters in the hero's field of view, asleep ones too; the passive (the
+ * shopkeeper, the ghost and the rest) and a mirror image are no enemies.
+ */
+export function visibleEnemies(world: World, hero: Hero): number {
+  const fov = heroView(world, hero);
+  return (world.floors[hero.depth]?.mobs ?? []).filter((mob) => mob.state !== 'passive' && mob.hp > 0 && !mob.image && fov[mob.pos]).length;
+}
+
+/**
+ * Invisibility.dispel: an invisible hero is seen again, but only when some enemy is in sight to see them; with none about,
+ * the invisibility lasts (melee blows, wands, the warrior's leap and every scroll call it, as the original's do).
+ */
+export function dispelInvisibility(world: World, hero: Hero): void {
+  if (hero.invisible > 0 && visibleEnemies(world, hero) > 0) hero.invisible = 0;
+}
+
 export function exploredCells(world: World, depth: number): boolean[] {
   return (world.explored[depth] ??= new Array<boolean>(LENGTH).fill(false));
 }
