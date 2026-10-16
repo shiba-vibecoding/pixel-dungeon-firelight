@@ -9,10 +9,11 @@ export class PerfOverlay {
   private frames = 0;
   private cpu = 0;
   private cpuMax = 0;
+  private render = 0;
   private since = 0;
   private last = 0;
   /** The last numbers shown, for tests and the console. */
-  readonly latest = { fps: 0, cpuMs: 0, cpuMax: 0, gpuMs: 0, calls: 0, triangles: 0, textures: 0, geometries: 0, hz: 0, tier: '' };
+  readonly latest = { fps: 0, cpuMs: 0, renderMs: 0, maxCalls: 0, cpuMax: 0, gpuMs: 0, calls: 0, triangles: 0, textures: 0, geometries: 0, hz: 0, tier: '' };
 
   constructor() {
     this.el.id = 'pd-perf';
@@ -25,6 +26,7 @@ export class PerfOverlay {
   note(now: number, sample: PerfSample, hz: number, tier: string): void {
     this.frames++;
     this.cpu += sample.cpuMs;
+    this.render += sample.renderMs;
     this.cpuMax = Math.max(this.cpuMax, sample.cpuMs);
     if (this.since === 0) this.since = now;
     if (now - this.since < 500) return;
@@ -33,6 +35,8 @@ export class PerfOverlay {
     l.fps = Math.round(this.frames / seconds);
     l.cpuMs = this.cpu / this.frames;
     l.cpuMax = this.cpuMax;
+    l.renderMs = this.render / this.frames;
+    l.maxCalls = sample.maxCalls;
     l.gpuMs = sample.gpuMs;
     l.calls = sample.calls;
     l.triangles = sample.triangles;
@@ -42,9 +46,10 @@ export class PerfOverlay {
     l.tier = tier;
     this.el.textContent =
       `3D ${l.fps} fps (screen ${hz} Hz) tier ${tier}\n` +
-      `cpu ${l.cpuMs.toFixed(2)} ms (max ${l.cpuMax.toFixed(1)})  gpu ${l.gpuMs ? l.gpuMs.toFixed(2) : 'n/a'} ms\n` +
-      `calls ${l.calls}  tris ${l.triangles}\ntextures ${l.textures}  geometries ${l.geometries}`;
+      `cpu ${l.cpuMs.toFixed(2)} ms (render() ${l.renderMs.toFixed(2)}, max ${l.cpuMax.toFixed(1)})  gpu ${l.gpuMs ? l.gpuMs.toFixed(2) : 'n/a'} ms\n` +
+      `calls ${l.calls} (max ${l.maxCalls})  tris ${l.triangles}\ntextures ${l.textures}  geometries ${l.geometries}`;
     this.frames = 0;
+    this.render = 0;
     this.cpu = 0;
     this.cpuMax = 0;
     this.since = now;

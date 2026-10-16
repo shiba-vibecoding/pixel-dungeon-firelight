@@ -16,7 +16,7 @@ export const PITCH = (PITCH_DEG * Math.PI) / 180;
 /** How much the ground is squeezed up and down on the screen. */
 export const YS = Math.sin(PITCH);
 /** How far a figure standing up is leaned back toward the camera, degrees: the sprite faces the viewer without lying down. */
-export const LEAN_DEG = 38;
+export const LEAN_DEG = 20;
 export const LEAN = (LEAN_DEG * Math.PI) / 180;
 /**
  * A leaned sprite is shortened on screen by cos(pitch - lean); drawn this much taller it keeps the proportions of its art

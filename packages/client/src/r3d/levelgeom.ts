@@ -194,6 +194,27 @@ export function pickTorches(map: ArrayLike<number>): number[] {
   return picked;
 }
 
+/**
+ * Where light falls through a grating in the ceiling: a cell inside a room (open ground all around it), now and then, at
+ * most `MAX_SHAFTS`, never closer than 9 cells to one already chosen.
+ */
+export const MAX_SHAFTS = 2;
+export function pickShafts(map: ArrayLike<number>): number[] {
+  const picked: number[] = [];
+  const open = (cell: number): boolean => SHAPES[map[cell]!]!.kind === K_FLOOR && ((terrainFlags[map[cell]!] ?? 0) & F.PASSABLE) !== 0;
+  for (let cell = WIDTH * 2; cell < LENGTH - WIDTH * 2 && picked.length < MAX_SHAFTS; cell++) {
+    const x = cell % WIDTH;
+    if (x < 2 || x >= WIDTH - 2 || (Math.imul(cell, 2246822519) >>> 21) % 41 !== 0) continue;
+    let room = true;
+    for (let dy = -1; dy <= 1 && room; dy++) for (let dx = -1; dx <= 1 && room; dx++) room = open(cell + dx + dy * WIDTH);
+    if (!room) continue;
+    const cy = Math.trunc(cell / WIDTH);
+    if (picked.some((other) => Math.max(Math.abs((other % WIDTH) - x), Math.abs(Math.trunc(other / WIDTH) - cy)) < 9)) continue;
+    picked.push(cell);
+  }
+  return picked;
+}
+
 const SIDES: ReadonlyArray<readonly [number, number, number]> = [
   [0, 1, 1], // south: what the camera sees
   [1, 0, 0.82], // east
@@ -211,6 +232,7 @@ export class LevelGeom {
   boxes!: Buffers;
   water!: Buffers;
   torches: number[] = [];
+  shafts: number[] = [];
   /** Bumped when the floor's uvs change, and when a box buffer is rewritten; a renderer uploads what is newer than it has. */
   floorVersion = 0;
   boxVersion = 0;
@@ -244,6 +266,7 @@ export class LevelGeom {
       idx[i + 3] = v; idx[i + 4] = v + 2; idx[i + 5] = v + 3;
     }
     this.torches = pickTorches(map);
+    this.shafts = pickShafts(map);
     this.boxes = makeBuffers(8, 12);
     this.water = makeBuffers(8, 12);
     this.rebuildSolids();

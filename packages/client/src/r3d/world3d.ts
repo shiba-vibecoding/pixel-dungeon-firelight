@@ -12,7 +12,7 @@
  * What does not come over yet: bolts, gas, explosions and the other canvas effects are drawn flat onto the 2D layer over the scene.
  */
 import {
-  AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, Color, DataTexture, DoubleSide,
+  AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DataTexture, DoubleSide,
   DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, LinearFilter, Mesh, MeshBasicMaterial,
   MeshLambertMaterial, NearestFilter, OrthographicCamera, PCFShadowMap, PlaneGeometry, PointLight, Points, PointsMaterial,
   RedFormat, RepeatWrapping, Scene, SRGBColorSpace, Texture, UnsignedByteType, WebGLRenderer,
@@ -245,6 +245,22 @@ function blobTexture(): CanvasTexture {
   return texture;
 }
 
+/** A very soft white cloud, for the mist. */
+function mistTexture(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const texture = new CanvasTexture(c);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
 function dotTexture(): CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 16;
@@ -260,7 +276,11 @@ function dotTexture(): CanvasTexture {
 /** Time the frame took, for the perf overlay and the governor. */
 export interface PerfSample {
   cpuMs: number;
+  /** The part of cpuMs spent inside Three's render() (the rest is this file's own preparation). */
+  renderMs: number;
   gpuMs: number;
+  /** The most draw calls any frame has made (a frame that redraws shadows makes the most). */
+  maxCalls: number;
   calls: number;
   triangles: number;
   textures: number;
@@ -288,6 +308,7 @@ export class World3D {
   private readonly fog = new Fog();
   private readonly fogUniform = { value: this.fog.texture as Texture };
   private readonly blob = blobTexture();
+  private readonly blobMist = mistTexture();
   private readonly dot = dotTexture();
 
   // Terrain.
@@ -324,12 +345,14 @@ export class World3D {
   private shadowDirty = true;
   private shadowsOn: boolean;
 
-  // Particles.
+  // Particles: dust, a few drifting wisps of mist, and shafts of light through the ceiling (all off in the low tier).
+  private readonly shaftMesh: Mesh[] = [];
+  private mist: InstancedMesh | null = null;
   private dust: Points | null = null;
   private dustPhase = new Float32Array(48 * 3);
 
   // Instruments.
-  private readonly perf: PerfSample = { cpuMs: 0, gpuMs: 0, calls: 0, triangles: 0, textures: 0, geometries: 0 };
+  private readonly perf: PerfSample = { cpuMs: 0, renderMs: 0, gpuMs: 0, calls: 0, maxCalls: 0, triangles: 0, textures: 0, geometries: 0 };
   private timer: { ext: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }; gl: WebGL2RenderingContext; pending: WebGLQuery | null } | null = null;
   /** The fog is easing: the 2D loop must keep drawing. */
   fogMoving = false;
@@ -435,6 +458,8 @@ export class World3D {
     this.configureShadows();
     this.shadowDirty = true;
     if (this.dust) this.dust.visible = tier.particles;
+    if (this.mist) this.mist.visible = tier.particles;
+    for (const shaft of this.shaftMesh) shaft.visible = shaft.visible && tier.particles;
   }
 
   resize(width: number, height: number): void {
@@ -756,19 +781,26 @@ export class World3D {
     const drift = ((now / 120) % 32) / 32;
     this.waterTex!.offset.set(drift, drift * 0.5);
 
-    if (this.dust && this.tier.particles) this.moveDust(now, hx, hz);
+    if (this.dust && this.tier.particles) {
+      this.moveDust(now, hx, hz);
+      this.moveMist(now, hx, hz);
+      this.placeShafts(f);
+    }
 
     if (this.shadowDirty && this.shadowsOn) {
       this.renderer.shadowMap.needsUpdate = true;
       this.shadowDirty = false;
     }
     this.measureBegin();
+    const r0 = performance.now();
     this.renderer.render(this.scene, cam);
+    this.perf.renderMs = performance.now() - r0;
     this.measureEnd();
     const info = this.renderer.info;
     const p = this.perf;
     p.cpuMs = performance.now() - t0;
     p.calls = info.render.calls;
+    p.maxCalls = Math.max(p.maxCalls, p.calls);
     p.triangles = info.render.triangles;
     p.textures = info.memory.textures;
     p.geometries = info.memory.geometries;
@@ -828,10 +860,53 @@ export class World3D {
       map: this.dot, size: 2.5, sizeAttenuation: false, color: new Color(0xffe6b8), transparent: true, opacity: 0.55,
       depthWrite: false, blending: AdditiveBlending,
     });
+    // Dust shows only where the party has been: its alpha follows the fog of war at the speck.
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.tFog = this.fogUniform;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', ['#include <common>', 'uniform sampler2D tFog;', 'varying float vFog;'].join(String.fromCharCode(10)))
+        .replace(
+          '#include <begin_vertex>',
+          ['#include <begin_vertex>', `vFog = texture2D(tFog, vec2(position.x / ${WIDTH}.0, position.z / ${HEIGHT}.0)).r;`].join(String.fromCharCode(10)),
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', ['#include <common>', 'varying float vFog;'].join(String.fromCharCode(10)))
+        .replace('#include <opaque_fragment>', ['#include <opaque_fragment>', 'gl_FragColor.a *= 1.0 - smoothstep(0.1, 0.5, vFog);'].join(String.fromCharCode(10)));
+    };
+    material.customProgramCacheKey = () => 'pddust';
     this.dust = new Points(geometry, material);
     this.dust.frustumCulled = false;
     this.dust.visible = this.tier.particles;
     this.scene.add(this.dust);
+
+    // Shafts: open cones of pale light, added onto what is behind, one draw each.
+    const cone = new CylinderGeometry(0.42, 0.85, 2.3, 14, 1, true).translate(0, 1.15, 0);
+    const shaftMaterial = new MeshBasicMaterial({
+      color: 0xbcd6ff, transparent: true, opacity: 0.085, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
+    });
+    for (let i = 0; i < 2; i++) {
+      const shaft = new Mesh(cone, shaftMaterial);
+      shaft.visible = false;
+      shaft.rotation.z = -0.22;
+      shaft.frustumCulled = false;
+      shaft.renderOrder = 3;
+      this.shaftMesh.push(shaft);
+      this.scene.add(shaft);
+    }
+
+    // Mist: a few big soft flat wisps near the hero.
+    const wisp = new PlaneGeometry(1, 1);
+    const wispMaterial = new MeshBasicMaterial({ map: this.blobMist, transparent: true, depthWrite: false, opacity: 0.16, color: 0x9fb0cf });
+    withFog(wispMaterial, this.fogUniform, 'instance');
+    const whole = new InstancedBufferAttribute(new Float32Array(6 * 4), 4);
+    for (let i = 0; i < 6; i++) whole.setXYZW(i, 0, 0, 1, 1);
+    wisp.setAttribute('aUv', whole);
+    this.mist = new InstancedMesh(wisp, wispMaterial, 6);
+    this.mist.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.mist.frustumCulled = false;
+    this.mist.renderOrder = 1;
+    this.mist.visible = this.tier.particles;
+    this.scene.add(this.mist);
   }
 
   private moveDust(now: number, hx: number, hz: number): void {
@@ -845,6 +920,35 @@ export class World3D {
       a[i * 3 + 2] = hz + Math.cos(t * 0.17 + p[i * 3 + 2]!) * 4.5;
     }
     position.needsUpdate = true;
+  }
+
+  private moveMist(now: number, hx: number, hz: number): void {
+    const mist = this.mist!;
+    const m = mist.instanceMatrix.array as Float32Array;
+    const t = now / 1000;
+    for (let i = 0; i < 6; i++) {
+      const size = 3.4 + (i % 3) * 0.9;
+      const o = i * 16;
+      const x = hx + Math.sin(t * 0.07 + i * 1.9) * 3.6;
+      const z = hz + Math.cos(t * 0.06 + i * 2.3) * 3.2;
+      m[o] = size; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
+      m[o + 4] = 0; m[o + 5] = 0; m[o + 6] = -size * 0.8; m[o + 7] = 0;
+      m[o + 8] = 0; m[o + 9] = 1; m[o + 10] = 0; m[o + 11] = 0;
+      m[o + 12] = x; m[o + 13] = 0.1 + i * 0.012; m[o + 14] = z; m[o + 15] = 1;
+    }
+    mist.instanceMatrix.needsUpdate = true;
+  }
+
+  /** The shafts stand in the cells chosen for the level, and show only while the party sees the cell. */
+  private placeShafts(f: Frame3D): void {
+    const cells = this.geom!.shafts;
+    for (let i = 0; i < this.shaftMesh.length; i++) {
+      const shaft = this.shaftMesh[i]!;
+      const cell = cells[i];
+      const on = cell !== undefined && f.visible[cell] === true;
+      shaft.visible = on;
+      if (on) shaft.position.set((cell % WIDTH) + 0.5, 0, Math.trunc(cell / WIDTH) + 0.5);
+    }
   }
 
   // ---- instruments ---------------------------------------------------------------------------------------------------------
@@ -910,9 +1014,19 @@ export class World3D {
       this.dust.geometry.dispose();
       (this.dust.material as PointsMaterial).dispose();
     }
+    if (this.mist) {
+      this.mist.geometry.dispose();
+      (this.mist.material as MeshBasicMaterial).dispose();
+      this.mist.dispose();
+    }
+    if (this.shaftMesh[0]) {
+      this.shaftMesh[0].geometry.dispose();
+      (this.shaftMesh[0].material as MeshBasicMaterial).dispose();
+    }
+    this.blobMist.dispose();
     for (const light of this.torchLights) light.shadow.dispose();
     this.renderer.dispose();
-    this.renderer.forceContextLoss();
+    if (!this.lost) this.renderer.forceContextLoss();
     this.geom = null;
   }
 }
