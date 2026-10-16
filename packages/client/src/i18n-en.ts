@@ -572,7 +572,6 @@ export const en = {
   specialCost: 'Each use costs a third of your health.',
   specials: { warrior: 'Heroic leap', mage: 'Molten earth', rogue: 'Smoke bomb', huntress: 'Spectral blades' } as Record<HeroClass, string>,
   classArmorMade: (name: string) => `Your armour becomes the ${name}!`,
-  balanceFor: { speed: 'Balance it for speed', accuracy: 'Balance it for accuracy' },
   balanced: { speed: 'You balanced your weapon to make it faster.', accuracy: 'You balanced your weapon to make it more accurate.' },
   imbueInfo: { speed: 'It is balanced for speed.', accuracy: 'It is balanced for accuracy.' },
   burntUp: (name: string) => `Your ${name} burns up!`,
@@ -807,6 +806,8 @@ export const en = {
   /** ArmorKit and Weightstone: WndBag's selector titles, and Weightstone.WndBalance. */
   pickKit: 'Select an armour to upgrade',
   pickWeapon: 'Select a weapon to balance',
+  pickKitHint: 'Tap the armour to make a class armour of.',
+  pickWeaponHint: 'Tap the weapon to balance.',
   balance: 'Balance…',
   balanceAsk: (name: string) => `How would you like to balance your ${name}?`,
   balanceImbue: { speed: 'For speed', accuracy: 'For accuracy' },

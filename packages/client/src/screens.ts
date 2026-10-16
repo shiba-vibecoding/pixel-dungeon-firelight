@@ -1109,7 +1109,7 @@ export interface BackpackOptions {
    * WndBag's selector: the backpack with only what a scroll can be read on to tap (worn
    * things too); the rest dimmed. A tap reads the scroll on it.
    */
-  pick?: { title: string; targets: readonly ItemRef[]; onPick(ref: ItemRef): void; onCancel(): void };
+  pick?: { title: string; targets: readonly ItemRef[]; onPick(ref: ItemRef): void; onCancel(): void; /** What the panel says: what to tap (the scroll's by default). */ hint?: string };
 }
 
 /** What is chosen in the backpack: an item in the pack (by slot) or one worn. */
@@ -1468,7 +1468,7 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   );
   const item = chosenItem(hero, choice);
   const panel = pick
-    ? el('div', { className: 'pd-pick empty' }, info(t.pickTarget))
+    ? el('div', { className: 'pd-pick empty' }, info(pick.hint ?? t.pickTarget))
     : item && choice
       ? itemDetail({ ...options, item, ...where(choice) })
       : el(
@@ -1968,11 +1968,11 @@ function askTarget(options: BackpackOptions, kind: ItemKind, on: ItemRef, go: ()
  * WndBag's selector for an item's own action (the armour kit, the weightstone): the backpack with only what the item can act on
  * to tap; a tap does `done` with it, «cancel» goes back to the item. Returns what the item's button does.
  */
-function chooseFrom(options: ItemOptions, index: number, title: string, targets: readonly ItemRef[], done: (on: ItemRef) => void): () => void {
+function chooseFrom(options: ItemOptions, index: number, title: string, hint: string, targets: readonly ItemRef[], done: (on: ItemRef) => void): () => void {
   const pick = (): void => {
     // The button of the item's panel that asked, for the window to come back after a reload (windowState).
     pickOrigin = lastUse;
-    showBackpack({ ...options, pick: { title, targets, onPick: done, onCancel: () => showBackpack(options, { index }) } });
+    showBackpack({ ...options, pick: { title, hint, targets, onPick: done, onCancel: () => showBackpack(options, { index }) } });
   };
   return pick;
 }
@@ -1983,6 +1983,8 @@ function showBalance(options: ItemOptions, index: number, on: ItemRef): void {
   const weapon = itemAt(hero, on);
   if (!weapon) return;
   const back = (): void => showBackpack(options, { index });
+  // The bag steps aside for the question, so that a choice draws it again (kept open, as after an upgrade) over this window.
+  pauseBag();
   const balance = (imbue: 'speed' | 'accuracy'): void => {
     // A weapon in hand is the stone's default; one in the pack is named.
     keepOpen(options, { type: 'balance', item: index, imbue, ...(typeof on === 'number' ? { weapon: on } : {}) }, weapon);
@@ -2091,7 +2093,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     }
     // ArmorKit: WndBag's selector of armours, worn and in the pack; the kit goes on the one chosen.
     if (category === 'kit') {
-      use(t.applyKit, chooseFrom(options, index, t.pickKit, kitTargets(hero), (on) => act({ type: 'use', item: index, on })));
+      use(t.applyKit, chooseFrom(options, index, t.pickKit, t.pickKitHint, kitTargets(hero), (on) => act({ type: 'use', item: index, on })));
     }
     if (category === 'seed') use(t.plantSeed, () => aimWith('throw', index));
     if (category === 'scroll') {
@@ -2128,7 +2130,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     }
     if (category === 'weightstone') {
       // Weightstone: WndBag's selector of weapons, the one in hand and those in the pack, then WndBalance for the one chosen.
-      use(t.balance, chooseFrom(options, index, t.pickWeapon, balanceTargets(hero), (on) => showBalance(options, index, on)));
+      use(t.balance, chooseFrom(options, index, t.pickWeapon, t.pickWeaponHint, balanceTargets(hero), (on) => showBalance(options, index, on)));
     }
     if (category === 'wipeout') use(t.read, () => act({ type: 'use', item: index }));
     if (category === 'vial' && item.volume) use(t.drink, () => act({ type: 'use', item: index }));
