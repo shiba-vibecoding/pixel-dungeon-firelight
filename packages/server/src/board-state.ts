@@ -1,6 +1,6 @@
 import { compareEntries, type DailyEntry, Leaderboard, type Passed, servedEntry } from './leaderboard';
 import { RankIndex } from './rank-index';
-import { isBase, orderOf, rankKey, type Slice, sliceKey, sliceSize, slicesOf } from './slices';
+import { ALL_SLICES, isBase, orderOf, rankKey, type Slice, sliceKey, sliceSize, slicesOf } from './slices';
 
 /*
  * What a board object does with a finished run and with a question about a slice, apart from storage (the Durable Object, daily-board.ts,
@@ -31,11 +31,14 @@ export interface PutInput {
   previous: DailyEntry | undefined;
 }
 
-/** The slices a put reads: those the entry counts for. */
-export const putSlices = slicesOf;
+/** Boards that are no list of runs (the season's Heat, a hall of fame) have the score list only: no slices of speed, depth or hero. */
+export const sliced = (name: string): boolean => !name.startsWith('season:') && !name.startsWith('hall:');
+
+/** The slices a put reads: those the entry counts for (the score list alone on a board that is not of runs). */
+export const putSlices = (entry: DailyEntry, name = ''): Slice[] => (sliced(name) ? slicesOf(entry) : ALL_SLICES.filter((slice) => isBase(slice)));
 
 /** A finished run onto the score list, every slice it counts for and the rank index; the answer and what to write. */
-export function applyPut(input: PutInput, entry: DailyEntry): { answer: PutAnswer; writes: Record<string, unknown> } {
+export function applyPut(input: PutInput, entry: DailyEntry, name = ''): { answer: PutAnswer; writes: Record<string, unknown> } {
   const base = input.lists.get('board') ?? [];
   const writes: Record<string, unknown> = {};
   // Before the lists change: the index (made from the score list for a board from before there was one) and the player's standing entry.
@@ -55,7 +58,7 @@ export function applyPut(input: PutInput, entry: DailyEntry): { answer: PutAnswe
   let rank: number | null = null;
   let passed: Passed | undefined;
   let total = 0;
-  for (const slice of slicesOf(entry)) {
+  for (const slice of putSlices(entry, name)) {
     const key = sliceKey(slice);
     const list = new Leaderboard([...(input.lists.get(key) ?? [])], orderOf(slice.metric), sliceSize(slice));
     const placed = list.place(entry);
@@ -98,4 +101,13 @@ export function readSlice(slice: Slice, input: ReadInput, ask: { me: string | nu
     rank, top: board.top(ask.top), total: board.entries().length, played,
     ...(you ? { you: servedEntry(you) } : {}), ...(mine ? { owner: { rank: mine.rank } } : {}),
   };
+}
+
+/** Where a player stood on a day's speed and depth lists (null: not on one): the titles' proof. */
+export function listRanks(lists: { speed: readonly DailyEntry[]; depth: readonly DailyEntry[] }, me: string): { speed: number | null; depth: number | null } {
+  const at = (list: readonly DailyEntry[]): number | null => {
+    const index = list.findIndex((entry) => entry.id === me);
+    return index >= 0 ? index + 1 : null;
+  };
+  return { speed: at(lists.speed), depth: at(lists.depth) };
 }

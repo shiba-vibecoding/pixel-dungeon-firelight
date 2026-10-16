@@ -1,9 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
-import { applyPut, entryKey, putSlices, RANKS, readSlice } from './board-state';
+import { applyPut, entryKey, listRanks, putSlices, RANKS, readSlice } from './board-state';
 import { boardTtl } from './boards';
 import { json } from './http';
 import type { Env } from './index';
-import { type DailyEntry, Leaderboard } from './leaderboard';
+import { type DailyEntry, Leaderboard, servedEntry } from './leaderboard';
 import { cleanWorn } from './worn';
 import { parseSlice, sliceKey } from './slices';
 
@@ -19,6 +19,8 @@ export class DailyBoard extends DurableObject<Env> {
     const name = url.searchParams.get('name') ?? url.searchParams.get('date') ?? '';
     if (request.method === 'POST' && url.pathname === '/put') return json(await this.put((await request.json()) as DailyEntry, name));
     if (request.method === 'POST' && url.pathname === '/worn') return this.worn(await request.json());
+    // A hall of fame is written once: the first to bring the top keeps it, the rest are told it is kept.
+    if (request.method === 'POST' && url.pathname === '/freeze') return this.freeze(await request.json());
     if (request.method === 'POST') return json({ error: 'results come from checked runs only' }, 410);
     const storage = this.ctx.storage;
     // Every player's place, by account (the reminders' weekly results); never served outside.
@@ -37,14 +39,30 @@ export class DailyBoard extends DurableObject<Env> {
     const ranks = await storage.get<number[]>(RANKS);
     const own = me && !list.some((entry) => entry.id === me) ? await storage.get<DailyEntry>(entryKey(me)) : undefined;
     const count = Math.min(100, Math.max(0, Number(url.searchParams.get('top') ?? 20) || 0));
-    return json(readSlice(slice, { list, ranks, own }, { me, owner: url.searchParams.get('owner'), top: count }));
+    const answer = readSlice(slice, { list, ranks, own }, { me, owner: url.searchParams.get('owner'), top: count });
+    // What a finished day says of a player for the titles: where they stood on its speed and depth lists.
+    if (me && url.searchParams.get('lists') === '1') {
+      const lists = await storage.get<DailyEntry[]>(['l:speed', 'l:depth']);
+      Object.assign(answer, listRanks({ speed: lists.get('l:speed') ?? [], depth: lists.get('l:depth') ?? [] }, me));
+    }
+    // A hall of fame says whether it has been written.
+    if (name.startsWith('hall:')) Object.assign(answer, { frozen: (await storage.get('frozen')) !== undefined });
+    return json(answer);
+  }
+
+  private async freeze(body: unknown): Promise<Response> {
+    const storage = this.ctx.storage;
+    if ((await storage.get('frozen')) !== undefined) return json({ frozen: true, kept: true });
+    const entries = Array.isArray((body as { entries?: unknown }).entries) ? ((body as { entries: DailyEntry[] }).entries).slice(0, 10).map(servedEntry) : [];
+    await storage.put({ board: entries, frozen: Date.now() });
+    return json({ frozen: true, kept: false });
   }
 
   /** A finished run onto the score list, every slice it counts for, and the rank index. */
   private async put(entry: DailyEntry, name: string): Promise<unknown> {
     const storage = this.ctx.storage;
-    const lists = await storage.get<DailyEntry[]>(putSlices(entry).map(sliceKey));
-    const { answer, writes } = applyPut({ lists, ranks: await storage.get<number[]>(RANKS), previous: await storage.get<DailyEntry>(entryKey(entry.id)) }, entry);
+    const lists = await storage.get<DailyEntry[]>(putSlices(entry, name).map(sliceKey));
+    const { answer, writes } = applyPut({ lists, ranks: await storage.get<number[]>(RANKS), previous: await storage.get<DailyEntry>(entryKey(entry.id)) }, entry, name);
     await storage.put(writes);
     await this.expireAfter(name);
     return answer;
