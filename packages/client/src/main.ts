@@ -2037,9 +2037,10 @@ function tapCell(cell: number, quiet = false): void {
     refuse(cell, 'barricade', t.barricade, vnow);
     return;
   }
-  // A tap on a wall (or a statue, a bookshelf: anything solid one cannot walk into) walks to the cell under it, the floor in
-  // front of its face: in a corridor or along a room's wall that is where the finger meant to go.
-  if (hasFlag(level.map[cell]!, F.SOLID) && !hasFlag(level.map[cell]!, F.PASSABLE)) {
+  // A tap on a wall (or a statue, a bookshelf) walks to the cell under it, the floor in front of its face: in a corridor or along
+  // a room's wall that is where the finger meant to go. Only these: a locked door, the locked way down and the like are solid
+  // too, and a tap on them must walk into them (to unlock with the key, or to be told it is locked).
+  if (WALL_LIKE.has(level.map[cell]!)) {
     const below = cell + WIDTH;
     if (below >= WIDTH * HEIGHT || !explored[below] || !hasFlag(level.map[below]!, F.PASSABLE)) {
       // A wall with no floor in front of it: nowhere to go, and a held key stops here.
@@ -2503,6 +2504,9 @@ function tapAt(px: number, py: number): void {
   } else cam.otherTap();
   tapCell(x + y * WIDTH);
 }
+
+/** The terrain a tap stands for the floor in front of (tapCell): walls and the furniture of walls, nothing one can open. */
+const WALL_LIKE: ReadonlySet<number> = new Set([T.WALL, T.WALL_DECO, T.BOOKSHELF, T.STATUE, T.STATUE_SP]);
 
 /** Figures drawn larger than a cell (the bosses), whose bodies reach further. */
 const BIG_FIGURES: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
