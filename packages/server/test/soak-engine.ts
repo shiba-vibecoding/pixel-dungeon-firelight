@@ -272,7 +272,9 @@ function rush(world: World): Action | null {
   const goal = yog ? yog.pos : level.exit;
   if (yog && distance(hero.pos, yog.pos) === 1) return { type: 'attack', target: yog.id };
   const none = new Set<number>();
-  const path = findPath(level, hero.pos, goal, none) ?? findPath(level, hero.pos, goal, none, undefined, false, true);
+  // (A shopkeeper stands where he stands: a hero who teleported into his shop walks round him, not into him.)
+  const keepers = new Set(floor.mobs.filter((m) => m.kind === 'shopkeeper' || m.kind === 'impShopkeeper').map((m) => m.pos));
+  const path = findPath(level, hero.pos, goal, keepers) ?? findPath(level, hero.pos, goal, none) ?? findPath(level, hero.pos, goal, none, undefined, false, true);
   if (!path || path.length === 0) return null;
   const blocker = floor.mobs.find((m) => m.pos === path[0]);
   if (blocker && !swapsWithHero(blocker)) return { type: 'attack', target: blocker.id };

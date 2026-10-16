@@ -293,11 +293,28 @@ export function showCamp(options: CampScreenOptions): CampScreen {
 
   // The hero by the fire stands in the middle of the room between the name card and the sheet, as big as that room allows:
   // the scene's pixel is a whole number of screen pixels, 4 at the least (a short window), 10 at the most.
+  // On a short screen the room between the card and the sheet holds fewer than the four icons of the right edge: the camera icon goes over to
+  // the left edge under the mail, and the logo and the icons are a little smaller (.tight), so that none is hidden behind the day's block.
+  const leftNav = edges.querySelector<HTMLElement>('.pd-camp-edge.left')!;
+  const rightNav = edges.querySelector<HTMLElement>('.pd-camp-edge.right')!;
+  const photoIcon = rightNav.querySelector<HTMLElement>('.photo')!;
+  const prefsIcon = rightNav.querySelector<HTMLElement>('.prefs')!;
+  /** What the logo gives back when .tight shrinks it (45 px of the Russian logo, 32 of the English, at 2 to 1.5). */
+  const LOGO_BACK = 16;
+  let tight = false;
   const fit = (): void => {
     const box = root.getBoundingClientRect();
     const above = top.getBoundingClientRect().bottom - box.top;
     const below = sheet.getBoundingClientRect().top - box.top;
     const room = Math.max(0, below - above);
+    // The room as it would be with the full-size logo (so that going tight does not undo itself): a column of three icons wants 166 px.
+    const wasTight = tight;
+    tight = room - (wasTight ? LOGO_BACK : 0) < 166;
+    if (tight !== wasTight) {
+      root.classList.toggle('tight', tight);
+      if (tight) leftNav.append(photoIcon);
+      else rightNav.insertBefore(photoIcon, prefsIcon);
+    }
     // The fire and the hero span some 64 scene pixels across (camp.ts FIRE at 24, HERO at 50): they fit the width with a margin.
     const scale = Math.max(4, Math.min(10, Math.floor(room / 56), Math.floor(box.width / 66)));
     camp.setScale(scale);
@@ -314,6 +331,10 @@ export function showCamp(options: CampScreenOptions): CampScreen {
     fit();
   };
   refit();
-  if (typeof ResizeObserver === 'function') new ResizeObserver(refit).observe(root);
+  // The card, and the sheet (the day's rules opened, a new language) change the room too, and so does Telegram's safe area at the top.
+  if (typeof ResizeObserver === 'function') {
+    const watch = new ResizeObserver(refit);
+    for (const node of [root, top, sheet]) watch.observe(node, { box: 'border-box' });
+  }
   return { camp };
 }

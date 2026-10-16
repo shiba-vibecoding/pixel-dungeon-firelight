@@ -973,6 +973,8 @@ export interface EndOptions {
   /** How the run counted — «counts», «repeat», «not counted» — and what that means for the boards (labels.ts). */
   label?: ReturnType<typeof labelWords>;
   hero: { name: string; heroClass: HeroClass; lvl: number; depth: number; gold: number; kills: number };
+  /** The hero as he stood at the end, dressed (a hero card, herocard.ts); without it the old class portrait stands in. */
+  card?: HTMLElement;
   onRestart: () => void;
   restartLabel: string;
   onExit: () => void;
@@ -1016,8 +1018,8 @@ export function showRunEnd(options: EndOptions): void {
         options.place && !options.ranking ? el('p', { className: 'pd-info center pd-gold', textContent: options.place === 1 ? t.newRecord : t.rankPlace(options.place) }) : null,
         el(
           'div',
-          { className: 'pd-runend-hero' },
-          el('div', { className: 'pd-avatar' }, avatar),
+          { className: `pd-runend-hero${options.card ? ' card' : ''}` },
+          options.card ?? el('div', { className: 'pd-avatar' }, avatar),
           el('div', { className: 'pd-info', textContent: `${hero.name} · ${t.classes[hero.heroClass]}` }),
         ),
         stats(rows),

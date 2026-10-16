@@ -52,3 +52,6 @@ span.fl-stage { border: 0; background: none; padding: 0; display: block; line-he
 /* a row with no place (the player's own runs, a list he is not on): no column for it */
 .fl-row.no-n { grid-template-columns: 80px minmax(0, 1fr) auto; grid-template-areas: "stage name score" "stage sub sub"; padding-left: 0; }
 .fl-board-links { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* the end of a run: the hero as he stood, beside his name (small, so that the figures stay in sight on a short screen) */
+.pd-runend-hero.card > .pd-runend-card { flex: none; }

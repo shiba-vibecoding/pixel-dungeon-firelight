@@ -91,12 +91,17 @@ export function showNews(options: NewsOptions): void {
           el('span', { className: 'pd-news-kick', textContent: `${release.kick ? words(release.kick) : ''} · ${t.news.version(release.version)}` }),
           el('b', { textContent: release.title ? words(release.title) : '' }),
         ),
-        release.sub ? el('p', { className: 'pd-news-sub', textContent: words(release.sub) }) : null,
-        release.notice ? el('p', { className: 'pd-news-notice', role: 'note', textContent: words(release.notice) }) : null,
+        // What is told scrolls on a short screen; «Play» below stays in reach (it was at the end of a window that scrolled whole, out of sight).
         el(
-          'ul',
-          { className: 'pd-news-big' },
-          ...release.main.map((item) => el('li', {}, el('span', { className: 'pd-news-ico' }, mainIcon(item.icon)), el('span', {}, el('b', { textContent: words(item.title) }), words(item.text)))),
+          'div',
+          { className: 'pd-scroll pd-stack' },
+          release.sub ? el('p', { className: 'pd-news-sub', textContent: words(release.sub) }) : null,
+          release.notice ? el('p', { className: 'pd-news-notice', role: 'note', textContent: words(release.notice) }) : null,
+          el(
+            'ul',
+            { className: 'pd-news-big' },
+            ...release.main.map((item) => el('li', {}, el('span', { className: 'pd-news-ico' }, mainIcon(item.icon)), el('span', {}, el('b', { textContent: words(item.title) }), words(item.text)))),
+          ),
         ),
         el(
           'div',
