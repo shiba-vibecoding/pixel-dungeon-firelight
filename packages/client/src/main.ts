@@ -26,7 +26,7 @@ import { type ArenaHud, heroBuffs, Hud, type HudStatus, type QuickState } from '
 import { arenaBest, recordArena, showArenaEnd, showArenaReward } from './arenaui';
 import { ArenaView } from './arenaview';
 import { levelRegion } from './sprites';
-import { capitalize, t } from './i18n';
+import { capitalize, lang, t } from './i18n';
 import { chargesOf, itemInfo, itemName, wearOf } from './itemtext';
 import { bakeLevel, type Camera, patchLevel, render } from './render';
 import {
@@ -139,12 +139,12 @@ const progressText = document.createElement('p');
   progress.setAttribute('role', 'progressbar');
   progressText.className = 'pd-loading-text';
   progressText.textContent = t.loadingSprites(0);
-  const logo = Object.assign(document.createElement('div'), { className: 'pd-logo' });
-  logo.append(Object.assign(document.createElement('img'), { src: 'assets/banner-title.png', alt: t.gameName }));
-  const runner = Object.assign(document.createElement('div'), { className: 'pd-runner' });
+  // Firelight's loader (design part 1, assets/brand/loader.css): the fire kindles and its sparks light the letters.
+  const logo = Object.assign(document.createElement('div'), { className: 'fl-loader', role: 'img', ariaLabel: t.gameName });
+  const sub = lang === 'ru' ? Object.assign(document.createElement('p'), { className: 'pd-loading-text', textContent: 'У костра' }) : '';
   const hint = Object.assign(document.createElement('p'), { className: 'pd-loading-tip' });
   hint.append(Object.assign(document.createElement('b'), { textContent: t.tip }), ` ${tip}`);
-  loading.replaceChildren(logo, runner, progress, progressText, hint);
+  loading.replaceChildren(logo, sub, progress, progressText, hint);
 }
 const assets = await loadAssets(`${import.meta.env.BASE_URL}assets/`, (done) => {
   const percent = Math.round(done * 100);

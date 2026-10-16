@@ -1,5 +1,14 @@
 <p align="right"><a href="README.md">English</a> · <b>Русский</b></p>
 
+<p align="center"><img src="docs/github/header-ru.png" alt="Pixel Dungeon: Firelight — у костра у входа в подземелье" width="100%"></p>
+
+<p align="center">
+  <a href="https://t.me/pixel_dungeon_gamebot"><img src="docs/github/badge-play-ru.png" alt="Играть в Telegram" height="44"></a>
+  <a href="https://github.com/watabou/pixel-dungeon"><img src="docs/github/badge-fork-ru.png" alt="Форк Pixel Dungeon" height="44"></a>
+  <a href="LICENSE"><img src="docs/github/badge-gpl-ru.png" alt="GPL-3.0" height="44"></a>
+  <img src="docs/github/badge-daily-ru.png" alt="Подземелье дня" height="44">
+</p>
+
 # Pixel Dungeon: Firelight — «У костра»
 
 **Firelight** — форк [Pixel Dungeon](https://github.com/watabou/pixel-dungeon) от Watabou, пересобранный для Telegram. Каждый забег начинается у костра на поверхности, а внизу ждёт оригинальное подземелье, освещённое огнём.

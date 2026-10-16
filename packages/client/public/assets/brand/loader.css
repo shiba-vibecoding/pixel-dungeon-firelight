@@ -1,0 +1,11 @@
+/* Firelight loader (design part 1): an ember, a flame, sparks flying into the letters; 14 frames x 100 ms = 1.4 s, looping.
+   Sheet: assets/brand/loader.png, 14 frames of 89x32 art pixels side by side. Scale with --fl-s (whole numbers keep the pixels crisp). */
+.fl-loader {
+  --fl-s: 4;
+  width: calc(89px * var(--fl-s)); height: calc(32px * var(--fl-s));
+  background: url("loader.png") 0 0 / calc(1246px * var(--fl-s)) calc(32px * var(--fl-s)) no-repeat;
+  image-rendering: pixelated;
+  animation: fl-loader 1.4s steps(14) infinite;
+}
+@keyframes fl-loader { to { background-position: calc(-1246px * var(--fl-s)) 0; } }
+@media (prefers-reduced-motion: reduce) { .fl-loader { animation: none; background-position: calc(-890px * var(--fl-s)) 0; } }

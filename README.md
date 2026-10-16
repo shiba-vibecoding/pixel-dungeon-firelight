@@ -1,5 +1,14 @@
 <p align="right"><b>English</b> · <a href="README.ru.md">Русский</a></p>
 
+<p align="center"><img src="docs/github/header-en.png" alt="Pixel Dungeon: Firelight — heroes by the camp fire at the dungeon door" width="100%"></p>
+
+<p align="center">
+  <a href="https://t.me/pixel_dungeon_gamebot"><img src="docs/github/badge-play-en.png" alt="Play in Telegram" height="44"></a>
+  <a href="https://github.com/watabou/pixel-dungeon"><img src="docs/github/badge-fork-en.png" alt="Pixel Dungeon fork" height="44"></a>
+  <a href="LICENSE"><img src="docs/github/badge-gpl-en.png" alt="GPL-3.0" height="44"></a>
+  <img src="docs/github/badge-daily-en.png" alt="Daily dungeon" height="44">
+</p>
+
 # Pixel Dungeon: Firelight
 
 **Firelight** is a fork of [Pixel Dungeon](https://github.com/watabou/pixel-dungeon) by Watabou, rebuilt for Telegram. Every run starts at the camp fire on the surface; below lies the original dungeon, now lit by firelight.

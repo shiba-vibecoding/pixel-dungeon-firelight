@@ -620,3 +620,7 @@ html.pd-paused *, html.pd-paused *::before, html.pd-paused *::after { animation-
 @keyframes pd-quip-pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
 .pd-log-line.quip { color: var(--ink-muted); font-style: italic; }
 .pd-seg.fit .pd-seg-opt { flex: 1 1 auto; padding: 0 var(--space-2); }
+
+/* Firelight loader size: 3 on a phone, 6 from 900 px (design part 1). */
+.fl-loader { --fl-s: 3; }
+@media (min-width: 900px) { .fl-loader { --fl-s: 6; } }
