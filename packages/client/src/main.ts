@@ -481,7 +481,7 @@ function setMode3d(on: boolean): void {
 }
 
 /** The 3D view is put away: its memory is given back, and with a message the switch goes off (it was too slow, or would not start). */
-function stop3d(message?: string): void {
+function stop3d(message?: string, quietUnlessChosen = false): void {
   r3?.dispose();
   r3 = null;
   frame3d = null;
@@ -490,8 +490,10 @@ function stop3d(message?: string): void {
   canvas3d = null;
   setMode3d(false);
   if (message) {
-    beta3d.set(false);
-    toast(message, { tone: 'warn' });
+    // 3D is on by default: a device that cannot start it at all is not told about a switch it never touched.
+    const tell = !quietUnlessChosen || beta3d.chosen;
+    beta3d.fallBack();
+    if (tell) toast(message, { tone: 'warn' });
   }
 }
 
@@ -504,7 +506,7 @@ function pick3d(level: Level, world: World): boolean {
   if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena))) return false;
   const mod = lazy3d.ready();
   if (!mod) {
-    load(lazy3d, () => drawPace.force(), () => stop3d(t.render3dFailed));
+    load(lazy3d, () => drawPace.force(), () => stop3d(t.render3dFailed, true));
     return false;
   }
   // The world kit and the floor's region maps come first (a second or so, the first time): till then the floor is 2D.
@@ -512,7 +514,7 @@ function pick3d(level: Level, world: World): boolean {
   const region = levelRegion(level);
   const state = mod.prepare(base, assets, region);
   if (state === 'failed') {
-    stop3d(t.render3dFailed);
+    stop3d(t.render3dFailed, true);
     return false;
   }
   if (state === 'loading') return false;
@@ -535,7 +537,7 @@ function pick3d(level: Level, world: World): boolean {
     canvas3d?.remove();
     canvas3d = null;
     r3 = null;
-    stop3d(t.render3dFailed);
+    stop3d(t.render3dFailed, true);
     return false;
   }
   return true;
