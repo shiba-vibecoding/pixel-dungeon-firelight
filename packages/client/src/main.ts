@@ -55,7 +55,7 @@ import { showLeague, showWeek } from './leagueui';
 import { showCircles, showInvite } from './circleui';
 import { showHall } from './hallui';
 import { tx } from './compete-ui';
-import { myLook } from './herocard';
+import { heroCard, myLook } from './herocard';
 import { chatPicture, circlePicture, savePicture } from './sharecards';
 import { mart } from './mart';
 import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta';
@@ -3642,6 +3642,8 @@ function tick(now: number): void {
         ...(victory ? {} : { notes: [causeNote(me.killedBy), packLine(me)] }),
         ...(solo ? { label: labelWords(runLabel({ checked: !!session.checked, ranked: session.checked?.meta.ranked ?? true })) } : {}),
         hero: { name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, lvl: me.lvl, depth: me.depth, gold: me.gold, kills: me.kills },
+        // The hero as he fell or won, in the armour worn at the end and the look, hat, pet and fire he wears (herocard.ts).
+        card: endCard(me),
         restartLabel: victory ? t.newRun : solo ? t.tryAgain : t.restartRun,
         onRestart: () => {
           session?.restart();
@@ -3655,6 +3657,15 @@ function tick(now: number): void {
       });
     }, 1200 + quipSys.deathDelay());
   }
+}
+
+/** The hero card of a run's end: this hero in the armour he wears now, and what the player has put on him. */
+function endCard(hero: Hero): HTMLElement {
+  const card = heroCard(myLook(hero.heroClass, armorTier(hero)), { kind: 'row', animate: true, scale: 2, className: 'pd-card-row' });
+  const box = document.createElement('span');
+  box.className = 'fl-stage row pd-runend-card';
+  box.append(card.canvas);
+  return box;
 }
 
 /**
@@ -3675,7 +3686,7 @@ function shareChoices(card: () => Promise<ShareCard>, text: string): ShareChoice
       run: () => {
         toast(t.ranked.sharePreparing);
         void (async () => {
-          const blob = await storyCard(await card(), t.ranked.storyCall);
+          const blob = await storyCard(await card());
           const url = blob && (await api.card(blob));
           if (url) shareStory(url, `${text} ${appLink(inviteStart('daily'))}`);
           else toast(t.ranked.shareFailed);
@@ -3704,7 +3715,7 @@ function shareChoices(card: () => Promise<ShareCard>, text: string): ShareChoice
     run: () => {
       toast(tx('sharePreparing'));
       void (async () => {
-        const blob = await storyCard(await card(), t.ranked.storyCall);
+        const blob = await storyCard(await card());
         if (!blob) {
           toast(tx('shareFailed'));
           return;
