@@ -725,3 +725,13 @@ describe('wallets from the first, placeholder catalogue', () => {
     expect([...ownedItems(shopOf(await wallets.get(7)))]).toEqual(['trail.embers']);
   });
 });
+
+describe('what an invoice says of a look', () => {
+  it('names the class of a hero’s look, in the buyer’s language, within Telegram’s limits', async () => {
+    const { api, calls } = fakeApi();
+    await createInvoice(api, 7, 'skin.warrior.moss', 'en', NOW);
+    await createInvoice(api, 7, 'skin.huntress.wildfire', 'ru', NOW);
+    expect(calls[0]!.params).toMatchObject({ title: 'Warrior: Moss', prices: [{ amount: 100 }] });
+    expect(calls[1]!.params).toMatchObject({ title: 'Охотница: Лесной пожар', prices: [{ amount: 450 }] });
+  });
+});

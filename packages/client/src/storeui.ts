@@ -723,7 +723,7 @@ function build(options: StoreOptions): void {
         if (cosmetics.owns(item)) void cosmetics.wear(item, !cosmetics.isWorn(item)).then(() => render());
         else go({ s: 'tryon', id: item.id });
       }, (item) => cosmetics.owns(item) && cosmetics.isWorn(item))),
-      section(T('stickers'), T('stickerHint'), stickerRow),
+      section(T('stickers'), S.stickerTap, stickerRow),
       info(S.photoNote, 'fl-hint'),
     ];
   };

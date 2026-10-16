@@ -90,13 +90,6 @@ type Row = readonly [key: string, ru: string, en: string, stars: number, extra?:
 
 const rarityOf = (stars: number, legendary: boolean): Rarity => (legendary ? 'legendary' : stars >= 150 ? 'epic' : stars >= 75 ? 'rare' : 'common');
 
-const CLASS_NAMES: Record<HeroClass, Record<Lang, string>> = {
-  warrior: { ru: 'Воин', en: 'Warrior' },
-  mage: { ru: 'Маг', en: 'Mage' },
-  rogue: { ru: 'Разбойник', en: 'Rogue' },
-  huntress: { ru: 'Охотница', en: 'Huntress' },
-};
-
 /* ---- What the designer drew: names in both languages, and the price (see above) ---- */
 
 const HATS: Row[] = [
@@ -439,9 +432,10 @@ export const bundleValue = (entry: Item): number => (entry.pack ? 0 : (entry.ite
 
 /** Every item a purchase of this id puts in the wallet: the item, or a bundle's parts. */
 export function grantedBy(id: string): string[] {
-  const entry = itemById(id);
+  // A sku of the first catalogue (a gift waiting in the mail, a payment arriving late) grants what it became.
+  const entry = itemById(canonical(id));
   if (!entry) return [];
-  return entry.items ? [...entry.items] : [id];
+  return entry.items ? [...entry.items] : [entry.id];
 }
 
 export const itemName = (entry: Item, lang: Lang): string => entry.name[lang];

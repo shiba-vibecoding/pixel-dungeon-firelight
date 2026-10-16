@@ -105,7 +105,7 @@ export function itemInvoiceText(entry: Item, language?: string, gift = false): I
   const ru = speaksRussian(language);
   const lang = ru ? 'ru' : 'en';
   // A look is of a class: the receipt says whose (the card names it by its colour alone).
-  const name = entry.heroClass ? `${CLASS_WORD[entry.heroClass][ru ? 0 : 1]}: ${itemName(entry, lang)}` : itemName(entry, lang);
+  const name = entry.category === 'look' && entry.heroClass ? `${CLASS_WORD[entry.heroClass][ru ? 0 : 1]}: ${itemName(entry, lang)}` : itemName(entry, lang);
   const word = CATEGORY_WORD[entry.category][ru ? 0 : 1];
   const parts = entry.items?.map((id) => itemById(id)).filter((part): part is Item => part !== undefined).map((part) => itemName(part, lang));
   const what = entry.category === 'pass'

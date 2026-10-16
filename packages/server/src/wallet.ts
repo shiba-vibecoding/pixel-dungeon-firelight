@@ -164,7 +164,7 @@ export function applyWalletChange(record: WalletRecord, change: WalletChange): W
   switch (change.kind) {
     case 'pay':
       if (record.refunded.includes(change.charge)) return record;
-      if (itemById(change.sku)) return payItem(record, change);
+      if (itemById(canonical(change.sku))) return payItem(record, change);
       return { ...record, wallet: walletPay(record.wallet, change.sku, change.charge, change.stars, change.at, change.expiresAt) };
     case 'refund': {
       const paid = record.wallet.charges[change.charge];
@@ -213,7 +213,7 @@ function payItem(record: WalletRecord, change: Extract<WalletChange, { kind: 'pa
 function applyShopChange(shop: ShopState, change: Exclude<WalletChange, { kind: 'pay' | 'refund' }>): ShopState {
   switch (change.kind) {
     case 'gift':
-      if (shop.inbox.some((note) => note.id === change.id) || !itemById(change.sku)) return shop;
+      if (shop.inbox.some((note) => note.id === change.id) || !itemById(canonical(change.sku))) return shop;
       shop.inbox = [{ id: change.id, sku: change.sku, from: change.from, at: change.at, ...(change.name ? { name: change.name.slice(0, 32) } : {}) }, ...shop.inbox].slice(0, INBOX_MAX);
       return shop;
     case 'delivered':
