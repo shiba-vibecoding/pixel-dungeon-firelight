@@ -1124,9 +1124,10 @@ export class View {
           }
           break;
         case 'hunger':
-          if (effect.hero === myId) {
-            this.say(effect.state === 'hungry' ? t.hungry : t.starving, effect.state === 'hungry' ? COLORS.warning : COLORS.negative, now);
-            if (effect.state === 'starving') haptic('error');
+          // Only full starvation is shown over the hero; mere hunger is left to the hunger icon and the log.
+          if (effect.hero === myId && effect.state === 'starving') {
+            this.say(t.starving, COLORS.negative, now);
+            haptic('error');
           }
           break;
         case 'dew':

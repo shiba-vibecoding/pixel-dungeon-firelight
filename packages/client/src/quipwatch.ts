@@ -29,9 +29,9 @@ export const FOOD_MOMENT: Partial<Record<ItemKind, Occasion>> = {
   'food.ration': 'ateRation', 'food.overpriced': 'ateOverpriced', 'food.pasty': 'atePasty', 'food.meat': 'ateMeat',
   'food.steak': 'ateSteak', 'food.carpaccio': 'ateCarpaccio',
 };
-/** While starving, a reminder every this many turns (a roll between the two). */
-export const NAG_MIN_TURNS = 30;
-export const NAG_MAX_TURNS = 40;
+/** While starving, a reminder every this many turns (a roll between the two): rare, the owner found hunger said too often. */
+export const NAG_MIN_TURNS = 150;
+export const NAG_MAX_TURNS = 250;
 
 /** Bosses, each with a moment of their own. */
 const BOSSES: Partial<Record<MobKind, Moment>> = { goo: 'goo', tengu: 'tengu', dm300: 'dm300', king: 'king', yog: 'yog' };
@@ -107,8 +107,8 @@ export class QuipWatch {
         case 'hunger':
           if (effect.hero !== me.id) break;
           this.hungry = true;
-          if (effect.state === 'hungry') found.add('hungry');
-          else {
+          // Only full starvation is worth a word; mere hunger is left to the hunger icon.
+          if (effect.state === 'starving') {
             found.add('starving');
             this.nagAt = this.nextNag(turn);
           }

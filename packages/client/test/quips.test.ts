@@ -414,7 +414,7 @@ describe('what the hero\'s turn was', () => {
     expect(watch().read([{ type: 'died', depth: 3, who: 'h2', pos: 40 }], me, 10)).toBeNull();
     expect(watch().read([{ type: 'amulet', hero: 'h1', first: true }], me, 10)).toBe('amulet');
     expect(watch().read([{ type: 'amulet', hero: 'h1', first: false }], me, 10)).toBeNull();
-    expect(watch().read([{ type: 'hunger', hero: 'h1', state: 'hungry' }], me, 10)).toBe('hungry');
+    expect(watch().read([{ type: 'hunger', hero: 'h1', state: 'hungry' }], me, 10)).toBeNull();
     expect(watch().read([{ type: 'hunger', hero: 'h1', state: 'starving' }], me, 10)).toBe('starving');
     expect(watch().read([{ type: 'hunger', hero: 'h2', state: 'hungry' }], me, 10)).toBeNull();
     const cursed = { kind: 'weapon.sword', cursed: true } as never;
@@ -482,13 +482,13 @@ describe('the watch: hunger and meals', () => {
   const hungryHero = { ...me, hunger: 300 };
   const starvingHero = { ...me, hunger: 360 };
 
-  it('knows hungry and starving, and only the hero\'s own', () => {
-    expect(watch().read([hunger('hungry')], hungryHero, 10)).toBe('hungry');
+  it('speaks only of full starvation, and only the hero\'s own', () => {
+    expect(watch().read([hunger('hungry')], hungryHero, 10)).toBeNull();
     expect(watch().read([hunger('starving')], starvingHero, 10)).toBe('starving');
     expect(watch().read([{ type: 'hunger', hero: 'h2', state: 'starving' }], fed, 10)).toBeNull();
   });
 
-  it('reminds every 30 to 40 turns while starving, and stops when fed or dead', () => {
+  it('reminds rarely (every NAG_MIN_TURNS to NAG_MAX_TURNS turns) while starving, and stops when fed or dead', () => {
     const w = new QuipWatch(() => 0);
     expect(w.read([hunger('starving')], starvingHero, 100)).toBe('starving');
     const idle: Effect[] = [{ type: 'hurt', depth: 3, who: 'h2', damage: 1 }];
@@ -497,7 +497,7 @@ describe('the watch: hunger and meals', () => {
     // The next one is another wait away.
     expect(w.read(idle, starvingHero, 101 + NAG_MIN_TURNS)).toBeNull();
     expect(w.read(idle, starvingHero, 100 + 2 * NAG_MIN_TURNS)).toBe('starvingNag');
-    // The longest wait (the top of the dice) is 40.
+    // The longest wait (the top of the dice) is NAG_MAX_TURNS.
     const late = new QuipWatch(() => 0.999);
     late.read([hunger('starving')], starvingHero, 100);
     expect(late.read(idle, starvingHero, 100 + NAG_MAX_TURNS - 1)).toBeNull();
