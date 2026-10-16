@@ -392,6 +392,7 @@ export function render(
   }
   // What fights left on the floor (blood, chunks, bodies), under what lies there: remembered
   // where the party has been, and dimmed with the rest of it by the fog.
+  fx.drawWaterRed(ctx, now, (x, y) => explored[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true);
   fx.drawDecals(ctx, now, (x, y) => explored[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true);
   scene.under?.(ctx);
   for (const heap of scene.heaps) {

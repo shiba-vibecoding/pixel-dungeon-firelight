@@ -279,8 +279,14 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
         count: 6 + Math.round(share * 30) + Math.min(10, effect.damage) + (heavy ? 8 : 0), colors, glow,
         speed: [35, 100 + share * 90 + (heavy ? 30 : 0)], life: [280, 680], gravity: 260, drag: 0.12, size: [1, 3], angle, cone: 1.7, spread: 2,
       });
-      // What spilt stays on the floor.
-      if (!glow) fx.splat(to.x, to.y, now, colors, 2 + Math.round(share * 8));
+      // What spilt stays on the floor; in water it goes red round the victim, a cloud that spreads a cell or two and fades.
+      if (!glow) {
+        fx.splat(to.x, to.y, now, colors, 3 + Math.round(share * 9));
+        if (colors === BLOOD) {
+          const feet = feetOf(view, target, now);
+          fx.bleedWater(feet.x, feet.y, now, 0.45 + share * 0.9, 1.1 + share * 1.6);
+        }
+      }
       // A very heavy blow that does not kill still tears a chunk or two off.
       if (!killing && share >= 0.3) throwGibs(feetOf(view, target, now), gore, share >= 0.5 ? 2 : 1, angle, 0.8, now);
       const mine = effect.attacker === myId || effect.target === myId;
@@ -334,6 +340,8 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       const angle = blow && now - blow.at < BLOW_MS ? blow.angle : undefined;
       const feet = puppet ? feetOf(view, puppet, now) : { x: at.x, y: at.y + 5, z: 5 };
       throwGibs(feet, gore, boss ? 16 : 4 + Math.floor(Math.random() * 4), angle, boss ? 1.3 : 1, now);
+      // A slaying in water reddens it widely.
+      if (gore.pool?.color === MEAT.pool?.color) fx.bleedWater(feet.x, feet.y, now, 1, boss ? 3.2 : 2);
       if (puppet) layBody(view, puppet, gore, boss, now);
       // What was alive leaves as a faint wisp (a ghost as nothing else).
       burst(at, now, {

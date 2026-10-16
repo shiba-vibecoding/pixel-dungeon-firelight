@@ -571,7 +571,8 @@ export class Effects3D {
       const k = (now - p.born) / p.life;
       if (k < 0 || k >= 1) continue;
       const rgb = parseCss(p.color);
-      const size = Math.max(0.09, (p.size / TILE) * 1.5);
+      // (Blood and dust are drawn bigger than their art pixel: seen from above and far away a single pixel is lost.)
+      const size = Math.max(0.1, (p.size / TILE) * (p.glow ? 1.5 : 2.2));
       const a = rgb[3]! * (1 - k);
       if (p.glow) this.glow.billboard(p.x / TILE, 0.3 + 0.5 * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, a);
       else this.soft.billboard(p.x / TILE, 0.3 + 0.35 * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
@@ -594,7 +595,7 @@ export class Effects3D {
       const rgb = parseCss(d.color);
       const age = now - d.born;
       const a = age < 14000 ? d.alpha : d.alpha * Math.max(0, 1 - (age - 14000) / 3000);
-      this.soft.flat((d.x + d.w / 2) / TILE, 0.016, (d.y + d.h / 2) / TILE, Math.max(0.07, d.w / TILE), Math.max(0.07, d.h / TILE), 0, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
+      this.soft.flat((d.x + d.w / 2) / TILE, 0.016, (d.y + d.h / 2) / TILE, Math.max(0.11, (d.w / TILE) * 1.8), Math.max(0.11, (d.h / TILE) * 1.8), 0, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
     }
     // The pool that spreads under a body.
     for (const corpse of fx.corpses) {
