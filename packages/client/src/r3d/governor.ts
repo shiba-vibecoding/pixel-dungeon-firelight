@@ -73,6 +73,7 @@ export class Governor {
   private lowFor = 0;
   /** The renderer is to go; set once. */
   fellBack = false;
+  private holding = 0;
 
   constructor(private readonly options: GovernorOptions = {}) {}
 
@@ -84,8 +85,18 @@ export class Governor {
    * Notes a frame the renderer drew while something was moving (a calm frame, drawn at the slow cadence, says nothing about
    * speed): `dt` is the time since the previous drawn frame, `hz` the display's refresh.
    */
+  /** Frames are not judged for this long (ms of frames): shaders are being compiled, a floor built, a texture uploaded. */
+  hold(ms: number): void {
+    this.holding = Math.max(this.holding, ms);
+    this.sum = this.count = this.elapsed = 0;
+  }
+
   frame(dt: number, hz: number): Verdict {
     if (this.fellBack) return 'fallback';
+    if (this.holding > 0) {
+      if (dt > 0 && dt <= 250) this.holding -= dt;
+      return 'ok';
+    }
     // Gaps that are not frames (a window over the map, a hidden tab) are not counted.
     if (dt <= 0 || dt > 250) return 'ok';
     this.sum += dt;

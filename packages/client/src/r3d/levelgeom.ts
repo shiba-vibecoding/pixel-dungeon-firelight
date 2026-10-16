@@ -369,7 +369,9 @@ export class LevelGeom {
       this.kinds[i] = now.kind;
       if (this.slot[i]! >= 0) this.writeFloor(i);
       tiles = true;
-      if (was.kind !== now.kind || was.side !== now.side || was.top !== now.top || was.h !== now.h || now.kind === K_WATER) solids = true;
+      // Boxes and water are rewritten when one comes or goes, or a box's art or height changes; a floor tile alone is patched in place.
+      const box = now.kind === K_WALL || now.kind === K_LOW;
+      if (was.kind !== now.kind || (box && (was.side !== now.side || was.top !== now.top || was.h !== now.h))) solids = true;
     }
     if (solids) this.rebuildSolids();
     if (tiles) this.floorVersion++;

@@ -28,7 +28,11 @@ import { ArenaView } from './arenaview';
 import { levelRegion } from './sprites';
 import { capitalize, lang, t } from './i18n';
 import { chargesOf, itemInfo, itemName, wearOf } from './itemtext';
-import { bakeLevel, type Camera, patchLevel, render } from './render';
+import { bakeLevel, type Camera, patchLevel, render, renderOverlay3D } from './render';
+import type { Frame3D, World3D } from './r3d/world3d';
+import { Governor, RefreshMeter } from './r3d/governor';
+import { FEET_PX, YS } from './r3d/project';
+import { beta3d, covers3D } from './r3d/setting';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
   askDrink, onWindow, reopenWindow, type WindowState, windowState,
@@ -301,7 +305,7 @@ function coachMove(me: Hero): void {
     document.getElementById('ui')!.append(coach);
   }
   const x = (cellX(me.pos) * TILE + TILE / 2 - camera.x) * camera.zoom / (canvas.width / canvas.clientWidth);
-  const y = (cellY(me.pos) * TILE - camera.y) * camera.zoom / (canvas.height / canvas.clientHeight);
+  const y = headScreenY(cellY(me.pos) * TILE) / (canvas.height / canvas.clientHeight);
   const left = `${Math.round(x / hud.scale)}px`;
   const top = `${Math.round(y / hud.scale)}px`;
   if (coach.style.left !== left) coach.style.left = left;
@@ -338,14 +342,16 @@ function layerRect(box: DOMRect, pad: number): Rect | null {
 function cellRect(pos: number, pad: number, up = 0): Rect | null {
   const ratio = canvas.width / (canvas.clientWidth || 1);
   const unit = camera.zoom / ratio / (hud.scale || 1);
+  const squeeze = ground();
   const x = (cellX(pos) * TILE - camera.x) * unit;
-  const y = (cellY(pos) * TILE - camera.y) * unit;
+  const y = (cellY(pos) * TILE - camera.y) * unit * squeeze;
   const size = TILE * unit;
+  const high = size * squeeze;
   const layer = uiLayer.getBoundingClientRect();
   const scale = hud.scale || 1;
   // Off the screen: no ring.
-  if (x + size < 0 || y + size < 0 || x > layer.width / scale || y > layer.height / scale) return null;
-  return { x: x - pad, y: y - pad - up, w: size + 2 * pad, h: size + 2 * pad + up };
+  if (x + size < 0 || y + high < 0 || x > layer.width / scale || y > layer.height / scale) return null;
+  return { x: x - pad, y: y - pad - up, w: size + 2 * pad, h: high + 2 * pad + up };
 }
 
 /** The first of a button's kind that is on screen (the toolbar's, or the monitor's islands'). */
@@ -421,6 +427,95 @@ const myClass = (): HeroClass => (session?.world && heroById(session.world, sess
 const putOnLook = (): void => session?.wear(mart.look(myClass()));
 mart.onChange(putOnLook);
 const camera: Camera = { x: 0, y: 0, zoom: 2 };
+
+/*
+ * The new renderer (r3d/, «Новая графика (бета)»): the sewers as a 3D scene on a canvas under this one, which then only carries
+ * what is drawn over the map (numbers, names, cards, the canvas effects flattened onto the floor). Its chunk is fetched only once the
+ * switch is on. The camera stays CamControl's, working on a virtual screen whose up-and-down is stretched by 1 / sin(pitch)
+ * (r3d/project.ts), so taps, drags and pinches need no change but one division; `ground()` is that squeeze.
+ */
+let canvas3d: HTMLCanvasElement | null = null;
+const lazy3d = lazy(() => import('./r3d/world3d'));
+let r3: World3D | null = null;
+let frame3d: Frame3D | null = null;
+let mode3d = false;
+/** Which floor and which turn the 3D scene was last brought up to date with. */
+let r3Floor = '';
+let r3Turn = '';
+const governor = new Governor();
+const refreshMeter = new RefreshMeter();
+let lastDraw3d = 0;
+/** The last frame drawn was one with something moving (a gap after a calm one says nothing of speed). */
+let movedBefore = false;
+const perfOn = new URLSearchParams(location.search).get('perf') === '1';
+
+/** How much the map's up-and-down is squeezed on the screen: 1 in 2D, sin(pitch) in the new view. */
+const ground = (): number => (mode3d ? YS : 1);
+/** Where a character's head is on the screen (device pixels): the top of its cell in 2D, over the leaned figure in 3D. */
+const headScreenY = (cellTop: number): number =>
+  mode3d ? ((cellTop + FEET_PX - camera.y) * YS - 15) * camera.zoom : (cellTop - camera.y) * camera.zoom;
+
+/** Shows the 3D canvas (or not) and keeps the 2D one clear over it. */
+function setMode3d(on: boolean): void {
+  if (on === mode3d) return;
+  mode3d = on;
+  if (canvas3d) canvas3d.style.display = on ? 'block' : 'none';
+  document.body.classList.toggle('pd-3d', on);
+  if (!on) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  resize();
+  drawPace.force();
+}
+
+/** The 3D view is put away: its memory is given back, and with a message the switch goes off (it was too slow, or would not start). */
+function stop3d(message?: string): void {
+  r3?.dispose();
+  r3 = null;
+  frame3d = null;
+  r3Floor = r3Turn = '';
+  canvas3d?.remove();
+  canvas3d = null;
+  setMode3d(false);
+  if (message) {
+    beta3d.set(false);
+    toast(message, { tone: 'warn' });
+  }
+}
+
+/** Whether this floor is drawn in 3D now (the switch, the sewers, the chunk and the context all there); makes the renderer when it can. */
+function pick3d(level: Level, world: World): boolean {
+  if (!beta3d.on) {
+    if (r3) stop3d();
+    return false;
+  }
+  if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena))) return false;
+  if (r3) return true;
+  const mod = lazy3d.ready();
+  if (!mod) {
+    load(lazy3d, () => drawPace.force(), () => stop3d(t.render3dFailed));
+    return false;
+  }
+  try {
+    // A canvas that has had a lost context cannot be given a new one: each start has its own.
+    canvas3d = document.createElement('canvas');
+    canvas3d.id = 'game3d';
+    canvas.before(canvas3d);
+    const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, onLost: () => stop3d(t.render3dFailed) });
+    r3.enableParticles();
+    governor.hold(2500);
+    frame3d = {
+      now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, view, seeAll: false, focusX: 0, focusY: 0,
+    };
+    r3.resize(canvas.width, canvas.height);
+  } catch {
+    canvas3d?.remove();
+    canvas3d = null;
+    r3 = null;
+    stop3d(t.render3dFailed);
+    return false;
+  }
+  return true;
+}
 
 /* Preferences */
 
@@ -1770,7 +1865,8 @@ const toDevice = (clientX: number, clientY: number): { x: number; y: number } =>
   // A canvas not laid out (a hidden pane) has no size to scale by.
   const sx = rect.width > 0 ? canvas.width / rect.width : 1;
   const sy = rect.height > 0 ? canvas.height / rect.height : 1;
-  return { x: (clientX - rect.left) * sx, y: (clientY - rect.top) * sy };
+  // The new renderer's camera works on a virtual screen whose y is stretched back (r3d/project.ts): every cell asked for goes through it.
+  return { x: (clientX - rect.left) * sx, y: ((clientY - rect.top) * sy) / ground() };
 };
 
 canvas.addEventListener('pointerdown', (event) => {
@@ -1942,7 +2038,7 @@ canvas.insertAdjacentElement('afterend', hover.frame);
 function cellUnder(clientX: number, clientY: number): number {
   const rect = canvas.getBoundingClientRect();
   const px = (clientX - rect.left) * (canvas.width / rect.width);
-  const py = (clientY - rect.top) * (canvas.height / rect.height);
+  const py = ((clientY - rect.top) * (canvas.height / rect.height)) / ground();
   const x = Math.floor((camera.x + px / camera.zoom) / TILE);
   const y = Math.floor((camera.y + py / camera.zoom) / TILE);
   return x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT ? -1 : x + y * WIDTH;
@@ -1992,8 +2088,9 @@ function placeHover(): void {
   const k = rect.width / canvas.width;
   const size = TILE * camera.zoom * k;
   hover.frame.style.left = `${rect.left + ((hover.cell % WIDTH) * TILE - camera.x) * camera.zoom * k}px`;
-  hover.frame.style.top = `${rect.top + (Math.trunc(hover.cell / WIDTH) * TILE - camera.y) * camera.zoom * k}px`;
-  hover.frame.style.width = hover.frame.style.height = `${size}px`;
+  hover.frame.style.top = `${rect.top + (Math.trunc(hover.cell / WIDTH) * TILE - camera.y) * camera.zoom * k * ground()}px`;
+  hover.frame.style.width = `${size}px`;
+  hover.frame.style.height = `${size * ground()}px`;
 }
 
 function tapAt(px: number, py: number): void {
@@ -2194,7 +2291,7 @@ for (const type of ['pointerdown', 'pointermove', 'pointerup', 'keydown', 'wheel
 
 function resize(): void {
   // Light effects draw a coarser canvas: pixel art stays crisp, there are just fewer pixels to fill.
-  const dpr = Math.min(devicePixelRatio || 1, quality.light ? 1.5 : 3);
+  const dpr = Math.min(devicePixelRatio || 1, quality.light ? 1.5 : 3, mode3d ? governor.tier.dpr : 3);
   const wide = canvas.clientWidth * dpr;
   const tall = canvas.clientHeight * dpr;
   // The art is coarse, so a canvas past a few million pixels (a big monitor, a scaled desktop, 4K)
@@ -2222,6 +2319,7 @@ function resize(): void {
   const cssScale = wideScreen
     ? Math.max(2, Math.min(Math.round(W / 448), Math.floor(H / 208)))
     : Math.max(1, Math.min(Math.round(screenNarrow / (TILE * (fine ? 16 : 12))), Math.floor(windowNarrow / (TILE * 9))));
+  r3?.resize(canvas.width, canvas.height);
   zoom.base = Math.max(1, Math.round((cssScale * dpr) / shrink));
   zoom.min = Math.max(1, Math.min(zoom.base, Math.floor(narrow / (TILE * WIDTH))));
   zoom.max = Math.max(zoom.base + 2, zoom.base * 2);
@@ -2279,7 +2377,7 @@ function flyToBag(launch: Launch): void {
   const scale = camera.zoom / (canvas.width / (canvas.clientWidth || canvas.width));
   const rect = canvas.getBoundingClientRect();
   const x = rect.left + (launch.x - camera.x) * scale;
-  const y = rect.top + (launch.y - camera.y) * scale;
+  const y = rect.top + (launch.y - camera.y) * scale * ground();
   const target = bag.getBoundingClientRect();
   const icon = document.createElement('i');
   icon.className = 'pd-item pd-flying';
@@ -2361,6 +2459,7 @@ function placeVignette(on: boolean, x = 0, y = 0): void {
 }
 
 function drawBackdrop(now: number): void {
+  setMode3d(false);
   placeVignette(false);
   const { level, all } = backdrop;
   const middle = levelMiddle(level);
@@ -2415,6 +2514,7 @@ function noteFrame(now: number): void {
 
 function frame(now: number): void {
   noteFrame(now);
+  refreshMeter.note(now);
   if (session && windowOverMap()) {
     if (now - lastUnderWindow < UNDER_WINDOW_MS) return;
     lastUnderWindow = now;
@@ -2629,6 +2729,7 @@ function tick(now: number): void {
   }
 
   const level = levelAt(world, me.depth);
+  setMode3d(pick3d(level, world));
   // Chunks thrown in a fight land on this floor, never in its walls.
   fx.floor = level.map;
 
@@ -2694,6 +2795,22 @@ function tick(now: number): void {
     enemiesInSight = enemies.map((m) => m.id);
     // Hero.checkVisibleMobs: with no fair last target, the nearest enemy a shot can reach becomes it.
     if (isAlive(me)) refreshTarget(world, level, me);
+  }
+
+  // The 3D scene follows the floor and the turn (what a door did, what the party can see).
+  if (mode3d && r3) {
+    const where = `${me.depth}:${session.generation}`;
+    const fresh = r3Floor !== where;
+    if (fresh) {
+      r3.setLevel(level, where);
+      r3Floor = where;
+      governor.hold(1500);
+    }
+    if (fresh || r3Turn !== key) {
+      if (!fresh) r3.patch(level);
+      r3.setSight(visible, exploredCells(world, me.depth), fresh);
+      r3Turn = key;
+    }
   }
 
   // Blows held back to follow mine, when their moment has come.
@@ -2764,12 +2881,18 @@ function tick(now: number): void {
   if (heroWasAlive && !isAlive(me)) cam.recentre();
   heroWasAlive = isAlive(me);
   const ratio = canvas.height / (canvas.clientHeight || 1);
+  // In the 3D view the camera works on the stretched virtual screen (r3d/project.ts).
+  const stretch = 1 / ground();
+  camera.ys = ground();
   const state = cam.frame(dt, {
     hero: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
     cell: { x: cellX(me.pos) * TILE + TILE / 2, y: cellY(me.pos) * TILE + TILE / 2 },
     floor: `${session.generation}:${me.depth}`,
     bounds: levelMiddle(level),
-    viewport: { width: canvas.width, height: canvas.height, middle, bandTop: free.top * ratio, bandBottom: free.bottom * ratio, px: canvas.width / (canvas.clientWidth || canvas.width) },
+    viewport: {
+      width: canvas.width, height: canvas.height * stretch, middle: middle * stretch, bandTop: free.top * ratio * stretch,
+      bandBottom: free.bottom * ratio * stretch, px: canvas.width / (canvas.clientWidth || canvas.width),
+    },
   });
   camera.zoom = state.zoom;
   camera.x = state.x + kick.x;
@@ -2791,8 +2914,8 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || motion.moving() || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
-  if (drawPace.due(now, moving, quality.light)) {
+    || view.moving(vnow) || fx.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+  if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
     const clouds = world.floors[me.depth]?.gas ?? {};
@@ -2828,10 +2951,41 @@ function tick(now: number): void {
       // The cards sit above the hero, not on them: a third of the way down the free band.
       cardY: (free.top + (free.bottom - free.top) * 0.3) * (canvas.height / (canvas.clientHeight || 1)),
     };
-    // The arena's wall and stands stand in the light of the crowd's own torches, whatever the party sees.
-    render(ctx, world.arena ? { ...scene, visible: arenaView.shown(level, visible) } : scene, view, session.myId, assets, camera, vnow);
-    coop.frame(ctx, { session, world, view, camera, free, now: vnow });
-    placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom);
+    if (mode3d && r3 && frame3d) {
+      const f = frame3d;
+      f.now = vnow;
+      f.camX = camera.x;
+      f.camY = camera.y;
+      f.zoom = camera.zoom;
+      f.width = canvas.width;
+      f.height = canvas.height;
+      f.visible = visible;
+      f.explored = explored;
+      f.heaps = heaps;
+      f.plants = plants;
+      f.seeAll = scene.seeAll;
+      f.focusX = scene.focus.x;
+      f.focusY = scene.focus.y;
+      r3.hz = refreshMeter.hz;
+      const gap = lastDraw3d ? now - lastDraw3d : 0;
+      lastDraw3d = now;
+      if (!r3.frame(f, gap)) stop3d(t.render3dFailed);
+      else {
+        renderOverlay3D(ctx, scene, view, session.myId, assets, camera, vnow, r3.shown, r3.shownCount);
+        // Only frames drawn while something moves say how fast the renderer is (a calm one is on the slow cadence on purpose).
+        const verdict = moving && movedBefore ? governor.frame(gap, refreshMeter.hz) : 'ok';
+        movedBefore = moving;
+        if (verdict === 'demote') {
+          r3.applyTier(governor.tier);
+          resize();
+        } else if (verdict === 'fallback') stop3d(t.render3dSlow);
+      }
+    } else {
+      // The arena's wall and stands stand in the light of the crowd's own torches, whatever the party sees.
+      render(ctx, world.arena ? { ...scene, visible: arenaView.shown(level, visible) } : scene, view, session.myId, assets, camera, vnow);
+      coop.frame(ctx, { session, world, view, camera, free, now: vnow });
+    }
+    placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom * ground());
     mapControls.update(
       cam.canZoomIn, cam.canZoomOut, cam.away, cam.overview,
       document.querySelector<HTMLElement>('#ui .pd-log')?.offsetHeight ?? 120,
@@ -2857,7 +3011,7 @@ function tick(now: number): void {
     drawPace.effect(now);
     const unit = camera.zoom / (canvas.width / (canvas.clientWidth || 1)) / (hud.scale || 1);
     const layer = uiLayer.getBoundingClientRect();
-    quipSys.frame(now, { x: (at.x + TILE / 2 - camera.x) * unit, y: (at.y - camera.y) * unit, w: layer.width / (hud.scale || 1), h: layer.height / (hud.scale || 1) }, overlayOpen());
+    quipSys.frame(now, { x: (at.x + TILE / 2 - camera.x) * unit, y: (mode3d ? headScreenY(at.y) / camera.zoom : at.y - camera.y) * unit, w: layer.width / (hud.scale || 1), h: layer.height / (hud.scale || 1) }, overlayOpen());
   }
 
   // Who the dungeon is waiting for, once my action has been queued for a moment. Under live turns, the

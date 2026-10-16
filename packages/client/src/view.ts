@@ -177,6 +177,7 @@ function cornerBend(map: readonly number[] | undefined, from: number, to: number
 /** Where a step from (fromX, fromY) to a cell, started at `start`, has got to by `now`; round a corner if it bends. */
 function segment(
   fromX: number, fromY: number, to: number, start: number, dur: number, bend: { x: number; y: number } | undefined, now: number,
+  out: { x: number; y: number } = { x: 0, y: 0 },
 ): { x: number; y: number } {
   const k = Math.min(1, Math.max(0, (now - start) / dur));
   const toX = cellX(to) * TILE;
@@ -184,9 +185,13 @@ function segment(
   if (bend && k < 1) {
     // Round the corner: a curve pulled towards the open cell beside it.
     const a = (1 - k) * (1 - k), b = 2 * (1 - k) * k, c = k * k;
-    return { x: a * fromX + b * bend.x + c * toX, y: a * fromY + b * bend.y + c * toY };
+    out.x = a * fromX + b * bend.x + c * toX;
+    out.y = a * fromY + b * bend.y + c * toY;
+    return out;
   }
-  return { x: fromX + (toX - fromX) * k, y: fromY + (toY - fromY) * k };
+  out.x = fromX + (toX - fromX) * k;
+  out.y = fromY + (toY - fromY) * k;
+  return out;
 }
 
 /** Steps a walker may be shown behind the world before the oldest are cut short. */
@@ -501,9 +506,14 @@ export class View {
 
   /** Interpolated position in world pixels. */
   position(puppet: Puppet, now: number): { x: number; y: number } {
+    return this.positionInto(puppet, now, { x: 0, y: 0 });
+  }
+
+  /** The same, written into `out` (the new renderer's frame loop makes no garbage). */
+  positionInto(puppet: Puppet, now: number, out: { x: number; y: number }): { x: number; y: number } {
     return segment(
       puppet.fromX ?? cellX(puppet.from) * TILE, puppet.fromY ?? cellY(puppet.from) * TILE, puppet.aim ?? puppet.to,
-      puppet.moveStart, puppet.moveDur ?? this.stepMs, puppet.bend, now,
+      puppet.moveStart, puppet.moveDur ?? this.stepMs, puppet.bend, now, out,
     );
   }
 

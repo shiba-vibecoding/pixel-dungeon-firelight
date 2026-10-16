@@ -4,6 +4,7 @@ import { FALL_MS, type Puppet, TILE, type View } from './view';
 import { bossCard, depthCard, floatNumber, floorTitle, levelCard, nameplate, slainCard, waveCard } from './cards';
 
 import { fx } from './fx';
+import { FEET_PX } from './r3d/project';
 import { CHEST_ANIMS, type HeapLook } from './motion';
 import { drawFrame, frameAt as sheetFrame, lookIndex, regionIndex, sheet, tintedImage } from './worldsheets';
 import { quality } from './quality';
@@ -19,6 +20,8 @@ export interface Camera {
   x: number;
   y: number;
   zoom: number;
+  /** The new renderer's view squeezes the ground up and down by this (project.ts YS); 1 (absent) in 2D. */
+  ys?: number;
 }
 
 const isWater = (terrain: number): boolean => terrain >= T.WATER_TILES && terrain <= T.WATER;
@@ -217,7 +220,7 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   ctx.restore();
 }
 
-const LUNGE_MS = 150;
+export const LUNGE_MS = 150;
 /** A blow knocks the struck back and they spring back in this long. */
 const KNOCK_MS = 120;
 
@@ -226,7 +229,7 @@ const KNOCK_MS = 120;
  * way at once, held a moment, then back in whole steps (knockX and knockY are
  * whole pixels), as pixel art moves.
  */
-function knockback(puppet: Puppet, now: number): number {
+export function knockback(puppet: Puppet, now: number): number {
   if (puppet.knockStart === undefined) return 0;
   const k = (now - puppet.knockStart) / KNOCK_MS;
   if (k < 0 || k >= 1) return 0;
@@ -235,9 +238,7 @@ function knockback(puppet: Puppet, now: number): number {
   return Math.round(back * reach) / reach;
 }
 
-function drawHealth(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y: number): void {
-  const top = snap(y + TILE - puppet.sprite.sheet.h - 3);
-  const left = snap(x + 2);
+function drawHealth(ctx: CanvasRenderingContext2D, puppet: Puppet, left: number, top: number): void {
   const width = TILE - 4;
   ctx.fillStyle = '#000';
   ctx.fillRect(left - 0.5, top - 0.5, width + 1, 2);
@@ -528,7 +529,7 @@ export function render(
     } else if (now < puppet.alertUntil) {
       drawIcon(ctx, assets, ICONS.alert, x + TILE / 2, top - 2);
     }
-    if (puppet.hp < puppet.ht && !(puppet.isHero && puppet.id === myId)) drawHealth(ctx, puppet, x, y);
+    if (puppet.hp < puppet.ht && !(puppet.isHero && puppet.id === myId)) drawHealth(ctx, puppet, snap(x + 2), snap(y + TILE - puppet.sprite.sheet.h - 3));
   }
 
   // Thrown weapons and magic bolts in flight.
@@ -559,6 +560,63 @@ export function render(
 
   fx.draw(ctx, now, seen);
 
+  screenLayer(ctx, scene, view, camera, now, shown, shown.length);
+}
+
+/**
+ * The 2D layer over the new renderer's scene: cleared, then the canvas effects (blood, sparks, bolts, drawn flat onto the ground:
+ * a stand-in until they have a 3D form), the marks over the characters the scene drew (asleep, alarmed, hurt), and the same
+ * names, numbers and cards as in 2D. `marks` are where the scene put each character (world pixels, the cell's top-left).
+ */
+export function renderOverlay3D(
+  ctx: CanvasRenderingContext2D, scene: Scene, view: View, myId: string, assets: Assets, camera: Camera, now: number,
+  marks: ReadonlyArray<{ puppet: Puppet; x: number; y: number }>, count: number,
+): void {
+  const { canvas } = ctx;
+  const ys = camera.ys ?? 1;
+  const { zoom } = camera;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  fine = 1 / zoom;
+  const visible = scene.visible;
+  ctx.setTransform(zoom, 0, 0, zoom * ys, -Math.round(camera.x * zoom), -Math.round(camera.y * zoom * ys));
+  fx.draw(ctx, now, (x, y) => visible[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true);
+  // Marks in screen art pixels: the transform only scales.
+  ctx.setTransform(zoom, 0, 0, zoom, 0, 0);
+  for (let i = 0; i < count; i++) {
+    const { puppet, x, y } = marks[i]!;
+    if (!puppet.alive) continue;
+    const mid = x + TILE / 2 - camera.x;
+    const top = (y + FEET_PX - camera.y) * ys - puppet.sprite.sheet.h - 1;
+    if (puppet.sleeping) drawIcon(ctx, assets, ICONS.sleep, mid + TILE / 2 - 2, top + Math.sin(now / 400) * 1.5);
+    else if (now < puppet.alertUntil) drawIcon(ctx, assets, ICONS.alert, mid, top - 2);
+    if (puppet.hp < puppet.ht && !(puppet.isHero && puppet.id === myId)) {
+      drawHealth(ctx, puppet, Math.round((mid - TILE / 2 + 2) * zoom) / zoom, Math.round((top - 2) * zoom) / zoom);
+    }
+  }
+  screenLayer(ctx, scene, view, camera, now, marks, count);
+}
+
+/** Where a character's head is on the screen (device pixels), for names and marks; `y` is the top of its cell. */
+function headY(camera: Camera, y: number, spriteH: number): number {
+  const ys = camera.ys ?? 1;
+  return ys === 1 ? (y + TILE - spriteH - camera.y) * camera.zoom : ((y + FEET_PX - camera.y) * ys - spriteH) * camera.zoom;
+}
+
+/** Where a floating number starts (device pixels): over the head in 2D, and over the leaned figure's head in the 3D view. */
+function floaterY(camera: Camera, y: number): number {
+  const ys = camera.ys ?? 1;
+  return ys === 1 ? (y - camera.y) * camera.zoom : ((y + FEET_PX - camera.y) * ys - 15) * camera.zoom;
+}
+
+/** What is laid over the map at screen resolution: names, numbers, cards and banners, the same over the 2D and the 3D view. */
+function screenLayer(
+  ctx: CanvasRenderingContext2D, scene: Scene, view: View, camera: Camera, now: number,
+  names: ReadonlyArray<{ puppet: Puppet; x: number; y: number }>, count: number,
+): void {
+  const { canvas } = ctx;
   // Floating numbers and words, drawn at screen resolution so text stays crisp.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   // Fallen, the hero sees the world drain of colour.
@@ -573,18 +631,18 @@ export function render(
   // Device pixels per CSS pixel: the cards' sizes are in CSS pixels, as in the design system.
   const px = canvas.width / (canvas.clientWidth || canvas.width);
   // Companions' names above their heads, in the colour co-op wears everywhere.
-  for (const { puppet, x, y } of shown) {
+  for (let i = 0; i < count; i++) {
+    const { puppet, x, y } = names[i]!;
     if (!puppet.label || !puppet.alive) continue;
     const sx = (x + TILE / 2 - camera.x) * camera.zoom;
-    const top = (y + TILE - puppet.sprite.sheet.h - camera.y) * camera.zoom;
-    nameplate(ctx, puppet.label, sx, top, px, { patron: puppet.look?.patron });
+    nameplate(ctx, puppet.label, sx, headY(camera, y, puppet.sprite.sheet.h), px, { patron: puppet.look?.patron });
   }
   ctx.globalAlpha = 1;
 
   // Numbers and words rising over characters (PD.fx.number): damage red, healing green, words in their colour.
   for (const floater of view.floaters) {
     const sx = (floater.x - camera.x) * camera.zoom;
-    const sy = (floater.y - camera.y) * camera.zoom;
+    const sy = floaterY(camera, floater.y);
     const numeric = /^\d+$/.test(floater.text);
     const scale = floater.scale ?? 1;
     const kind = floater.word ? 'word' : numeric ? (scale >= 2 ? 'kill' : scale > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
@@ -601,7 +659,7 @@ export function render(
   const card = view.levelCard;
   if (card && scene.focus) {
     const x = (scene.focus.x - camera.x) * camera.zoom;
-    const y = (scene.focus.y - camera.y) * camera.zoom - TILE * camera.zoom * 3;
+    const y = (scene.focus.y - camera.y) * (camera.ys ?? 1) * camera.zoom - TILE * camera.zoom * 3;
     if (!levelCard(ctx, t.levelCard(card.lvl), x, y, now - card.start, px)) view.levelCard = null;
   }
 

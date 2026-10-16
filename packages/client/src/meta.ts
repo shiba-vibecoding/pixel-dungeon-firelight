@@ -5,6 +5,7 @@ import { fx } from './fx';
 import { capitalize, lang, locale, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { smooth } from './pace';
+import { beta3d } from './r3d/setting';
 import { QUIP_MODES, quipMode } from './quips';
 import { type FxMode, quality } from './quality';
 import { el, info, show, sprites, windowOf } from './screens';
@@ -218,6 +219,7 @@ export function showSettings(options: SettingsOptions): void {
       info(t.meta.quipsNote, 'pd-note'),
     ),
     switchRow(t.meta.smooth, t.meta.smoothNote, smooth.on, (on) => smooth.set(on)),
+    switchRow(t.meta.render3d, t.meta.render3dNote, beta3d.on, (on) => beta3d.set(on)),
     // The questions before a trap or gas, and before the unknown (mistap.ts, riskyuse.ts): «don't ask again» lands here too.
     switchRow(t.safe.settings.danger, t.safe.settings.dangerNote, confirmDanger.on, (on) => confirmDanger.set(on)),
     switchRow(t.safe.settings.risky, t.safe.settings.riskyNote, confirmRisky.on, (on) => confirmRisky.set(on)),
