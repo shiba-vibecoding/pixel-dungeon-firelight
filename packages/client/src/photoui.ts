@@ -10,7 +10,7 @@ import {
   applyFilter, scaleSticker, STICKER_START, STICKERS_MAX, stickerAt, stickerBox, workingSize,
 } from './photo';
 import { el, show, toast, windowOf } from './screens';
-import { appLink, canDownloadFile, canShareStory, downloadFile, inTelegram, shareStory } from './telegram';
+import { appLink, canDownloadFile, canShareStory, downloadFile, inTelegram, inviteStart, shareStory } from './telegram';
 
 /*
  * The photo mode's screen: a snapshot of the game (the map, or the camp) in a frame, with a filter and stickers on it, saved as a PNG or
@@ -532,7 +532,7 @@ function build(options: PhotoOptions): void {
     const url = await publicUrl();
     if (!url) return toast(P.storyFailed, { tone: 'warn' });
     // The story's link opens the game (the widget is shown to Premium senders; the caption's text goes to everyone).
-    shareStory(url, P.storyText, { url: appLink(), name: 'Pixel Dungeon' });
+    shareStory(url, P.storyText, { url: appLink(inviteStart()), name: 'Pixel Dungeon' });
   });
 
   /** The last resort: the picture on its own, to be held and saved by the phone. */

@@ -7,6 +7,11 @@
  */
 import { Color, DataTexture, LinearFilter, type MeshBasicMaterial, type MeshLambertMaterial, type MeshStandardMaterial, RGBAFormat, type Texture, UnsignedByteType, Vector2 } from 'three';
 import { HEIGHT, LENGTH, WIDTH } from '@pd/core';
+import {
+  MEMORY_CONTRAST, MEMORY_DESATURATE, MEMORY_GLOW, MEMORY_GLOW_DESATURATE, MEMORY_LIFT, MEMORY_MID, MEMORY_POOL, MEMORY_TINT, POOL_STRENGTH,
+} from './memory';
+
+const vec3 = (v: readonly [number, number, number]): string => `vec3(${v[0].toFixed(3)}, ${v[1].toFixed(3)}, ${v[2].toFixed(3)})`;
 
 /** How dark each state is (the 2D renderer's own numbers, render.ts). */
 export const FOG_REMEMBERED = 0.55;
@@ -14,8 +19,7 @@ export const FOG_REMEMBERED = 0.55;
  * What a remembered cell keeps of the look it has in the light (a share of its own colour, added in the shader, cool and washed out
  * so it still differs from what is in sight), and how strong a baked pool of fire light is at its middle.
  */
-export const MEMORY_LIFT = 0.6;
-export const POOL_STRENGTH = 0.85;
+export { MEMORY_LIFT, POOL_STRENGTH };
 const FOG_REVEAL_MS = 70;
 const FOG_FORGET_MS = 260;
 
@@ -201,10 +205,16 @@ export function withFog(
           '  float flick = 1.0 + 0.1 * sin(uTime * 2.3 + cellPhase) + 0.06 * sin(uTime * 5.1 + cellPhase * 1.9);',
           '  float seen = 1.0 - smoothstep(0.52, 1.0, vFog);',
           '  vec3 base = gl_FragColor.rgb - totalEmissiveRadiance;',
-          '  base += albedo * (uMem * rem * seen + uPool * flick * vPool * seen);',
+          // The fire's pools in remembered ground are a faint warmth, and what is remembered is flat grey with a cool cast, pulled toward
+          // a mid-dark (legible, not darker); the glow of the thing itself keeps a third, drained. All of it by `rem`, so it eases in.
+          `  float poolK = mix(1.0, ${MEMORY_POOL.toFixed(3)}, rem);`,
+          '  base += albedo * (uMem * rem * seen + uPool * flick * vPool * seen * poolK);',
           '  float lum = dot(base, vec3(0.299, 0.587, 0.114));',
-          '  base = mix(base, vec3(lum) * vec3(0.86, 0.97, 1.22), rem * 0.7);',
-          '  gl_FragColor.rgb = base + totalEmissiveRadiance;',
+          `  vec3 flatGrey = mix(vec3(${MEMORY_MID.toFixed(3)}), vec3(lum), ${MEMORY_CONTRAST.toFixed(3)}) * ${vec3(MEMORY_TINT)};`,
+          `  base = mix(base, flatGrey, rem * ${MEMORY_DESATURATE.toFixed(3)});`,
+          '  float glowLum = dot(totalEmissiveRadiance, vec3(0.299, 0.587, 0.114));',
+          `  vec3 glow = mix(totalEmissiveRadiance, vec3(glowLum) * ${vec3(MEMORY_TINT)}, rem * ${MEMORY_GLOW_DESATURATE.toFixed(3)}) * mix(1.0, ${MEMORY_GLOW.toFixed(3)}, rem);`,
+          '  gl_FragColor.rgb = base + glow;',
         ]
       : [
           '  float lum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));',

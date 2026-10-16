@@ -9,9 +9,8 @@
  *             door's leaf), statues, shelves and wells as lower blocks, and the edges of chasms that fall away three cells. Only
  *             what can be seen or cast a shadow, and only beside open ground. Rewritten, into the same arrays, when a box
  *             appears or goes (a door opens).
- *   doors   - dressed in code (writeDoor), part of `boxes`: a thin leaf (about 0.15 thick) in front of the wall line with the region's
- *             door tile on its face, thin jambs and a lintel; steel straps and a lock on a locked one; an open door's leaf standing
- *             upright, turned a quarter. The cell's top stays the wall's own cap.
+ *   doors   - closed and locked doors are gaps in the wall line (no box, no cap: the walls beside are the jambs, their faces and caps end
+ *             at the gap); a door's leaf is not in these buffers but a small mesh of its own that swings (doorLeafBuffers, doorswing.ts).
  *   water   - a quad under every water cell, for the drifting water texture.
  *   decals  - the kit's contact shadows on the floor along the foot of every wall.
  *
@@ -90,8 +89,6 @@ export const SHAPES: readonly Shape[] = shapesFor(DEFAULT_GEOM);
 export const isDoorTile = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR || terrain === T.OPEN_DOOR;
 /** A closed or locked door: a gap in the wall line, with a thin panel standing in it (no stone cap, no box). */
 export const isGapDoor = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR;
-/** The most quads a door's dressing takes (a locked door's frame, straps and plate, or an open door's frame and leaf). */
-const DOOR_QUADS = 40;
 /** The wood of a door's frame and slab is lit: its colours are lifted above the plain, warm for wood and cool for steel. */
 const WOOD_LIT = [1.45, 1.22, 0.98];
 const STEEL_LIT = [1.2, 1.25, 1.4];
@@ -265,6 +262,85 @@ const SIDES: ReadonlyArray<readonly [number, number, number]> = [
 /** The cap of a wall with no floor beside it, as the kit has it: darker where it is far from any room. */
 const BURIED_SHADE = 0.55;
 
+/**
+ * Writes a box's faces into `b`: the top, then by the bits of `sides` the south (1), east (2), west (4) and north (8) faces, each with
+ * the whole tile (the top may take a band of its own tile instead: five pixels of planks across a thin edge).
+ */
+function boxFaces(
+  b: Buffers, cols: number, rows: number, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number,
+  tile: number, tint: ArrayLike<number>, sides: number, top?: { tile: number; tint: ArrayLike<number>; band: 'x' | 'z' },
+): void {
+  tileRect(tile, cols, rows, rect);
+  const u0 = rect[0]!;
+  const v0 = rect[1]!;
+  const u1 = rect[2]!;
+  const v1 = rect[3]!;
+  shades.fill(1);
+  set12(x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0);
+  if (top) {
+    tileRect(top.tile, cols, rows, rect);
+    const tu0 = rect[0]!;
+    const tv0 = rect[1]!;
+    const tu1 = rect[2]!;
+    const tv1 = rect[3]!;
+    if (top.band === 'z') quad(b, corners, 0, 1, 0, shades, top.tint, tu0, tv0 + (tv1 - tv0) * 0.34, tu1, tv0 + (tv1 - tv0) * 0.66);
+    else quad(b, corners, 0, 1, 0, shades, top.tint, tu0 + (tu1 - tu0) * 0.34, tv0, tu0 + (tu1 - tu0) * 0.66, tv1);
+  } else quad(b, corners, 0, 1, 0, shades, tint, u0, v0, u1, v1);
+  shades[0] = shades[1] = FACE_FOOT;
+  shades[2] = shades[3] = 1;
+  if (sides & 1) {
+    set12(x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1);
+    quad(b, corners, 0, 0, 1, shades, tint, u0, v0, u1, v1);
+  }
+  if (sides & 8) {
+    set12(x1, y0, z0, x0, y0, z0, x0, y1, z0, x1, y1, z0);
+    quad(b, corners, 0, 0, -1, shades, tint, u0, v0, u1, v1);
+  }
+  shades[0] = shades[1] = FACE_FOOT * 0.85;
+  shades[2] = shades[3] = 0.85;
+  if (sides & 2) {
+    set12(x1, y0, z1, x1, y0, z0, x1, y1, z0, x1, y1, z1);
+    quad(b, corners, 1, 0, 0, shades, tint, u0, v0, u1, v1);
+  }
+  if (sides & 4) {
+    set12(x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0);
+    quad(b, corners, -1, 0, 0, shades, tint, u0, v0, u1, v1);
+  }
+  shades.fill(1);
+}
+
+/** How thick a door's leaf is, and how far from the hinge pin it reaches either way, in cells. */
+export const LEAF_THICK = 0.18;
+export const LEAF_REACH_BACK = LEAF_THICK / 2;
+export const LEAF_REACH = 1 - LEAF_THICK / 2;
+
+/**
+ * A door's leaf as a mesh of its own, in its own frame: the hinge pin at the origin, the leaf reaching along +x (from just behind the pin
+ * to a cell's width), 0.18 thick, as tall as the wall. Both faces carry the region's door tile (planks and handle, or the lock), its
+ * top and ends are a strip of planks (dark iron on a locked door, which also has straps and a lock plate on both faces). The
+ * renderer stands one of these at each door, turned about the pin as the door swings.
+ */
+export function doorLeafBuffers(locked: boolean, cols: number, rows: number, wall = DEFAULT_GEOM.wall): Buffers {
+  const b = makeBuffers(12 * 4, 12 * 6);
+  const tile = locked ? T.LOCKED_DOOR : T.DOOR;
+  const tint = locked ? LEAF_LIT_LOCKED : LEAF_LIT;
+  const top = locked ? { tile: DOOR_IRON, tint: [0.55, 0.6, 0.7], band: 'z' as const } : { tile: DOOR_TOP_H, tint: WOOD_LIT, band: 'z' as const };
+  const h = LEAF_THICK / 2;
+  boxFaces(b, cols, rows, -LEAF_REACH_BACK, 0, -h, LEAF_REACH, wall, h, tile, tint, 15, top);
+  if (locked) {
+    for (const side of [1, -1]) {
+      const z0 = side > 0 ? h : -h - 0.04;
+      const z1 = side > 0 ? h + 0.04 : -h;
+      boxFaces(b, cols, rows, -LEAF_REACH_BACK, 0.3, z0, LEAF_REACH, 0.42, z1, DOOR_IRON, STEEL_LIT, 1 | 8);
+      boxFaces(b, cols, rows, -LEAF_REACH_BACK, 1.05, z0, LEAF_REACH, 1.17, z1, DOOR_IRON, STEEL_LIT, 1 | 8);
+      const p0 = side > 0 ? h : -h - 0.08;
+      const p1 = side > 0 ? h + 0.08 : -h;
+      boxFaces(b, cols, rows, 0.32, 0.55, p0, 0.6, 0.85, p1, DOOR_IRON, STEEL_LIT, 1 | 8);
+    }
+  }
+  return b;
+}
+
 export class LevelGeom {
   /** The terrain these buffers were made from. */
   readonly terrain = new Uint8Array(LENGTH);
@@ -347,8 +423,9 @@ export class LevelGeom {
     const z = Math.trunc(cell / WIDTH);
     const shape = this.shapes[this.terrain[cell]!]!;
     const y = shape.kind === K_CHASM ? this.kit.chasm : 0;
-    // A box on the cell hides its floor; the tile there is the plain floor, for the day it opens.
-    const tile = shape.kind === K_WALL || shape.kind === K_LOW ? T.EMPTY : shape.kind === K_CHASM ? T.CHASM : (this.under.get(this.terrain[cell]!) ?? this.terrain[cell]!);
+    // A box on the cell hides its floor; the tile there is the plain floor, for the day it opens. An open door is a gap in the wall: the
+    // floor shows, not the original's picture of a frame (a pale stone portal round the doorway).
+    const tile = shape.kind === K_WALL || shape.kind === K_LOW || this.terrain[cell] === T.OPEN_DOOR ? T.EMPTY : shape.kind === K_CHASM ? T.CHASM : (this.under.get(this.terrain[cell]!) ?? this.terrain[cell]!);
     tileRect(tile, this.cols, this.rows, rect);
     set12(x, y, z + 1, x + 1, y, z + 1, x + 1, y, z, x, y, z);
     const v = slot * 4;
@@ -398,7 +475,6 @@ export class LevelGeom {
       else if (kind === K_LOW) box += 1 + 4 * 2;
       else if (kind === K_CHASM) box += 4 * 2;
       if (kind === K_FLOOR || kind === K_LOW) decal += 4;
-      if (isDoorTile(this.terrain[i]!)) box += DOOR_QUADS;
     }
     return { box, water, decal };
   }
@@ -428,7 +504,6 @@ export class LevelGeom {
       else if (kind === K_LOW) this.writeBox(i);
       else if (kind === K_CHASM) this.writeEdges(i);
       if (kind === K_FLOOR || kind === K_LOW) this.writeShadows(i);
-      if (isDoorTile(this.terrain[i]!)) this.writeDoor(i);
     }
     this.quads.boxes = this.boxes.verts / 4;
     this.quads.water = this.water.verts / 4;
@@ -569,101 +644,6 @@ export class LevelGeom {
   doorAcross(x: number, z: number): boolean {
     const open = (cx: number, cz: number): boolean => cx >= 0 && cz >= 0 && cx < WIDTH && cz < HEIGHT && this.kinds[cx + cz * WIDTH] !== K_WALL;
     return open(x, z - 1) || open(x, z + 1) || !(open(x - 1, z) || open(x + 1, z));
-  }
-
-  /** A solid block of a door's dressing, with the faces the camera and the lights see (top, then south, east, west by the bits of `sides`). */
-  private block(
-    x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, tile: number, tint: ArrayLike<number>, sides = 7,
-    top?: { tile: number; tint: ArrayLike<number>; band: 'x' | 'z' },
-  ): void {
-    const b = this.boxes;
-    tileRect(tile, this.cols, this.rows, rect);
-    const u0 = rect[0]!;
-    const v0 = rect[1]!;
-    const u1 = rect[2]!;
-    const v1 = rect[3]!;
-    shades.fill(1);
-    set12(x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0);
-    if (top) {
-      // The top of a thin panel shows a band of its own tile (five pixels of the planks), not the whole picture squeezed into a strip.
-      tileRect(top.tile, this.cols, this.rows, rect);
-      const tu0 = rect[0]!;
-      const tv0 = rect[1]!;
-      const tu1 = rect[2]!;
-      const tv1 = rect[3]!;
-      if (top.band === 'z') quad(b, corners, 0, 1, 0, shades, top.tint, tu0, tv0 + (tv1 - tv0) * 0.34, tu1, tv0 + (tv1 - tv0) * 0.66);
-      else quad(b, corners, 0, 1, 0, shades, top.tint, tu0 + (tu1 - tu0) * 0.34, tv0, tu0 + (tu1 - tu0) * 0.66, tv1);
-    } else quad(b, corners, 0, 1, 0, shades, tint, u0, v0, u1, v1);
-    shades[0] = shades[1] = FACE_FOOT;
-    shades[2] = shades[3] = 1;
-    if (sides & 1) {
-      set12(x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1);
-      quad(b, corners, 0, 0, 1, shades, tint, u0, v0, u1, v1);
-    }
-    shades[0] = shades[1] = FACE_FOOT * 0.85;
-    shades[2] = shades[3] = 0.85;
-    if (sides & 2) {
-      set12(x1, y0, z1, x1, y0, z0, x1, y1, z0, x1, y1, z1);
-      quad(b, corners, 1, 0, 0, shades, tint, u0, v0, u1, v1);
-    }
-    if (sides & 4) {
-      set12(x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0);
-      quad(b, corners, -1, 0, 0, shades, tint, u0, v0, u1, v1);
-    }
-    shades.fill(1);
-  }
-
-  /**
-   * A door, like Minecraft's: a gap in the wall line (the walls on its sides are its jambs: their faces and caps end at it) with a
-   * thin panel standing in it, 0.18 cell thick and the full height of the wall, centred on the wall line and as wide as the cell. The
-   * camera sees its front face (the region's door tile: planks and handle, or the lock) and its top edge, a wooden strip at the height
-   * of the walls' caps (planks seen from above), with the floor of the cell on both sides of it. Locked: the face has iron straps and
-   * a lock plate, and the top edge is dark iron. Open: the same panel, swung a quarter turn against the jamb, into the room, with
-   * nothing across the gap. In a wall line running north-south the camera sees the panel along its length: a strip down the cell.
-   * Nothing is placed where a figure standing in an open doorway is (a card leaned back, head 1.46 up and half a cell north of its
-   * feet), so it stays whole.
-   */
-  private writeDoor(cell: number): void {
-    const x = cell % WIDTH;
-    const z = Math.trunc(cell / WIDTH);
-    const terrain = this.terrain[cell]!;
-    const open = terrain === T.OPEN_DOOR;
-    const locked = terrain === T.LOCKED_DOOR;
-    const passable = (cx: number, cz: number): boolean => cx >= 0 && cz >= 0 && cx < WIDTH && cz < HEIGHT && this.kinds[cx + cz * WIDTH] !== K_WALL;
-    const H = this.kit.wall;
-    const T2 = 0.09;
-    const faceTile = locked ? T.LOCKED_DOOR : T.DOOR;
-    const faceTint = locked ? LEAF_LIT_LOCKED : LEAF_LIT;
-    const topH = locked ? { tile: DOOR_IRON, tint: [0.55, 0.6, 0.7], band: 'z' as const } : { tile: DOOR_TOP_H, tint: WOOD_LIT, band: 'z' as const };
-    const topV = locked ? { tile: DOOR_IRON, tint: [0.55, 0.6, 0.7], band: 'x' as const } : { tile: DOOR_TOP_V, tint: WOOD_LIT, band: 'x' as const };
-    if (this.doorAcross(x, z)) {
-      if (!open) {
-        const mid = z + 0.5;
-        this.block(x, 0, mid - T2, x + 1, H, mid + T2, faceTile, faceTint, 7, topH);
-        if (locked) {
-          // Straps across the face and a lock plate, standing 0.04 out of it.
-          const front = mid + T2;
-          this.block(x, 0.3, front, x + 1, 0.42, front + 0.04, DOOR_IRON, STEEL_LIT, 1);
-          this.block(x, 1.05, front, x + 1, 1.17, front + 0.04, DOOR_IRON, STEEL_LIT, 1);
-          this.block(x + 0.36, 0.55, front, x + 0.64, 0.85, front + 0.08, DOOR_IRON, STEEL_LIT, 1);
-        }
-      } else {
-        // Swung against the jamb, into the room on the camera's side: it stands along the cell's edge, out of the doorway's middle.
-        const left = ((x + z) & 1) === 0;
-        const lx = left ? x : x + 1 - 0.14;
-        this.block(lx, 0, z + 0.5, lx + 0.14, H, z + 1.5, faceTile, faceTint, 7, topV);
-      }
-    } else if (!open) {
-      // A wall line running north-south: the panel along the cell's length, its edge a strip down the middle.
-      const mid = x + 0.5;
-      this.block(mid - T2, 0, z, mid + T2, H, z + 1, faceTile, faceTint, 7, topV);
-      if (locked) this.block(mid - T2 - 0.03, 0.55, z + 0.3, mid + T2 + 0.03, 0.85, z + 0.7, DOOR_IRON, STEEL_LIT, 0);
-    } else {
-      // Open: swung against the north jamb, along the passage on whichever side is open, starting beyond the figure in the doorway.
-      const east = passable(x + 1, z) && (!passable(x - 1, z) || ((x + z) & 1) === 0);
-      const lx = east ? x + 0.95 : x - 0.95;
-      this.block(lx, 0, z, lx + 1, H, z + 0.14, faceTile, faceTint, 7, topH);
-    }
   }
 
   /** The corners of a face of the box on cell (x, z), from height `y0` up to `y1`, on the side (dx, dz). */
