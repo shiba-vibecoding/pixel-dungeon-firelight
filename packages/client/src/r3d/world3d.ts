@@ -34,6 +34,7 @@ import { type Buffers, doorLeafBuffers, type GeomKit, K_WALL, LevelGeom } from '
 import { DoorSwing, writeLeafMatrix } from './doorswing';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
+import { heapDrawn } from '../heapsight';
 import { PerfOverlay } from './perfoverlay';
 import { BloodWater, withBlood } from './bloodwater';
 import { isSoft } from './softalpha';
@@ -1128,11 +1129,12 @@ export class World3D {
   }
 
   private addItems(f: Frame3D): void {
-    const { explored, visible } = f;
+    const { visible } = f;
     const items = this.assets.items;
     for (let i = 0; i < f.heaps.length; i++) {
       const heap = f.heaps[i]!;
-      if (!explored[heap.pos]) continue;
+      // Only where it is in sight, as in the original (heapsight.ts): not what lies in the rooms remembered.
+      if (!heapDrawn(visible, heap.pos)) continue;
       const x = (heap.pos % WIDTH) + 0.5;
       const z = Math.trunc(heap.pos / WIDTH) + 0.6;
       const bob = visible[heap.pos] && !f.seeAll ? Math.sin(f.now / 520 + heap.pos) * 0.012 : 0;
@@ -1143,7 +1145,7 @@ export class World3D {
     if (plants) {
       for (let i = 0; i < plants.length; i++) {
         const plant = plants[i]!;
-        if (!explored[plant.pos]) continue;
+        if (!heapDrawn(visible, plant.pos)) continue;
         this.sprite(this.assets.plants, plant.index * 16, 0, 16, 16, false, (plant.pos % WIDTH) + 0.5, 0, Math.trunc(plant.pos / WIDTH) + 0.7, 0.85, 0.85, 1);
       }
     }
