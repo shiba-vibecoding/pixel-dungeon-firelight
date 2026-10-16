@@ -33,6 +33,7 @@ const rect = (at: readonly [number, number, number, number], i = 0, frames = 1):
   return [(at[0] + i * w) / SIZE, 1 - (at[1] + at[3]) / SIZE, w / SIZE, at[3] / SIZE];
 };
 
+const RIPPLE_UV: Array<[number, number, number, number]> = [0, 1, 2, 3, 4, 5].map((i) => rect(RIPPLE_AT, i, 6));
 const UV_SOLID = rect(SOLID_AT);
 const UV_DOT = rect(DOT_AT);
 const UV_RING = rect(RING_AT);
@@ -199,6 +200,13 @@ export class Effects3D {
   private waterRipple: Float32Array = new Float32Array([1, 1, 1]);
   private hasWater = false;
 
+  /** The glowing tiles of the level (the kit's emissive list, and lava), each with a soft glow of its colour over it: the kit's bloom, cheaply. */
+  private glowCells = new Int32Array(0);
+  private glowRgb = new Float32Array(0);
+  private glowSize = new Float32Array(0);
+  private glowAlpha = new Float32Array(0);
+  private glowCount = 0;
+
   private bolt: BoltKit | null = null;
   private kitRef: Kit | null = null;
   /** The light moving with a bolt or a blast. */
@@ -231,6 +239,51 @@ export class Effects3D {
     this.waterRipple = parseCss(a.region.water.ripple);
     this.hasWater = false;
     for (let i = 0; i < geom.kinds.length && !this.hasWater; i++) this.hasWater = geom.kinds[i] === K_WATER;
+    this.scanGlow(a, geom);
+  }
+
+  /** Finds the cells that glow, and with what. */
+  private scanGlow(a: Atmosphere, geom: LevelGeom): void {
+    const cells: number[] = [];
+    const rgb: number[] = [];
+    const size: number[] = [];
+    const alpha: number[] = [];
+    const emissive = a.region.emissive;
+    const lava = a.region.water.emissive !== undefined;
+    const lavaRgb = lava ? parseCss(a.region.water.emissive!) : null;
+    for (let cell = 0; cell < geom.kinds.length && cells.length < 160; cell++) {
+      const t = geom.terrain[cell]!;
+      if (lava && geom.kinds[cell] === K_WATER) {
+        // Lava: a glow over every other cell, which the neighbours fill in.
+        if (((cell % WIDTH) + Math.trunc(cell / WIDTH)) % 2 === 0) {
+          cells.push(cell); rgb.push(lavaRgb![0]!, lavaRgb![1]!, lavaRgb![2]!); size.push(2.0); alpha.push(0.2);
+        }
+        continue;
+      }
+      const colour = emissive[String(t)];
+      if (typeof colour !== 'string') continue;
+      const c = parseCss(colour);
+      cells.push(cell); rgb.push(c[0]!, c[1]!, c[2]!); size.push(t === 9 ? 1.3 : 1.6); alpha.push(t === 9 ? 0.3 : 0.2);
+    }
+    this.glowCells = Int32Array.from(cells);
+    this.glowRgb = Float32Array.from(rgb);
+    this.glowSize = Float32Array.from(size);
+    this.glowAlpha = Float32Array.from(alpha);
+    this.glowCount = cells.length;
+  }
+
+  /** The glow over the tiles that shine: seen ones only, near the hero, flickering a little (embers more). */
+  private glows(c: FxContext): void {
+    const t = c.now / 1000;
+    for (let i = 0; i < this.glowCount; i++) {
+      const cell = this.glowCells[i]!;
+      if (!c.visible[cell]) continue;
+      const x = (cell % WIDTH) + 0.5;
+      const z = Math.trunc(cell / WIDTH) + 0.5;
+      if (Math.abs(x - c.hx) > 9 || Math.abs(z - c.hz) > 9) continue;
+      const flick = 0.8 + 0.2 * Math.sin(t * 3 + cell * 1.7);
+      this.glow.flat(x, 0.06, z, this.glowSize[i]!, this.glowSize[i]! * 0.9, 0, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], this.glowRgb[i * 3]!, this.glowRgb[i * 3 + 1]!, this.glowRgb[i * 3 + 2]!, this.glowAlpha[i]! * flick);
+    }
   }
 
   setParticles(on: boolean): void {
@@ -427,7 +480,7 @@ export class Effects3D {
       const age = c.now - this.rBorn[i]!;
       if (age < 0 || age >= RIPPLE_MS) continue;
       const k = age / RIPPLE_MS;
-      const uv = rect(RIPPLE_AT, Math.min(5, Math.floor(k * 6)), 6);
+      const uv = RIPPLE_UV[Math.min(5, Math.floor(k * 6))]!;
       this.glow.flat(this.rx[i]!, 0.005, this.rz[i]!, 1, 1, 0, uv[0], uv[1], uv[2], uv[3], rc[0]!, rc[1]!, rc[2]!, 0.7 * (1 - k));
     }
   }
@@ -593,6 +646,7 @@ export class Effects3D {
       this.wisps(c);
     }
     this.ripples(c);
+    this.glows(c);
     this.bolts(c, kit);
     this.legacy(c);
     this.gas(c);

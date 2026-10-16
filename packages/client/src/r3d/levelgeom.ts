@@ -187,7 +187,7 @@ function relevant(kinds: Uint8Array, cell: number): boolean {
  * Wall torches: walls with open floor to their south (the face the camera sees), now and then, never closer than
  * `TORCH_SPACING` cells to one already chosen. The same level always gets the same torches.
  */
-export const TORCH_SPACING = 5;
+export const TORCH_SPACING = 4;
 export const MAX_TORCHES = 40;
 export function pickTorches(map: ArrayLike<number>): number[] {
   const picked: number[] = [];
@@ -199,7 +199,7 @@ export function pickTorches(map: ArrayLike<number>): number[] {
     const south = map[cell + WIDTH]!;
     if (SHAPES[south]!.kind !== K_FLOOR || !((terrainFlags[south] ?? 0) & F.PASSABLE)) continue;
     if (SHAPES[map[cell - 1]!]!.kind !== K_WALL || SHAPES[map[cell + 1]!]!.kind !== K_WALL) continue;
-    if ((Math.imul(cell, 2654435761) >>> 20) % 3 !== 0) continue;
+    if ((Math.imul(cell, 2654435761) >>> 20) % 2 !== 0) continue;
     const cy = Math.trunc(cell / WIDTH);
     if (picked.some((other) => Math.max(Math.abs((other % WIDTH) - x), Math.abs(Math.trunc(other / WIDTH) - cy)) < TORCH_SPACING)) continue;
     picked.push(cell);
