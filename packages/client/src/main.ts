@@ -3425,6 +3425,8 @@ function tick(now: number): void {
       f.focusY = scene.focus.y;
       f.myId = session.myId;
       r3.hz = refreshMeter.hz;
+      // While the first floor's programs compile nothing is drawn: the first frames after it are not judged either.
+      if (r3.warming) governor.hold(1800);
       const gap = lastDraw3d ? now - lastDraw3d : 0;
       lastDraw3d = now;
       if (!r3.frame(f, gap)) stop3d(true);
@@ -3435,7 +3437,7 @@ function tick(now: number): void {
         movedBefore = moving;
         if (verdict === 'demote') {
           r3.applyTier(governor.tier);
-          governor.hold(1500);
+          governor.hold(1000);
           resize();
         }
       }

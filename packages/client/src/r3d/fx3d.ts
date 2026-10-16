@@ -35,7 +35,7 @@ export class Fx3D {
   ) {}
 
   /** Puts the sheets into the atlas, once the data has come; false while it has not (or if it does not fit: the older effects stay). */
-  private sync(): boolean {
+  sync(): boolean {
     const loaded = fxState();
     if (!loaded) return false;
     if (this.packedFor === loaded) return true;

@@ -226,6 +226,48 @@ export class Post {
     renderer.render(this.screen, this.camera);
   }
 
+  /**
+   * Starts compiling the programs of every pass, each in the state it is drawn in (the small passes into their half-float targets with no
+   * tone map, the output pass to the canvas with the renderer's own), so that the first frame with the bloom does not wait for them.
+   * Returns what to wait for.
+   */
+  compile(renderer: WebGLRenderer): Array<Promise<unknown>> {
+    const jobs: Array<Promise<unknown>> = [];
+    const tone = renderer.toneMapping;
+    const before = renderer.getRenderTarget();
+    renderer.toneMapping = NoToneMapping;
+    const passes: ReadonlyArray<readonly [ShaderMaterial, WebGLRenderTarget]> = [
+      [this.bright, this.quarter], [this.downToEighth, this.eighth], [this.downToSixteenth, this.sixteenth], [this.upToEighth, this.eighth], [this.upToQuarter, this.quarter],
+    ];
+    for (const [material, to] of passes) {
+      this.triangle.material = material;
+      renderer.setRenderTarget(to);
+      jobs.push(renderer.compileAsync(this.screen, this.camera));
+    }
+    renderer.toneMapping = tone;
+    this.triangle.material = this.output;
+    renderer.setRenderTarget(null);
+    jobs.push(renderer.compileAsync(this.screen, this.camera));
+    renderer.setRenderTarget(before);
+    return jobs;
+  }
+
+  /** Draws the small passes once into their targets (not the output pass: nothing reaches the canvas), so the targets are on the card. */
+  warm(renderer: WebGLRenderer): void {
+    const clear = renderer.autoClear;
+    renderer.autoClear = false;
+    const tone = renderer.toneMapping;
+    renderer.toneMapping = NoToneMapping;
+    this.draw(renderer, this.bright, this.quarter);
+    this.draw(renderer, this.downToEighth, this.eighth);
+    this.draw(renderer, this.downToSixteenth, this.sixteenth);
+    this.draw(renderer, this.upToEighth, this.eighth);
+    this.draw(renderer, this.upToQuarter, this.quarter);
+    renderer.toneMapping = tone;
+    renderer.setRenderTarget(null);
+    renderer.autoClear = clear;
+  }
+
   /** The heat haze of the level, in pixels (0 for none): the output pass moves the picture this far where the glow is. */
   setHeat(pixels: number): void {
     this.output.uniforms.uHeat!.value = pixels;

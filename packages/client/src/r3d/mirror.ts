@@ -15,7 +15,7 @@
  * frames: a stylised mirror of the same place, faint as the kit's strength says. Nothing is made while a frame is drawn.
  */
 import {
-  Color, DataTexture, HalfFloatType, LinearFilter, Matrix4, type MeshStandardMaterial, type Object3D, OrthographicCamera, Plane, RGBAFormat,
+  Color, DataTexture, HalfFloatType, LinearFilter, Matrix4, type MeshStandardMaterial, type Object3D, OrthographicCamera, RGBAFormat,
   SRGBColorSpace, UnsignedByteType, Vector3, WebGLRenderTarget, type WebGLRenderer,
 } from 'three';
 import { LENGTH, WIDTH } from '@pd/core';
@@ -65,9 +65,7 @@ export class Mirror {
   private readonly up = new Vector3();
   private readonly back = new Vector3();
   private readonly basis = new Matrix4();
-  private readonly plane = new Plane(new Vector3(0, 1, 0), 0);
   private readonly clear = new Color();
-  private readonly clipped: Plane[] = [];
   /** Where the water is: cell columns and rows, for knowing whether any is on the screen. */
   private water = new Int16Array(0);
   private waterCount = 0;
@@ -75,7 +73,7 @@ export class Mirror {
   private level = 0;
 
   /** `pitchDeg`: how steeply the mirror's camera looks up, the kit's camera pitch. */
-  constructor(readonly uniforms: MirrorUniforms, pitchDeg: number) {
+  constructor(readonly uniforms: MirrorUniforms, pitchDeg: number, private readonly below: { value: number }) {
     this.target = new WebGLRenderTarget(1, 1, {
       type: HalfFloatType, format: RGBAFormat, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: true, stencilBuffer: false, generateMipmaps: false,
     });
@@ -115,9 +113,6 @@ export class Mirror {
     }
     this.waterCount = n;
     this.level = waterY;
-    this.plane.constant = -waterY;
-    this.clipped.length = 0;
-    if (this.chasm) this.clipped.push(this.plane);
   }
 
   resize(width: number, height: number): void {
@@ -163,9 +158,10 @@ export class Mirror {
     const alpha = renderer.getClearAlpha();
     renderer.getClearColor(this.clear);
     renderer.setClearColor(0x000000, 0);
-    renderer.clippingPlanes = this.clipped;
+    // Nothing under the water is drawn (a chasm's rock): the fog's shaders discard what lies below this height (fogofwar.ts uBelow).
+    this.below.value = this.level;
     draw(this.target, cam);
-    renderer.clippingPlanes = NONE;
+    this.below.value = -1000;
     renderer.setClearColor(this.clear, alpha);
     this.uniforms.tMirror.value = this.target.texture;
     this.uniforms.uMirrorOn.value = 1;
@@ -176,7 +172,6 @@ export class Mirror {
   }
 }
 
-const NONE: Plane[] = [];
 
 /**
  * Lets the water's material show the mirror (after `withFog`): its colour is mixed toward the picture (a darkened, wobbling copy tinted

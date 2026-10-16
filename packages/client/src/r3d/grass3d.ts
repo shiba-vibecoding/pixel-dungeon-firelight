@@ -144,6 +144,11 @@ export class Grass {
     this.mesh.visible = false;
   }
 
+  /** The picture's textures (the warm-up sends them to the card before they are first drawn). */
+  get pictures(): CanvasTexture[] {
+    return this.textures;
+  }
+
   /** Cells that are drawn now (those that stand, and those folding). */
   get drawn(): number {
     return this.count;
@@ -289,6 +294,10 @@ export class Tufts {
     this.mesh.frustumCulled = false;
     this.mesh.count = 0;
     this.mesh.visible = false;
+  }
+
+  get pictures(): CanvasTexture[] {
+    return this.textures;
   }
 
   begin(): void {

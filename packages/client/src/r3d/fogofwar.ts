@@ -43,6 +43,8 @@ export interface AirUniforms {
   uMistColor: { value: Color };
   /** The colour of the floor of the level in its light, in linear light: what a figure's feet take back from it (the bounce, SpriteLook.row). */
   uFloor: { value: Color };
+  /** What lies below this height (world y) is not drawn by the terrain and water shaders: the mirror's pass sets it to the water's level, and it is far below the world otherwise. */
+  uBelow: { value: number };
 }
 
 export function makeAir(fog: Texture): AirUniforms {
@@ -58,6 +60,7 @@ export function makeAir(fog: Texture): AirUniforms {
     uMist: { value: new Vector2(0, 0.4) },
     uMistColor: { value: new Color(0x5a1a10) },
     uFloor: { value: new Color(0.2, 0.18, 0.15) },
+    uBelow: { value: -1000 },
   };
 }
 
@@ -209,6 +212,7 @@ export function withFog(
     shader.uniforms.uMist = air.uMist;
     shader.uniforms.uMistColor = air.uMistColor;
     shader.uniforms.uFloor = air.uFloor;
+    shader.uniforms.uBelow = air.uBelow;
     const declarations = [
       '#include <common>', 'uniform sampler2D tFog;', 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;',
       mode === 'attribute' ? 'attribute vec2 aFog;' : 'attribute vec4 aUv;',
@@ -254,9 +258,11 @@ export function withFog(
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec3 vFeet;', 'varying vec4 vRect;', 'uniform vec3 uFloor;'] : []), 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;', 'uniform vec3 uMistColor;', 'uniform vec2 uMist;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;', 'uniform float uTime;', 'uniform float uMem;', 'uniform float uPool;'].join(NEWLINE),
+        ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec3 vFeet;', 'varying vec4 vRect;', 'uniform vec3 uFloor;'] : []), 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;', 'uniform vec3 uMistColor;', 'uniform vec2 uMist;', 'uniform float uBelow;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;', 'uniform float uTime;', 'uniform float uMem;', 'uniform float uPool;'].join(NEWLINE),
       )
       .replace('#include <emissivemap_fragment>', sprite ? spriteFragment(sprite) : '#include <emissivemap_fragment>')
+      // The terrain, the water and the decals do not draw what lies under the mirror's plane in the mirror's pass (a chasm's rock).
+      .replace('#include <alphatest_fragment>', mode === 'attribute' ? '#include <alphatest_fragment>' + NEWLINE + '  if (vWY < uBelow) discard;' : '#include <alphatest_fragment>')
       .replace(
         '#include <opaque_fragment>',
         [

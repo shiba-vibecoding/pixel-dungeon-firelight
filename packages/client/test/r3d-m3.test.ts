@@ -41,7 +41,7 @@ describe('the mirror under the water (mirror.ts)', () => {
     for (const [x, z, kind] of carve) k[x + z * WIDTH] = kind;
     return k;
   };
-  const make = (): Mirror => new Mirror(makeMirrorUniforms(blankMirror()), kit.camera.pitch);
+  const make = (): Mirror => new Mirror(makeMirrorUniforms(blankMirror()), kit.camera.pitch, { value: -1000 });
 
   it('is for the highest tier only', () => {
     expect(TIERS.map((t) => [t.name, t.mirror])).toEqual([['high', true], ['mid', false], ['low', false], ['min', false]]);

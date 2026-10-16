@@ -17,7 +17,7 @@
  */
 import {
   AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
-  Color, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, NoBlending, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
+  Color, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, NoBlending, NoToneMapping, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
   PlaneGeometry, RepeatWrapping, Scene, SRGBColorSpace, Texture, WebGLRenderer,
 } from 'three';
 import { LENGTH, type Level, type MobKind, T, WIDTH } from '@pd/core';
@@ -37,10 +37,11 @@ import { type Kit, type MistKit, atmosphere, hex, lights, materialOf, regionKit 
 import { type Buffers, doorLeafBuffers, type GeomKit, K_WALL, K_WATER, LevelGeom } from './levelgeom';
 import { DoorSwing, writeLeafMatrix } from './doorswing';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
-import type { Tier } from './governor';
+import { TIERS, type Tier } from './governor';
 import { heapDrawn } from '../heapsight';
 import { PerfOverlay } from './perfoverlay';
 import { canPost, Post } from './post';
+import { still } from './quadbatch';
 import { blankMirror, makeMirrorUniforms, Mirror, reflects, withMirror } from './mirror';
 import { BloodWater, withBlood } from './bloodwater';
 import { bakeBody } from './bodyart';
@@ -84,6 +85,8 @@ export interface Shown {
   y: number;
 }
 
+/** How long the first floor may keep the picture back for the warm-up (compiling every program, sending every texture), ms; then it is drawn whatever is not ready. */
+const WARM_LIMIT_MS = 4500;
 const MAX_SPRITES = 360;
 const MAX_DEAD = 160;
 /** How long a body lies in the 3D view before it fades away (MobSprite.FADE_TIME: the original's dead sprite fades out over three seconds). */
@@ -300,6 +303,9 @@ export class World3D {
   private readonly spriteFeet: InstancedBufferAttribute;
   private readonly gnd = { on: 0, gap: 0, wade: 0 };
   private readonly feet = new WeakMap<Puppet, Feet>();
+  /** The warm-up (warmUp): cold until a floor is set, warming while the programs compile (the frames draw nothing), then warm. */
+  private warm: 'cold' | 'warming' | 'warm' = 'cold';
+  private warmStart = 0;
   /** The floor tile's average colour (in linear light), which a figure's feet take back (the bounce). */
   private readonly floorAvg = new Color(0.2, 0.18, 0.15);
   private grassCells: number[] = [];
@@ -451,6 +457,7 @@ export class World3D {
     this.sprites.count = 0;
     this.sprites.renderOrder = 3.5;
     reflects(this.sprites);
+    still(this.sprites);
     this.scene.add(this.sprites);
 
     const deadMaterial = makeMaterial();
@@ -483,6 +490,7 @@ export class World3D {
     this.deadMesh.frustumCulled = false;
     this.deadMesh.count = 0;
     this.deadMesh.renderOrder = 3;
+    still(this.deadMesh);
     this.scene.add(this.deadMesh);
     // The blended batch: the same atlas, the same fog and haze; the picture's own alpha, and a light of its own as the other figures
     // have (its own colours at 0.14, through the emissive map: a flat emissive colour would wash every bat and bee pale blue). The
@@ -518,6 +526,7 @@ export class World3D {
     this.ghosts.renderOrder = 3.7;
     this.ghosts.count = 0;
     this.ghosts.visible = false;
+    still(this.ghosts);
     this.scene.add(this.ghosts);
 
     for (let i = 0; i < MAX_SPRITES; i++) this.shown.push({ puppet: undefined as unknown as Puppet, x: 0, y: 0 });
@@ -547,6 +556,9 @@ export class World3D {
     this.rig.setShadowLights(tier.shadowLights);
     this.effects.setParticles(tier.particles);
     this.setBloom(tier.bloom);
+    // A tier that draws another way (into the bloom's target or straight to the canvas, with a mirror or without, with shadows or without)
+    // needs other programs: they are compiled in the background now, not at the first frame that wants them.
+    if (this.warm !== 'cold' && this.geom) void this.compilePrograms();
   }
 
   /** The bloom on or off: made when first wanted, given back when the tier goes without. */
@@ -569,7 +581,7 @@ export class World3D {
   /** The mirror under the water on or off: made when first wanted, given back when the tier goes without. */
   private setMirror(on: boolean): void {
     if (on && !this.mirror) {
-      this.mirror = new Mirror(this.mirrorUniforms, this.kit.camera.pitch);
+      this.mirror = new Mirror(this.mirrorUniforms, this.kit.camera.pitch, this.air.uBelow);
       this.mirror.resize(this.width, this.height);
       this.configureMirror();
     } else if (!on && this.mirror) {
@@ -698,6 +710,7 @@ export class World3D {
     this.heroCell = -1;
     this.waterScroll = a.region.water.scroll;
     worldSheet('ambient1');
+    this.warmUp();
   }
 
   private accentBase = 0;
@@ -776,6 +789,7 @@ export class World3D {
     }
     const cut = this.grassCut!;
     this.grass = new Grass(this.air, cut.color, cut.glow, this.kit.sprites.selfLight);
+    still(this.grass.mesh);
     this.scene.add(this.grass.mesh);
     if (this.tufts) {
       this.scene.remove(this.tufts.mesh);
@@ -783,6 +797,7 @@ export class World3D {
     }
     const short = this.shortCut!;
     this.tufts = new Tufts(this.air, short.color, short.glow, this.kit.sprites.selfLight);
+    still(this.tufts.mesh);
     this.scene.add(this.tufts.mesh);
     this.applyGlowGain();
   }
@@ -892,11 +907,14 @@ export class World3D {
       geometry.setAttribute('aUv', new InstancedBufferAttribute(whole, 4));
       const mesh = new InstancedMesh(geometry, this.leafMaterial, n);
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+      // (With its colour from the start: blood on a door tints it (tintDoors), and a mesh that takes a colour later is another program.)
+      mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3).setUsage(DynamicDrawUsage);
       mesh.frustumCulled = false;
       mesh.renderOrder = 1;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       reflects(mesh);
+      still(mesh);
       this.scene.add(mesh);
       if (locked) this.lockMesh = mesh;
       else this.leafMesh = mesh;
@@ -955,6 +973,7 @@ export class World3D {
     this.decalMesh.renderOrder = 1;
     for (const mesh of [this.floorMesh, this.boxMesh, this.waterMesh, this.decalMesh]) {
       mesh.frustumCulled = false;
+      still(mesh);
       this.scene.add(mesh);
     }
     geom.grew = false;
@@ -999,6 +1018,205 @@ export class World3D {
     }
     this.fog.set(visible, explored, snap);
     this.fogMoving = true;
+  }
+
+  /** The first floor's programs are still compiling: the frames draw nothing yet (the caller does not judge the speed meanwhile). */
+  get warming(): boolean {
+    return this.warm === 'warming';
+  }
+
+  // ---- the warm-up ---------------------------------------------------------------------------------------------------------
+
+  /**
+   * Everything a floor can ask of the card is asked for now, behind the veil of the level's arrival, and not in the middle of a fight
+   * (the first body, the first new monster, the first bolt, the first water seen each cost the better part of a second in compiling a
+   * program on the card, and a megabyte or more of texture):
+   *   - the sheets of every monster, the items and the plants go on the atlas, which then goes up whole, once;
+   *   - every texture of the scene is sent (`initTexture`);
+   *   - every program of the scene, whether its batch has anything in it or not, is compiled in parallel (`compileAsync`, with
+   *     KHR_parallel_shader_compile where the device has it) in the state it will be drawn in (into the bloom's target or the canvas,
+   *     with the bloom's passes;
+   *   - when they are ready, one frame is drawn into the targets with every batch made non-empty, so the shadow's programs, the
+   *     targets and the buffers are on the card too; it goes nowhere.
+   * Only the first floor of a session waits (the picture is held back for at most WARM_LIMIT_MS); the next floors of it find the programs
+   * made, and only compile what their region's materials add, in the background.
+   */
+  private warmUp(): void {
+    if (this.warm !== 'cold') {
+      // A later floor: its region's materials are new (their programs are the same, and cached, unless the region adds some); the lower tiers'
+      // programs, which the old materials held, are taken again for the new ones.
+      const again = (): void => {
+        if (this.warm !== 'warm' || !this.geom || this.lost) return;
+        try {
+          this.compileLowerTiers();
+        } catch {
+          // (As above.)
+        }
+      };
+      this.compilePrograms().then(again, again);
+      return;
+    }
+    this.warm = 'warming';
+    this.warmStart = performance.now();
+    try {
+      this.placeSheets();
+      this.sendTextures();
+    } catch {
+      // (A texture the card refuses is found out by the first frame, as before.)
+    }
+    const done = (): void => {
+      if (this.warm !== 'warming' || !this.geom || this.lost) return;
+      try {
+        this.hiddenFrame();
+      } catch {
+        // (Nothing to put right: the first real frame does what the hidden one could not.)
+      }
+      this.warm = 'warm';
+      // The programs of the tiers below this one (a device that cannot hold the frame will be sent there): compiled now, in the background.
+      try {
+        this.compileLowerTiers();
+      } catch {
+        // (They are compiled when the tier changes, as before.)
+      }
+    };
+    this.compilePrograms().then(done, done);
+  }
+
+  /** The sheets of every monster, the items, the plants and the heroes go on the atlas, so that none of them goes up in the middle of play. */
+  private placeSheets(): void {
+    const a = this.atlas;
+    // (Each sheet is also read once for its soft pixels and its feet, which is the first sight of a monster's cost in script.)
+    for (const art of [...Object.values(this.assets.mobs), ...Object.values(this.assets.heroes)]) {
+      const { image, w, h } = art.sheet;
+      a.place(image);
+      hasSoftBody(image);
+      gapRows(image, 0, 0, w, h);
+    }
+    a.place(this.assets.items, this.shared.itemsEmissive);
+    a.place(this.assets.plants);
+  }
+
+  /** Sends every texture of the scene to the card now. */
+  private sendTextures(): void {
+    const r = this.renderer;
+    this.effects.sheets.sync();
+    this.atlas.flush();
+    const list: Texture[] = [
+      this.atlas.color, this.atlas.glow, this.fog.texture, this.blood.texture, this.effects.texture, this.waterTex!, ...this.goreLayer.textures,
+    ];
+    const t = this.terrain;
+    if (t) list.push(t.color, t.emissive, t.rough);
+    if (t?.metal) list.push(t.metal);
+    if (this.grass) list.push(...this.grass.pictures);
+    if (this.tufts) list.push(...this.tufts.pictures);
+    for (const texture of list) if (texture) r.initTexture(texture);
+    this.atlas.sent();
+  }
+
+  /**
+   * Starts compiling every program of the scene in the state it will be drawn in, in parallel; resolves when they are all ready. The scene
+   * is gone through whole (`compile` takes the materials of invisible meshes too), so the batches that are empty now are compiled as well.
+   */
+  private compilePrograms(): Promise<void> {
+    const r = this.renderer;
+    const tone = r.toneMapping;
+    const target = r.getRenderTarget();
+    const jobs: Array<Promise<unknown>> = [];
+    try {
+      const post = this.post;
+      if (post) {
+        // The scene is drawn into the bloom's target with the tone map off (post.ts), and the mirror's picture the same way.
+        r.setRenderTarget(post.scene);
+        r.toneMapping = NoToneMapping;
+        jobs.push(r.compileAsync(this.scene, this.camera));
+        r.toneMapping = tone;
+        r.setRenderTarget(target);
+        jobs.push(...post.compile(r));
+      } else jobs.push(r.compileAsync(this.scene, this.camera));
+    } finally {
+      r.toneMapping = tone;
+      r.setRenderTarget(target);
+    }
+    return Promise.all(jobs).then(() => undefined);
+  }
+
+  /**
+   * The programs of the tiers below the present one, in the state each is drawn in: shadows from fewer lights, or none; the bloom's target
+   * or the canvas itself. Each is compiled with the rig and the renderer set as that tier will have them, which are then put back, and
+   * the materials are told to look their program up again at their next draw (`needsUpdate`: a cache hit, once). A demotion, which only
+   * happens on a device that is already late, then does not stop for the better part of a second to compile.
+   */
+  private compileLowerTiers(): void {
+    const r = this.renderer;
+    const rig = this.rig;
+    const here = this.tier;
+    const stale = rig.shadowsStale;
+    const enabled = r.shadowMap.enabled;
+    const target = r.getRenderTarget();
+    const tone = r.toneMapping;
+    const done = new Set<string>();
+    done.add(`${here.bloom && this.post !== null}-${here.shadowLights}`);
+    try {
+      for (const t of TIERS.slice(TIERS.indexOf(here) + 1)) {
+        const viaTarget = t.bloom && this.post !== null;
+        const key = `${viaTarget}-${t.shadowLights}`;
+        if (done.has(key)) continue;
+        done.add(key);
+        rig.setShadowLights(t.shadowLights);
+        r.shadowMap.enabled = t.shadowLights > 0;
+        if (viaTarget) {
+          r.setRenderTarget(this.post!.scene);
+          r.toneMapping = NoToneMapping;
+        } else {
+          r.setRenderTarget(null);
+          r.toneMapping = tone;
+        }
+        void r.compileAsync(this.scene, this.camera);
+      }
+    } finally {
+      rig.setShadowLights(here.shadowLights);
+      rig.shadowsStale = stale;
+      r.shadowMap.enabled = enabled;
+      r.setRenderTarget(target);
+      r.toneMapping = tone;
+    }
+    this.scene.traverse((object) => {
+      const material = (object as Mesh).material as { needsUpdate: boolean } | Array<{ needsUpdate: boolean }> | undefined;
+      if (Array.isArray(material)) for (const m of material) m.needsUpdate = true;
+      else if (material) material.needsUpdate = true;
+    });
+  }
+
+  /** One frame into the targets, with every batch non-empty (and the mirror's pass and the bloom's passes), which reaches no screen. */
+  private hiddenFrame(): void {
+    const forced: Array<[Mesh, boolean, number]> = [];
+    const force = (mesh: Mesh | null | undefined): void => {
+      if (!mesh) return;
+      const instanced = mesh as InstancedMesh;
+      forced.push([mesh, mesh.visible, instanced.isInstancedMesh ? instanced.count : 0]);
+      mesh.visible = true;
+      if (instanced.isInstancedMesh) instanced.count = Math.max(1, instanced.count);
+    };
+    for (const mesh of [
+      this.sprites, this.deadMesh, this.ghosts, this.effects.soft.mesh, this.effects.glow.mesh, this.grass?.mesh, this.tufts?.mesh, this.leafMesh, this.lockMesh,
+      ...this.goreLayer.meshes,
+    ]) force(mesh);
+    try {
+      if (this.renderer.shadowMap.enabled) this.renderer.shadowMap.needsUpdate = true;
+      const post = this.post;
+      if (post) {
+        if (this.mirror && this.ortho) this.mirror.render(this.renderer, 0, 0, 2, 2, (target, camera) => post.renderScene(this.renderer, this.scene, camera, target));
+        post.renderScene(this.renderer, this.scene, this.camera);
+        post.warm(this.renderer);
+        this.mirrorUniforms.uMirrorOn.value = 0;
+      } else this.renderer.render(this.scene, this.camera);
+    } finally {
+      for (const [mesh, visible, count] of forced) {
+        mesh.visible = visible;
+        if ((mesh as InstancedMesh).isInstancedMesh) (mesh as InstancedMesh).count = count;
+      }
+      this.rig.shadowsStale = true;
+    }
   }
 
   // ---- sprites -------------------------------------------------------------------------------------------------------------
@@ -1289,6 +1507,11 @@ export class World3D {
   /** Draws the scene. Returns false if the context is gone. */
   frame(given: Frame3D, dt: number): boolean {
     if (this.lost || !this.geom) return false;
+    if (this.warm === 'warming') {
+      // The first floor of the session is behind its veil while every program compiles (warmUp): nothing is drawn, and nothing is waited for.
+      if (performance.now() - this.warmStart < WARM_LIMIT_MS) return true;
+      this.warm = 'warm';
+    }
     const f = this.options.reveal ? { ...given, visible: this.everything, explored: this.everything } : given;
     const t0 = performance.now();
     this.current = f;
@@ -1422,7 +1645,7 @@ export class World3D {
       this.ghostAlpha.addUpdateRange(0, g);
       this.ghostAlpha.needsUpdate = true;
     }
-    this.atlas.flush();
+    this.atlas.flush(this.renderer);
 
     // Water drifts as the kit says: its texture slides.
     const w = this.waterTex!;

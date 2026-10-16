@@ -13,6 +13,8 @@ import { HEIGHT, WIDTH } from '@pd/core';
 import { CHUNK, chunkPixels, faceShows, type GoreData, groundCell, POOL, shade, type Splat, WALL } from '../gore';
 import { seeded } from './bodyart';
 import { type AirUniforms, withFog } from './fogofwar';
+import { subImage } from './texsub';
+import { still } from './quadbatch';
 
 const CELL = 16;
 const FACE = 24;
@@ -124,7 +126,7 @@ class Sheet {
     this.source.unpackAlignment = 1;
     // (The texture is stored flipped, as a canvas texture is: the box that lies y0..y1 down the canvas lies h - y1 up from the bottom.)
     this.at.set(x0, h - y1);
-    renderer.copyTextureToTexture(this.source, this.texture, null, this.at);
+    if (!subImage(renderer, this.texture, x0, h - y1, bw, bh, this.staging)) renderer.copyTextureToTexture(this.source, this.texture, null, this.at);
     this.uploaded += (x1 - x0) * (y1 - y0) * 4;
   }
 }
@@ -166,6 +168,8 @@ export class GoreLayer {
     this.wallMesh = wl.mesh(this.wallMaterial);
     this.floorMesh.renderOrder = 1;
     this.wallMesh.renderOrder = 1;
+    still(this.floorMesh);
+    still(this.wallMesh);
     this.scene.add(this.floorMesh, this.wallMesh);
     this.held = -1;
   }
@@ -177,6 +181,16 @@ export class GoreLayer {
     this.any = false;
     for (const s of data.splats) this.paint(s);
     this.held = version;
+  }
+
+  /** The two meshes of the level (for the warm-up, which draws them once even when there is no blood). */
+  get meshes(): Mesh[] {
+    return [this.floorMesh, this.wallMesh].filter((m): m is Mesh => m !== null);
+  }
+
+  /** The two canvases' textures. */
+  get textures(): CanvasTexture[] {
+    return [this.floor.texture, this.wall.texture];
   }
 
   /** Bytes sent to the card so far for the floor and the walls (tests, the perf overlay). */

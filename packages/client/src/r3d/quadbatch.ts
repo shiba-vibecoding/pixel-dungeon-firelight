@@ -43,6 +43,16 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+/**
+ * A mesh that never moves as an object (its vertices or instances carry every place): its matrix is the identity for good, so the scene's
+ * walk each frame leaves it out (`matrixWorldAutoUpdate`), and never composes one for it.
+ */
+export function still<T extends { matrixAutoUpdate: boolean; matrixWorldAutoUpdate: boolean }>(object: T): T {
+  object.matrixAutoUpdate = false;
+  object.matrixWorldAutoUpdate = false;
+  return object;
+}
+
 export interface QuadBatchOptions {
   capacity: number;
   texture: Texture | null;
@@ -84,6 +94,7 @@ export class QuadBatch {
     this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     this.m = this.mesh.instanceMatrix.array as Float32Array;
     this.mesh.frustumCulled = false;
+    still(this.mesh);
     this.mesh.renderOrder = o.renderOrder;
     this.mesh.count = 0;
   }
