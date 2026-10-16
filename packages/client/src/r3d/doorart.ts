@@ -1,7 +1,8 @@
 /*
  * The extra tiles of the doors' 3D dressing, drawn when a region's terrain is built (no new files): the slab of a door seen from
  * above (both ways round, plain and with a lock's straps), the frame's wood, steel, and the leaf, which is the region's own door tile
- * so every region keeps its look (the sewers' arched planks, the prison's dark door, the city's gold, the halls' runes).
+ * (the leaf itself is the region's own door tile, so every region keeps its look: the sewers' arched planks, the prison's dark door,
+ * the city's gold, the halls' runes).
  * They lie in the terrain atlas under the walls' rows (tilemap.ts DOOR_FIRST), 16 x 16 pixel art each. The wood's colours are
  * read from the region's door tile.
  */
@@ -14,8 +15,7 @@ export const DOOR_LOCK_H = DOOR_FIRST + 2;
 export const DOOR_LOCK_V = DOOR_FIRST + 3;
 export const DOOR_FRAME = DOOR_FIRST + 4;
 export const DOOR_IRON = DOOR_FIRST + 5;
-export const DOOR_LEAF = DOOR_FIRST + 6;
-export const DOOR_COUNT = 7;
+export const DOOR_COUNT = 6;
 
 type Rgb = readonly [number, number, number];
 
@@ -142,6 +142,4 @@ export function paintDoorTiles(color: CanvasRenderingContext2D, glow: CanvasRend
       }
     }
   }, [60, 70, 90]);
-  // The leaf: the region's own door tile.
-  color.drawImage(tiles, 5 * 16, 0, 16, 16, (DOOR_LEAF % cols) * 16, Math.trunc(DOOR_LEAF / cols) * 16, 16, 16);
 }

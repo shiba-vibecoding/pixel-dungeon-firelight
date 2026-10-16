@@ -126,7 +126,20 @@ export interface BoardEntry {
   nc?: string;
   tt?: string;
   fr?: string;
+  /** How the player's hero looked (the server's snapshot of what the wallet owned and wore: look of the class, hat, pet, fire, frame, title, name colour). Absent from older entries. */
+  w?: BoardWorn;
   at: number;
+}
+
+/** What a board entry says the hero wore, by catalogue item id (the hero card, herocard.ts). */
+export interface BoardWorn {
+  l?: string;
+  h?: string;
+  p?: string;
+  f?: string;
+  fr?: string;
+  tt?: string;
+  nc?: string;
 }
 
 export interface BoardView {

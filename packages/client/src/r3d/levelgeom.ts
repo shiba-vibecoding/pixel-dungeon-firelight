@@ -9,8 +9,9 @@
  *             door's leaf), statues, shelves and wells as lower blocks, and the edges of chasms that fall away three cells. Only
  *             what can be seen or cast a shadow, and only beside open ground. Rewritten, into the same arrays, when a box
  *             appears or goes (a door opens).
- *   doors   - dressed in code (writeDoor): a lit frame (jambs, lintel) round every door in the wall line, the slab seen from above,
- *             a lock's straps and plate on a locked one, and an open door's leaf swung aside, turned a quarter. Part of `boxes`.
+ *   doors   - dressed in code (writeDoor), part of `boxes`: a thin leaf (about 0.15 thick) in front of the wall line with the region's
+ *             door tile on its face, thin jambs and a lintel; steel straps and a lock on a locked one; an open door's leaf standing
+ *             upright, turned a quarter. The cell's top stays the wall's own cap.
  *   water   - a quad under every water cell, for the drifting water texture.
  *   decals  - the kit's contact shadows on the floor along the foot of every wall.
  *
@@ -18,7 +19,7 @@
  * and from cell to cell.
  */
 import { F, HEIGHT, LENGTH, T, terrainFlags, WIDTH } from '@pd/core';
-import { DOOR_FRAME, DOOR_IRON, DOOR_LEAF, DOOR_LOCK_H, DOOR_LOCK_V, DOOR_TOP_H, DOOR_TOP_V } from './doorart';
+import { DOOR_FRAME, DOOR_IRON, DOOR_LOCK_V, DOOR_TOP_V } from './doorart';
 import { CAP_FIRST, EDGE_LIP, EDGE_ROCK, FACE_DECO, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from './tilemap';
 
 export const K_FLOOR = 0;
@@ -514,14 +515,9 @@ export class LevelGeom {
     // The top: a cap by the sides that have floor (darker if none does), or the block's own.
     let tile = shape.top;
     let shade = 1;
-    let tint: ArrayLike<number> = WHITE;
+    const tint: ArrayLike<number> = WHITE;
     const terrain = this.terrain[cell]!;
-    if (terrain === T.DOOR || terrain === T.LOCKED_DOOR) {
-      // The slab of the door, seen from above: planks along the wall line, lit (steel straps and a lock plate if it is locked).
-      const across = this.doorAcross(x, z);
-      tile = terrain === T.LOCKED_DOOR ? (across ? DOOR_LOCK_H : DOOR_LOCK_V) : across ? DOOR_TOP_H : DOOR_TOP_V;
-      tint = terrain === T.LOCKED_DOOR ? STEEL_LIT : WOOD_LIT;
-    } else if (tile === -1) {
+    if (tile === -1) {
       const mask = this.capMask(x, z);
       tile = CAP_FIRST + mask;
       if (mask === 0) shade = BURIED_SHADE;
@@ -603,42 +599,58 @@ export class LevelGeom {
   }
 
   /**
-   * A door in the wall line, as a piece you can read from above. The closed door's slab is its top (writeBox); here its frame: two
-   * jambs and a lintel standing out of the wall, in lit wood (their glow is warm, doorart.ts). A locked door gets steel straps and
-   * a lock plate over its leaf. An open door has the leaf swung aside, turned a quarter, standing beside the opening. In a wall line
-   * that runs north-south the camera sees only the tops: the lintel is a beam across, and the leaf stands along the line of the wall.
+   * A door in the wall line. Closed: a thin leaf, about 0.15 cell thick, standing in front of the wall line with the region's door
+   * tile (planks, handle, or the lock) on the face the camera sees, between two thin jambs and under a thin lintel, all in lit wood;
+   * the cell's top stays the wall's cap. Locked: the same leaf with steel straps and a lock plate. Open: the frame, and the leaf
+   * stood upright, turned a quarter, at the hinge side: into the room beside the opening in a wall line that faces the camera, and
+   * against the wall's face along the passage in a wall line that runs north-south (where the camera sees only tops: there a closed
+   * door shows its leaf's edge as a thin strip on the cap). Nothing stands in front of the doorway of an open door, so nobody in it is covered.
    */
   private writeDoor(cell: number): void {
     const x = cell % WIDTH;
     const z = Math.trunc(cell / WIDTH);
     const terrain = this.terrain[cell]!;
     const open = terrain === T.OPEN_DOOR;
-    const p = 0.1;
-    const jw = 0.14;
+    const locked = terrain === T.LOCKED_DOOR;
+    const passable = (cx: number, cz: number): boolean => cx >= 0 && cz >= 0 && cx < WIDTH && cz < HEIGHT && this.kinds[cx + cz * WIDTH] !== K_WALL;
+    const leafTile = locked ? T.LOCKED_DOOR : T.DOOR;
+    const HEIGHT_LEAF = 1.22;
     if (this.doorAcross(x, z)) {
       const front = z + 1;
-      this.block(x - 0.03, 0, z + 0.55, x + jw, 1.3, front + p, DOOR_FRAME, WOOD_LIT);
-      this.block(x + 1 - jw, 0, z + 0.55, x + 1.03, 1.3, front + p, DOOR_FRAME, WOOD_LIT);
-      this.block(x - 0.03, 1.2, z + 0.55, x + 1.03, 1.42, front + p, DOOR_FRAME, WOOD_LIT);
-      if (terrain === T.LOCKED_DOOR) {
-        this.block(x + jw, 0.26, front, x + 1 - jw, 0.37, front + 0.05, DOOR_IRON, STEEL_LIT);
-        this.block(x + jw, 0.78, front, x + 1 - jw, 0.89, front + 0.05, DOOR_IRON, STEEL_LIT);
-        this.block(x + 0.36, 0.42, front, x + 0.64, 0.72, front + 0.09, DOOR_IRON, STEEL_LIT);
-      } else if (open) {
-        // The leaf, hinged on one jamb (alternating), swung a quarter turn into the room on the camera's side.
+      const jw = 0.12;
+      // The frame: thin jambs and a lintel, standing 0.22 out of the wall's face.
+      this.block(x - 0.02, 0, front - 0.1, x + jw, 1.32, front + 0.22, DOOR_FRAME, WOOD_LIT);
+      this.block(x + 1 - jw, 0, front - 0.1, x + 1.02, 1.32, front + 0.22, DOOR_FRAME, WOOD_LIT);
+      // A closed door has nobody in it, so its lintel stands at the front. An open door may have someone in the doorway, whom a beam in
+      // front would hide: a figure is a card leaned back, its head 1.46 cells up and half a cell north of its feet. So the open
+      // door's lintel is a strip at the height of the wall's cap, along the doorway's back edge, above any head (a longer one would cover heads on the screen).
+      if (open) this.block(x - 0.02, 1.42, z, x + 1.02, 1.52, z + 0.12, DOOR_FRAME, WOOD_LIT);
+      else this.block(x - 0.02, 1.24, front - 0.1, x + 1.02, 1.42, front + 0.22, DOOR_FRAME, WOOD_LIT);
+      if (!open) {
+        // The leaf, 0.15 thick, inside the frame.
+        this.block(x + jw, 0, front, x + 1 - jw, HEIGHT_LEAF, front + 0.15, leafTile, locked ? STEEL_LIT : WOOD_LIT);
+        if (locked) {
+          this.block(x + jw, 0.24, front + 0.15, x + 1 - jw, 0.35, front + 0.19, DOOR_IRON, STEEL_LIT, 1);
+          this.block(x + jw, 0.8, front + 0.15, x + 1 - jw, 0.91, front + 0.19, DOOR_IRON, STEEL_LIT, 1);
+          this.block(x + 0.38, 0.44, front + 0.15, x + 0.62, 0.7, front + 0.22, DOOR_IRON, STEEL_LIT, 1);
+        }
+      } else {
+        // Open: the leaf stands upright at the hinge side (alternating), a quarter turn into the room, hugging the jamb, clear of the doorway.
         const left = ((x + z) & 1) === 0;
-        const lx = left ? x + jw : x + 1 - jw - 0.1;
-        this.block(lx, 0, front + 0.03, lx + 0.1, 1.12, front + 0.86, DOOR_LEAF, WOOD_LIT);
+        const lx = left ? x + 0.02 : x + 1 - 0.14;
+        this.block(lx, 0, front + 0.22, lx + 0.12, HEIGHT_LEAF, front + 0.95, T.DOOR, WOOD_LIT);
       }
     } else {
-      // A wall line running north-south: a lintel beam across the opening, and the leaf standing out along the wall's line.
-      this.block(x + 0.38, 1.2, z, x + 0.62, 1.42, z + 1, DOOR_FRAME, WOOD_LIT);
-      if (terrain === T.LOCKED_DOOR) {
-        this.block(x + 0.3, 1.0, z + 0.3, x + 0.7, 1.12, z + 0.7, DOOR_IRON, STEEL_LIT);
-      } else if (open) {
-        const east = ((x + z) & 1) === 0;
+      // A wall line running north-south. A thin lintel beam crosses the opening, flush with the cap; the camera sees only tops.
+      if (open) {
+        this.block(x + 0.38, 1.42, z, x + 0.62, 1.52, z + 0.12, DOOR_FRAME, WOOD_LIT);
+        // The leaf against the wall's face along the passage, on the north side (the south side's face is turned away), toward whichever side is open.
+        const east = passable(x + 1, z) && (!passable(x - 1, z) || ((x + z) & 1) === 0);
         const lx = east ? x + 1.02 : x - 0.86;
-        this.block(lx, 0, z + 0.78, lx + 0.84, 1.12, z + 0.9, DOOR_LEAF, WOOD_LIT);
+        this.block(lx, 0, z + 0.02, lx + 0.84, HEIGHT_LEAF, z + 0.15, T.DOOR, WOOD_LIT);
+      } else {
+        // Closed: the leaf's edge, a thin strip along the cap (planks, or a lock's straps), with a lit beam beside it at each end.
+        this.block(x + 0.41, 1.5, z, x + 0.59, 1.55, z + 1, locked ? DOOR_LOCK_V : DOOR_TOP_V, locked ? STEEL_LIT : WOOD_LIT, 0);
       }
     }
   }

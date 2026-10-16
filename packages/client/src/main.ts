@@ -35,7 +35,7 @@ import { bakeLevel, type Camera, patchLevel, render, renderOverlay3D } from './r
 import type { Frame3D, World3D } from './r3d/world3d';
 import { Governor, RefreshMeter } from './r3d/governor';
 import { FEET_PX, setPitchDeg, YS } from './r3d/project';
-import { beta3d, covers3D } from './r3d/setting';
+import { covers3D, forgetOld3dChoice } from './r3d/setting';
 import { brightness } from './brightness';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
@@ -500,8 +500,19 @@ brightness.onChange(() => {
 });
 paintBrightness();
 
-/** The 3D view is put away: its memory is given back, and with a message the switch goes off (it was too slow, or would not start). */
-function stop3d(message?: string, quietUnlessChosen = false): void {
+/**
+ * Firelight is drawn in 3D only. A hard failure (the WebGL context lost, the renderer or its chunk or kit that would not start) puts
+ * the view away and it is tried again; only past NO_3D_AFTER failures in one launch, on a device whose WebGL does not work at all,
+ * does the classic view stand in, for that launch only.
+ */
+const NO_3D_AFTER = 3;
+let failures3d = 0;
+/** This floor is to be drawn in 3D (while it is not ready yet, the map is left dark rather than drawn in 2D). */
+let want3d = false;
+forgetOld3dChoice();
+
+/** The 3D view is put away and its memory given back; `failed`: it broke, and counts toward giving up on it for this launch. */
+function stop3d(failed = false): void {
   r3?.dispose();
   r3 = null;
   frame3d = null;
@@ -509,32 +520,28 @@ function stop3d(message?: string, quietUnlessChosen = false): void {
   canvas3d?.remove();
   canvas3d = null;
   setMode3d(false);
-  if (message) {
-    // 3D is on by default: a device that cannot start it at all is not told about a switch it never touched.
-    const tell = !quietUnlessChosen || beta3d.chosen;
-    beta3d.fallBack();
-    if (tell) toast(message, { tone: 'warn' });
-  }
+  if (failed && ++failures3d === NO_3D_AFTER) toast(t.render3dFailed, { tone: 'warn' });
 }
 
 /** Whether this floor is drawn in 3D now (the switch, the sewers, the chunk and the context all there); makes the renderer when it can. */
 function pick3d(level: Level, world: World): boolean {
-  if (!beta3d.on) {
+  want3d = false;
+  if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena)) || failures3d >= NO_3D_AFTER) {
     if (r3) stop3d();
     return false;
   }
-  if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena))) return false;
+  want3d = true;
   const mod = lazy3d.ready();
   if (!mod) {
-    load(lazy3d, () => drawPace.force(), () => stop3d(t.render3dFailed, true));
+    load(lazy3d, () => drawPace.force(), () => stop3d(true));
     return false;
   }
-  // The world kit and the floor's region maps come first (a second or so, the first time): till then the floor is 2D.
+  // The world kit and the floor's region maps come first (a second or so, the first time): till then the map is left dark.
   const base = `${import.meta.env.BASE_URL}assets/`;
   const region = levelRegion(level);
   const state = mod.prepare(base, assets, region);
   if (state === 'failed') {
-    stop3d(t.render3dFailed, true);
+    stop3d(true);
     return false;
   }
   if (state === 'loading') return false;
@@ -547,7 +554,7 @@ function pick3d(level: Level, world: World): boolean {
     canvas3d.id = 'game3d';
     canvas.before(canvas3d);
     const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(t.render3dFailed) });
+    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(true) });
     governor.hold(2500);
     frame3d = {
       now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0, myId: '',
@@ -557,7 +564,7 @@ function pick3d(level: Level, world: World): boolean {
     canvas3d?.remove();
     canvas3d = null;
     r3 = null;
-    stop3d(t.render3dFailed, true);
+    stop3d(true);
     return false;
   }
   return true;
@@ -2596,30 +2603,8 @@ let freeDepth = 0;
 /** Where my hero was last frame, for footstep and stairs sounds. */
 let lastPlace = { generation: -1, depth: 0, pos: -1 };
 
-/** The hero's light (#vignette): moved by the compositor to wherever the hero is on screen. */
-const vignette = document.getElementById('vignette');
-let vignetteState = '';
-
-function placeVignette(on: boolean, x = 0, y = 0): void {
-  if (!vignette) return;
-  // Canvas pixels to CSS pixels.
-  const css = (canvas.clientWidth || canvas.width) / canvas.width;
-  const inner = Math.round(TILE * camera.zoom * 3 * css);
-  const outer = Math.round(Math.max(canvas.clientWidth, canvas.clientHeight) * 0.7);
-  const state = on ? `${Math.round(x * css)},${Math.round(y * css)},${inner},${outer}` : 'off';
-  if (state === vignetteState) return;
-  vignetteState = state;
-  vignette.classList.toggle('on', on);
-  if (!on) return;
-  // Its middle sits on the screen's corner (game.css); moved from there onto the hero.
-  vignette.style.transform = `translate(${Math.round(x * css)}px, ${Math.round(y * css)}px)`;
-  vignette.style.setProperty('--inner', `${inner}px`);
-  vignette.style.setProperty('--outer', `${outer}px`);
-}
-
 function drawBackdrop(now: number): void {
   setMode3d(false);
-  placeVignette(false);
   const { level, all } = backdrop;
   const middle = levelMiddle(level);
   camera.x = Math.round(middle.x - canvas.width / camera.zoom / 2 + Math.sin(now / 9000) * 60);
@@ -3092,6 +3077,7 @@ function tick(now: number): void {
       level, baked: baked!, visible, explored, heaps, plants, gas, webs, seeAll: me.mindVision > 0,
         ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
       focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
+      vignette: !quality.light,
       lights: world.arena ? [...lightsFor(level, visible, view, vnow), ...arenaView.lights(level, visible, vnow)] : lightsFor(level, visible, view, vnow),
       heapLook: (pos: number, at: number) => motion.heapLook(pos, at),
       under: (c: CanvasRenderingContext2D) => {
@@ -3136,7 +3122,7 @@ function tick(now: number): void {
       r3.hz = refreshMeter.hz;
       const gap = lastDraw3d ? now - lastDraw3d : 0;
       lastDraw3d = now;
-      if (!r3.frame(f, gap)) stop3d(t.render3dFailed);
+      if (!r3.frame(f, gap)) stop3d(true);
       else {
         renderOverlay3D(ctx, scene, view, session.myId, assets, camera, vnow, r3.shown, r3.shownCount);
         // Only frames drawn while something moves say how fast the renderer is (a calm one is on the slow cadence on purpose).
@@ -3146,8 +3132,11 @@ function tick(now: number): void {
           r3.applyTier(governor.tier);
           governor.hold(1500);
           resize();
-        } else if (verdict === 'fallback') stop3d(t.render3dSlow);
+        }
       }
+    } else if (want3d) {
+      // The 3D view is still coming (its chunk, the region's maps): the map stays dark till then, never drawn in 2D.
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
     } else {
       // The arena's wall and stands stand in the light of the crowd's own torches, whatever the party sees.
       render(ctx, world.arena ? { ...scene, visible: arenaView.shown(level, visible) } : scene, view, session.myId, assets, camera, vnow);
@@ -3160,7 +3149,6 @@ function tick(now: number): void {
       const shot = takeShot();
       setTimeout(() => done(shot), 0);
     }
-    placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom * ground());
     mapControls.update(
       cam.canZoomIn, cam.canZoomOut, cam.away, cam.overview,
       document.querySelector<HTMLElement>('#ui .pd-log')?.offsetHeight ?? 120,

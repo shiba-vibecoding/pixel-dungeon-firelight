@@ -30,7 +30,7 @@ export const CAMP_ORDER: readonly string[] = ['warrior', 'mage', 'rogue', 'huntr
 export const campClasses = (): string[] => [...CAMP_ORDER];
 
 /** Each class's sprite sheet (the huntress's is the ranger's). */
-const SHEET: Readonly<Record<string, string>> = { warrior: 'warrior', mage: 'mage', rogue: 'rogue', huntress: 'ranger' };
+export const SHEET: Readonly<Record<string, string>> = { warrior: 'warrior', mage: 'mage', rogue: 'rogue', huntress: 'ranger' };
 
 /** The season the camp opens in: December to February winter, September to November autumn, else summer. */
 export function seasonOf(date: Date): Season {
@@ -60,7 +60,7 @@ const PLACES: Record<CampScene, Place> = {
 };
 
 /** The armour tier the camp shows (the sheets' row 1: the first armour, as a new hero wears it). */
-const TIER_ROW = 1;
+export const TIER_ROW = 1;
 /** The hero's canvas: his frame at (6, 12) in it. */
 const SIL_W = 24;
 const SIL_H = 32;
@@ -70,7 +70,7 @@ const SIL_Y = 12;
 const BASE = `${import.meta.env.BASE_URL}assets/`;
 const images = new Map<string, HTMLImageElement>();
 
-function image(path: string): HTMLImageElement {
+export function image(path: string): HTMLImageElement {
   let img = images.get(path);
   if (!img) {
     img = new Image();
@@ -80,9 +80,9 @@ function image(path: string): HTMLImageElement {
   return img;
 }
 
-const ready = (img: HTMLImageElement): boolean => img.complete && img.naturalWidth > 0;
+export const ready = (img: HTMLImageElement): boolean => img.complete && img.naturalWidth > 0;
 
-const background = (_scene: CampScene, season: Season): string => `camp/camp-outdoor-${season}.png`;
+export const background = (_scene: CampScene, season: Season): string => `camp/camp-outdoor-${season}.png`;
 
 /** Small seeded noise, so that the camp's sparks and stars are the same on every device. */
 function rng(seed: number): () => number {
@@ -103,7 +103,7 @@ const rgbOf = (hex: string): [number, number, number] => {
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 /** Light as Pixel Dungeon draws it: stepped rings, dithered at the edge. */
-function lightCanvas(r: number, color: string): HTMLCanvasElement {
+export function lightCanvas(r: number, color: string): HTMLCanvasElement {
   const size = r * 2 + 1;
   const canvas = document.createElement('canvas');
   canvas.width = size;
