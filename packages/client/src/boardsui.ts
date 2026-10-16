@@ -366,8 +366,9 @@ function mineRows(records: readonly RunRecord[], trophies: Profile['trophies'], 
       w: { ...(record.armor !== undefined ? { a: record.armor } : {}), ...(look.l ? { l: look.l } : {}), ...(look.h ? { h: look.h } : {}), ...(look.p ? { p: look.p } : {}), ...(look.f ? { f: look.f } : {}), ...(look.fr ? { fr: look.fr } : {}) },
     };
     // A run the server did not check (played before checked runs, or without the server) is on no board: it says so.
-    const unit = `${shortDate(record.date)}${record.checked ? '' : ` · ${tx('offBoard')}`}`;
-    const row = rowOf({ entry, place: null, value: number(record.score), unit: `${unit} · ${tx('depthShort', { n: record.depth })}` });
+    // (The depth before «on no board»: it is the depth that the narrow row would cut off.)
+    const unit = `${shortDate(record.date)} · ${tx('depthShort', { n: record.depth })}${record.checked ? '' : ` · ${tx('offBoard')}`}`;
+    const row = rowOf({ entry, place: null, value: number(record.score), unit });
     track(row);
     list.append(row.node);
   }

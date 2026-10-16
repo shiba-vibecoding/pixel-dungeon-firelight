@@ -866,3 +866,9 @@ body.pd-3d canvas#game { position: relative; z-index: 1; }
 .pd-camp-edges { min-height: 0; }
 .pd-camp-sheet { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
+/* The shop's cards on a narrow screen: a title's plate keeps inside its card (the name is under it in full), and a long word wraps rather than runs out. */
+.fl-card-art { grid-template-columns: minmax(0, 1fr); }
+.fl-card-art .pd-item-art.title { width: 100%; display: flex; justify-content: center; }
+.fl-card-art .fl-title-plate { max-width: calc(100% - 8px); box-sizing: border-box; font-size: 15px; padding-right: 6px; }
+.fl-card-art .fl-title-plate > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-card-name { overflow-wrap: anywhere; hyphens: auto; }
