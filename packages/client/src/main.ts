@@ -2037,6 +2037,17 @@ function tapCell(cell: number, quiet = false): void {
     feedback.refuse(cell, vnow);
     return;
   }
+  // A tap on a wall (or a statue, a bookshelf: anything solid one cannot walk into) walks to the cell under it, the floor in
+  // front of its face: in a corridor or along a room's wall that is where the finger meant to go.
+  if (hasFlag(level.map[cell]!, F.SOLID) && !hasFlag(level.map[cell]!, F.PASSABLE)) {
+    const below = cell + WIDTH;
+    if (below >= WIDTH * HEIGHT || !explored[below] || !hasFlag(level.map[below]!, F.PASSABLE)) {
+      if (!quiet) feedback.refuse(cell, vnow);
+      return;
+    }
+    if (below === me.pos) return;
+    cell = below;
+  }
   // The alchemy pot: what it is for, then walk up to it as usual.
   if (level.map[cell] === T.ALCHEMY) view.say(t.alchemyPot, '#ffff44');
   // The way goes round monsters in sight, known traps (findPath) and clouds of gas in sight, where another way exists.
