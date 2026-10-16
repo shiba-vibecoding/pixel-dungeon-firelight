@@ -115,8 +115,8 @@ for (const [language, commands] of [
 // What the bot says about itself: the profile's text, the line in the share card and the chat list,
 // and the button beside the message field that opens the game.
 for (const [language, description, short] of [
-  ['', 'Pixel Dungeon: the classic roguelike, in Telegram. Go down 26 depths for the Amulet of Yendor, take on the daily dungeon (the same for everyone, one attempt counts) and climb the weekly rankings. Every run is checked by the server. Tap «Play».', 'The classic roguelike in Telegram: daily dungeon, weekly rankings, trophies.'],
-  ['ru', 'Pixel Dungeon — классический рогалик прямо в Telegram. Спуститесь на 26 глубин за Амулетом Йендора, сразитесь в подземелье дня (у всех одно, засчитывается одна попытка) и поднимайтесь в недельном рейтинге. Каждый забег проверяет сервер. Нажмите «Играть».', 'Классический рогалик в Telegram: подземелье дня, рейтинги, трофеи.'],
+  ['', 'Pixel Dungeon: Firelight is Watabou's original Pixel Dungeon, rebuilt for Telegram. Every run starts at the camp fire: four heroes, 26 depths and the Amulet of Yendor at the very bottom. Take on the daily dungeon, the same for everyone, where one attempt counts, and climb the daily, weekly and all-time boards. The server checks every run. And yes, your hero has a filthy mouth. Tap «Play».', 'The original Pixel Dungeon by the camp fire: a daily dungeon, fair boards and a foul-mouthed hero.'],
+  ['ru', 'Pixel Dungeon: У костра — оригинальный Pixel Dungeon от Watabou, пересобранный для Telegram. Каждый забег начинается у костра: четыре героя, 26 глубин и Амулет Йендора на самом дне. Подземелье дня одно на всех, и засчитывается одна попытка. Поднимайтесь на досках дня, недели и всех времён. Каждый забег проверяет сервер. И да, герой за словом в карман не лезет. Нажмите «Играть».', 'Оригинальный Pixel Dungeon у костра: подземелье дня, честный рейтинг и герой с острым языком.'],
 ]) {
   const lang = language ? { language_code: language } : {};
   await call('setMyDescription', { description, ...lang });
