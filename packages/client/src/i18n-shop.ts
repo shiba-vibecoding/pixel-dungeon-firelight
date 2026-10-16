@@ -49,6 +49,17 @@ interface Words {
   giftLetter: string;
   giftLetterText: (from: string | undefined, item: string) => string;
   giftTaken: string;
+  giftFriends: string;
+  giftFriendsEmpty: string;
+  giftInvite: string;
+  giftInviteText: string;
+  giftOrId: string;
+  giftNoteTitle: string;
+  giftNoteHint: string;
+  giftNoteBad: string;
+  giftPick: string;
+  giftFor: string;
+  giftComes: string;
   passTitle: string;
   passSub: (season: number) => string;
   passLevel: (level: number) => string;
@@ -121,7 +132,7 @@ const EN: Words = {
   expired: 'Reopen the game from Telegram to buy.',
   alreadyOwned: 'You have it already.',
   giftTitle: 'A gift for a friend',
-  giftText: 'Enter your friend’s Telegram ID and the gift comes to their mail in the game. Or get a link and send it yourself: whoever opens it first gets the gift. A gift costs what the thing costs.',
+  giftText: 'Pick a friend who plays, or enter a Telegram ID, and the gift comes to their mail in the game. Or get a link and send it yourself: whoever opens it first gets the gift. A gift costs what the thing costs.',
   giftId: 'Friend’s Telegram ID',
   giftIdHint: 'digits only',
   giftById: 'Gift by ID',
@@ -134,6 +145,17 @@ const EN: Words = {
   giftLetter: 'A gift',
   giftLetterText: (from, item) => `${from ?? 'A friend'} sends you a gift: ${item}. Claim it to wear it.`,
   giftTaken: 'That gift has been taken already.',
+  giftFriends: 'Friends who play',
+  giftFriendsEmpty: 'Nobody here yet. Friends who open the game from your link, and those you have given gifts to, show up here.',
+  giftInvite: 'Invite a friend',
+  giftInviteText: 'Come and play Pixel Dungeon: Firelight with me!',
+  giftOrId: 'Or by Telegram ID',
+  giftNoteTitle: 'A note by the fire',
+  giftNoteHint: 'Optional, up to 80 characters',
+  giftNoteBad: 'The note is too long, or not text.',
+  giftPick: 'Pick a friend, or enter an ID.',
+  giftFor: 'Gift for',
+  giftComes: 'It arrives as a letter at their camp.',
   passTitle: 'Season pass',
   passSub: (season) => `Season ${season}: 30 levels, XP from your checked runs`,
   passLevel: (level) => `Level ${level}`,
@@ -206,7 +228,7 @@ const RU: Words = {
   expired: 'Откройте игру из Telegram заново, чтобы купить.',
   alreadyOwned: 'У вас это уже есть.',
   giftTitle: 'Подарок другу',
-  giftText: 'Введите Telegram-ID друга — подарок придёт ему в почту в игре. Или получите ссылку и отправьте её сами: подарок достанется тому, кто откроет её первым. Подарок стоит столько же, сколько вещь.',
+  giftText: 'Выберите друга, который играет, или введите Telegram-ID — подарок придёт ему в почту в игре. Или получите ссылку и отправьте её сами: подарок достанется тому, кто откроет её первым. Подарок стоит столько же, сколько вещь.',
   giftId: 'Telegram-ID друга',
   giftIdHint: 'только цифры',
   giftById: 'Подарить по ID',
@@ -219,6 +241,17 @@ const RU: Words = {
   giftLetter: 'Подарок',
   giftLetterText: (from, item) => `${from ?? 'Друг'} дарит вам подарок: ${item}. Заберите его, чтобы надеть.`,
   giftTaken: 'Этот подарок уже забрали.',
+  giftFriends: 'Друзья, которые играют',
+  giftFriendsEmpty: 'Пока никого. Друзья, которые откроют игру по вашей ссылке, и те, кому вы дарили подарки, появятся здесь.',
+  giftInvite: 'Позвать друга',
+  giftInviteText: 'Заходи играть в Pixel Dungeon: У костра!',
+  giftOrId: 'Или по Telegram-ID',
+  giftNoteTitle: 'Записка у костра',
+  giftNoteHint: 'Не обязательно, до 80 знаков',
+  giftNoteBad: 'Записка слишком длинная или не текст.',
+  giftPick: 'Выберите друга или введите ID.',
+  giftFor: 'Подарить за',
+  giftComes: 'Придёт письмом на их Привал.',
   passTitle: 'Пропуск сезона',
   passSub: (season) => `Сезон ${season}: 30 уровней, опыт — за проверенные забеги`,
   passLevel: (level) => `Уровень ${level}`,

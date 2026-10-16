@@ -89,7 +89,7 @@ import { CoopMarks } from './coop-marks';
 import {
   backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
   shareArena, shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
-  homeScreenStatus, addToHomeScreen, invitedGift,
+  homeScreenStatus, addToHomeScreen, invitedGift, inviteStart, launchedByInvite,
 } from './telegram';
 import { report, startReporting } from './report';
 import { STEP_MS, TILE, View } from './view';
@@ -443,6 +443,9 @@ let newLoot = false;
 void mart.refresh(SERVER);
 // The catalogue's side of it (storeui.ts): what is owned and worn. A friend's share link is opened once the shop is known.
 void cosmetics.refresh(SERVER).then(async () => {
+  // An invite or a share link a friend sent: the server makes the two friends who play (if the inviter is a known player).
+  const invite = launchedByInvite();
+  if (invite) void cosmetics.meetInviter(invite);
   const code = invitedGift();
   if (!code) return;
   const result = await cosmetics.acceptGift(code);
@@ -3546,7 +3549,7 @@ function shareChoices(card: () => Promise<ShareCard>, text: string, start: 'dail
         void (async () => {
           const blob = await storyCard(await card(), t.ranked.storyCall);
           const url = blob && (await api.card(blob));
-          if (url) shareStory(url, `${text} ${appLink(start)}`);
+          if (url) shareStory(url, `${text} ${appLink(inviteStart(start))}`);
           else toast(t.ranked.shareFailed);
         })();
       },

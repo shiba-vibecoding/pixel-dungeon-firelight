@@ -4,17 +4,18 @@ import { Camp, type CampDress, CAMP_ORDER, seasonOf } from './camp';
 import {
   bundleValue, CATALOG, DECOR_MAX, earnOnly, forSale, HEROES, type Item, itemById, PASS_PRICE, RARITY_RANK, type Slot, slotOf, type Category, passSku,
 } from './catalog';
-import { cosmetics } from './cosmetics';
+import { cosmetics, type FriendView, NOTE_MAX } from './cosmetics';
 import {
   fireArt, flCatalog, flItem, flStr, flUrl, fxArt, digitsArt, loadFl, onFlChange, type FlCategory,
 } from './flart';
-import { lang } from './i18n';
+import { lang, t } from './i18n';
 import { L, S } from './i18n-shop';
 import { P } from './i18n-photo';
 import { flash, sceneShot, showPhoto } from './photoui';
 import { levelCost, PASS_LEVELS, REWARDS, type Track } from './pass';
 import { packLines } from './quip-packs';
 import { SEASON } from './season';
+import { openLink } from './telegram';
 import { AVATAR, button, el, hideOverlay, info, show, sprites, toast } from './screens';
 import { framedFace, itemArt, paintName, pixelImage, titlePlate } from './shopart';
 import { wornOf } from './wear';
@@ -569,6 +570,63 @@ function build(options: StoreOptions): void {
       status.textContent = text;
       status.dataset.tone = tone;
     };
+
+    /* -- the friends who play: picked by handle, the shop never shows an id -- */
+    let picked: string | null = null;
+    const list = el('div', { className: 'fl-friends', role: 'radiogroup' });
+    list.setAttribute('aria-label', S.giftFriends);
+    const pick = (handle: string | null): void => {
+      picked = handle;
+      for (const row of list.querySelectorAll<HTMLElement>('.fl-friend')) row.setAttribute('aria-checked', String(row.dataset.h === handle));
+      if (handle) input.value = '';
+    };
+    const friendRow = (friend: FriendView): HTMLElement => {
+      const face = el('span', { className: 'fl-face-av' });
+      face.style.setProperty('--av', String(friend.heroClass ? AVATAR[friend.heroClass] ?? 0 : 0));
+      face.style.setProperty('--s', '1.5');
+      const row = el(
+        'div', { className: 'fl-friend', role: 'radio', tabIndex: 0 },
+        face,
+        el('span', { className: 'who' }, el('b', { textContent: friend.name }), el('span', { textContent: friend.heroClass ? t.classes[friend.heroClass] ?? '' : '' })),
+        el('i', { className: 'fl-check' }),
+      );
+      row.dataset.h = friend.h;
+      row.setAttribute('aria-checked', 'false');
+      row.onclick = () => {
+        audio.play('click');
+        pick(picked === friend.h ? null : friend.h);
+      };
+      row.onkeydown = (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          row.click();
+        }
+      };
+      return row;
+    };
+    const inviteButton = (invite: string): HTMLElement =>
+      button(S.giftInvite, () => openLink(`https://t.me/share/url?url=${encodeURIComponent(invite)}&text=${encodeURIComponent(S.giftInviteText)}`), 'quiet');
+    const showFriends = (found: { friends: FriendView[]; invite: string } | null): void => {
+      if (!found || found.friends.length === 0) {
+        list.replaceChildren(info(S.giftFriendsEmpty, 'fl-hint'), ...(found?.invite ? [inviteButton(found.invite)] : []));
+        return;
+      }
+      list.replaceChildren(...found.friends.map(friendRow), ...(found.invite ? [inviteButton(found.invite)] : []));
+    };
+    list.append(info('…', 'fl-hint'));
+    void cosmetics.friends().then(showFriends);
+    input.oninput = () => {
+      if (input.value) pick(null);
+    };
+
+    /* -- the note: up to 80 characters, shown in the friend's mail -- */
+    const note = el('textarea', { className: 'fl-note', maxLength: NOTE_MAX, rows: 3, placeholder: S.giftNoteHint });
+    note.setAttribute('aria-label', S.giftNoteTitle);
+    const count = el('span', { className: 'fl-note-count', textContent: `0/${NOTE_MAX}` });
+    note.oninput = () => {
+      count.textContent = `${[...note.value].length}/${NOTE_MAX}`;
+    };
+
     const finish = async (run: Promise<Awaited<ReturnType<typeof cosmetics.give>>>, link: boolean): Promise<void> => {
       const result = await run;
       if (result === 'paid') {
@@ -576,23 +634,29 @@ function build(options: StoreOptions): void {
         say(link ? S.giftLinkNote : S.giftSent, 'good');
       } else if (result === 'owned-by-friend') say(S.giftHas);
       else if (result === 'bad-friend') say(S.giftBadId);
+      else if (result === 'bad-note') say(S.giftNoteBad);
       else if (result === 'expired') say(S.expired);
       else if (result === 'failed') say(S.failed);
     };
-    const byId = el('button', { className: 'pd-button primary' }, `${S.giftById} `, priceTag(item.stars));
-    byId.onclick = () => {
-      const friend = input.value.trim();
-      if (!/^\d{4,15}$/.test(friend)) return say(S.giftBadId);
-      void finish(cosmetics.give(item, { friend: Number(friend) }), false);
+    const give = el('button', { className: 'pd-button primary' }, `${S.giftFor} `, priceTag(item.stars));
+    give.onclick = () => {
+      const typed = input.value.trim();
+      if (picked) return void finish(cosmetics.give(item, { handle: picked }, note.value), false);
+      if (!typed) return say(S.giftPick);
+      if (!/^\d{4,15}$/.test(typed)) return say(S.giftBadId);
+      void finish(cosmetics.give(item, { friend: Number(typed) }, note.value), false);
     };
-    const byLink = button(S.giftByLink, () => void finish(cosmetics.give(item, { link: true }), true), '');
-    byId.disabled = byLink.disabled = !cosmetics.open;
+    const byLink = button(S.giftByLink, () => void finish(cosmetics.give(item, { link: true }, note.value), true), '');
+    give.disabled = byLink.disabled = !cosmetics.open;
     return [
       top,
-      info(S.giftText, 'fl-hint'),
-      section(T('giftTo'), null, el('label', { className: 'fl-search' }, input)),
-      el('div', { className: 'fl-tryon-buy' }, byId, byLink),
+      section(S.giftFriends, null, list),
+      section(S.giftOrId, null, el('label', { className: 'fl-search' }, input)),
+      section(S.giftNoteTitle, null, note, count),
+      el('div', { className: 'fl-gift-buy' }, give, byLink),
       status,
+      info(S.giftComes, 'fl-hint'),
+      info(S.giftText, 'fl-hint'),
       info(cosmetics.open ? S.starsNote : S.closedNote, 'fl-hint'),
     ];
   };
