@@ -1464,3 +1464,98 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 .pd-ranks.mine .pd-rank > .pd-rank-score { grid-column: 3; }
 .pd-ranks.mine .pd-rank > .pd-rank-detail { grid-column: 2 / 4; }
 .pd-ranks.mine .pd-rank-n { display: none; }
+
+/* =====================================================================================================================
+   Firelight (design part 2): the interface lit by the camp fire. Same markup and classes; art and tokens only.
+   The light comes from below and in front, the way a fire lights a face: lower edges and frames warm (--lit-*), the stone
+   itself stays cold (stone-*), and only the main action burns (fire-coal under a fire-gold edge).
+   ===================================================================================================================== */
+/* Its tokens (stone-warm-hi, lit-*, glow-*) live in tokens.json. */
+
+/* Windows: the frame (ui-window.png) lit from below — warm bottom edge and ember studs, cool top; inside, light pools in
+   three hard steps along the bottom edge and a faint one up the sides. */
+.pd-window { isolation: isolate; }
+.pd-window::before {
+  content: ""; position: absolute; inset: calc(7 * var(--u)); z-index: -1; pointer-events: none;
+  background:
+    linear-gradient(to top, var(--glow-1) 0 calc(2 * var(--u)), var(--glow-2) calc(2 * var(--u)) calc(6 * var(--u)), var(--glow-3) calc(6 * var(--u)) calc(16 * var(--u)), transparent calc(16 * var(--u))),
+    linear-gradient(to right, var(--glow-2) 0 var(--u), transparent var(--u) calc(100% - var(--u)), var(--glow-2) calc(100% - var(--u)));
+}
+.pd-heading, .pd-window h2.pd-heading { color: var(--fire-light, #ffeba4); text-shadow: 0 var(--u) 0 var(--fire-ash, #1a0a06); }
+
+/* Buttons: the light edge warms; the main one is a coal with a gold edge on top, glowing ember under it. */
+.pd-button { --b-hi: var(--stone-warm-hi); }
+.pd-button.primary {
+  --b-bg: var(--fire-coal, #b22a2a); --b-hi: var(--fire-ember, #e8641f); --b-lo: var(--fire-coal-deep, #6e161a); --b-press: var(--fire-coal-deep, #6e161a); --b-ink: var(--fire-light, #ffeba4);
+  box-shadow: inset 0 var(--u) 0 var(--fire-gold, #ffcc66), inset 0 calc(2 * var(--u)) 0 var(--fire-ember, #e8641f), inset 0 calc(-2 * var(--u)) 0 var(--fire-coal-deep, #6e161a);
+  text-shadow: 0 var(--u) 0 var(--fire-coal-deep, #6e161a);
+}
+.pd-button.primary:active, .pd-button.primary.pressed { box-shadow: inset 0 calc(2 * var(--u)) 0 rgba(0, 0, 0, 0.3); }
+.pd-button.primary:focus-visible { box-shadow: inset 0 0 0 2px var(--focus), inset 0 0 0 4px var(--void); }
+.pd-button.quiet { text-decoration-color: var(--lit-lo); }
+
+/* Tabs: the chosen one is lit, its underline a line of gold with a glow rising from it. */
+.pd-tab[aria-selected="true"] {
+  color: var(--fire-light, #ffeba4); border-bottom-color: var(--fire-gold, #ffcc66);
+  background: linear-gradient(to top, var(--glow-1) 0 calc(2 * var(--u)), var(--glow-3) calc(2 * var(--u)) 60%, transparent 60%);
+}
+
+/* Item slots: the lower inner edge catches the light; the chosen slot rings in gold, the worn one in flame. */
+.pd-slot { box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--lit-dark); }
+.pd-slot.selected { box-shadow: inset 0 0 0 2px var(--fire-gold, #ffcc66), inset 0 0 0 4px var(--void), inset 0 0 0 6px var(--glow-1); }
+.pd-slot.equipped { box-shadow: inset 0 0 0 var(--u) var(--fire-flame, #ff9a3a), inset var(--u) var(--u) 0 calc(var(--u) * 2) var(--stone-500); }
+
+/* The HUD and the toolbar: warm light edges, the hero's level an ember. */
+.pd-tool, .pd-menu { box-shadow: inset 0 var(--u) 0 var(--stone-warm-hi), inset 0 calc(-2 * var(--u)) 0 var(--stone-500); }
+.pd-tool.quick { box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--lit-dark); }
+.pd-tool.quick.targeting { box-shadow: inset 0 0 0 2px var(--fire-gold, #ffcc66), inset 0 0 0 4px var(--void); }
+.pd-tool.holding::after { background: var(--fire-gold, #ffcc66); box-shadow: 0 calc(-1 * var(--u)) 0 var(--fire-ember, #e8641f); }
+.pd-toolbar { box-shadow: 0 calc(-1 * var(--u)) 0 var(--lit-dark), 0 calc(-2 * var(--u)) 0 var(--glow-2); }
+.pd-avatar { border-color: var(--lit-mid); }
+.pd-hero-lvl { color: var(--fire-light, #ffeba4); background: var(--fire-coal-deep, #6e161a); border-color: var(--fire-ember, #e8641f); }
+
+/* The toast: the same lit frame (ui-toast.png), its text warm. */
+.pd-toast { color: var(--ink); }
+
+/* The end of a run: the fire gone out over «You died» (logs gone grey, a last thread of smoke), a fire burning over a win. */
+.pd-runend .pd-display::before {
+  content: ""; display: block; width: calc(19 * var(--u) * 1.5); height: calc(21 * var(--u) * 1.5); margin: 0 auto var(--space-1);
+  background: url("/assets/ui/fl-fire-out.png") center bottom / contain no-repeat; image-rendering: pixelated;
+}
+.pd-runend.win .pd-display::before { height: calc(26 * var(--u) * 1.5); background-image: url("/assets/ui/fl-fire-win.png"); }
+.pd-runend .pd-display { text-shadow: 0 calc(2 * var(--u)) 0 var(--fire-ash, #1a0a06); }
+.pd-stats { box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark); }
+
+/* ---------- Photo mode (new) ----------
+   .fl-photo-btn — a toolbar-size camera button; .fl-photo — the mode's layer over the map: the frame (fl-photo-frame.png,
+   9-slice) with the logo in its corner, the filters' row and the «Save» / «To story» bar. The filter is a class on the
+   canvas (or on the frame's picture): .fl-filter-warm / -noir / -dream; none is no class. */
+.fl-photo-btn { position: relative; width: var(--tap-min, 44px); height: var(--tap-min, 44px); display: grid; place-items: center; background: var(--stone-600); border: var(--u) solid var(--void); clip-path: var(--notch); box-shadow: inset 0 var(--u) 0 var(--stone-warm-hi), inset 0 calc(-2 * var(--u)) 0 var(--stone-500); }
+.fl-photo-btn::before { content: ""; width: calc(16 * var(--u)); height: calc(16 * var(--u)); background: url("/assets/ui/fl-camera.png") center / contain no-repeat; image-rendering: pixelated; }
+.fl-photo-btn:active { background: var(--stone-500); }
+.fl-photo { position: absolute; inset: 0; z-index: var(--z-overlay, 50); display: flex; flex-direction: column; pointer-events: none; }
+.fl-photo > * { pointer-events: auto; }
+.fl-photo-frame {
+  position: relative; flex: 1; margin: calc(var(--safe-t, 0px) + var(--space-3)) var(--space-3) var(--space-2);
+  border: calc(8 * var(--u)) solid transparent; border-image: url("/assets/ui/fl-photo-frame.png") 8 / calc(8 * var(--u)) stretch; image-rendering: pixelated;
+  pointer-events: none;
+}
+.fl-photo-mark { position: absolute; right: var(--space-2); bottom: var(--space-2); width: calc(89px * 2); height: calc(32px * 2); background: url("/assets/brand/logo-en.png") center / contain no-repeat; image-rendering: pixelated; }
+:lang(ru) .fl-photo-mark { height: calc(45px * 2); background-image: url("/assets/brand/logo-ru.png"); }
+.fl-photo-caption { position: absolute; left: var(--space-2); top: var(--space-2); font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--fire-light, #ffeba4); text-shadow: var(--text-outline); }
+.fl-photo-bar { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) calc(var(--safe-r, 0px) + var(--space-3)) calc(var(--safe-b, 0px) + var(--space-3)) calc(var(--safe-l, 0px) + var(--space-3)); background: linear-gradient(to bottom, rgba(11, 11, 9, .6), rgba(11, 11, 9, .92) 30%); box-shadow: 0 calc(-1 * var(--u)) 0 var(--lit-dark); }
+.fl-filters { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+.fl-filter { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: var(--tap-min, 44px); padding: var(--space-1) 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); background: var(--stone-800); clip-path: var(--notch); box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--lit-dark); }
+.fl-filter::before { content: ""; width: calc(12 * var(--u)); height: calc(12 * var(--u)); background: var(--ico) center / contain no-repeat; image-rendering: pixelated; }
+.fl-filter.none { --ico: url("/assets/ui/fl-f-none.png"); } .fl-filter.warm { --ico: url("/assets/ui/fl-f-warm.png"); }
+.fl-filter.noir { --ico: url("/assets/ui/fl-f-noir.png"); } .fl-filter.dream { --ico: url("/assets/ui/fl-f-dream.png"); }
+.fl-filter[aria-pressed="true"] { color: var(--fire-light, #ffeba4); box-shadow: inset 0 0 0 2px var(--fire-gold, #ffcc66), inset 0 0 0 4px var(--void), inset 0 0 0 6px var(--glow-1); }
+.fl-photo-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.fl-photo-actions .pd-button::before { content: ""; width: calc(16 * var(--u)); height: calc(16 * var(--u)); background: var(--ico) center / contain no-repeat; image-rendering: pixelated; flex: none; }
+.fl-photo-actions .save { --ico: url("/assets/ui/fl-save.png"); } .fl-photo-actions .story { --ico: url("/assets/ui/fl-story.png"); }
+.fl-filter-warm { filter: sepia(.35) saturate(1.25) hue-rotate(-12deg) brightness(1.06); }
+.fl-filter-noir { filter: grayscale(1) contrast(1.3) brightness(.92); }
+.fl-filter-dream { filter: saturate(1.35) hue-rotate(14deg) brightness(1.1) contrast(.92); }
+.fl-photo-flash { position: absolute; inset: 0; z-index: calc(var(--z-overlay, 50) + 1); background: var(--fire-spark, #fffad6); pointer-events: none; animation: fl-flash .28s steps(4) both; }
+@keyframes fl-flash { from { opacity: .9; } to { opacity: 0; } }
+@media (min-width: 900px) { .fl-photo-bar { flex-direction: row; align-items: center; justify-content: center; } .fl-filters { width: 420px; } .fl-photo-actions { width: 380px; } }

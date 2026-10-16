@@ -24,6 +24,9 @@ export interface QuipAnchor {
 }
 
 /** Gap between the bubble's tail and the hero's head. */
+/** The moments said in the loud bubble: the bosses, a trap set off, a close call, the Amulet (death has it too, as the last words). */
+const LOUD: ReadonlySet<Moment> = new Set<Moment>(['goo', 'tengu', 'dm300', 'king', 'yog', 'nearDeath', 'amulet', 'death', 'trap', 'trapPoison', 'trapFire', 'trapToxic', 'trapParalytic', 'trapLightning', 'trapGripping', 'trapAlarm', 'trapSummoning']);
+
 const GAP = 10;
 const MARGIN = 8;
 
@@ -84,10 +87,10 @@ class QuipSystem {
     if (line === null) return;
     this.lastLine = line;
     this.say(`«${line}»`);
-    this.show(line, now, moment === 'death');
+    this.show(line, now, moment === 'death', LOUD.has(moment));
   }
 
-  private show(text: string, now: number, last: boolean): void {
+  private show(text: string, now: number, last: boolean, loud = last): void {
     if (!this.host) return;
     if (!this.node) {
       const node = document.createElement('div');
@@ -109,6 +112,8 @@ class QuipSystem {
     node.hidden = false;
     node.classList.remove('out', 'pop');
     node.classList.toggle('last', last);
+    // Firelight's loud bubble (design part 2): bosses, a trap, near death, the Amulet — a jagged ember edge and a shake.
+    node.classList.toggle('loud', loud);
     // Out of sight until the frame places it: it must not show for a frame at the wrong place.
     node.style.visibility = 'hidden';
     this.measured = { w: node.offsetWidth, h: node.offsetHeight };
