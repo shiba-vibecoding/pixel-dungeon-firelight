@@ -240,7 +240,7 @@ export const ru: Strings = {
   noticed: (mob) => `Вас замечает ${mob}!`,
   killed: (mob) => `${capitalize(mob)} гибнет.`,
   heroDied: (name) => `${name} падает без сил!`,
-  levelUp: (name, lvl) => `${name} достигает ${lvl}-го уровня!`,
+  levelUp: (name, lvl) => `${name} достигает ${lvl}-го уровня! +5 к здоровью, точность и уклонение выше.`,
   myLevelUp: (lvl) => `Новый уровень! Теперь у вас ${lvl}-й.`,
   found: 'Вы нашли что-то скрытое!',
   nothingFound: 'Вы ищете, но ничего не находите.',

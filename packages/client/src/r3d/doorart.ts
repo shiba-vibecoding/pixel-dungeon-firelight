@@ -24,6 +24,10 @@ type Rgb = readonly [number, number, number];
 const STEEL: Rgb = [139, 147, 160];
 const STEEL_DARK: Rgb = [66, 72, 84];
 const STEEL_LIGHT: Rgb = [200, 206, 216];
+/** Dark iron (a lock, straps, hinges): on wood it reads as ironwork, not as a grey block. */
+const IRON: Rgb = [66, 69, 78];
+const IRON_DARK: Rgb = [30, 32, 38];
+const IRON_LIGHT: Rgb = [112, 116, 128];
 
 const mix = (a: Rgb, b: Rgb, k: number): Rgb => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 const css = (c: Rgb, k = 1): string => `rgb(${Math.round(Math.min(255, c[0] * k))},${Math.round(Math.min(255, c[1] * k))},${Math.round(Math.min(255, c[2] * k))})`;
@@ -86,22 +90,16 @@ function slab(paint: Painter, wood: { dark: Rgb; mid: Rgb; light: Rgb }, seed: n
   }
 }
 
-/** The same slab with an iron strap across each end and a lock plate in the middle. */
+/** The same slab with a dark iron strap bound round each end: the top edge of a locked leaf, wood with ironwork. */
 function locked(paint: Painter, wood: { dark: Rgb; mid: Rgb; light: Rgb }, seed: number): void {
   slab(paint, wood, seed);
   for (const x0 of [2, 11]) {
     for (let x = x0; x < x0 + 3; x++) {
-      for (let y = 0; y < 16; y++) paint(x, y, y === 0 || y === 15 ? STEEL_DARK : x === x0 ? STEEL_LIGHT : x === x0 + 2 ? STEEL_DARK : STEEL);
+      for (let y = 0; y < 16; y++) paint(x, y, y === 0 || y === 15 ? IRON_DARK : x === x0 ? IRON_LIGHT : x === x0 + 2 ? IRON_DARK : IRON);
     }
-    paint(x0 + 1, 3, STEEL_DARK);
-    paint(x0 + 1, 12, STEEL_DARK);
+    paint(x0 + 1, 3, IRON_DARK);
+    paint(x0 + 1, 12, IRON_DARK);
   }
-  for (let y = 5; y < 11; y++) for (let x = 5; x < 11; x++) paint(x, y, y === 5 || x === 5 ? STEEL_LIGHT : y === 10 || x === 10 ? STEEL_DARK : STEEL);
-  paint(7, 7, [12, 12, 16]);
-  paint(8, 7, [12, 12, 16]);
-  paint(7, 8, [12, 12, 16]);
-  paint(8, 8, [12, 12, 16]);
-  paint(7, 9, [12, 12, 16]);
 }
 
 /**
@@ -125,15 +123,17 @@ function leafFace(paint: Painter, wood: { dark: Rgb; mid: Rgb; light: Rgb }, see
   }
   if (!lockedLeaf) {
     // Hinge straps, and an iron ring.
-    for (const y of [3, 4, 11, 12]) for (let x = 0; x < 7; x++) paint(x, y, y === 3 || y === 11 ? STEEL : STEEL_DARK);
-    for (const [x, y] of [[11, 7], [12, 7], [10, 8], [13, 8], [10, 9], [13, 9], [11, 10], [12, 10]] as const) paint(x, y, y < 9 ? STEEL_LIGHT : STEEL);
+    for (const y of [3, 4, 11, 12]) for (let x = 0; x < 7; x++) paint(x, y, y === 3 || y === 11 ? IRON_LIGHT : IRON_DARK);
+    for (const [x, y] of [[11, 7], [12, 7], [10, 8], [13, 8], [10, 9], [13, 9], [11, 10], [12, 10]] as const) paint(x, y, y < 9 ? IRON_LIGHT : IRON);
     return;
   }
-  for (const y of [3, 4, 11, 12]) for (let x = 0; x < 16; x++) paint(x, y, y === 3 || y === 11 ? STEEL_LIGHT : x % 5 === 2 ? STEEL_DARK : STEEL);
-  for (let y = 6; y < 10; y++) for (let x = 5; x < 11; x++) paint(x, y, y === 6 || x === 5 ? STEEL_LIGHT : y === 9 || x === 10 ? STEEL_DARK : STEEL);
-  paint(7, 7, [12, 12, 16]);
-  paint(8, 7, [12, 12, 16]);
-  paint(7, 8, [12, 12, 16]);
+  // Two dark iron straps across the planks, riveted; a lock plate at handle height with a keyhole; a small padlock hanging from it.
+  for (const y of [3, 4, 11, 12]) for (let x = 0; x < 16; x++) paint(x, y, y === 3 || y === 11 ? IRON_LIGHT : x % 5 === 2 ? IRON_DARK : IRON);
+  for (let y = 6; y < 10; y++) for (let x = 5; x < 11; x++) paint(x, y, y === 6 || x === 5 ? IRON_LIGHT : y === 9 || x === 10 ? IRON_DARK : IRON);
+  for (const [x, y] of [[7, 7], [8, 7], [7, 8]] as const) paint(x, y, [6, 6, 8]);
+  paint(8, 8, IRON_DARK);
+  for (const [x, y] of [[7, 10], [8, 10], [6, 11], [9, 11]] as const) paint(x, y, IRON_LIGHT);
+  for (const x of [7, 8]) for (const y of [11, 12]) paint(x, y, y === 11 ? [150, 120, 40] : [110, 86, 28]);
 }
 
 /** Paints a tile (16 x 16) of colour and of glow with a function that draws into an offscreen canvas, then lays both on the sheets. */
@@ -172,12 +172,12 @@ export function paintDoorTiles(color: CanvasRenderingContext2D, glow: CanvasRend
   const seed = Math.round(luma(wood.mid));
   lay(color, glow, DOOR_TOP_H, cols, 0, 0, (p) => slab(p, wood, seed), warm);
   lay(color, glow, DOOR_TOP_V, cols, 0, 0, transposed((p) => slab(p, wood, seed)), warm);
-  lay(color, glow, DOOR_LOCK_H, cols, 0, 0, (p) => locked(p, wood, seed), [60, 70, 90]);
-  lay(color, glow, DOOR_LOCK_V, cols, 0, 0, transposed((p) => locked(p, wood, seed)), [60, 70, 90]);
+  lay(color, glow, DOOR_LOCK_H, cols, 0, 0, (p) => locked(p, wood, seed), warm);
+  lay(color, glow, DOOR_LOCK_V, cols, 0, 0, transposed((p) => locked(p, wood, seed)), warm);
   // The leaf's own picture, wood only: the original's door tile has a plaster or stone frame round its planks, which on a leaf looks like
   // a piece of wall swinging open.
   lay(color, glow, DOOR_LEAF, cols, 0, 0, (p) => leafFace(p, wood, seed + 7, false), warm);
-  lay(color, glow, DOOR_LEAF_LOCK, cols, 0, 0, (p) => leafFace(p, wood, seed + 7, true), [60, 70, 90]);
+  lay(color, glow, DOOR_LEAF_LOCK, cols, 0, 0, (p) => leafFace(p, wood, seed + 7, true), warm);
   // The frame: darker, closer-grained wood, planks running up.
   lay(color, glow, DOOR_FRAME, cols, 0, 0, (paint) => {
     for (let y = 0; y < 16; y++) {

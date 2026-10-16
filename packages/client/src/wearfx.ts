@@ -1,4 +1,5 @@
 import { WIDTH } from '@pd/core';
+import { faceOf, settle, turnable, turnBetween } from './dirs';
 import type { Worn } from './wear';
 
 /*
@@ -82,7 +83,8 @@ export class WearFx {
   private petToCell = -1;
   private petStart = 0;
   private petDur = 0;
-  private petFlip = false;
+  /** Which way the pet looks (dirs.ts): its own step's direction, by the same rule as the hero's. */
+  private readonly pet = turnable();
   private readonly queue: Array<{ cell: number; due: number }> = [];
   private heroCell = -1;
   private depth = -1;
@@ -94,6 +96,9 @@ export class WearFx {
     this.grave = null;
     this.queue.length = 0;
     this.petCell = this.petToCell = this.heroCell = -1;
+    this.pet.flip = false;
+    this.pet.facing = this.pet.facingWant = 'front';
+    this.pet.facingAt = -1e9;
   }
 
   /** A foe fell at (x, y), a cell's corner. */
@@ -184,8 +189,7 @@ export class WearFx {
       if (head && now >= head.due) {
         this.queue.shift();
         if (head.cell !== this.petCell) {
-          const dx = (head.cell % WIDTH) - (this.petCell % WIDTH);
-          if (dx !== 0) this.petFlip = dx < 0;
+          turnBetween(this.pet, this.petCell, head.cell, WIDTH, now);
           this.petToCell = head.cell;
           this.petStart = now;
           this.petDur = Math.max(70, hero.stepMs / (1 + this.queue.length * 0.6));
@@ -254,10 +258,13 @@ export class WearFx {
     }
     const frames = walking ? art.walk : art.idle;
     const frame = frames[Math.floor(now / art.ms) % frames.length]!;
+    settle(this.pet, now);
+    // The pet's view of its direction, once its pictures have come (a view it lacks, or has not yet, is the side).
+    const face = faceOf(art.faces, this.pet.facing);
     const q = this.next('pet');
-    q.image = art.image; q.sx = frame * art.w; q.sy = 0; q.w = art.w; q.h = art.h; q.x = x; q.y = y; q.ax = art.feetX; q.ay = art.feetY + 1;
-    q.flip = this.petFlip;
-    if (art.glow) q.glow = art.glow;
+    q.image = face?.img ?? art.image; q.sx = frame * art.w; q.sy = 0; q.w = art.w; q.h = art.h; q.x = x; q.y = y; q.ax = art.feetX; q.ay = art.feetY + 1;
+    q.flip = !face && this.pet.flip;
+    if (face ? face.glowImg : art.glow) q.glow = face ? face.glowImg : art.glow;
     if (art.fly) {
       q.lift = FLY_LIFT + FLY_BOB * Math.sin((now / 1000) * FLY_HZ * Math.PI * 2);
       q.shade = art.w * 0.9 * 0.7;

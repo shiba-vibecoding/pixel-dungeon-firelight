@@ -4,6 +4,7 @@ import {
   type Look,
 } from '@pd/core';
 import { audio, type Sound } from './audio';
+import { initialFacing, turnable, turnAt, turnBetween, type Turnable } from './dirs';
 import { BLUNT_MOBS, BLUNT_WEAPONS, BOLT_SOUND, TRAP_SOUND } from './soundmap';
 import { capitalize, t } from './i18n';
 import { itemName, plainName } from './itemtext';
@@ -61,7 +62,7 @@ function blowSound(world: World, attacker: string, mob?: string): Sound {
 /** The middle of a cell, world pixels. */
 const cellMiddle = (cell: number): { x: number; y: number } => ({ x: cellX(cell) * TILE + TILE / 2, y: cellY(cell) * TILE + TILE / 2 });
 
-export interface Puppet {
+export interface Puppet extends Turnable {
   id: string;
   /** Where the current step started, in world pixels: wherever the walker was, not the middle of a cell. */
   fromX?: number;
@@ -89,7 +90,7 @@ export interface Puppet {
   from: number;
   to: number;
   moveStart: number;
-  flip: boolean;
+  /* `flip`, `facing`: which way it looks and with which view (dirs.ts); the side view is mirrored when it looks left. */
   anim: AnimName;
   animStart: number;
   alive: boolean;
@@ -233,6 +234,7 @@ function advance(puppet: Puppet, now: number, step: number): void {
     puppet.fromY = cellY(reached) * TILE;
     puppet.aim = next.cell;
     puppet.bend = next.bend;
+    turnBetween(puppet, reached, next.cell, WIDTH, now);
     // Never quicker than a third of a step, and never more than a few steps behind: the oldest are cut short.
     while (queue.length > MAX_BEHIND) queue.shift();
     puppet.moveDur = step / Math.min(3, 1 + 0.5 * queue.length);
@@ -387,7 +389,7 @@ export class View {
       let puppet = this.puppets.get(id);
       if (!puppet) {
         puppet = {
-          id, kind, sprite, isHero, from: pos, to: pos, moveStart: 0, flip: false, anim: 'idle', animStart: now,
+          id, kind, sprite, isHero, from: pos, to: pos, moveStart: 0, ...turnable(initialFacing(isHero, kind)), anim: 'idle', animStart: now,
           alive: hp > 0, removeAt: Infinity, flashUntil: 0, alertUntil: 0, sleeping, pumped, invisible, row: 0, label: '',
           hp, ht,
         };
@@ -415,7 +417,6 @@ export class View {
         const shown = puppet.queue?.[puppet.queue.length - 1]?.cell ?? puppet.aim ?? puppet.to;
         const end = puppet.moveStart + (puppet.moveDur ?? this.stepMs);
         const walking = puppet.anim === 'run' && (now - end < WALK_GRACE_MS || (puppet.queue?.length ?? 0) > 0);
-        if (cellX(pos) !== cellX(shown)) puppet.flip = cellX(pos) < cellX(shown);
         if (adjacent(pos, shown) && (now < end || (puppet.queue?.length ?? 0) > 0)) {
           // A step while the last is still on screen: it waits its turn (see advance), however fast turns come.
           (puppet.queue ??= []).push({ cell: pos, bend: cornerBend(map, shown, pos) });
@@ -426,6 +427,7 @@ export class View {
           puppet.from = shown;
           puppet.aim = pos;
           puppet.bend = cornerBend(map, shown, pos);
+          turnBetween(puppet, shown, pos, WIDTH, now);
           puppet.moveStart = Math.max(end, now - this.stepMs / 2);
           puppet.moveDur = this.stepMs;
         } else {
@@ -435,6 +437,7 @@ export class View {
           puppet.fromX = here.x;
           puppet.fromY = here.y;
           puppet.aim = pos;
+          turnBetween(puppet, shown, pos, WIDTH, now);
           puppet.queue = [];
           puppet.bend = adjacent(pos, puppet.from) ? cornerBend(map, puppet.from, pos) : undefined;
           puppet.moveStart = now - this.lead;
@@ -576,6 +579,13 @@ export class View {
     return now - puppet.moveStart >= (puppet.moveDur ?? this.stepMs) / 2 ? puppet.aim ?? puppet.to : puppet.from;
   }
 
+  /** A hero who zaps or throws turns to face the cell it goes to (dirs.ts: the view of that direction). */
+  private faceAway(from: number, to: number, now: number): void {
+    for (const puppet of this.puppets.values()) {
+      if (puppet.isHero && puppet.alive && puppet.to === from) turnAt(puppet, from, to, WIDTH, now);
+    }
+  }
+
   /** A hero busy with their hands (drinking, reading, eating): the operate animation, as in the original. */
   private busy(id: string, now: number): void {
     const puppet = this.puppets.get(id);
@@ -629,7 +639,7 @@ export class View {
           if (attacker) {
             attacker.anim = 'attack';
             attacker.animStart = now;
-            if (target && cellX(target.to) !== cellX(attacker.to)) attacker.flip = cellX(target.to) < cellX(attacker.to);
+            if (target) turnAt(attacker, attacker.to, target.to, WIDTH, now);
           }
           if (effect.hit) {
             if (target) target.flashUntil = now + 160;
@@ -953,12 +963,14 @@ export class View {
           }
           break;
         case 'thrown':
+          if (effect.depth === this.depth) this.faceAway(effect.from, effect.to, now);
           // The designer's flights (fx.json: boomerang, shuriken, tomahawk, javelin; the stones) take the place of the item in an arc.
           if (effect.depth === this.depth && !fxp.launch(effect, this.depth, now)) {
             this.shoot(effect.from, effect.to, itemSprite({ kind: effect.item, qty: 1, level: 0 }, world.run.labels), now);
           }
           break;
         case 'zapped':
+          if (effect.depth === this.depth) this.faceAway(effect.from, effect.to, now);
           if (effect.depth === this.depth && !fxp.launch(effect, this.depth, now, (cell) => seenCells(world, this.depth)[cell] === true)) {
             this.shoot(effect.from, effect.to, null, now, BOLT_COLORS[effect.bolt ?? 'magic'], effect.bolt ?? 'magic');
           }

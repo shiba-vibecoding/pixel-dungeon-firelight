@@ -165,6 +165,13 @@ function adminOps(env: Env): AdminOps {
       await store.fetch('https://reports/hunter', { method: 'POST', body: JSON.stringify({ id }) });
       return granted ? 'granted' : 'already';
     },
+    async reporter(id) {
+      const found = await store.fetch('https://reports/resolve', { method: 'POST', body: JSON.stringify({ id }) });
+      if (!found.ok) return 'unknown';
+      const { by } = (await found.json()) as { by: string };
+      const tg = /^tg(\d{1,15})$/.exec(by);
+      return tg ? Number(tg[1]) : 'guest';
+    },
     async outages(change) {
       const response = await store.fetch('https://reports/outages', { method: 'POST', body: JSON.stringify(change ?? {}) });
       return (await response.json()) as string[];

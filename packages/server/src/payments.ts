@@ -352,6 +352,19 @@ async function runAdminCommand(command: AdminCommand, chat: number, api: BotApi,
     case 'payments':
       await say(describePayments(command.user, await wallets.get(command.user), now));
       return;
+    case 'answer': {
+      if (!ops) return void (await say('Not available here.'));
+      const user = await ops.reporter(command.id);
+      if (user === 'unknown') return void (await say(`No report ${command.id}.`));
+      if (user === 'guest') return void (await say(`Report ${command.id} was sent outside Telegram: there is nobody to write to.`));
+      try {
+        await api('sendMessage', { chat_id: user, text: command.text });
+        await say(`Sent to the reporter of ${command.id} (${user}).`);
+      } catch (error) {
+        await say(`Not sent: ${(error as Error).message}`);
+      }
+      return;
+    }
     case 'reply':
       try {
         await api('sendMessage', { chat_id: command.user, text: command.text });

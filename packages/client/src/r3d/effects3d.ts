@@ -648,10 +648,41 @@ export class Effects3D {
     }
     this.ripples(c);
     this.glows(c);
+    this.cellFlashes(c);
     this.bolts(c, kit);
     this.legacy(c);
     // The designer's effects and clouds; until their sheets have come, the older puffs of gas.
     if (!this.sheets.frame(c, this.dynamic)) this.gas(c);
+  }
+
+  /**
+   * Cells lit up for a moment (view.flashes): a secret found, a trap shown, a tinted burst of gas or flame. In 2D they are a coloured
+   * square over the floor; here a soft pad of light on the floor, fading as that does, and for a discovery (no colour given) a few
+   * little stars rising from the cell, as the original's Speck.DISCOVER.
+   */
+  private cellFlashes(c: FxContext): void {
+    const flashes = c.view.flashes;
+    for (let i = 0; i < flashes.length; i++) {
+      const f = flashes[i]!;
+      const k = (c.now - f.start) / (f.duration ?? 600);
+      if (k < 0 || k >= 1) continue;
+      const rgb = parseCss(f.color ?? '255, 255, 200');
+      const x = (f.cell % WIDTH) + 0.5;
+      const z = Math.trunc(f.cell / WIDTH) + 0.5;
+      const fade = 1 - k;
+      this.glow.flat(x, 0.045, z, 1.15, 1.15, 0, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], rgb[0]! * 1.5 * fade, rgb[1]! * 1.5 * fade, rgb[2]! * 1.5 * fade, 0.85);
+      if (f.color === undefined) {
+        // The found sparkle: four stars, one after another, each rising and twinkling out.
+        for (let s = 0; s < 4; s++) {
+          const t = k * 1.6 - s * 0.16;
+          if (t < 0 || t >= 1) continue;
+          const sx = x + (s % 2 === 0 ? -0.22 : 0.22) + Math.sin(f.cell + s * 2.1) * 0.08;
+          const sz = z + (s < 2 ? -0.12 : 0.14);
+          const size = 0.2 * (1 - t * 0.5);
+          this.glow.billboard(sx, 0.2 + t * 0.7, sz, size, size, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], rgb[0]! * 2.6, rgb[1]! * 2.6, rgb[2]! * 2.2, 1 - t);
+        }
+      }
+    }
   }
 
   begin(): void {

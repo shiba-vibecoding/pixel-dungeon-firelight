@@ -1,9 +1,10 @@
 /*
- * Shelf-packed sheets: every sprite sheet is copied once onto one canvas, and the whole thing is one texture, so every character, item
+ * Packed sheets (packer.ts): every sprite sheet is copied once onto one canvas, and the whole thing is one texture, so every character, item
  * and flame is one draw. A second canvas of the same layout carries the glow of the pictures that glow (a wand, a ring, a fungus), black
  * for the rest; the sprites' material reads both. Pixel art: nearest, no mipmaps.
  */
 import { CanvasTexture, NearestFilter, SRGBColorSpace } from 'three';
+import { RectPacker } from './packer';
 
 export const ATLAS_W = 2048;
 export const ATLAS_H = 1024;
@@ -16,9 +17,8 @@ export class Atlas {
   private readonly g: CanvasRenderingContext2D;
   private readonly gg: CanvasRenderingContext2D;
   private readonly spots = new Map<CanvasImageSource, { x: number; y: number }>();
-  private shelfX = 0;
-  private shelfY = 0;
-  private shelfH = 0;
+  /** Where the next sheet goes: they come in the order the player meets them (a hero's three views, a dozen monsters, looks and hats). */
+  private readonly packer = new RectPacker(ATLAS_W, ATLAS_H);
   /** The atlas has something new to upload before the next frame. */
   dirty = false;
 
@@ -48,17 +48,10 @@ export class Atlas {
     if (known) return known;
     const w = image.width;
     const h = image.height;
-    if (this.shelfX + w > ATLAS_W) {
-      this.shelfX = 0;
-      this.shelfY += this.shelfH;
-      this.shelfH = 0;
-    }
-    if (this.shelfY + h > ATLAS_H) return null;
-    const spot = { x: this.shelfX, y: this.shelfY };
+    const spot = this.packer.place(w, h);
+    if (!spot) return null;
     this.g.drawImage(image, spot.x, spot.y);
     if (glow) this.gg.drawImage(glow, spot.x, spot.y);
-    this.shelfX += w;
-    this.shelfH = Math.max(this.shelfH, h);
     this.spots.set(image, spot);
     this.dirty = true;
     return spot;

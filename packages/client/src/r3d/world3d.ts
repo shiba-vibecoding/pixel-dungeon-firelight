@@ -27,6 +27,7 @@ import { sheet as worldSheet } from '../worldsheets';
 import { fx } from '../fx';
 import { knockback, LUNGE_MS } from '../render';
 import { FALL_MS, type Puppet, TILE, type View } from '../view';
+import { figureOf } from '../dirs';
 import { puppetAlpha } from '../puppetfade';
 import { ATLAS_H, ATLAS_W, Atlas } from './atlas';
 import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrain, loadKit, loadRegion, propCutout } from './assets3d';
@@ -448,10 +449,12 @@ export class World3D {
     this.deadMesh.count = 0;
     this.deadMesh.renderOrder = 3;
     this.scene.add(this.deadMesh);
-    // The blended batch: the same atlas, the same fog and haze; the picture's own alpha, and a cold light of its own.
+    // The blended batch: the same atlas, the same fog and haze; the picture's own alpha, and a light of its own as the other figures
+    // have (its own colours at 0.14, through the emissive map: a flat emissive colour would wash every bat and bee pale blue). The
+    // ghost's cold glow is its halo (addPuppet).
     const softQuad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
     const softMaterial = new MeshLambertMaterial({
-      map: this.atlas.color, emissive: 0x86aedb, transparent: true, depthWrite: false, alphaTest: 0.02, side: DoubleSide,
+      map: this.atlas.color, emissive: 0x242424, emissiveMap: this.atlas.color, transparent: true, depthWrite: false, alphaTest: 0.02, side: DoubleSide,
     });
     withFog(softMaterial, this.air, 'instance');
     // The fade is through the picture's alpha: a per-instance `aAlpha` scales it (the dead batch dissolves by dither; this one blends).
@@ -742,9 +745,18 @@ export class World3D {
     if (change === 'rebuilt') {
       this.dropMeshes();
       this.makeMeshes();
-    } else if (this.swing.sync(geom.terrain, (cell) => this.options.reveal === true || this.lastVisible[cell] === true, this.clock) > 0) {
-      // A door in sight begins to swing: its shadow is drawn again when it has swung, as well as now.
-      this.rig.shadowsStale = true;
+    } else {
+      // Whatever changed (a secret door found, a door burnt, a wall mined), the doors of the level are collected again, and the leaves
+      // made again if there are more or fewer: the gap and its leaf are there on the next frame.
+      const { across, passable } = this.doorSurroundings();
+      if (this.swing.refresh(geom.terrain, across, passable)) {
+        this.dropLeaves();
+        this.makeLeaves(true);
+      }
+      if (this.swing.sync(geom.terrain, (cell) => this.options.reveal === true || this.lastVisible[cell] === true, this.clock) > 0) {
+        // A door in sight begins to swing: its shadow is drawn again when it has swung, as well as now.
+        this.rig.shadowsStale = true;
+      }
     }
     this.scanProps();
     this.configureMirror();
@@ -772,6 +784,11 @@ export class World3D {
     }
     this.floorMesh = this.boxMesh = this.waterMesh = this.decalMesh = null;
     this.seenFloor = this.seenBox = -1;
+    this.dropLeaves();
+  }
+
+  /** The leaves' meshes are given back (the doors themselves are kept: DoorSwing). */
+  private dropLeaves(): void {
     for (const mesh of [this.leafMesh, this.lockMesh]) {
       if (!mesh) continue;
       this.scene.remove(mesh);
@@ -781,12 +798,21 @@ export class World3D {
     this.leafMesh = this.lockMesh = null;
   }
 
+  /** The level's terrain says which cells hold doors: beside a wall, open ground? */
+  private doorSurroundings(): { across: (x: number, z: number) => boolean; passable: (x: number, z: number) => boolean } {
+    const g = this.geom!;
+    return {
+      across: (x, z) => g.doorAcross(x, z),
+      passable: (x, z) => x >= 0 && z >= 0 && x < WIDTH && z < LENGTH / WIDTH && g.kinds[x + z * WIDTH] !== K_WALL,
+    };
+  }
+
   /** One leaf mesh per kind, an instance for each door of the level (the kind a door is not has its instance scaled to nothing). */
   private makeLeaves(keep: boolean): void {
     const g = this.geom!;
-    const passable = (x: number, z: number): boolean => x >= 0 && z >= 0 && x < WIDTH && z < LENGTH / WIDTH && g.kinds[x + z * WIDTH] !== K_WALL;
+    const { across, passable } = this.doorSurroundings();
     this.swing.reduced = this.options.reduced === true;
-    if (!keep || this.swing.leaves.length === 0) this.swing.reset(g.terrain, (x, z) => g.doorAcross(x, z), passable);
+    if (!keep || this.swing.leaves.length === 0) this.swing.reset(g.terrain, across, passable);
     const n = this.swing.leaves.length;
     if (n === 0 || !this.leafMaterial) return;
     for (const locked of [false, true]) {
@@ -1029,6 +1055,8 @@ export class World3D {
     const now = f.now;
     const pos = f.view.positionInto(puppet, now, this.at);
     const { sheet, anims } = puppet.sprite;
+    // Which view of it to draw (dirs.ts: side, front or back by its last step or blow; the same layout, so the frame is the same).
+    const fig = figureOf(puppet, now);
     const anim = puppet.anim === 'idle' && puppet.pumped ? 'pump' : puppet.anim;
     const frame = frameAt(anims[anim], now - puppet.animStart);
     const sx = (frame % sheet.cols) * sheet.w;
@@ -1084,20 +1112,20 @@ export class World3D {
       this.deadFade = tint < 1 ? 1 - tint : 0;
       if (tint < 1) tint = 1;
     }
-    this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, look?.glow, blend);
+    this.sprite(fig.image, sx, sy, sheet.w, sheet.h, fig.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, fig.glow, blend);
     this.toDead = false;
     if (spectral) this.effects.halo(tx, 0.55 + lift, tz, COLD, 1.7, 0.2 + 0.05 * Math.sin(now / 520 + puppet.to));
-    if (look?.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
+    if (look && fig.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
     // The rim of the strongest light on the silhouette (not on the dead: they lie flat), and the shade slipping away from that light.
-    const lit = puppet.alive && !blend && this.rimLast(tx, tz, puppet.flip);
+    const lit = puppet.alive && !blend && this.rimLast(tx, tz, fig.flip);
     // The hat, a second picture by the same frame and armour, the hero's frame at (2, 7) of its cell: standing where he stands.
     const hat = worn?.hat;
-    if (hat) {
+    if (hat && fig.hat) {
       const col = frame % sheet.cols;
       const row = Math.floor(frame / sheet.cols) + puppet.row;
-      this.sprite(hat.image, col * hat.w, row * hat.h, hat.w, hat.h, puppet.flip, tx, lift, tz, (hat.w / TILE) * scale, (hat.h / TILE) * scale, tint, LEANED, 0, hat.glow);
-      if (hat.glow) this.glowLast(0.9);
-      this.rimLast(tx, tz, puppet.flip);
+      this.sprite(fig.hat, col * hat.w, row * hat.h, hat.w, hat.h, fig.flip, tx, lift, tz, (hat.w / TILE) * scale, (hat.h / TILE) * scale, tint, LEANED, 0, fig.hatGlow);
+      if (fig.hatGlow) this.glowLast(0.9);
+      this.rimLast(tx, tz, fig.flip);
     }
     if (puppet.alive || !puppet.laid) {
       const air = flyer || spectral || hover > 0;

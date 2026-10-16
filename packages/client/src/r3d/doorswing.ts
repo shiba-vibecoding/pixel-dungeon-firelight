@@ -197,6 +197,52 @@ export class DoorSwing {
     return changed;
   }
 
+  /**
+   * The terrain has changed in a way that may add or take away doors (a secret door found, a door burnt to embers, a wall mined): the
+   * leaves are collected again. A leaf that is still at a door keeps its state and its swing; a new one stands closed (or open, if the
+   * cell is an open door); one whose door is gone is dropped; every pose is worked out again, as the cells beside may have changed.
+   * Returns whether the set of leaves changed (the meshes are to be made again).
+   */
+  refresh(terrain: ArrayLike<number>, across: (x: number, z: number) => boolean, passable: (x: number, z: number) => boolean): boolean {
+    const before = this.leaves.slice();
+    const kept = new Map<number, Leaf>();
+    for (const leaf of before) kept.set(leaf.cell, leaf);
+    this.leaves.length = 0;
+    this.at.fill(-1);
+    this.moving = 0;
+    let changed = false;
+    for (let cell = 0; cell < LENGTH; cell++) {
+      const t = terrain[cell]!;
+      if (!isDoor(t)) continue;
+      const x = cell % WIDTH;
+      const z = Math.trunc(cell / WIDTH);
+      let leaf = kept.get(cell);
+      if (!leaf) {
+        changed = true;
+        leaf = {
+          cell, locked: t === T.LOCKED_DOOR, px: 0, pz: 0, closedA: 0, openA: 0, angle: 0, from: 0, to: 0, start: 0, ms: 0,
+          opening: false, moving: false, open: t === T.OPEN_DOOR,
+        };
+        poseOf(cell, across(x, z), passable, leaf);
+        leaf.angle = leaf.from = leaf.to = leaf.open ? leaf.openA : leaf.closedA;
+      } else {
+        const was = { closed: leaf.closedA, open: leaf.openA };
+        poseOf(cell, across(x, z), passable, leaf);
+        if (was.closed !== leaf.closedA || was.open !== leaf.openA) {
+          // The doorway's surroundings changed: the pose is taken, not swung to.
+          leaf.moving = false;
+          leaf.angle = leaf.from = leaf.to = leaf.open ? leaf.openA : leaf.closedA;
+        }
+      }
+      if (leaf.moving) this.moving++;
+      this.at[cell] = this.leaves.length;
+      this.leaves.push(leaf);
+    }
+    if (this.leaves.length !== before.length) changed = true;
+    this.dirty = true;
+    return changed;
+  }
+
   leafAt(cell: number): Leaf | undefined {
     const i = this.at[cell]!;
     return i < 0 ? undefined : this.leaves[i];
