@@ -25,6 +25,7 @@ import { sheet as worldSheet } from '../worldsheets';
 import { fx } from '../fx';
 import { knockback, LUNGE_MS } from '../render';
 import { FALL_MS, type Puppet, TILE, type View } from '../view';
+import { figureOf } from '../dirs';
 import { puppetAlpha } from '../puppetfade';
 import { ATLAS_H, ATLAS_W, Atlas } from './atlas';
 import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrain, loadKit, loadRegion, propCutout } from './assets3d';
@@ -873,6 +874,8 @@ export class World3D {
     const now = f.now;
     const pos = f.view.positionInto(puppet, now, this.at);
     const { sheet, anims } = puppet.sprite;
+    // Which view of it to draw (dirs.ts: side, front or back by its last step or blow; the same layout, so the frame is the same).
+    const fig = figureOf(puppet, now);
     const anim = puppet.anim === 'idle' && puppet.pumped ? 'pump' : puppet.anim;
     const frame = frameAt(anims[anim], now - puppet.animStart);
     const sx = (frame % sheet.cols) * sheet.w;
@@ -927,20 +930,20 @@ export class World3D {
       this.deadFade = tint < 1 ? 1 - tint : 0;
       if (tint < 1) tint = 1;
     }
-    this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, look?.glow, blend);
+    this.sprite(fig.image, sx, sy, sheet.w, sheet.h, fig.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, fig.glow, blend);
     this.toDead = false;
     if (spectral) this.effects.halo(tx, 0.55 + lift, tz, COLD, 1.7, 0.2 + 0.05 * Math.sin(now / 520 + puppet.to));
-    if (look?.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
+    if (look && fig.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
     // The rim of the strongest light on the silhouette (not on the dead: they lie flat), and the shade slipping away from that light.
-    const lit = puppet.alive && !blend && this.rimLast(tx, tz, puppet.flip);
+    const lit = puppet.alive && !blend && this.rimLast(tx, tz, fig.flip);
     // The hat, a second picture by the same frame and armour, the hero's frame at (2, 7) of its cell: standing where he stands.
     const hat = worn?.hat;
-    if (hat) {
+    if (hat && fig.hat) {
       const col = frame % sheet.cols;
       const row = Math.floor(frame / sheet.cols) + puppet.row;
-      this.sprite(hat.image, col * hat.w, row * hat.h, hat.w, hat.h, puppet.flip, tx, lift, tz, (hat.w / TILE) * scale, (hat.h / TILE) * scale, tint, LEANED, 0, hat.glow);
-      if (hat.glow) this.glowLast(0.9);
-      this.rimLast(tx, tz, puppet.flip);
+      this.sprite(fig.hat, col * hat.w, row * hat.h, hat.w, hat.h, fig.flip, tx, lift, tz, (hat.w / TILE) * scale, (hat.h / TILE) * scale, tint, LEANED, 0, fig.hatGlow);
+      if (fig.hatGlow) this.glowLast(0.9);
+      this.rimLast(tx, tz, fig.flip);
     }
     if (puppet.alive || !puppet.laid) {
       const air = flyer || spectral || hover > 0;

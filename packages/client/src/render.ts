@@ -4,6 +4,7 @@ import { drawVignette } from './vignette';
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
+import { type Figure, figureOf } from './dirs';
 import { puppetAlpha } from './puppetfade';
 import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
 
@@ -182,6 +183,8 @@ function puffImage(color: string): HTMLCanvasElement {
 
 function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y: number, now: number): void {
   const { sheet, anims } = puppet.sprite;
+  // The view to draw (dirs.ts): side, front or back, in the same layout.
+  const fig = figureOf(puppet, now);
   const anim = puppet.anim === 'idle' && puppet.pumped ? 'pump' : puppet.anim;
   const frame = frameAt(anims[anim], now - puppet.animStart);
   const sx = (frame % sheet.cols) * sheet.w;
@@ -223,7 +226,7 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   }
   // AlphaTweener: a wraith rising, a ghost turning into its curse and back.
   if (puppet.fade) ctx.globalAlpha *= puppetAlpha(puppet, now, false);
-  if (puppet.flip) {
+  if (fig.flip) {
     ctx.translate(dx + sheet.w, dy);
     ctx.scale(-1, 1);
   } else {
@@ -233,18 +236,18 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   // A legendary look's aura stands behind the hero (24 x 28, its feet at (12, 26); the hero's at (6, 14)).
   const aura = worn?.look?.aura;
   if (aura) ctx.drawImage(aura.image, (Math.floor(now / aura.ms) % aura.frames) * aura.w, 0, aura.w, aura.h, 6 - aura.feetX, 14 - aura.feetY, aura.w, aura.h);
-  ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
-  if (worn) drawWorn(ctx, puppet, frame, now);
+  ctx.drawImage(fig.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+  if (worn) drawWorn(ctx, puppet, fig, frame, now);
   if (now < puppet.flashUntil) {
     // Hit flash: adding the sprite onto itself brightens only its own pixels.
     ctx.globalCompositeOperation = 'lighter';
-    ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
-    ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+    ctx.drawImage(fig.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+    ctx.drawImage(fig.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
   } else if (puppet.pumped && puppet.alive) {
     // A pumped-up Goo throbs.
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.35 + 0.35 * Math.sin(now / 60);
-    ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+    ctx.drawImage(fig.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
   }
   ctx.restore();
 }
@@ -254,28 +257,28 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
  * left): the hat is a second picture by the same frame and armour, in a cell 16 x 22 with the hero's frame at (2, 7); a legendary look's
  * mask of what glows is added onto itself, pulsing; a crown or a halo glows too.
  */
-function drawWorn(ctx: CanvasRenderingContext2D, puppet: Puppet, frame: number, now: number): void {
+function drawWorn(ctx: CanvasRenderingContext2D, puppet: Puppet, fig: Figure, frame: number, now: number): void {
   const worn = puppet.worn!;
   const { sheet } = puppet.sprite;
   const col = frame % sheet.cols;
   const row = Math.floor(frame / sheet.cols) + puppet.row;
   const look = worn.look;
-  if (look?.glow) {
+  if (look && fig.glow) {
     const k = 0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = look.pulse.min + (look.pulse.max - look.pulse.min) * k;
-    ctx.drawImage(look.glow, col * sheet.w, row * sheet.h, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+    ctx.drawImage(fig.glow, col * sheet.w, row * sheet.h, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
     ctx.restore();
   }
   const hat = worn.hat;
-  if (hat) {
-    ctx.drawImage(hat.image, col * hat.w, row * hat.h, hat.w, hat.h, -hat.heroX, -hat.heroY, hat.w, hat.h);
-    if (hat.glow) {
+  if (hat && fig.hat) {
+    ctx.drawImage(fig.hat, col * hat.w, row * hat.h, hat.w, hat.h, -hat.heroX, -hat.heroY, hat.w, hat.h);
+    if (fig.hatGlow) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.7;
-      ctx.drawImage(hat.glow, col * hat.w, row * hat.h, hat.w, hat.h, -hat.heroX, -hat.heroY, hat.w, hat.h);
+      ctx.drawImage(fig.hatGlow, col * hat.w, row * hat.h, hat.w, hat.h, -hat.heroX, -hat.heroY, hat.w, hat.h);
       ctx.restore();
     }
   }

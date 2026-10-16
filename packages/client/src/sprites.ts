@@ -1,4 +1,5 @@
 import { baseKind, type HeroClass, LAST_SHOP_DEPTH, type MobKind } from '@pd/core';
+import { type Faces, SPRITE_VIEWS } from './dirs';
 
 /* Sprite sheets and animations of the original (HeroSprite, RatSprite, …). */
 
@@ -20,6 +21,11 @@ export type AnimName = 'idle' | 'run' | 'attack' | 'die' | 'operate' | 'pump';
 export interface CharSprite {
   sheet: Sheet;
   anims: Readonly<Record<AnimName, Animation>>;
+  /**
+   * The views from the front and the back (design part 8, dirs.ts), in the layout of `sheet`, fetched when first drawn. Without them (or
+   * until they come) the side view is drawn in every direction.
+   */
+  faces?: Faces;
 }
 
 export interface Assets {
@@ -343,6 +349,9 @@ function loadImage(url: string, attempt = 0): Promise<HTMLImageElement> {
 
 const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image, w, h, cols: Math.floor(image.width / w) });
 
+/** The views of a sheet by the name of its picture (dirs.ts SPRITE_VIEWS), if it has any. */
+const viewsOf = (name: string): { faces?: Faces } => (SPRITE_VIEWS[name] ? { faces: SPRITE_VIEWS[name] } : {});
+
 /** Loads every sprite sheet; `onProgress` hears the share done, from 0 to 1. */
 /** Where the sprite sheets are, for the looks loaded later. */
 let assetBase = '';
@@ -404,21 +413,21 @@ export async function loadAssets(base: string, onProgress?: (done: number) => vo
     ),
   ) as Record<(typeof names)[number], HTMLImageElement>;
 
-  const hero = (image: HTMLImageElement): CharSprite => ({ sheet: sheet(image, 12, 15), anims: HERO_ANIMS });
+  const hero = (image: HTMLImageElement, name: string): CharSprite => ({ sheet: sheet(image, 12, 15), anims: HERO_ANIMS, ...viewsOf(name) });
   const mob = (kind: MobKind): CharSprite => {
     const spec = MOB_SPRITES[kind];
     // A mirror image is drawn with its hero's own sheet (see View.sync); the warrior's stands in here.
     const image = kind === 'mirror' ? 'warrior' : kind === 'fetidRat' ? 'rat' : kind === 'curse' ? 'wraith' : kind === 'impShopkeeper' ? 'imp' : baseKind(kind);
-    return { sheet: sheet(images[image as (typeof names)[number]], spec.w, spec.h), anims: spec.anims };
+    return { sheet: sheet(images[image as (typeof names)[number]], spec.w, spec.h), anims: spec.anims, ...viewsOf(image) };
   };
   return {
     tiles: [images.tiles0, images.tiles1, images.tiles2, images.tiles3, images.tiles4],
     water: [images.water0, images.water1, images.water2, images.water3, images.water4],
     heroes: {
-      warrior: hero(images.warrior),
-      mage: hero(images.mage),
-      rogue: hero(images.rogue),
-      huntress: hero(images.ranger),
+      warrior: hero(images.warrior, 'warrior'),
+      mage: hero(images.mage, 'mage'),
+      rogue: hero(images.rogue, 'rogue'),
+      huntress: hero(images.ranger, 'ranger'),
     },
     mobs: Object.fromEntries((Object.keys(MOB_SPRITES) as MobKind[]).map((kind) => [kind, mob(kind)])) as Record<MobKind, CharSprite>,
     icons: images.icons,

@@ -1,4 +1,5 @@
 import { artSku, type Item } from './catalog';
+import { conventionFaces, type Faces, PET_VIEWS, withView } from './dirs';
 
 /*
  * The designer's art for Pixel-Mart (design part 5: public/assets/mart/fl/catalog.json and the sheets it names), read for the game: the
@@ -183,6 +184,8 @@ export interface LookArt {
   pulse: { hz: number; min: number; max: number };
   /** The legendary look's aura: frames of w x h side by side, the feet at (feetX, feetY). */
   aura?: { image: HTMLImageElement; frames: number; w: number; h: number; feetX: number; feetY: number; ms: number };
+  /** The look seen from the front and from the back (design part 8: <sheet>-front.png, <sheet>-glow-front.png), fetched when first drawn. */
+  faces: Faces;
 }
 
 export function lookArt(id: string): LookArt | undefined {
@@ -196,6 +199,7 @@ export function lookArt(id: string): LookArt | undefined {
   if (raw.legendary && ((typeof raw.glow === 'string' && !glow) || (raw.aura && !aura))) return undefined;
   return {
     sheet,
+    faces: conventionFaces(raw.sheet, typeof raw.glow === 'string' ? raw.glow : undefined),
     ...(glow ? { glow } : {}),
     pulse: raw.glowPulse ?? { hz: 1, min: 0.55, max: 1 },
     ...(aura && raw.aura ? { aura: { image: aura, frames: raw.aura.frames, w: raw.aura.w, h: raw.aura.h, feetX: raw.aura.feet[0], feetY: raw.aura.feet[1], ms: raw.aura.ms } } : {}),
@@ -210,6 +214,8 @@ export interface HatArt {
   h: number;
   heroX: number;
   heroY: number;
+  /** The hat from the front and from the back (design part 8), in the same cells and rows, fetched when first drawn. */
+  faces: Faces;
 }
 
 export function hatArt(id: string, heroClass: string): HatArt | undefined {
@@ -222,7 +228,7 @@ export function hatArt(id: string, heroClass: string): HatArt | undefined {
   const glow = got(glowPath);
   if (glowPath && !glow) return undefined;
   const cell = raw.cell ?? { w: 16, h: 22, heroAt: [2, 7] as const };
-  return { image, ...(glow ? { glow } : {}), w: cell.w, h: cell.h, heroX: cell.heroAt[0], heroY: cell.heroAt[1] };
+  return { image, ...(glow ? { glow } : {}), w: cell.w, h: cell.h, heroX: cell.heroAt[0], heroY: cell.heroAt[1], faces: conventionFaces(raw.sheets[key], glowPath) };
 }
 
 export interface PetArt {
@@ -240,6 +246,8 @@ export interface PetArt {
   fly: boolean;
   /** How long after the hero's step the pet takes its own, ms. */
   lag: number;
+  /** The pet from the front and from the back (design part 8); a view it does not have is drawn from the side. */
+  faces: Faces;
 }
 
 export function petArt(id: string): PetArt | undefined {
@@ -251,7 +259,12 @@ export function petArt(id: string): PetArt | undefined {
   const glow = typeof raw.glow === 'string' ? got(raw.glow) : undefined;
   if (typeof raw.glow === 'string' && !glow) return undefined;
   const feet = sheet.feet ?? [6, 11];
+  const views = PET_VIEWS[sheet.file.replace(/^.*\/|\.png$/g, '')] ?? {};
+  const glowPath = typeof raw.glow === 'string' ? raw.glow : undefined;
+  const face = (view: 'front' | 'back') => ({ image: withView(sheet.file, view), ...(glowPath ? { glow: glowPath } : {}) });
+  const faces: Faces = { ...(views.front ? { front: face('front') } : {}), ...(views.back ? { back: face('back') } : {}) };
   return {
+    faces,
     image, ...(glow ? { glow } : {}), w: sheet.w, h: sheet.h, idle: sheet.idle ?? [0, 1, 2, 3], walk: sheet.walk ?? [4, 5, 6, 7], feetX: feet[0], feetY: feet[1],
     ms: sheet.ms ?? 150, fly: raw.fly === true, lag: raw.follow?.lag_ms ?? 220,
   };
