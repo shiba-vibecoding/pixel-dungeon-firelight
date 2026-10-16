@@ -1,12 +1,15 @@
 import { audio } from './audio';
-import type { BoardEntry, BoardKind, BoardView, Profile, RunApi, SyncAnswer } from './checked';
+import type { BoardEntry, BoardKind, BoardView, BoardWorn, Profile, RunApi, SyncAnswer } from './checked';
+import { heroCard, lookOfEntry, myLook } from './herocard';
+import { type VirtualList, type VirtualRow, virtualList } from './vlist';
 import { locale, t } from './i18n';
 import type { RunRecord } from './rankings';
-import { AVATAR, button, el, info, show, sprites, windowOf } from './screens';
+import { button, el, info, show, sprites, windowOf } from './screens';
 import { itemById } from './catalog';
 import { cosmetics } from './cosmetics';
 import { L } from './i18n-shop';
-import { frameStyle, paintName } from './shopart';
+import { flCatalog, onFlChange } from './flart';
+import { paintName } from './shopart';
 import { type RankIcon, rankIcon, trophyKind } from './trophyicons';
 
 /*
@@ -24,44 +27,64 @@ const BOARD_ICON: Partial<Record<string, RankIcon>> = { daily: 'gold', week: 'we
 
 const number = (n: number): string => n.toLocaleString(locale);
 
+/** A name in the colour of its item. The designer's colours come with their catalogue (flart.ts): a name made before it has arrived is painted when it does. */
+function paintNameLive(node: HTMLElement, item: Parameters<typeof paintName>[1]): void {
+  paintName(node, item);
+  if (!item || flCatalog()) return;
+  const stop = onFlChange(() => {
+    if (!flCatalog()) return;
+    stop();
+    paintName(node, item);
+  });
+}
+
 interface RowEntry {
   heroClass: BoardEntry['heroClass'];
   name: string;
   score: number;
   patron?: boolean;
-  /** Name colour, title and portrait frame worn (Pixel-Mart's catalogue, item ids). */
+  /** Name colour, title and portrait frame worn (Pixel-Mart's catalogue, item ids): the old per-field values of an entry. */
   nc?: string;
   tt?: string;
   fr?: string;
+  /** How the hero looked: the server's snapshot (look, hat, pet, fire, frame, title, name colour). */
+  w?: BoardWorn;
 }
 
-/** One row of a board: place (none on the player's own list), face, name with a patron's mark, score, and what the run came to. */
-function row(place: number | null, entry: RowEntry, detail: Array<string | Node>, me: boolean): HTMLElement {
-  const face = el('i', { className: 'pd-rank-face' });
-  face.style.setProperty('--av', String(AVATAR[entry.heroClass]));
+/** A row of a board is this tall, on a phone and everywhere (the list is virtual: it counts in rows of one height). */
+const ROW_H = 56;
+
+/** A row with what must be done when it leaves the page (its hero card stops moving). */
+type RowNode = VirtualRow;
+
+/**
+ * One row of a board: place (none on the player's own list), the hero card (the hero in the look, hat, pet and camp fire the player
+ * wore, in their frame), name in its colour with a patron's mark and the title, score, and what the run came to.
+ * `moving`: the top three, the player's own row: their card's fire and pet move; every other row is a still frame.
+ */
+function row(place: number | null, entry: RowEntry, detail: Array<string | Node>, me: boolean, moving = false): RowNode {
   const medal = place !== null && place <= 3 ? ` pd-medal-${place}` : '';
-  // What the player wears for the boards: a frame round the face, a colour for the name, a title after it (looks only).
+  // What the player wears for the boards (looks only): `w`, or the old per-field values of an entry from before it.
   const worn = (id: string | undefined, category: string) => {
     const found = id ? itemById(id) : undefined;
     return found?.category === category ? found : undefined;
   };
-  const frame = worn(entry.fr, 'frame');
-  if (frame) {
-    face.classList.add('worn-frame');
-    face.style.cssText += `;${frameStyle(frame)}`;
-  }
+  const look = lookOfEntry({ heroClass: entry.heroClass, w: { ...entry.w, ...(entry.w?.fr || !entry.fr ? {} : { fr: entry.fr }) } });
+  const card = heroCard(look, { animate: moving || me, scale: 2, className: 'pd-rank-art' });
   const label = el('span', { textContent: entry.name });
-  paintName(label, worn(entry.nc, 'namecolor'));
-  const title = worn(entry.tt, 'title');
-  return el(
+  paintNameLive(label, worn(entry.w?.nc ?? entry.nc, 'namecolor'));
+  const title = worn(entry.w?.tt ?? entry.tt, 'title');
+  const node = el(
     'div',
-    { className: `pd-rank${me ? ' me' : ''}${medal}` },
+    { className: `pd-rank${me ? ' me' : ''}${medal}${title ? '' : ' no-title'}` },
     place !== null ? el('span', { className: 'pd-rank-n', textContent: String(place) }) : null,
-    face,
-    el('span', { className: 'pd-rank-name' }, entry.patron ? el('i', { className: 'pd-patron-mark' }) : null, label, title ? el('small', { className: 'pd-rank-title', textContent: title.name[L] }) : null),
+    el('span', { className: 'pd-rank-card' }, card.canvas),
+    el('span', { className: 'pd-rank-name' }, entry.patron ? el('i', { className: 'pd-patron-mark' }) : null, label),
+    title ? el('small', { className: `pd-rank-title ${title.rarity}`, textContent: title.name[L] }) : null,
     el('span', { className: 'pd-rank-score', textContent: number(entry.score) }),
     el('small', { className: 'pd-rank-detail' }, ...detail),
   );
+  return { node, dispose: () => card.dispose() };
 }
 
 /** «Warrior · lv.22 · ⛶24», the depth as its icon; in the arena «Warrior · wave 23». */
@@ -70,20 +93,36 @@ function detail(heroClass: BoardEntry['heroClass'], level: number, depth: number
   return [`${t.classes[heroClass]} · ${t.ranked.lv}${level} · `, el('i', { className: 'pd-rank-depth' }), `${depth}${won ? ' · ★' : ''}`];
 }
 
-/** A board as rows, then (stuck to the bottom) my row if it is further down, and my place. */
-export function boardRows(board: BoardView | null, arena: boolean, count = 50): HTMLElement[] {
+/** Boards longer than this are listed virtually (only the rows on screen are mounted). */
+const EAGER_ROWS = 12;
+
+/**
+ * A board as rows, then (stuck to the bottom) my row if it is further down, and my place. Given the element that scrolls it, a long
+ * board mounts only the rows on screen; `onList` gets the list, so that it can be stopped when the board is left.
+ */
+export function boardRows(board: BoardView | null, arena: boolean, scroller?: HTMLElement, onList?: (list: VirtualList) => void): HTMLElement[] {
   if (!board) return [info(t.boardOffline, 'pd-note center')];
-  const list = el('div', { className: 'pd-ranks' });
-  board.top.slice(0, count).forEach((entry, i) => list.append(row(i + 1, entry, detail(entry.heroClass, entry.level, entry.depth, arena, entry.won), i + 1 === board.rank)));
+  const make = (i: number): RowNode => {
+    const entry = board.top[i]!;
+    return row(i + 1, entry, detail(entry.heroClass, entry.level, entry.depth, arena, entry.won), i + 1 === board.rank, i < 3);
+  };
+  let list: HTMLElement;
+  if (scroller && board.top.length > EAGER_ROWS) {
+    const virtual = virtualList(scroller, board.top.length, ROW_H, make, 'pd-ranks virtual');
+    onList?.(virtual);
+    list = virtual.node;
+  } else {
+    list = el('div', { className: 'pd-ranks' }, ...board.top.map((_, i) => make(i).node));
+  }
   const nodes: HTMLElement[] = [board.top.length === 0 ? info(t.noResults, 'pd-note center') : list];
   if (board.rank !== null) {
-    const below = board.rank > count && board.you;
+    const below = board.rank > board.top.length && board.you;
     nodes.push(
       el(
         'div',
         { className: 'pd-ranks-me' },
         below ? el('div', { className: 'pd-ranks-gap', textContent: '· · ·' }) : null,
-        below ? row(board.rank, board.you!, detail(board.you!.heroClass, board.you!.level, board.you!.depth, arena, board.you!.won), true) : null,
+        below ? row(board.rank, board.you!, detail(board.you!.heroClass, board.you!.level, board.you!.depth, arena, board.you!.won), true).node : null,
         el('div', { className: 'pd-board-place', textContent: t.ranked.placeOf(board.rank, board.total ?? board.rank) }),
       ),
     );
@@ -120,7 +159,11 @@ function mineRows(records: readonly RunRecord[], trophies: Profile['trophies']):
     const what = record.won ? '' : record.cause ? ` · ${record.cause}` : '';
     // A run the server did not check (played before checked runs, or without the server) is on no board: it says so.
     const unranked = record.checked ? '' : ` · ${t.ranked.offBoard}`;
-    list.append(row(null, record, [`${shortDate(record.date)} · `, ...detail(record.heroClass, record.lvl, record.depth, arena, record.won), unranked, what], false));
+    // The device's own runs are this player's: their hero as they wear it now.
+    const mine = myLook(record.heroClass);
+    const w: BoardWorn = { ...(mine.l ? { l: mine.l } : {}), ...(mine.h ? { h: mine.h } : {}), ...(mine.p ? { p: mine.p } : {}), ...(mine.f ? { f: mine.f } : {}), ...(mine.fr ? { fr: mine.fr } : {}) };
+    const mineRow = row(null, { ...record, w: { ...w, ...(cosmetics.nameColor ? { nc: cosmetics.nameColor.id } : {}), ...(cosmetics.title ? { tt: cosmetics.title.id } : {}) } }, [`${shortDate(record.date)} · `, ...detail(record.heroClass, record.lvl, record.depth, arena, record.won), unranked, what], false);
+    list.append(mineRow.node);
   }
   nodes.push(list);
   return nodes;
@@ -144,8 +187,12 @@ export function showBoards(options: BoardsOptions): void {
   tabs.setAttribute('role', 'tablist');
   const cache = new Map<Tab, Promise<BoardView | null>>();
   let current: Tab = options.api ? (options.tab ?? 'daily') : 'device';
+  let listing: VirtualList | null = null;
   const select = (tab: Tab): void => {
     current = tab;
+    // The board left behind lets its rows (and their hero cards) go.
+    listing?.dispose();
+    listing = null;
     for (const node of tabs.children) node.setAttribute('aria-selected', String((node as HTMLElement).dataset.tab === tab));
     const icon = BOARD_ICON[tab];
     note.replaceChildren(...(icon ? [rankIcon(icon)] : []), options.api ? t.ranked.tabInfo[tab] ?? '' : t.ranked.telegramOnly);
@@ -158,7 +205,7 @@ export function showBoards(options: BoardsOptions): void {
     if (!cache.has(tab)) cache.set(tab, options.api.board(tab as BoardKind));
     void cache.get(tab)!.then((board) => {
       if (current !== tab) return;
-      body.replaceChildren(...boardRows(board, tab === 'arena'));
+      body.replaceChildren(...boardRows(board, tab === 'arena', body, (list) => { listing = list; }));
       sprites(body);
     });
   };
@@ -203,9 +250,11 @@ export interface CardFallback {
 export interface CardOptions {
   /** The name shown. */
   name: string;
-  /** The hero on the scene, in avatars.png. */
+  /** The hero on the scene, in avatars.png (the order of the camp's classes). */
   avatar: number;
-  /** The portrait frame worn (Pixel-Mart). */
+  /** The hero's class on the scene: his card shows him as this player wears him. */
+  heroClass?: string;
+  /** The portrait frame worn (Pixel-Mart): the card draws the frame itself now. */
   frame?: string;
   profile: Profile | null;
   fallback?: CardFallback;
@@ -219,17 +268,14 @@ export interface CardOptions {
 export function profileCard(options: CardOptions): HTMLElement {
   const { profile } = options;
   const streak = profile?.streak.count ?? 0;
-  const face = el('i');
-  face.style.setProperty('--av', String(options.avatar));
-  const portrait = el('span', { className: `pd-profile-face${options.frame ? ` frame-${options.frame}` : ''}` }, face);
-  // The profile frame, name colour and title worn (Pixel-Mart's catalogue).
-  const worn = { frame: cosmetics.frame, color: cosmetics.nameColor, title: cosmetics.title };
-  if (worn.frame) {
-    portrait.classList.add('frame-p');
-    portrait.style.cssText = frameStyle(worn.frame);
-  }
+  // The portrait is the hero card: this player's hero in the look, hat, pet and camp fire worn now, in the profile frame, moving.
+  const heroClass = options.heroClass ?? (['warrior', 'mage', 'rogue', 'huntress'][options.avatar] ?? 'warrior');
+  const card = heroCard(() => myLook(heroClass), { animate: true, scale: 2, className: 'pd-profile-art' });
+  const portrait = el('span', { className: 'pd-profile-face card' }, card.canvas);
+  // The name colour and title worn (Pixel-Mart's catalogue).
+  const worn = { color: cosmetics.nameColor, title: cosmetics.title };
   const nameNode = el('span', { className: 'pd-profile-name', textContent: options.name });
-  paintName(nameNode, worn.color);
+  paintNameLive(nameNode, worn.color);
   const facts: Node[] = [];
   const fact = (label: string, value: string, className = ''): void => {
     if (facts.length > 0) facts.push(document.createTextNode(' · '));
