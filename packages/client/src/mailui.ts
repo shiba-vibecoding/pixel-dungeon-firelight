@@ -2,6 +2,9 @@ import { audio } from './audio';
 import { type Gift, type Letter, type Profile, type RunApi, unclaimed } from './checked';
 import { locale, t } from './i18n';
 import { button, el, show, sprites, toast, windowOf } from './screens';
+import { itemById } from './catalog';
+import { L, S } from './i18n-shop';
+import { glyph } from './shopart';
 import { rankIcon, trophyKind } from './trophyicons';
 
 /*
@@ -32,6 +35,11 @@ function dayOf(board: string): string {
 
 /** The letter's words, with its place picked out. */
 function words(letter: Letter): HTMLElement {
+  if (letter.kind === 'gift') {
+    const given = letter.gifts[0];
+    const item = given?.type === 'item' ? itemById(given.sku) : undefined;
+    return el('p', { className: 'pd-letter-text' }, S.giftLetterText(given?.type === 'item' ? given.name : undefined, item ? item.name[L] : '…'));
+  }
   const [, when = ''] = letter.board.split(':');
   const text = letter.kind === 'cup'
     ? t.mail.cupText(dayOf(letter.board), letter.place, letter.total)
@@ -41,6 +49,10 @@ function words(letter: Letter): HTMLElement {
 
 /** One gift: its icon and name. A kind this client does not know is left out (an update will show it). */
 function gift(item: Gift): HTMLElement | null {
+  if (item.type === 'item') {
+    const found = itemById(item.sku);
+    return found ? el('span', { className: 'pd-gift' }, glyph(found), found.name[L]) : null;
+  }
   if (item.type !== 'trophy') return null;
   const kind = trophyKind(item.board, item.place);
   return el('span', { className: 'pd-gift' }, rankIcon(kind, { x1: true }), t.mail.gifts[kind] ?? '');
@@ -125,11 +137,12 @@ export function showMail(options: MailOptions): void {
                 })(),
           );
           const kind = letter.kind === 'cup' ? trophyKind(letter.board, letter.place) : 'week';
-          const title = letter.kind === 'cup' ? t.mail.cup : t.mail.medal;
+          const title = letter.kind === 'gift' ? S.giftLetter : letter.kind === 'cup' ? t.mail.cup : t.mail.medal;
+          const giftItem = letter.kind === 'gift' && letter.gifts[0]?.type === 'item' ? itemById(letter.gifts[0].sku) : undefined;
           const node = el(
             'article',
             { className: `pd-letter${done ? ' claimed' : unread.has(letter.id) ? ' unread' : ''}` },
-            el('span', { className: 'pd-letter-ico' }, rankIcon(kind, { big: true })),
+            el('span', { className: 'pd-letter-ico' }, giftItem ? glyph(giftItem) : rankIcon(kind, { big: true })),
             el('header', { className: 'pd-letter-head' }, el('b', { textContent: title }), el('time', { textContent: when(letter.at, now) })),
             words(letter),
             act,

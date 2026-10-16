@@ -46,7 +46,7 @@ import { idle, lazy, load } from './lazy';
 import { QUIP_LOG_COLOR, quipSys } from './quipsys';
 import { loop, onResume } from './lifecycle';
 import { reloadForUpdate } from './update';
-import { type Camp, campClasses } from './camp';
+import { type Camp, type CampDress, campClasses } from './camp';
 import { type DailyRulesView, showCamp } from './campui';
 import { showMail, unclaimed } from './mailui';
 import { markSeenHere, newsDue, seenHere } from './news';
@@ -58,6 +58,9 @@ import { coachDone, markCoachDone, type Rect, type StepId, Tutorial, veteranSkip
 import { watchErrors } from './diag';
 import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
+import { showStore } from './storeui';
+import { cosmetics } from './cosmetics';
+import { S as shopText } from './i18n-shop';
 import { quality } from './quality';
 import { type Launch, Motion } from './motion';
 import { Scenery } from './scenery';
@@ -74,7 +77,7 @@ import { CoopMarks } from './coop-marks';
 import {
   backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
   shareArena, shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
-  homeScreenStatus, addToHomeScreen,
+  homeScreenStatus, addToHomeScreen, invitedGift,
 } from './telegram';
 import { report, startReporting } from './report';
 import { STEP_MS, TILE, View } from './view';
@@ -421,6 +424,14 @@ let newLoot = false;
 
 // Pixel-Mart: what this player owns, from the server; what they wear goes to the party.
 void mart.refresh(SERVER);
+// The catalogue's side of it (storeui.ts): what is owned and worn. A friend's share link is opened once the shop is known.
+void cosmetics.refresh(SERVER).then(async () => {
+  const code = invitedGift();
+  if (!code) return;
+  const result = await cosmetics.acceptGift(code);
+  toast(result === 'ok' ? shopText.giftAccepted : result === 'taken' ? shopText.giftTaken : shopText.failed, { tone: result === 'ok' ? 'good' : 'warn' });
+  if (result === 'ok') refreshProfile();
+});
 setBadgeImages(Object.fromEntries(BADGES.map((badge) => [badge.id, badge.image])));
 /** The class my hero plays in the current run. */
 const myClass = (): HeroClass => (session?.world && heroById(session.world, session.myId)?.heroClass) || heroClass;
@@ -920,6 +931,12 @@ function maybeNews(answer: Profile | null): boolean {
   return true;
 }
 
+/** Pixel-Mart's storefront; the first shop (recolours, effects, the patronage) is one button away and comes back to it. */
+function openStore(heroClass: HeroClass, onClose: () => void): void {
+  const again = (): void => openStore(heroClass, onClose);
+  showStore({ heroClass, onClose, classic: () => showMart({ heroClass, onClose: again }) });
+}
+
 /** The mail window; back to the camp when closed. */
 function openMail(): void {
   if (!api) return;
@@ -927,6 +944,8 @@ function openMail(): void {
     letters: profile?.mail ?? [],
     api,
     onChange: (mail, trophies) => {
+      // A gift claimed from the mail is owned now (the wallet is the shop's).
+      void cosmetics.refresh(SERVER);
       if (!profile) return;
       profile.mail = mail;
       profile.trophies = trophies;
@@ -1011,7 +1030,7 @@ function toTitle(ask = true): void {
     onNewDay: () => toTitle(false),
     onPractice: () => startSolo('daily'),
     onRankings: () => openBoards(),
-    onMart: () => showMart({ heroClass, onClose: toTitle }),
+    onMart: () => openStore(heroClass, toTitle),
     onSettings: () => settings(toTitle),
     mail: api && profile?.mail ? { count: unclaimed(profile.mail), onOpen: openMail } : undefined,
     challenges: challengesOpen() ? challenges : 0,
@@ -1028,7 +1047,15 @@ function toTitle(ask = true): void {
       }),
   });
   activeCamp = camp.camp;
+  activeCamp.dress(homeDress());
 }
+
+/** What the camp wears from the catalogue: the campfire's style and the looks' tints. The rest waits for its art (cosmetics.ts hooks). */
+const homeDress = (): CampDress => ({
+  fire: cosmetics.fire,
+  tint: Object.fromEntries((['warrior', 'mage', 'rogue', 'huntress'] as const).map((name) => [name, cosmetics.tint(name)])),
+});
+cosmetics.onChange(() => activeCamp?.dress(homeDress()));
 
 /** The journal and catalog; from the menu it goes back to the menu, from the corner button to the game. */
 function openJournal(onClose: () => void = hideOverlay): void {
@@ -1055,7 +1082,7 @@ function openMenu(): void {
         toast(sendNetlog('player report', true) ? t.reportSent : t.reportFailed);
       }
       : undefined,
-    onMart: () => showMart({ heroClass: myClass(), onClose: hideOverlay }),
+    onMart: () => openStore(myClass(), hideOverlay),
     onTreat: () => showTreat(hideOverlay),
     onExit: toTitle,
   });

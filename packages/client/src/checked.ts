@@ -42,12 +42,13 @@ export interface SyncAnswer {
 }
 
 /** What a letter gives; kinds are added as rewards come (a server with a mailbox). */
-export type Gift = { type: 'trophy'; board: string; place: number };
+export type Gift = { type: 'trophy'; board: string; place: number } | { type: 'item'; sku: string; from: number; name?: string };
 
 /** A letter of the mailbox: one a finished board the player placed on. */
 export interface Letter {
   id: string;
-  kind: 'cup' | 'medal';
+  /** A gift is from a friend (Pixel-Mart's catalogue): its item is claimed from the mail. */
+  kind: 'cup' | 'medal' | 'gift';
   board: string;
   place: number;
   total?: number;
@@ -121,6 +122,10 @@ export interface BoardEntry {
   won: boolean;
   kills?: number;
   patron?: boolean;
+  /** What the player wears for the boards (Pixel-Mart's catalogue, by item id): name colour, title, portrait frame. */
+  nc?: string;
+  tt?: string;
+  fr?: string;
   at: number;
 }
 

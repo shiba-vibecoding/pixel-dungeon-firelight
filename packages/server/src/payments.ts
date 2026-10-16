@@ -1,8 +1,10 @@
-import { emptyWallet, forSale, inSeason, offerBySku, SUBSCRIPTION_SECONDS, type Wallet } from '@pd/core';
+import { emptyWallet, forSale, inSeason, type Offer, offerBySku, SUBSCRIPTION_SECONDS, type Wallet } from '@pd/core';
+import { forSale as itemForSale, type Item, itemById, isPassSku, passSeason } from '../../client/src/catalog';
 import { ADMIN_USAGE, type AdminCommand, type AdminOps, describePayments, isAdminChat, parseAdminCommand } from './admin';
-import { invoiceText, speaksRussian } from './catalogue';
+import { SEASON } from './boards';
+import { type InvoiceText, invoiceText, itemInvoiceText, speaksRussian } from './catalogue';
 import type { WindowLimiter } from './limits';
-import { recentCharges, type WalletChange } from './wallet';
+import { type GiftTarget, recentCharges, shopOf, type WalletChange, type WalletView } from './wallet';
 
 /*
  * Pixel-Mart's payments in Telegram Stars (core.telegram.org/bots/payments-stars):
@@ -23,34 +25,78 @@ export type BotApi = (method: string, params: Record<string, unknown>) => Promis
 
 /** Players' wallets, wherever they are kept; a change is applied where the wallet is, all at once (wallet.ts). */
 export interface Wallets {
-  get(user: number): Promise<Wallet>;
-  apply(user: number, change: WalletChange): Promise<Wallet>;
+  get(user: number): Promise<WalletView>;
+  apply(user: number, change: WalletChange): Promise<WalletView>;
 }
 
-/** What an invoice carries back to the webhook: who pays and for what (at most 128 bytes). */
-interface Payload {
+/**
+ * What an invoice carries back to the webhook: who pays and for what (at most 128 bytes). A gift names its friend (`g`, a Telegram
+ * id) or its share link (`l`, a code that starts with the giver's id).
+ */
+export interface Payload {
   u: number;
   s: string;
+  g?: number;
+  l?: string;
 }
 
 function parsePayload(text: unknown): Payload | null {
   try {
     const payload = JSON.parse(String(text)) as Payload;
-    return typeof payload.u === 'number' && typeof payload.s === 'string' ? payload : null;
+    if (typeof payload.u !== 'number' || typeof payload.s !== 'string') return null;
+    if (payload.g !== undefined && (!Number.isInteger(payload.g) || payload.g <= 0 || payload.g === payload.u)) return null;
+    if (payload.l !== undefined && (typeof payload.l !== 'string' || !payload.l.startsWith(`${payload.u}_`))) return null;
+    return payload;
   } catch {
     return null;
   }
 }
 
+/** What is for sale under a sku: its price, its words and whether it renews. Without a price, why not. */
+interface Priced {
+  stars: number;
+  subscription: boolean;
+  text(language: string | undefined, gift: boolean): InvoiceText;
+  /** A catalogue item (or bundle), as against the first shop's offers. */
+  item?: Item;
+}
+
+function priced(sku: string, now: number, season: number): Priced | { error: string } {
+  const offer: Offer | undefined = offerBySku(sku);
+  if (offer) {
+    if (!forSale(offer)) return { error: 'not for sale' };
+    if (!inSeason(offer, now)) return { error: 'out of season' };
+    return { stars: offer.stars, subscription: Boolean(offer.subscription), text: (language) => invoiceText(offer, language) };
+  }
+  const entry = itemById(sku);
+  if (!entry || !itemForSale(entry)) return { error: 'not for sale' };
+  // Only the pass of the season now on is sold.
+  if (isPassSku(sku) && passSeason(sku) !== season) return { error: 'out of season' };
+  return { stars: entry.stars, subscription: false, item: entry, text: (language, gift) => itemInvoiceText(entry, language, gift) };
+}
+
+/** What an invoice may be made with. */
+export interface InvoiceOptions {
+  /** A gift for a friend (by Telegram id) or for whoever opens a share link (its code). */
+  gift?: { to: number } | { link: string };
+  /** What the one who will have it owns already (the buyer, or the friend). */
+  owned?: ReadonlySet<string>;
+  /** The season the pass sold is of (the world's; tests give their own). */
+  season?: number;
+}
+
 /** An invoice link for an offer, worded from the server's catalogue in the buyer's language, or why there is none. */
 export async function createInvoice(
-  api: BotApi, user: number, sku: string, language?: string, now = Date.now(),
+  api: BotApi, user: number, sku: string, language?: string, now = Date.now(), options: InvoiceOptions = {},
 ): Promise<{ link: string } | { error: string }> {
-  const offer = offerBySku(sku);
-  if (!offer || !forSale(offer)) return { error: 'not for sale' };
-  if (!inSeason(offer, now)) return { error: 'out of season' };
-  const text = invoiceText(offer, language);
-  const payload: Payload = { u: user, s: offer.sku };
+  const offer = priced(sku, now, options.season ?? SEASON);
+  if ('error' in offer) return offer;
+  const gift = options.gift;
+  // Only the catalogue's things can be given, and not to oneself.
+  if (gift && (!offer.item || ('to' in gift && gift.to === user))) return { error: 'cannot be a gift' };
+  if (offer.item && options.owned && (offer.item.items ?? [offer.item.id]).every((id) => options.owned!.has(id))) return { error: 'already owned' };
+  const text = offer.text(language, Boolean(gift));
+  const payload: Payload = { u: user, s: sku, ...(gift && 'to' in gift ? { g: gift.to } : {}), ...(gift && 'link' in gift ? { l: gift.link } : {}) };
   const link = await api('createInvoiceLink', {
     title: text.title,
     description: text.description,
@@ -63,11 +109,13 @@ export async function createInvoice(
 }
 
 /** True if a checkout is for something on sale today, at its price, in Stars, by whom it was made out to. */
-export function checkoutValid(checkout: NonNullable<TelegramUpdate['pre_checkout_query']>, now: number): boolean {
+export function checkoutValid(checkout: NonNullable<TelegramUpdate['pre_checkout_query']>, now: number, season: number = SEASON): boolean {
   const payload = parsePayload(checkout.invoice_payload);
-  const offer = payload && offerBySku(payload.s);
-  return !!offer && forSale(offer) && inSeason(offer, now)
-    && checkout.currency === 'XTR' && checkout.total_amount === offer.stars && payload!.u === checkout.from.id;
+  const offer = payload && priced(payload.s, now, season);
+  if (!payload || !offer || 'error' in offer) return false;
+  // A gift is of the catalogue's things only.
+  if ((payload.g !== undefined || payload.l !== undefined) && !offer.item) return false;
+  return checkout.currency === 'XTR' && checkout.total_amount === offer.stars && payload.u === checkout.from.id;
 }
 
 /** What the bot says, in the player's language. */
@@ -75,6 +123,10 @@ export interface BotText {
   greeting(name: string): string;
   play: string;
   thanks: string;
+  /** To the giver once a gift is paid: it is in the friend's mail. */
+  giftDelivered: string;
+  /** To the giver once a gift link is paid: the link to pass on. */
+  giftLink(link: string): string;
   paySupport: string;
   /** A message to support went to the admin. */
   passedOn: string;
@@ -91,6 +143,9 @@ const EN: BotText = {
   greeting: (name) => `The dungeon awaits, ${name}. Go down, and mind the traps.`,
   play: 'Play Pixel Dungeon',
   thanks: 'Thank you! It is yours: open the game to wear it.',
+  giftDelivered: 'Thank you! The gift is in your friend’s mail in the game.',
+  giftLink: (link) => `Thank you! Send this link to a friend: whoever opens it first gets the gift.
+${link}`,
   paySupport:
     'Trouble with a purchase? Write here, in one message, what happened and when; it goes to the developer, who ' +
     'answers within two days and refunds Stars for anything that did not arrive. Purchases are looks only: they ' +
@@ -108,6 +163,9 @@ const RU: BotText = {
   greeting: (name) => `Подземелье ждёт, ${name}. Спускайтесь и смотрите под ноги.`,
   play: 'Играть в Pixel Dungeon',
   thanks: 'Спасибо! Покупка ваша — откройте игру, чтобы надеть её.',
+  giftDelivered: 'Спасибо! Подарок лежит в почте у вашего друга, в игре.',
+  giftLink: (link) => `Спасибо! Отправьте эту ссылку другу: подарок достанется тому, кто откроет её первым.
+${link}`,
   paySupport:
     'Что-то не так с покупкой? Напишите сюда одним сообщением, что и когда случилось: оно уйдёт разработчику, ' +
     'он ответит в течение двух дней и вернёт звёзды за то, что не пришло. Все покупки — только облик, на саму ' +
@@ -189,17 +247,27 @@ export async function handleUpdate(update: TelegramUpdate, api: BotApi, wallets:
     const payload = parsePayload(paid.invoice_payload);
     if (payload && paid.currency === 'XTR') {
       const expiresAt = paid.subscription_expiration_date ? paid.subscription_expiration_date * 1000 : undefined;
-      await wallets.apply(payload.u, {
-        kind: 'pay', sku: payload.s, charge: paid.telegram_payment_charge_id, stars: paid.total_amount, at: now, ...(expiresAt ? { expiresAt } : {}),
+      const charge = paid.telegram_payment_charge_id;
+      const gift: GiftTarget | undefined = payload.g !== undefined ? { to: payload.g } : payload.l !== undefined ? { link: payload.l } : undefined;
+      const after = await wallets.apply(payload.u, {
+        kind: 'pay', sku: payload.s, charge, stars: paid.total_amount, at: now, ...(expiresAt ? { expiresAt } : {}), ...(gift ? { gift } : {}),
       });
-      await api('sendMessage', { chat_id: message.chat.id, text: text.thanks, ...playButton(text, config.appLink) });
+      let reply = text.thanks;
+      if (gift && 'link' in gift) {
+        reply = text.giftLink(config.appLink ? `${config.appLink}?startapp=gift_${gift.link}` : gift.link);
+      } else if (gift) {
+        // The friend's mail gets it now; if that cannot be done the giver's wallet remembers it is owed (redeliver, shopapi.ts).
+        await deliverGift(api, wallets, payload.u, message.from, charge, after, config).catch(() => false);
+        reply = text.giftDelivered;
+      }
+      await api('sendMessage', { chat_id: message.chat.id, text: reply, ...playButton(text, config.appLink) });
     }
     return;
   }
   const refund = message.refunded_payment;
   if (refund) {
     const payload = parsePayload(refund.invoice_payload);
-    if (payload) await wallets.apply(payload.u, { kind: 'refund', charge: refund.telegram_payment_charge_id });
+    if (payload) await refundCharge(wallets, payload.u, refund.telegram_payment_charge_id);
     return;
   }
 
@@ -289,12 +357,48 @@ async function runAdminCommand(command: AdminCommand, chat: number, api: BotApi,
       // Telegram may also send a refunded_payment message; a refund applied twice changes nothing.
       const before = await wallets.get(command.user);
       const paid = before.charges[command.charge];
-      await wallets.apply(command.user, { kind: 'refund', charge: command.charge });
+      await refundCharge(wallets, command.user, command.charge);
       await say(`Refunded ${command.charge} to ${command.user}${paid ? ` (${paid.sku}, ${paid.stars}★)` : ' (not in the wallet)'}.`);
       return;
     }
   }
 }
+
+/** Gives a refund: the charge's goods go from the wallet, and a gift is taken back from the friend it went to. */
+export async function refundCharge(wallets: Wallets, user: number, charge: string): Promise<void> {
+  const shop = shopOf(await wallets.get(user));
+  const sent = shop.sent[charge];
+  // Who opened a share link is known to the giver's wallet only, which the refund is about to forget.
+  const opener = sent?.link !== undefined ? shop.links[sent.link]?.by : undefined;
+  await wallets.apply(user, { kind: 'refund', charge });
+  if (sent?.to !== undefined) await wallets.apply(sent.to, { kind: 'revokeGift', id: charge });
+  if (sent?.link !== undefined && opener !== undefined) await wallets.apply(opener, { kind: 'revokeGift', id: `l-${sent.link}` });
+}
+
+/**
+ * Puts a paid gift into the friend's mail (the friend is the payload's `g`), then marks it delivered in the giver's wallet, and
+ * tells the friend in the bot. Idempotent: a gift already delivered is not delivered or announced again. True if it was delivered now.
+ */
+export async function deliverGift(
+  api: BotApi, wallets: Wallets, giver: number, from: Message['from'], charge: string, wallet: WalletView, config: BotConfig,
+): Promise<boolean> {
+  const sent = shopOf(wallet).sent[charge];
+  if (!sent || sent.to === undefined || sent.delivered) return false;
+  const name = [from?.first_name, from?.last_name].filter(Boolean).join(' ') || from?.username;
+  await wallets.apply(sent.to, { kind: 'gift', id: charge, sku: sent.sku, from: giver, at: sent.at, ...(name ? { name } : {}) });
+  await wallets.apply(giver, { kind: 'delivered', charge });
+  try {
+    await api('sendMessage', { chat_id: sent.to, text: GIFT_NOTE(name), ...playButton(EN, config.appLink) });
+  } catch {
+    // The friend may not have started the bot: the gift is in their mail all the same.
+  }
+  return true;
+}
+
+/** Told to the friend in both languages (their own is not known): a gift waits in the game's mail. */
+const GIFT_NOTE = (from?: string): string =>
+  `🎁 ${from ? `${from} дарит вам подарок` : 'Вам подарок'}: он ждёт в почте игры.
+🎁 ${from ? `${from} sent you a gift` : 'A gift for you'}: it is waiting in the game’s mail.`;
 
 function playButton(text: BotText, appLink: string): Record<string, unknown> {
   // Opened over the whole screen (Bot API 8.0 direct links' mode).

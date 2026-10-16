@@ -204,6 +204,13 @@ export function invitedRoom(): string | null {
   return new URLSearchParams(location.search).get('room');
 }
 
+/** A share link's gift to open from the launch (Pixel-Mart): `startapp=gift_<code>` in Telegram or `?gift=<code>` in a browser. */
+export function invitedGift(): string | null {
+  const start = webApp?.initDataUnsafe.start_param;
+  if (start?.startsWith('gift_')) return start.slice('gift_'.length);
+  return new URLSearchParams(location.search).get('gift');
+}
+
 /** True when the app was opened to play the daily dungeon (a shared result's link). */
 export function launchedForDaily(): boolean {
   return webApp?.initDataUnsafe.start_param === 'daily' || new URLSearchParams(location.search).has('daily');

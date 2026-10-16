@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import {
   allowedLook, type ClientMessage, emptyWallet, type GameMode, type HeroClass, isPatron, type Look, type PlayerInfo, RULES_VERSION, type Wallet,
 } from '@pd/core';
-import { botApi, createInvoice, handleUpdate, type TelegramUpdate, type Wallets } from './payments';
+import { botApi, type BotConfig, handleUpdate, type TelegramUpdate } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { guestId } from './guest';
 import { type DailyEntry, isPublicId, Leaderboard, publicId, servedEntry } from './leaderboard';
@@ -23,7 +23,10 @@ import { Notifier, notifierStub, notifyRoute } from './notifier';
 import { readBody, sameSecret } from './secret';
 import { SignalLimiter, validSignal } from './signals';
 import { DAY_SECONDS, type TelegramUser, verifyInitData, WEEK_SECONDS } from './telegram-auth';
-import { applyWalletChange, emptyRecord, parseWalletChange, type WalletChange } from './wallet';
+import { applyWalletChange, emptyRecord, parseWalletChange, type WalletRecord, walletView } from './wallet';
+import { walletsOf } from './walletsdo';
+import { acceptGift, claimPass, equip, type Facts, giftInvoice, invoice, noFacts, type Reply, shopState } from './shopapi';
+import { SEASON } from './boards';
 
 /*
  * Co-op server: one Durable Object per room holds the authoritative world.
@@ -530,7 +533,7 @@ export class Room extends DurableObject<Env> {
   /** A player's look, checked against their wallet (a Telegram player's purchases), then shown to the room. */
   private async wear(seat: Seat, look: Look): Promise<void> {
     const telegram = /^tg(\d+)$/.exec(ownerOf(seat));
-    const wallet = telegram ? await wallets(this.env).get(Number(telegram[1])) : emptyWallet();
+    const wallet = telegram ? await walletsOf(this.env).get(Number(telegram[1])) : emptyWallet();
     // In development (no bot token) the client is trusted, as it is with its identity.
     const allowed = this.env.BOT_TOKEN ? allowedLook(look, wallet, seat.heroClass, Date.now()) : look;
     const looks = { ...(await this.looks()), [seat.id]: allowed };
@@ -679,35 +682,21 @@ export class Room extends DurableObject<Env> {
  */
 export class WalletStore extends DurableObject<Env> {
   override async fetch(request: Request): Promise<Response> {
+    const stored = await this.ctx.storage.get<unknown>(['wallet', 'refunded', 'shop']);
+    const record: WalletRecord = {
+      wallet: (stored.get('wallet') as Wallet | undefined) ?? emptyRecord().wallet,
+      refunded: (stored.get('refunded') as string[] | undefined) ?? [],
+      ...(stored.get('shop') ? { shop: stored.get('shop') as WalletRecord['shop'] } : {}),
+    };
     if (request.method === 'POST') {
       const change = parseWalletChange(await request.json());
       if (!change) return json({ error: 'bad change' }, 400);
-      const stored = await this.ctx.storage.get<unknown>(['wallet', 'refunded']);
-      const record = emptyRecord();
-      const next = applyWalletChange({
-        wallet: (stored.get('wallet') as Wallet | undefined) ?? record.wallet,
-        refunded: (stored.get('refunded') as string[] | undefined) ?? record.refunded,
-      }, change);
-      await this.ctx.storage.put({ wallet: next.wallet, refunded: next.refunded });
-      return json(next.wallet);
+      const next = applyWalletChange(record, change);
+      await this.ctx.storage.put({ wallet: next.wallet, refunded: next.refunded, ...(next.shop ? { shop: next.shop } : {}) });
+      return json(walletView(next));
     }
-    return json((await this.ctx.storage.get<Wallet>('wallet')) ?? emptyWallet());
+    return json(walletView(record));
   }
-}
-
-/** Wallets by Telegram user id. Each change runs inside the user's own object (WalletStore). */
-function wallets(env: Env): Wallets {
-  const stub = (user: number): DurableObjectStub<WalletStore> => env.WALLET.get(env.WALLET.idFromName(`tg${user}`));
-  return {
-    async get(user) {
-      return (await (await stub(user).fetch('https://wallet/')).json()) as Wallet;
-    },
-    async apply(user, change: WalletChange) {
-      const response = await stub(user).fetch('https://wallet/apply', { method: 'POST', body: JSON.stringify(change) });
-      if (!response.ok) throw new Error(`wallet ${change.kind}: ${response.status}`);
-      return (await response.json()) as Wallet;
-    },
-  };
 }
 
 /** The Telegram user behind a request's init data, if signed within `maxAgeSeconds`; Pixel-Mart takes no guests. */
@@ -716,22 +705,54 @@ async function telegramUser(body: Record<string, unknown>, env: Env, maxAgeSecon
   return verifyInitData(body.initData, env.BOT_TOKEN, maxAgeSeconds);
 }
 
-async function shop(request: Request, env: Env, route: 'me' | 'invoice'): Promise<Response> {
+/** What the shop asks of a player's own object: the pass's XP, the best streak and the trophies (player.ts). */
+async function playerFacts(env: Env, user: number): Promise<Facts> {
+  const response = await env.PLAYER.get(env.PLAYER.idFromName(`tg${user}`)).fetch('https://player/facts', { method: 'POST', body: '{}' });
+  return response.ok ? ((await response.json()) as Facts) : noFacts();
+}
+
+/** A fresh code for a share link: the giver's id, then eight random bytes (shopapi.ts acceptGift reads it back). */
+const shareCode = (user: number): string => `${user}_${[...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+
+const SHOP_ROUTES = ['me', 'invoice', 'equip', 'gift', 'accept', 'claim'] as const;
+type ShopRoute = (typeof SHOP_ROUTES)[number];
+
+async function shop(request: Request, env: Env, route: ShopRoute): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
   if (!env.BOT_TOKEN) return json({ error: 'the shop is closed' }, 503);
   const body = await jsonBody(request);
   if (!body) return json({ error: 'bad json' }, 400);
-  // Looking at one's wallet is harmless, and the Mini App may stay open for days; buying takes fresh init data.
-  const user = await telegramUser(body, env, route === 'me' ? WEEK_SECONDS : DAY_SECONDS);
+  // Looking at one's wallet and wearing what one has are harmless, and the Mini App may stay open for days; buying and claiming take fresh init data.
+  const harmless = route === 'me' || route === 'equip';
+  const user = await telegramUser(body, env, harmless ? WEEK_SECONDS : DAY_SECONDS);
   if (user === null) return json({ error: 'unauthorized' }, 401);
-  if (route === 'me') {
-    const wallet = await wallets(env).get(user.id);
-    return json({ owned: wallet.owned, patronUntil: wallet.patronUntil ?? null, patron: isPatron(wallet, Date.now()), tipped: wallet.tipped ?? 0 });
+  const deps = {
+    wallets: walletsOf(env), api: botApi(env.BOT_TOKEN), config: botConfig(env), facts: (id: number) => playerFacts(env, id), now: Date.now(), season: SEASON, code: shareCode,
+  };
+  let reply: Reply;
+  switch (route) {
+    case 'me':
+      reply = await shopState(deps, user.id);
+      break;
+    case 'equip':
+      reply = await equip(deps, user.id, body);
+      break;
+    case 'gift':
+      reply = await giftInvoice(deps, user.id, body, user.language_code);
+      break;
+    case 'accept':
+      reply = await acceptGift(deps, user.id, typeof body.code === 'string' ? body.code.slice(0, 64) : '');
+      break;
+    case 'claim':
+      reply = await claimPass(deps, user.id, body.track === 'paid' ? 'paid' : 'free');
+      break;
+    case 'invoice':
+      // The invoice's words come from the server's catalogue, in the buyer's language; the request's own are ignored.
+      reply = await invoice(deps, user.id, String(body.sku ?? ''), user.language_code);
+      break;
   }
-  // The invoice's words come from the server's catalogue, in the buyer's language; the request's own are ignored.
-  const result = await createInvoice(botApi(env.BOT_TOKEN), user.id, String(body.sku ?? ''), user.language_code);
-  return 'link' in result ? json(result) : json(result, 400);
+  return json(reply.body, reply.status);
 }
 
 /** How often one player's messages reach the admin through /paysupport, per Worker instance. */
@@ -739,6 +760,11 @@ const supportLimiter = new WindowLimiter(5, 10 * 60_000);
 
 /** The longest update the webhook reads; Telegram's are a few kilobytes. */
 const MAX_UPDATE_BYTES = 256 * 1024;
+
+/** How the bot is set up in this deployment. */
+function botConfig(env: Env): BotConfig {
+  return { appLink: env.APP_LINK ?? '', adminChatId: env.ADMIN_CHAT_ID, termsUrl: env.TERMS_URL, supportLimiter, ops: adminOps(env) };
+}
 
 async function webhook(request: Request, env: Env): Promise<Response> {
   // Only Telegram knows the secret set with setWebhook.
@@ -756,9 +782,7 @@ async function webhook(request: Request, env: Env): Promise<Response> {
     } catch {
       throw new Error('update is not JSON');
     }
-    await handleUpdate(update, botApi(env.BOT_TOKEN), wallets(env), {
-      appLink: env.APP_LINK ?? '', adminChatId: env.ADMIN_CHAT_ID, termsUrl: env.TERMS_URL, supportLimiter, ops: adminOps(env),
-    });
+    await handleUpdate(update, botApi(env.BOT_TOKEN), walletsOf(env), botConfig(env));
   } catch (error) {
     await keepReport(env, serverReport(error, 'webhook'));
   }
@@ -849,7 +873,8 @@ async function daily(request: Request, env: Env, date: string): Promise<Response
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === '/shop/me' || url.pathname === '/shop/invoice') return shop(request, env, url.pathname === '/shop/me' ? 'me' : 'invoice');
+    const shopRoute = /^\/shop\/(me|invoice|equip|gift|accept|claim)$/.exec(url.pathname);
+    if (shopRoute) return shop(request, env, shopRoute[1] as ShopRoute);
     if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env);
     if (url.pathname === '/report' || url.pathname === '/reports') return reports(request, env);
     if (url.pathname === '/problem') return problemRoute(request, env);

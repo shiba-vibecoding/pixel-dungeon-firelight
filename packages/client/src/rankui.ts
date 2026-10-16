@@ -3,6 +3,10 @@ import type { BoardEntry, BoardKind, BoardView, Profile, RunApi, SyncAnswer } fr
 import { locale, t } from './i18n';
 import type { RunRecord } from './rankings';
 import { AVATAR, button, el, info, show, sprites, windowOf } from './screens';
+import { itemById } from './catalog';
+import { cosmetics } from './cosmetics';
+import { L } from './i18n-shop';
+import { frameStyle, paintName } from './shopart';
 import { type RankIcon, rankIcon, trophyKind } from './trophyicons';
 
 /*
@@ -25,6 +29,10 @@ interface RowEntry {
   name: string;
   score: number;
   patron?: boolean;
+  /** Name colour, title and portrait frame worn (Pixel-Mart's catalogue, item ids). */
+  nc?: string;
+  tt?: string;
+  fr?: string;
 }
 
 /** One row of a board: place (none on the player's own list), face, name with a patron's mark, score, and what the run came to. */
@@ -32,12 +40,25 @@ function row(place: number | null, entry: RowEntry, detail: Array<string | Node>
   const face = el('i', { className: 'pd-rank-face' });
   face.style.setProperty('--av', String(AVATAR[entry.heroClass]));
   const medal = place !== null && place <= 3 ? ` pd-medal-${place}` : '';
+  // What the player wears for the boards: a frame round the face, a colour for the name, a title after it (looks only).
+  const worn = (id: string | undefined, category: string) => {
+    const found = id ? itemById(id) : undefined;
+    return found?.category === category ? found : undefined;
+  };
+  const frame = worn(entry.fr, 'frame');
+  if (frame) {
+    face.classList.add('worn-frame');
+    face.style.cssText += `;${frameStyle(frame)}`;
+  }
+  const label = el('span', { textContent: entry.name });
+  paintName(label, worn(entry.nc, 'namecolor'));
+  const title = worn(entry.tt, 'title');
   return el(
     'div',
     { className: `pd-rank${me ? ' me' : ''}${medal}` },
     place !== null ? el('span', { className: 'pd-rank-n', textContent: String(place) }) : null,
     face,
-    el('span', { className: 'pd-rank-name' }, entry.patron ? el('i', { className: 'pd-patron-mark' }) : null, entry.name),
+    el('span', { className: 'pd-rank-name' }, entry.patron ? el('i', { className: 'pd-patron-mark' }) : null, label, title ? el('small', { className: 'pd-rank-title', textContent: title.name[L] }) : null),
     el('span', { className: 'pd-rank-score', textContent: number(entry.score) }),
     el('small', { className: 'pd-rank-detail' }, ...detail),
   );
@@ -201,6 +222,14 @@ export function profileCard(options: CardOptions): HTMLElement {
   const face = el('i');
   face.style.setProperty('--av', String(options.avatar));
   const portrait = el('span', { className: `pd-profile-face${options.frame ? ` frame-${options.frame}` : ''}` }, face);
+  // The profile frame, name colour and title worn (Pixel-Mart's catalogue).
+  const worn = { frame: cosmetics.frame, color: cosmetics.nameColor, title: cosmetics.title };
+  if (worn.frame) {
+    portrait.classList.add('frame-p');
+    portrait.style.cssText = frameStyle(worn.frame);
+  }
+  const nameNode = el('span', { className: 'pd-profile-name', textContent: options.name });
+  paintName(nameNode, worn.color);
   const facts: Node[] = [];
   const fact = (label: string, value: string, className = ''): void => {
     if (facts.length > 0) facts.push(document.createTextNode(' · '));
@@ -231,7 +260,8 @@ export function profileCard(options: CardOptions): HTMLElement {
     el(
       'span',
       { className: 'pd-profile-text' },
-      el('span', { className: 'pd-profile-name', textContent: options.name }),
+      nameNode,
+      worn.title ? el('span', { className: 'pd-profile-title', textContent: worn.title.name[L] }) : null,
       profile ? el('span', { className: `pd-profile-streak${streak > 0 ? '' : ' off'}` }, rankIcon(streak > 0 ? 'flame' : 'flame-off', { x1: true }), streak > 0 ? t.ranked.streak(streak) : t.ranked.streakNone) : null,
       el('span', { className: 'pd-profile-facts' }, ...facts),
     ),
