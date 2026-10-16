@@ -54,7 +54,7 @@ describe.each(KINDS)('an unknown %s read', (kind) => {
     expect(done.some((e) => e.type === ON[kind].effect)).toBe(true);
     expect(hero.pendingScroll).toBeUndefined();
     expect(hero.time).toBe(time + 1);
-    if (kind === 'scroll.upgrade') expect(hero.armor.level).toBe(1);
+    if (kind === 'scroll.upgrade') expect(hero.armor!.level).toBe(1);
     if (kind === 'scroll.enchantment') expect(hero.weapon!.enchant).toBeDefined();
     if (kind === 'scroll.identify') expect(world.known).toContain('potion.frost');
     // The spare scroll is known and waits in the pack.
@@ -192,7 +192,7 @@ describe('reading unknown scrolls of choice', () => {
     known.world.known.push('scroll.upgrade');
     ok(known.world, { type: 'use', item: 0, on: 'armor' });
     expect(known.hero.pendingScroll).toBeUndefined();
-    expect(known.hero.armor.level).toBe(1);
+    expect(known.hero.armor!.level).toBe(1);
   });
 
   it('is learned by the party: the next scroll of the kind is a known one', () => {
@@ -201,6 +201,6 @@ describe('reading unknown scrolls of choice', () => {
     ok(world, { type: 'scrollCancel' });
     ok(world, { type: 'use', item: 0, on: 'armor' });
     expect(hero.pendingScroll).toBeUndefined();
-    expect(hero.armor.level).toBe(1);
+    expect(hero.armor!.level).toBe(1);
   });
 });

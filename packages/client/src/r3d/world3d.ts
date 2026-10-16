@@ -31,9 +31,11 @@ import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrai
 import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
-import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
+import { type Buffers, doorLeafBuffers, type GeomKit, K_WALL, LevelGeom } from './levelgeom';
+import { DoorSwing, writeLeafMatrix } from './doorswing';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
+import { heapDrawn } from '../heapsight';
 import { PerfOverlay } from './perfoverlay';
 import { BloodWater, withBlood } from './bloodwater';
 import { isSoft } from './softalpha';
@@ -175,6 +177,8 @@ export interface World3DOptions {
   persp: boolean;
   /** Dev only (`?reveal=1`): the whole level is lit and seen, to look at a level the way the kit's frames show a room. */
   reveal?: boolean;
+  /** Reduced motion: a door swings in 100 ms, plainly. */
+  reduced?: boolean;
   /** The context was lost: the game goes back to 2D. */
   onLost: () => void;
 }
@@ -220,6 +224,17 @@ export class World3D {
   private terrainMaterial: MeshStandardMaterial | null = null;
   private decalMaterial: MeshBasicMaterial | null = null;
   private waterMaterial: MeshStandardMaterial | null = null;
+  /**
+   * The doors' leaves: each door has a leaf standing in its gap, turned about its hinge as the door swings (doorswing.ts): one small
+   * instanced mesh for the plain kind and one for the locked, each drawn only if the level has a door of that kind.
+   */
+  private readonly swing = new DoorSwing();
+  private leafMesh: InstancedMesh | null = null;
+  private lockMesh: InstancedMesh | null = null;
+  private leafMaterial: MeshStandardMaterial | null = null;
+  /** The last turn's sight and the last frame's time, for the swings begun by a change of the map. */
+  private lastVisible: readonly boolean[] = [];
+  private clock = 0;
   /** Blood in the water: the red a victim leaves in it (bloodwater.ts). */
   private readonly blood = new BloodWater();
   private waterScroll: [number, number] = [0, 0.006];
@@ -347,6 +362,8 @@ export class World3D {
     quad.setAttribute('aRim', this.spriteRim);
     quad.setAttribute('aRimColor', this.spriteRimColor);
     this.sprites.frustumCulled = false;
+    // Drawn after the doors' leaves (renderOrder 1): a figure is never under a door.
+    this.sprites.renderOrder = 2;
     this.sprites.count = 0;
     this.sprites.renderOrder = 3.5;
     this.scene.add(this.sprites);
@@ -466,6 +483,7 @@ export class World3D {
       this.terrain?.dispose();
       this.waterTex?.dispose();
       this.terrainMaterial?.dispose();
+      this.leafMaterial?.dispose();
       this.decalMaterial?.dispose();
       this.waterMaterial?.dispose();
       this.images = images;
@@ -528,6 +546,12 @@ export class World3D {
       vertexColors: true, alphaTest: 0.5,
     });
     withFog(this.terrainMaterial, this.air, 'attribute');
+    // A leaf is drawn after the floor and the walls, testing the depth but not writing it, and before the figures: nobody in a
+    // doorway is ever covered by the door, whatever the angle of the swing.
+    this.leafMaterial = new MeshStandardMaterial({
+      map: t.color, emissiveMap: t.emissive, emissive: 0xffffff, emissiveIntensity: 1, roughness: 1, metalness: 0, vertexColors: true, depthWrite: false,
+    });
+    withFog(this.leafMaterial, this.air, 'instance');
     this.decalMaterial = new MeshBasicMaterial({ map: t.color, vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 });
     withFog(this.decalMaterial, this.air, 'attribute');
     const w = materialOf(this.kit, region, 'water');
@@ -565,6 +589,9 @@ export class World3D {
     if (change === 'rebuilt') {
       this.dropMeshes();
       this.makeMeshes();
+    } else if (this.swing.sync(geom.terrain, (cell) => this.options.reveal === true || this.lastVisible[cell] === true, this.clock) > 0) {
+      // A door in sight begins to swing: its shadow is drawn again when it has swung, as well as now.
+      this.rig.shadowsStale = true;
     }
     this.scanProps();
     if (change !== 'patched') {
@@ -591,9 +618,76 @@ export class World3D {
     }
     this.floorMesh = this.boxMesh = this.waterMesh = this.decalMesh = null;
     this.seenFloor = this.seenBox = -1;
+    for (const mesh of [this.leafMesh, this.lockMesh]) {
+      if (!mesh) continue;
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.dispose();
+    }
+    this.leafMesh = this.lockMesh = null;
   }
 
-  private makeMeshes(): void {
+  /** One leaf mesh per kind, an instance for each door of the level (the kind a door is not has its instance scaled to nothing). */
+  private makeLeaves(keep: boolean): void {
+    const g = this.geom!;
+    const passable = (x: number, z: number): boolean => x >= 0 && z >= 0 && x < WIDTH && z < LENGTH / WIDTH && g.kinds[x + z * WIDTH] !== K_WALL;
+    this.swing.reduced = this.options.reduced === true;
+    if (!keep || this.swing.leaves.length === 0) this.swing.reset(g.terrain, (x, z) => g.doorAcross(x, z), passable);
+    const n = this.swing.leaves.length;
+    if (n === 0 || !this.leafMaterial) return;
+    for (const locked of [false, true]) {
+      const b = doorLeafBuffers(locked, 16, 16);
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(b.pos.slice(0, b.verts * 3), 3));
+      geometry.setAttribute('normal', new BufferAttribute(b.normal.slice(0, b.verts * 3), 3));
+      geometry.setAttribute('uv', new BufferAttribute(b.uv.slice(0, b.verts * 2), 2));
+      geometry.setAttribute('color', new BufferAttribute(b.color.slice(0, b.verts * 3), 3));
+      geometry.setIndex(new BufferAttribute(b.index.slice(0, b.indices), 1));
+      // The picture's own coordinates are in the geometry: every instance maps them whole.
+      const whole = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) { whole[i * 4 + 2] = 1; whole[i * 4 + 3] = 1; }
+      geometry.setAttribute('aUv', new InstancedBufferAttribute(whole, 4));
+      const mesh = new InstancedMesh(geometry, this.leafMaterial, n);
+      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 1;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+      if (locked) this.lockMesh = mesh;
+      else this.leafMesh = mesh;
+    }
+    this.writeLeaves();
+  }
+
+  /** The leaves' matrices, from their angles. */
+  private writeLeaves(): void {
+    const leaf = this.leafMesh;
+    const lock = this.lockMesh;
+    if (!leaf || !lock) return;
+    const a = leaf.instanceMatrix.array as Float32Array;
+    const b = lock.instanceMatrix.array as Float32Array;
+    let locked = 0;
+    const leaves = this.swing.leaves;
+    for (let i = 0; i < leaves.length; i++) {
+      const l = leaves[i]!;
+      writeLeafMatrix(a, i * 16, l.px, l.pz, l.angle, l.locked ? 0 : 1);
+      writeLeafMatrix(b, i * 16, l.px, l.pz, l.angle, l.locked ? 1 : 0);
+      if (l.locked) locked++;
+    }
+    leaf.visible = locked < leaves.length;
+    lock.visible = locked > 0;
+    leaf.instanceMatrix.needsUpdate = true;
+    lock.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Doors are swinging now: the frame must be drawn. */
+  get doorsMoving(): boolean {
+    return this.swing.moving > 0;
+  }
+
+  /** `keepSwing`: the buffers only grew, the doors are the same (a door swinging goes on swinging). */
+  private makeMeshes(keepSwing = false): void {
     const geom = this.geom!;
     this.dropMeshes();
     const floor = new BufferGeometry();
@@ -622,6 +716,7 @@ export class World3D {
     this.seenBox = geom.boxVersion;
     // The walls' shadows are cast on the side facing the light; the floor and the walls take them.
     this.terrainMaterial!.shadowSide = FrontSide;
+    this.makeLeaves(keepSwing);
     this.rig.shadowsStale = true;
   }
 
@@ -630,7 +725,7 @@ export class World3D {
     const geom = this.geom!;
     if (geom.grew) {
       this.dropMeshes();
-      this.makeMeshes();
+      this.makeMeshes(true);
       return;
     }
     if (geom.floorVersion !== this.seenFloor) {
@@ -650,6 +745,7 @@ export class World3D {
 
   /** The new turn's sight. */
   setSight(visible: readonly boolean[], explored: readonly boolean[], snap: boolean): void {
+    this.lastVisible = visible;
     if (this.options.reveal) {
       this.fog.set(this.everything, this.everything, snap);
       this.fogMoving = true;
@@ -902,6 +998,12 @@ export class World3D {
 
     if (brightness.value !== this.bright) this.applyBrightness(brightness.value);
     this.air.uTime.value = f.now / 1000;
+    this.clock = f.now;
+    if (this.swing.step(f.now)) {
+      this.writeLeaves();
+      // A swing that has just ended: the shadows are drawn once more with the leaf where it stays.
+      if (this.swing.moving === 0) this.rig.shadowsStale = true;
+    }
     this.fogMoving = this.fog.step(dt);
     const hx = f.focusX / TILE;
     const hz = f.focusY / TILE;
@@ -1060,11 +1162,12 @@ export class World3D {
   }
 
   private addItems(f: Frame3D): void {
-    const { explored, visible } = f;
+    const { visible } = f;
     const items = this.assets.items;
     for (let i = 0; i < f.heaps.length; i++) {
       const heap = f.heaps[i]!;
-      if (!explored[heap.pos]) continue;
+      // Only where it is in sight, as in the original (heapsight.ts): not what lies in the rooms remembered.
+      if (!heapDrawn(visible, heap.pos)) continue;
       const x = (heap.pos % WIDTH) + 0.5;
       const z = Math.trunc(heap.pos / WIDTH) + 0.6;
       const bob = visible[heap.pos] && !f.seeAll ? Math.sin(f.now / 520 + heap.pos) * 0.012 : 0;
@@ -1075,7 +1178,7 @@ export class World3D {
     if (plants) {
       for (let i = 0; i < plants.length; i++) {
         const plant = plants[i]!;
-        if (!explored[plant.pos]) continue;
+        if (!heapDrawn(visible, plant.pos)) continue;
         this.sprite(this.assets.plants, plant.index * 16, 0, 16, 16, false, (plant.pos % WIDTH) + 0.5, 0, Math.trunc(plant.pos / WIDTH) + 0.7, 0.85, 0.85, 1);
       }
     }
@@ -1214,6 +1317,7 @@ export class World3D {
     this.overlay?.remove();
     this.dropMeshes();
     this.terrainMaterial?.dispose();
+    this.leafMaterial?.dispose();
     this.decalMaterial?.dispose();
     this.waterMaterial?.dispose();
     this.terrain?.dispose();

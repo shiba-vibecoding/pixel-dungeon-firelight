@@ -214,6 +214,8 @@ export class WearFx {
       const frame = art ? Math.floor((now - spot.start) / art.ms) : 99;
       if (!art || frame >= art.frames) continue;
       this.kills[n++] = spot;
+      // Still on its way (a bolt or a missile has yet to land): kept, not drawn.
+      if (frame < 0) continue;
       const q = this.next('kill');
       // Centred on the foe: the middle of the picture a little above the cell's feet.
       q.image = art.image; q.sx = frame * art.w; q.sy = 0; q.w = art.w; q.h = art.h; q.x = spot.x; q.y = spot.y; q.ax = art.w / 2; q.ay = art.h / 2; q.oy = -6;

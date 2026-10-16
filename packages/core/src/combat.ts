@@ -149,8 +149,10 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     const mark = ctx.effects.length;
     damage = armorProc(ctx, attacker, defender, damage);
     // Armor.proc: and every blow taken makes the armour better known, and wears it.
-    familiarise(ctx, defender, defender.armor, ARMOR_HITS_TO_KNOW);
-    wear(ctx, defender, defender.armor);
+    if (defender.armor) {
+      familiarise(ctx, defender, defender.armor, ARMOR_HITS_TO_KNOW);
+      wear(ctx, defender, defender.armor);
+    }
     // The glyph's backlash may have felled its wearer, or an ankh raised them anew: the blow is spent.
     if (!isAlive(defender) || ctx.effects.slice(mark).some((e) => e.type === 'resurrected')) return true;
   }

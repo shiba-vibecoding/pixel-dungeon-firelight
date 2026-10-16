@@ -44,7 +44,7 @@ export interface SyncAnswer {
 }
 
 /** What a letter gives; kinds are added as rewards come (a server with a mailbox). */
-export type Gift = { type: 'trophy'; board: string; place: number } | { type: 'item'; sku: string; from: number; name?: string };
+export type Gift = { type: 'trophy'; board: string; place: number } | { type: 'item'; sku: string; from: number; name?: string; note?: string };
 
 /** A letter of the mailbox: one a finished board the player placed on. */
 export interface Letter {

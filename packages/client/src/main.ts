@@ -5,7 +5,7 @@ import {
   type Hero, type Item, type Level,
   type Bones, hasAmulet, heroById, type HeroClass, leaveBones, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, type PlanStep, PLANT_KINDS, type SmithLine, T,
-  chargesKnown, WIDTH,
+  chargesKnown, WIDTH, itemAt,
   type World, charAt, swapsWithHero,
 } from '@pd/core';
 import * as core from '@pd/core';
@@ -87,7 +87,7 @@ import { CoopMarks } from './coop-marks';
 import {
   backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
   shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
-  homeScreenStatus, addToHomeScreen, invitedGift,
+  homeScreenStatus, addToHomeScreen, invitedGift, inviteStart, launchedByInvite,
 } from './telegram';
 import { report, startReporting } from './report';
 import { STEP_MS, TILE, View } from './view';
@@ -274,6 +274,7 @@ const mapControlsActions = {
     cam.toggleOverview(world && me ? boxOf(exploredCells(world, me.depth), WIDTH, TILE) : null);
   },
   home: () => cam.recentre(),
+  photo: () => openPhoto(),
   attack: () => {
     const world = session?.world;
     const me = world && heroById(world, session!.myId);
@@ -426,6 +427,9 @@ let newLoot = false;
 void mart.refresh(SERVER);
 // The catalogue's side of it (storeui.ts): what is owned and worn. A friend's share link is opened once the shop is known.
 void cosmetics.refresh(SERVER).then(async () => {
+  // An invite or a share link a friend sent: the server makes the two friends who play (if the inviter is a known player).
+  const invite = launchedByInvite();
+  if (invite) void cosmetics.meetInviter(invite);
   const code = invitedGift();
   if (!code) return;
   const result = await cosmetics.acceptGift(code);
@@ -545,7 +549,7 @@ function pick3d(level: Level, world: World): boolean {
     canvas3d.id = 'game3d';
     canvas.before(canvas3d);
     const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(true) });
+    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reduced: quality.reducedMotion, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(true) });
     governor.hold(2500);
     frame3d = {
       now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0, myId: '',
@@ -1234,7 +1238,11 @@ const heapAt = (world: World, depth: number, pos: number): boolean =>
  * Aiming a thrown weapon or a wand: the next tap on the map picks the target. Aiming from a quick slot (`slot`) may
  * have the last target marked: the same slot tapped again fires at it (targeting.ts).
  */
-let aim: { index: number; kind: 'throw' | 'zap' | 'special'; slot?: number; marked?: boolean } | null = null;
+/**
+ * What is being aimed: a pack slot's `index`, or (index -2) the thing worn named by `worn`, which a throw takes off first
+ * (EquipableItem.cast).
+ */
+let aim: { index: number; worn?: 'weapon' | 'armor' | 'ring0' | 'ring1'; kind: 'throw' | 'zap' | 'special'; slot?: number; marked?: boolean } | null = null;
 
 /** The aim from a quick slot is on a marked target: fire at it (autoAim: angled round what is in the way, if need be). False: it is gone. */
 function fireMarked(): boolean {
@@ -1776,6 +1784,7 @@ function tapCell(cell: number, quiet = false): void {
       rememberTarget(seenEnemies(world, me).find((m) => m.pos === end));
     }
     if (shot.kind === 'special') send({ type: 'special', target: cell }, performance.now());
+    else if (cell !== me.pos && shot.worn && itemAt(me, shot.worn)) send({ type: 'throw', item: shot.worn, target: cell }, performance.now());
     else if (cell !== me.pos && me.items[shot.index]) send({ type: shot.kind, item: shot.index, target: cell }, performance.now());
     return;
   }
@@ -1927,8 +1936,8 @@ function backpackOptions(world: World, me: Hero): Parameters<typeof showBackpack
     world,
     hero: me,
     onAction: (action) => send(action, performance.now()),
-    onAim: (index, kind) => {
-      aim = { index, kind };
+    onAim: (at, kind) => {
+      aim = typeof at === 'string' ? { index: -2, worn: at, kind } : { index: at, kind };
     },
     onClose: hideOverlay,
   };
@@ -2263,8 +2272,12 @@ function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;
   // A region's intro is read first: the tap that skips it does nothing else.
   if (view.skipIntro(fx.now)) return;
-  const x = Math.floor((camera.x + px / camera.zoom) / TILE);
-  const y = Math.floor((camera.y + py / camera.zoom) / TILE);
+  const wx = camera.x + px / camera.zoom;
+  const wy = camera.y + py / camera.zoom;
+  // In 3D a figure stands up off its cell, drawn over the cells north of it: a tap on its body is a tap on its cell.
+  const figure = figureCellAt(wx, wy);
+  const x = figure >= 0 ? figure % WIDTH : Math.floor(wx / TILE);
+  const y = figure >= 0 ? Math.floor(figure / WIDTH) : Math.floor(wy / TILE);
   // The whole level is on: a tap on the map walks there (below) and takes the view back to the normal zoom, eased.
   if (cam.overview) cam.exitOverview(true);
   if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
@@ -2279,6 +2292,41 @@ function tapAt(px: number, py: number): void {
     if (cam.heroTap(performance.now())) return;
   } else cam.otherTap();
   tapCell(x + y * WIDTH);
+}
+
+/** Figures drawn larger than a cell (the bosses), whose bodies reach further. */
+const BIG_FIGURES: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
+
+/**
+ * The cell of the figure (a monster, a hero) whose standing body is under a point of the ground plane (world pixels), or -1: only
+ * in 3D, where a figure stands up from its feet (FEET_PX into its cell) and covers about its own height of the screen, which on the
+ * ground plane is that height over sin(pitch), mostly the cells north of it. Of two, the one nearer the camera (further south) is
+ * drawn in front, and wins. Only figures in sight count, and never the player's own hero (the cell under the tap stands for it).
+ */
+function figureCellAt(wx: number, wy: number): number {
+  if (!mode3d) return -1;
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return -1;
+  const seen = seenCells(world, me.depth);
+  let best = -1;
+  let bestFeet = -Infinity;
+  const consider = (pos: number, big: boolean): void => {
+    if (!seen[pos]) return;
+    const cx = (pos % WIDTH) * TILE + TILE / 2;
+    const feet = Math.floor(pos / WIDTH) * TILE + FEET_PX;
+    const half = big ? 11 : 7.5;
+    const tall = (big ? 26 : 18) / YS;
+    if (Math.abs(wx - cx) > half || wy > feet + 4 || wy < feet - tall) return;
+    if (feet > bestFeet) {
+      bestFeet = feet;
+      best = pos;
+    }
+  };
+  for (const mob of world.floors[me.depth]?.mobs ?? []) consider(mob.pos, BIG_FIGURES.has(mob.kind));
+  // Not the player's own hero: a tap meant for a monster just north of them must never become a search or a double tap.
+  for (const hero of world.heroes) if (hero.id !== me.id && hero.depth === me.depth && isAlive(hero)) consider(hero.pos, false);
+  return best;
 }
 
 /** The examine tool is on: the next tap on the map tells what is there. */
@@ -3058,7 +3106,7 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
@@ -3228,7 +3276,7 @@ function tick(now: number): void {
     examining = false;
   };
   // One state at a time, the most pressing: the connection, death, a target to choose, examining, companions.
-  const aimed = aim && aim.index >= 0 ? me.items[aim.index] : undefined;
+  const aimed = aim?.worn ? itemAt(me, aim.worn) : aim && aim.index >= 0 ? me.items[aim.index] : undefined;
   const status: HudStatus | null =
     session.status ? { kind: session.status === t.reconnecting ? 'reconnecting' : 'connecting', text: session.status }
     : !isAlive(me) && !world.over ? { kind: 'dead', text: `${t.youDied}. ${t.youDiedCoop}` }
@@ -3361,7 +3409,7 @@ function shareChoices(card: () => Promise<ShareCard>, text: string): ShareChoice
         void (async () => {
           const blob = await storyCard(await card(), t.ranked.storyCall);
           const url = blob && (await api.card(blob));
-          if (url) shareStory(url, `${text} ${appLink('daily')}`);
+          if (url) shareStory(url, `${text} ${appLink(inviteStart('daily'))}`);
           else toast(t.ranked.shareFailed);
         })();
       },

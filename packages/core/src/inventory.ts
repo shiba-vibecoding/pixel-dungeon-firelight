@@ -1,7 +1,7 @@
 import { mend, wear } from './wear';
 import { chargesKnown, identify, isIdentified, learn, WAND_USAGES_TO_KNOW } from './ident';
 import {
-  BACKPACK_SIZE, beckon, createMob, isShopkeeper, statsOf, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
+  BACKPACK_SIZE, beckon, createMob, heroSpeed, isShopkeeper, statsOf, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
   SUBCLASSES,
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
@@ -61,8 +61,12 @@ export type InventoryAction =
   | { type: 'scrollCancel' }
   | { type: 'equip'; item: number }
   | { type: 'drop'; item: number }
-  /** Throw a dart, the boomerang or a potion at a cell; it flies until it hits someone or something. */
-  | { type: 'throw'; item: number; target: number }
+  /**
+   * Throw a dart, the boomerang, a potion or any other thing at a cell; it flies until it hits someone or something.
+   * `item` may name something worn ('weapon', 'armor', 'ring0', 'ring1'): EquipableItem.cast takes it off first (a cursed one
+   * will not come off, and is not thrown), which costs the time of taking it off, and then it flies like anything else.
+   */
+  | { type: 'throw'; item: ItemRef; target: number }
   /** Zap a wand at a cell. */
   | { type: 'zap'; item: number; target: number }
   /** Buy the shop's ware the hero stands on. */
@@ -71,8 +75,11 @@ export type InventoryAction =
   | { type: 'sell'; item: number }
   /** Take off a worn ring, back into the pack. */
   | { type: 'remove'; ring: number }
-  /** Put the weapon in hand away (KindOfWeapon's UNEQUIP), into the pack or, with no room there, at the hero's feet. */
-  | { type: 'unequip' }
+  /**
+   * Take the weapon in hand (the default) or the armour worn off (EquipableItem's UNEQUIP), into the pack or, with no room there,
+   * at the hero's feet. Armour takes two turns over it (Armor.time2equip), a weapon one.
+   */
+  | { type: 'unequip'; slot?: 'weapon' | 'armor' }
   /** Read the Tome of Mastery and master one of the two ways of the hero's class. */
   | { type: 'master'; item: number; subclass: SubClass }
   /** Mine the vein of dark gold next to the hero with the blacksmith's pickaxe. */
@@ -100,6 +107,8 @@ const TIME_TO_USE = 1;
 const TIME_TO_EQUIP = 1;
 const TIME_TO_DROP = 1;
 const TIME_TO_THROW = 1;
+/** Plant.Seed.TIME_TO_PLANT. */
+const TIME_TO_PLANT = 1;
 const TIME_TO_ZAP = 1;
 const TIME_TO_EAT = 3;
 /** PhantomFish.TIME_TO_EAT. */
@@ -152,9 +161,12 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   if (action.type === 'mine') return mineProblem(world, hero);
   if (action.type === 'special') return specialProblem(world, hero, action.target);
   if (action.type === 'unequip') {
-    if (!hero.weapon) return 'nothing in hand';
-    // EquipableItem.doUnequip: a cursed weapon will not leave the hand.
-    return hero.weapon.cursed ? CURSED : null;
+    if (action.slot !== undefined && action.slot !== 'weapon' && action.slot !== 'armor') return 'bad slot';
+    const slot = action.slot ?? 'weapon';
+    const worn = hero[slot];
+    if (!worn) return slot === 'weapon' ? 'nothing in hand' : 'you wear no armour';
+    // EquipableItem.doUnequip: a cursed weapon will not leave the hand, nor cursed armour the body.
+    return worn.cursed ? CURSED : null;
   }
   if (action.type === 'remove') {
     if (!Number.isInteger(action.ring) || !hero.rings[action.ring]) return 'no such ring';
@@ -168,12 +180,15 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     if (hero.gold < buyPrice(ware, hero.depth, world.known.includes(ware.kind), haggles(hero))) return 'not enough gold';
     return hasRoom(hero, ware) ? null : 'your pack is full';
   }
-  const item = Number.isInteger(action.item) ? hero.items[action.item] : undefined;
+  // A throw may name something worn, too (EquipableItem.cast).
+  const item = action.type === 'throw'
+    ? (isItemRef(action.item) ? itemAt(hero, action.item) : undefined)
+    : Number.isInteger(action.item) ? hero.items[action.item] : undefined;
   if (!item) return 'no such item';
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial', 'wipeout'].includes(category) && item.kind !== 'quest.fish') {
+      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial', 'wipeout', 'seed'].includes(category) && item.kind !== 'quest.fish') {
         return 'that cannot be used';
       }
       if (category === 'vial' && !item.volume) return 'your dew vial is empty';
@@ -211,6 +226,8 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       // Item.AC_THROW: anything in the pack may be thrown (a bag would scatter what it holds: not that).
       const fits = action.type === 'throw' ? category !== 'bag' : category === 'wand';
       if (!fits) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
+      // EquipableItem.cast: worn, it must first come off, and a cursed one will not.
+      if (action.type === 'throw' && isWornRef(action.item) && item.cursed) return CURSED;
       if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
         return 'bad target';
       }
@@ -287,6 +304,13 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         drinkFromVial(ctx, hero, hero.items[action.item]!);
         return TIME_TO_USE;
       }
+      if (itemDef(hero.items[action.item]!.kind).category === 'seed') {
+        // Plant.Seed.execute, AC_PLANT: one seed, planted (or let fall) at the hero's feet.
+        const seed = hero.items[action.item]!;
+        if (--seed.qty <= 0) hero.items.splice(action.item, 1);
+        seedLands(ctx, hero, seed.kind, hero.pos);
+        return TIME_TO_PLANT;
+      }
       if (itemDef(hero.items[action.item]!.kind).category === 'honeypot') {
         // Honeypot.execute: shattered right where the hero stands.
         const pot = hero.items[action.item]!;
@@ -315,12 +339,14 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       ctx.effects.push({ type: 'mastered', hero: hero.id, subclass: action.subclass });
       return TIME_TO_READ_TOME;
     case 'unequip': {
-      const weapon = hero.weapon!;
-      hero.weapon = null;
-      if (hasRoom(hero, weapon)) hero.items.push(weapon);
-      else dropItem(ctx.floor, hero.pos, weapon);
-      ctx.effects.push({ type: 'dropped', hero: hero.id, item: weapon });
-      return TIME_TO_EQUIP;
+      // EquipableItem.doUnequip with `collect`: into the pack or, with no room there, down at the hero's feet.
+      const slot = action.slot ?? 'weapon';
+      const time = timeToUnequip(hero, slot);
+      const worn = unwear(hero, slot);
+      if (hasRoom(hero, worn)) hero.items.push(worn);
+      else dropItem(ctx.floor, hero.pos, worn);
+      ctx.effects.push({ type: 'dropped', hero: hero.id, item: worn });
+      return time;
     }
     case 'remove': {
       const ring = hero.rings.splice(action.ring, 1)[0]!;
@@ -395,11 +421,21 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       return TIME_TO_DROP;
     }
     case 'throw': {
+      // EquipableItem.cast: something worn comes off first (`hero.spend(time2equip)`, no turn ends there), then it flies as any item does.
+      let index: number;
+      let undressing = 0;
+      if (isWornRef(action.item)) {
+        undressing = timeToUnequip(hero, action.item);
+        hero.items.push(unwear(hero, action.item));
+        index = hero.items.length - 1;
+      } else {
+        index = action.item;
+      }
       // Shuriken fly twice as fast as anything else (Shuriken.DLY).
-      const thrown = hero.items[action.item]!;
+      const thrown = hero.items[index]!;
       const delay = itemDef(thrown.kind).category === 'missile' ? missileStats(thrown).delay : 1;
-      throwItem(ctx, hero, action.item, action.target);
-      return TIME_TO_THROW * delay;
+      throwItem(ctx, hero, index, action.target);
+      return undressing + TIME_TO_THROW * delay;
     }
     case 'zap':
       zap(ctx, hero, action.item, action.target);
@@ -426,12 +462,42 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
   }
 }
 
+type WornRef = 'weapon' | 'armor' | 'ring0' | 'ring1';
+const isWornRef = (ref: ItemRef): ref is WornRef => typeof ref === 'string';
+
+/** EquipableItem.time2equip: a turn, but armour takes two (Armor.time2equip: `2 / hero.speed()`, the armour still on). */
+const timeToUnequip = (hero: Hero, slot: WornRef): number => (slot === 'armor' ? 2 / heroSpeed(hero) : TIME_TO_EQUIP);
+
+/** What EquipableItem.doUnequip leaves of the slot: the hero no longer wears the thing, which is returned. */
+function unwear(hero: Hero, slot: WornRef): Item {
+  const worn = itemAt(hero, slot)!;
+  if (slot === 'weapon') hero.weapon = null;
+  else if (slot === 'armor') hero.armor = null;
+  else hero.rings.splice(slot === 'ring0' ? 0 : 1, 1);
+  return worn;
+}
+
 /** Wearing a ring of haggler, shops ask half. */
 const haggles = (hero: Hero): boolean => hero.rings.some((ring) => ring.kind === 'ring.haggler');
 
 /** A shopkeeper standing next to the hero, ready to trade. */
 export function shopkeeperBeside(world: World, hero: Hero): boolean {
   return (world.floors[hero.depth]?.mobs ?? []).some((mob) => isShopkeeper(mob) && adjacent(mob.pos, hero.pos));
+}
+
+/**
+ * Plant.Seed.onThrow: into an alchemy pot it goes into the brew instead, over a chasm it falls through; anywhere else it is
+ * planted there and then (Level.plant: whatever grew in the cell is replaced).
+ */
+function seedLands(ctx: Ctx, hero: Hero, kind: ItemKind, cell: number): void {
+  if (ctx.level.map[cell] === T.ALCHEMY) {
+    dropItem(ctx.floor, cell, createItem(kind));
+    brew(ctx, cell, hero);
+  } else if (hasFlag(ctx.level.map[cell]!, F.PIT)) {
+    landItem(ctx, cell, createItem(kind));
+  } else {
+    plant(ctx, cell, SEED_PLANTS[kind]!);
+  }
 }
 
 /** MissileWeapon.onThrow: a hit uses the dart up, a miss leaves it on the floor; the boomerang returns. */
@@ -460,15 +526,7 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     if (--item.qty <= 0) hero.items.splice(index, 1);
     const end = ballistica(ctx, hero.pos, target, false, true).at(-1)!;
     ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: kind });
-    // Into an alchemy pot, it goes into the brew instead; into a chasm, it falls.
-    if (ctx.level.map[end] === T.ALCHEMY) {
-      dropItem(ctx.floor, end, createItem(kind));
-      brew(ctx, end, hero);
-    } else if (hasFlag(ctx.level.map[end]!, F.PIT)) {
-      landItem(ctx, end, createItem(kind));
-    } else {
-      plant(ctx, end, SEED_PLANTS[kind]!);
-    }
+    seedLands(ctx, hero, kind, end);
     return;
   }
   if (itemDef(item.kind).category !== 'missile') {

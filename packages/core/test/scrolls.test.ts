@@ -43,7 +43,7 @@ describe('a scroll of upgrade, on the item chosen (WndBag)', () => {
     expect(hero.items[slot(hero, 'missile.boomerang')]!.level).toBe(1);
     expect(act(world, 'p', { type: 'use', item: 0, on: slot(hero, 'armor.leather') }).ok).toBe(true);
     expect(hero.items[slot(hero, 'armor.leather')]!.level).toBe(1);
-    expect(hero.armor.level).toBe(0);
+    expect(hero.armor!.level).toBe(0);
   });
 
   it('upgrades the weapon in hand or one in the pack', () => {
@@ -76,7 +76,7 @@ describe('a scroll of upgrade, on the item chosen (WndBag)', () => {
   it('still takes the old `target` of older clients', () => {
     const { world, hero } = reader('warrior', 'scroll.upgrade');
     expect(act(world, 'p', { type: 'use', item: 0, target: 'armor' }).ok).toBe(true);
-    expect(hero.armor.level).toBe(1);
+    expect(hero.armor!.level).toBe(1);
     expect(hero.weapon!.level).toBe(0);
   });
 
@@ -96,7 +96,7 @@ describe('a scroll of enchantment, on the item chosen', () => {
     hero.items.push(createItem('armor.scale'));
     expect(act(world, 'p', { type: 'use', item: 0, on: slot(hero, 'armor.scale') }).ok).toBe(true);
     expect(hero.items[slot(hero, 'armor.scale')]!.glyph).toBeDefined();
-    expect(hero.armor.glyph).toBeUndefined();
+    expect(hero.armor!.glyph).toBeUndefined();
     expect(act(world, 'p', { type: 'use', item: 0, on: slot(hero, 'wand.magicMissile') })).toEqual({
       ok: false, reason: 'that cannot be enchanted',
     });

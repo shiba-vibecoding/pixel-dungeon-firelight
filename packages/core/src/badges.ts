@@ -102,7 +102,7 @@ export function checkBadges(progress: BadgeProgress, world: World, me: Hero, eff
   tiers(['cooked1', 'cooked2', 'cooked3', 'cooked4'], me.stats?.brewed ?? 0, [3, 6, 9, 12]);
   earn('piranhas', (me.stats?.piranhas ?? 0) >= 6);
 
-  const belongings: Item[] = [...me.items, ...me.rings, me.armor, ...(me.weapon ? [me.weapon] : [])];
+  const belongings: Item[] = [...me.items, ...me.rings, ...(me.armor ? [me.armor] : []), ...(me.weapon ? [me.weapon] : [])];
   // Badges.validateItemLevelAquired: only a level that is known counts.
   const best = Math.max(0, ...belongings.filter(levelKnown).map((item) => item.level));
   tiers(['item1', 'item2', 'item3', 'item4'], best, [3, 6, 9, 12]);

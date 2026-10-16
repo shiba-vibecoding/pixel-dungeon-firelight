@@ -161,7 +161,7 @@ describe('checked runs', () => {
         hero.items.unshift(createItem(kind, 2));
         world.known = world.known.filter((known) => known !== kind);
         // (The armour is not known, for identify to have something to tell.)
-        Object.assign(hero.armor, { levelUnknown: true, curseUnknown: true });
+        Object.assign(hero.armor!, { levelUnknown: true, curseUnknown: true });
       }
       return { logic, device: structuredClone(run.world) };
     }

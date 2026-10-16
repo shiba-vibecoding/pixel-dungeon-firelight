@@ -1003,7 +1003,7 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 
 /* ---------- Тосты находок ----------
    Справа сверху под HUD, короткие, складываются в стопку при серии: новые сверху, старше трёх — уходят. */
-.pd-finds { position: absolute; z-index: var(--z-toast, 30); right: calc(var(--safe-r) + var(--space-2)); top: calc(var(--safe-t) + var(--hud-h, 200px)); display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
+.pd-finds { position: absolute; z-index: var(--z-toast, 30); right: calc(var(--safe-r) + var(--space-2) + var(--tap-min, 44px) + 8px); top: calc(var(--safe-t) + var(--hud-h, 200px)); display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
 .pd-find {
   display: flex; align-items: center; gap: 6px; max-width: 220px;
   padding: 2px 10px 2px 4px; min-height: 36px;

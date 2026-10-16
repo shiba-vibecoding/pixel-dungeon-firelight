@@ -4,6 +4,7 @@ import { ADMIN_USAGE, type AdminCommand, type AdminOps, describePayments, isAdmi
 import { SEASON } from './boards';
 import { type InvoiceText, invoiceText, itemInvoiceText, speaksRussian } from './catalogue';
 import type { WindowLimiter } from './limits';
+import { connect } from './friends';
 import { type GiftTarget, onceTaken, recentCharges, shopOf, type WalletChange, type WalletView } from './wallet';
 
 /*
@@ -397,8 +398,10 @@ export async function deliverGift(
   const sent = shopOf(wallet).sent[charge];
   if (!sent || sent.to === undefined || sent.delivered) return false;
   const name = [from?.first_name, from?.last_name].filter(Boolean).join(' ') || from?.username;
-  await wallets.apply(sent.to, { kind: 'gift', id: charge, sku: sent.sku, from: giver, at: sent.at, ...(name ? { name } : {}) });
+  await wallets.apply(sent.to, { kind: 'gift', id: charge, sku: sent.sku, from: giver, at: sent.at, ...(name ? { name } : {}), ...(sent.note ? { note: sent.note } : {}) });
   await wallets.apply(giver, { kind: 'delivered', charge });
+  // A gift joins the two as friends who play (friends.ts); never at the cost of the gift.
+  await connect({ wallets, now: sent.at }, giver, sent.to, 'gift');
   try {
     await api('sendMessage', { chat_id: sent.to, text: GIFT_NOTE(name), ...playButton(EN, config.appLink) });
   } catch {

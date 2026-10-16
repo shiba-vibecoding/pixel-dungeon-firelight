@@ -1,10 +1,12 @@
 import { audio } from './audio';
 import { t } from './i18n';
+import { P } from './i18n-photo';
 
 /*
  * The map's own controls and the finds (design system: .pd-mapctl, .pd-finds).
  * A column of buttons over the log on the right: zoom in, zoom out, the whole
- * level, and — only while the view has been dragged away — back to the hero.
+ * level, the camera (the photo mode; on the phone, as the wide screen has its own in the corner), and — only while the view has been
+ * dragged away — back to the hero.
  * Under the HUD on the right, what was just picked up stacks for a moment;
  * the same thing again counts up «×N» rather than repeating.
  */
@@ -13,6 +15,8 @@ export interface MapActions {
   zoomIn(): void;
   zoomOut(): void;
   whole(): void;
+  /** The photo mode's camera (the phone's; the wide screen's is in the HUD's corner). */
+  photo(): void;
   home(): void;
   /** The attack indicator: strike (or go for) the enemy it shows. */
   attack(): void;
@@ -27,6 +31,7 @@ export class MapControls {
   private readonly zoomIn: HTMLButtonElement;
   private readonly zoomOut: HTMLButtonElement;
   private readonly all: HTMLButtonElement;
+  private readonly camera: HTMLButtonElement;
   private readonly attackButton: HTMLButtonElement;
   private readonly resumeButton: HTMLButtonElement;
   private attackKey = '';
@@ -54,7 +59,9 @@ export class MapControls {
     this.box.className = 'pd-mapctl';
     this.all = button('all', t.mapAll, actions.whole);
     this.all.setAttribute('aria-pressed', 'false');
-    this.box.append(this.attackButton, this.resumeButton, this.hero, this.zoomIn, this.zoomOut, this.all);
+    this.camera = button('photo', P.cameraTitle, actions.photo);
+    this.camera.setAttribute('aria-keyshortcuts', 'P');
+    this.box.append(this.attackButton, this.resumeButton, this.hero, this.zoomIn, this.zoomOut, this.all, this.camera);
     root.append(this.box);
   }
 

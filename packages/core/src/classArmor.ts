@@ -43,7 +43,7 @@ export function applyArmorKit(ctx: Ctx, hero: Hero, index: number, armor: Item):
   ctx.effects.push({ type: 'classArmor', hero: hero.id, item: made });
 }
 
-const wearsClassArmor = (hero: Hero): boolean => hero.armor.kind === CLASS_ARMOR_OF[hero.heroClass];
+const wearsClassArmor = (hero: Hero): boolean => hero.armor?.kind === CLASS_ARMOR_OF[hero.heroClass];
 
 export function specialProblem(world: World, hero: Hero, target: number | undefined): string | null {
   if (!wearsClassArmor(hero)) return 'you wear no class armour';

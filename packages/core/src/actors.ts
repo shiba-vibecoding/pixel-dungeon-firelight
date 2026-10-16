@@ -77,7 +77,7 @@ export interface Hero {
   ooze: number;
   /** The weapon in hand; none after a monk's disarming blow, until the hero takes one up again. */
   weapon: Item | null;
-  armor: Item;
+  armor: Item | null;
   /** Rings worn, two at most. */
   rings: Item[];
   items: Item[];
@@ -239,11 +239,14 @@ export function heroAttackSkill(hero: Hero): number {
   return Math.trunc(f32(f32(hero.attackSkill * accuracy) * factor));
 }
 
+/** The armour's strength requirement less the hero's strength; none worn, none to carry (Hero.speed: `belongings.armor != null ? STR - STR() : 0`). */
+const armorEncumbrance = (hero: Hero): number => (hero.armor ? armorStats(hero.armor).str - heroStr(hero) : 0);
+
 export function heroDefenseSkill(hero: Hero): number {
   // RingOfEvasion: 1.2 times as evasive a level.
   const bonus = ringBonus(hero, 'ring.evasion');
   const defense = Math.trunc(f32(hero.defenseSkill * (bonus === 0 ? 1 : f32(ipow(1.2, bonus)))));
-  const encumbrance = armorStats(hero.armor).str - heroStr(hero);
+  const encumbrance = armorEncumbrance(hero);
   if (encumbrance > 0) {
     return Math.trunc(defense / ipow(1.5, encumbrance));
   }
@@ -268,7 +271,7 @@ export function heroRangedSkill(hero: Hero, item: Item, pointBlank: boolean): nu
 
 /** Heavy armour slows its wearer down (Hero.speed). */
 export function heroSpeed(hero: Hero): number {
-  const encumbrance = armorStats(hero.armor).str - heroStr(hero);
+  const encumbrance = armorEncumbrance(hero);
   // Char.speed: crippled, half as fast; a freerunner who is not starving nor weighed down, much faster.
   const crippled = hero.crippled > 0 ? 0.5 : 1;
   const running = hero.subclass === 'freerunner' && !isStarving(hero) && encumbrance <= 0 ? 1.6 : 1;
@@ -301,7 +304,7 @@ export function awareness(hero: Hero): number {
 }
 
 /** Hero.dr: the armour's, and a warden's bark. */
-export const heroArmor = (hero: Hero): number => armorStats(hero.armor).dr + Math.max(0, Math.ceil(hero.barkskin ?? 0));
+export const heroArmor = (hero: Hero): number => (hero.armor ? armorStats(hero.armor).dr : 0) + Math.max(0, Math.ceil(hero.barkskin ?? 0));
 export const heroStealth = (hero: Hero): number => HERO_CLASSES[hero.heroClass].stealth + ringBonus(hero, 'ring.shadows');
 export const maxExp = (hero: Hero): number => 5 + hero.lvl * 5;
 
