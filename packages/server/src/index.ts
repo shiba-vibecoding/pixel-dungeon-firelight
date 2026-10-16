@@ -14,7 +14,7 @@ import {
 } from './reports';
 import { boardObject, boardTtl } from './boards';
 import { CORS, json, jsonBody } from './http';
-import { boardRoute, mailRoute, meRoute, Player, problemRoute, runRoute } from './player';
+import { boardRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRoute } from './player';
 import type { AdminOps } from './admin';
 import { changeOutages, normalizeDays } from './outages';
 import { adminNotice, KEEP_PROBLEMS, newId, type Problem, type StoredProblem } from './problem';
@@ -25,6 +25,7 @@ import { SignalLimiter, validSignal } from './signals';
 import { DAY_SECONDS, type TelegramUser, verifyInitData, WEEK_SECONDS } from './telegram-auth';
 import { applyWalletChange, emptyRecord, parseWalletChange, type WalletRecord, walletView } from './wallet';
 import { walletsOf } from './walletsdo';
+import { cleanWorn } from './worn';
 import { acceptGift, claimPass, equip, type Facts, giftInvoice, invoice, noFacts, type Reply, shopState } from './shopapi';
 import { SEASON } from './boards';
 
@@ -717,7 +718,7 @@ const shareCode = (user: number): string => `${user}_${[...crypto.getRandomValue
 const SHOP_ROUTES = ['me', 'invoice', 'equip', 'gift', 'accept', 'claim'] as const;
 type ShopRoute = (typeof SHOP_ROUTES)[number];
 
-async function shop(request: Request, env: Env, route: ShopRoute): Promise<Response> {
+async function shop(request: Request, env: Env, ctx: ExecutionContext, route: ShopRoute): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
   if (!env.BOT_TOKEN) return json({ error: 'the shop is closed' }, 503);
@@ -728,7 +729,7 @@ async function shop(request: Request, env: Env, route: ShopRoute): Promise<Respo
   const user = await telegramUser(body, env, harmless ? WEEK_SECONDS : DAY_SECONDS);
   if (user === null) return json({ error: 'unauthorized' }, 401);
   const deps = {
-    wallets: walletsOf(env), api: botApi(env.BOT_TOKEN), config: botConfig(env), facts: (id: number) => playerFacts(env, id), now: Date.now(), season: SEASON, code: shareCode,
+    wallets: walletsOf(env, (id) => ctx.waitUntil(patchWorn(env, id))), api: botApi(env.BOT_TOKEN), config: botConfig(env), facts: (id: number) => playerFacts(env, id), now: Date.now(), season: SEASON, code: shareCode,
   };
   let reply: Reply;
   switch (route) {
@@ -766,7 +767,7 @@ function botConfig(env: Env): BotConfig {
   return { appLink: env.APP_LINK ?? '', adminChatId: env.ADMIN_CHAT_ID, termsUrl: env.TERMS_URL, supportLimiter, ops: adminOps(env) };
 }
 
-async function webhook(request: Request, env: Env): Promise<Response> {
+async function webhook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   // Only Telegram knows the secret set with setWebhook.
   if (!env.BOT_TOKEN || !env.WEBHOOK_SECRET || !(await sameSecret(request.headers.get('X-Telegram-Bot-Api-Secret-Token'), env.WEBHOOK_SECRET))) {
     return new Response('forbidden', { status: 403 });
@@ -782,7 +783,7 @@ async function webhook(request: Request, env: Env): Promise<Response> {
     } catch {
       throw new Error('update is not JSON');
     }
-    await handleUpdate(update, botApi(env.BOT_TOKEN), walletsOf(env), botConfig(env));
+    await handleUpdate(update, botApi(env.BOT_TOKEN), walletsOf(env, (id) => ctx.waitUntil(patchWorn(env, id))), botConfig(env));
   } catch (error) {
     await keepReport(env, serverReport(error, 'webhook'));
   }
@@ -795,6 +796,7 @@ async function webhook(request: Request, env: Env): Promise<Response> {
  *
  *   GET  ?name=&me=<public id>|owner=<account>&top=<n>   the best n, and that player's place
  *   POST /put?name=   an entry of a checked run (from the player's object only)
+ *   POST /worn?name=  what a player wears now: their entries show it (from the player's object only)
  *
  * Boards named by a bare date are the daily boards of before checked runs, read as they were.
  */
@@ -809,6 +811,15 @@ export class DailyBoard extends DurableObject<Env> {
       await this.ctx.storage.put('board', board.entries());
       await this.expireAfter(name);
       return json({ rank, total: board.entries().length });
+    }
+    if (request.method === 'POST' && url.pathname === '/worn') {
+      // The player's equipment changed (player.ts Player.worn): their entries on this board show the look of their class as worn now.
+      const patch = (await request.json()) as { owner?: unknown; byClass?: unknown };
+      if (typeof patch.owner !== 'string' || typeof patch.byClass !== 'object' || patch.byClass === null) return json({ error: 'bad patch' }, 400);
+      const byClass = Object.fromEntries(Object.entries(patch.byClass).map(([heroClass, worn]) => [heroClass, cleanWorn(worn)]));
+      const changed = board.patchWorn(patch.owner, byClass);
+      if (changed) await this.ctx.storage.put('board', board.entries());
+      return json({ changed });
     }
     if (request.method === 'POST') return json({ error: 'results come from checked runs only' }, 410);
     // Every player's place, by account (the reminders' weekly results); never served outside.
@@ -871,11 +882,11 @@ async function daily(request: Request, env: Env, date: string): Promise<Response
 }
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     const shopRoute = /^\/shop\/(me|invoice|equip|gift|accept|claim)$/.exec(url.pathname);
-    if (shopRoute) return shop(request, env, shopRoute[1] as ShopRoute);
-    if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env);
+    if (shopRoute) return shop(request, env, ctx, shopRoute[1] as ShopRoute);
+    if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env, ctx);
     if (url.pathname === '/report' || url.pathname === '/reports') return reports(request, env);
     if (url.pathname === '/problem') return problemRoute(request, env);
     if (url.pathname === '/run') return runRoute(request, env);

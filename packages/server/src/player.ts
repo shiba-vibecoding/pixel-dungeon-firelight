@@ -4,7 +4,8 @@ import { BOARD_KINDS, type BoardKind, boardName, boardObject, boardOfRun, boards
 import { secretDailySeed } from './daily-seed';
 import { CORS, json, jsonBody } from './http';
 import type { Env } from './index';
-import { type DailyEntry, publicId } from './leaderboard';
+import { BOARD_SIZE, type DailyEntry, publicId } from './leaderboard';
+import { legacyFields, wornByClass, wornOf } from './worn';
 import { claimAll, claimLetter, collectMail, type Lookup, noteEntered, readAll } from './mail';
 import { newsSeenAfter, parseVersion } from './news';
 import { outageDays } from './outages';
@@ -42,7 +43,7 @@ import { verifyInitData, WEEK_SECONDS } from './telegram-auth';
 const MAX_RUN_BYTES = 128 * 1024;
 const HERO_CLASSES: readonly HeroClass[] = ['warrior', 'mage', 'rogue', 'huntress'];
 /** How many entries a board shows. */
-const BOARD_TOP = 50;
+const BOARD_TOP = BOARD_SIZE;
 
 interface Who {
   /** The account key: tg<Telegram id>, or the development id. */
@@ -181,6 +182,16 @@ export async function boardRoute(request: Request, env: Env): Promise<Response> 
   return json({ name, ...payload });
 }
 
+/** Tells a player's object that what they wear changed (equipment, a refund): the boards still open show it (Player.worn). Never fails the caller. */
+export async function patchWorn(env: Env, user: number): Promise<void> {
+  const key = `tg${user}`;
+  try {
+    await playerStub(env, key).fetch('https://player/worn', { method: 'POST', body: JSON.stringify({ player: { key, name: '' } }) });
+  } catch {
+    // The boards catch up with the next change or the next run.
+  }
+}
+
 /** A player's checked runs and profile (runs.ts), kept in storage as run-store.ts cuts them. */
 export class Player extends DurableObject<Env> {
   private logic: PlayerLogic | null = null;
@@ -227,6 +238,7 @@ export class Player extends DurableObject<Env> {
       const facts: Facts = { pass: p.pass ?? null, streakBest: p.streak.best, trophies: p.trophies.map((trophy) => ({ board: trophy.board, place: trophy.place })), badges: p.badges.earned };
       return json(facts);
     }
+    if (url.pathname === '/worn') return json(await this.worn(logic, body.player));
     if (url.pathname === '/honor') {
       // The admin confirmed a problem report (index.ts adminOps): the badge goes to the profile, once.
       const granted = giveHonor(logic.profile, String(body.honor ?? ''));
@@ -327,20 +339,51 @@ export class Player extends DurableObject<Env> {
     }
   }
 
+  /** What was last sent to the open boards (see worn()), so the same look is not sent twice. */
+  private lastWorn = '';
+
+  /**
+   * Equipment changed or a purchase was refunded: the boards still open (today's daily, this week's, the best ever) that this player is on
+   * show what they wear now. One call to each board they are on (their profile knows which; the wallet is read once, never per row), and
+   * none at all when the look is the same as last sent. Finished boards stay as photographs of their day.
+   */
+  private async worn(logic: PlayerLogic, player: Who): Promise<{ boards: number }> {
+    const profile = logic.profile;
+    const wallet = await this.wallet(player.key);
+    if (!wallet) return { boards: 0 };
+    const now = Date.now();
+    const open = [boardName('daily', now), boardName('week', now)].filter((name) => profile.entered.includes(name));
+    if (profile.games > 0) open.push(boardName('all', now));
+    const byClass = wornByClass(shopOf(wallet));
+    const signature = JSON.stringify([open, byClass]);
+    if (open.length === 0 || signature === this.lastWorn) return { boards: 0 };
+    const results = await Promise.all(open.map(async (name) => {
+      try {
+        const response = await boardStub(this.env, name).fetch(`https://board/worn?name=${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify({ owner: player.key, byClass }) });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }));
+    // A board that could not be reached is tried again with the next change.
+    if (results.every(Boolean)) this.lastWorn = signature;
+    return { boards: open.length };
+  }
+
   /** A finished run onto the boards it counts for; its place on each. */
   private async submit(player: Who, summary: RunSummary, now: number): Promise<Partial<Record<BoardKind, number | null>>> {
     const places: Partial<Record<BoardKind, number | null>> = {};
     const wallet = await this.wallet(player.key);
     const patron = wallet ? isPatron(wallet, now) : false;
-    // What the player wears for the boards: a name colour, a title and a portrait frame (Pixel-Mart's catalogue; looks only).
-    const worn = wallet ? shopOf(wallet).equipped.slots : {};
+    // What the hero wears on the boards (hero card, name colour, title, frame): built here from what the wallet owns and wears; never the device's word.
+    const worn = wallet ? wornOf(shopOf(wallet), summary.heroClass) : undefined;
     for (const kind of boardsFor(summary)) {
       const name = boardOfRun(kind, summary, now);
       const entry: DailyEntry = {
         id: await publicId(boardKey(this.env), name, player.key), owner: player.key, name: player.name,
         heroClass: summary.heroClass, depth: summary.depth, level: summary.level, gold: summary.gold, won: summary.won,
         score: summary.score, turns: summary.turns, kills: summary.kills, at: now, ...(patron ? { patron } : {}),
-        ...(worn.namecolor ? { nc: worn.namecolor } : {}), ...(worn.title ? { tt: worn.title } : {}), ...(worn.frame ? { fr: worn.frame } : {}),
+        ...(worn ? { w: worn, ...legacyFields(worn) } : {}),
       };
       noteEntered(this.logic!.profile, name);
       try {

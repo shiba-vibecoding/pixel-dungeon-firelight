@@ -214,7 +214,7 @@ export function showCamp(options: CampScreenOptions): CampScreen {
 
   const card = (): HTMLElement =>
     profileCard({
-      name: options.name, ...portrait(camp.heroClass), ...(options.frame ? { frame: options.frame } : {}), profile: options.profile, fallback: options.fallback, onOpen: options.onRankings,
+      name: options.name, ...portrait(camp.heroClass), heroClass: camp.heroClass, ...(options.frame ? { frame: options.frame } : {}), profile: options.profile, fallback: options.fallback, onOpen: options.onRankings,
     });
   const top = el('div', { className: 'pd-camp-top' });
 
