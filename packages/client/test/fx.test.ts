@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type Effect, HEIGHT, type ItemKind, POTION_COLORS, type TrapKind, WIDTH } from '@pd/core';
 import { FxPlayer, MODE_FLOOR, MODE_HEAD, type Env } from '../src/fxplayer';
 import {
@@ -373,6 +373,8 @@ describe('the player', () => {
   });
 
   it('plays the light quality\'s waves with half the rings and specks', () => {
+    // The specks' timing comes from a random seed per effect: fixed here, so both qualities are compared on the same dice.
+    const dice = vi.spyOn(Math, 'random').mockReturnValue(0.42);
     const full = player();
     full.p.onEffect({ type: 'scroll', hero: 'me', kind: 'lullaby', count: 1 }, env(), 0);
     full.p.collect(1000, everywhere);
@@ -380,6 +382,7 @@ describe('the player', () => {
     light.screen.light = true;
     light.p.onEffect({ type: 'scroll', hero: 'me', kind: 'lullaby', count: 1 }, env(), 0);
     light.p.collect(1000, everywhere);
+    dice.mockRestore();
     expect(light.p.count).toBeLessThan(full.p.count);
   });
 
