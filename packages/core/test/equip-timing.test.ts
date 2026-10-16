@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   act, type Action, addHero, canEnter, charAt, createItem, createMob, createWorld, fingerprint, floorAt, type Hero, type HeroClass, heroAttackDelay,
-  heroSpeed, heroWeapon, levelAt, NEIGHBOURS8, T, type World,
+  heroSpeed, heroWeapon, levelAt, NEIGHBOURS8, Rng, T, type World,
 } from '../src/index';
+import { stepOnPlant } from '../src/plants';
+import type { Ctx } from '../src/floor';
 import { pacify } from './helpers';
 
 /*
@@ -275,5 +277,62 @@ describe('thrown weapons in the hand', () => {
     ok(a.world, { type: 'throw', item: 'weapon', target: a.cell });
     expect(act(b, 'p', { type: 'throw', item: 'weapon', target: a.cell }).ok).toBe(true);
     expect(fingerprint(b)).toBe(fingerprint(a.world));
+  });
+});
+
+describe('whose garden it is (Plant.wither asks Dungeon.hero)', () => {
+  const ctxOf = (world: World, seed: number): Ctx => ({ world, depth: 1, level: levelAt(world, 1), floor: floorAt(world, 1), rng: Rng.seeded(seed), effects: [] });
+  /** Sets plants off, one after another, and says how many times something lay under them. */
+  const gifts = (world: World, cell: number, who: 'mob' | 'item' | Hero, tries = 120): number => {
+    let found = 0;
+    for (let i = 0; i < tries; i++) {
+      floorAt(world, 1).heaps = [];
+      floorAt(world, 1).plants = [{ pos: cell, kind: 'sungrass' }];
+      const ctx = ctxOf(world, 1000 + i);
+      stepOnPlant(ctx, who === 'mob' || who === 'item' ? (who === 'mob' ? createMob('#rat', 'rat', cell, 'hunting', 0) : null) : who, cell);
+      if (lyingAt(world, cell).length > 0) found++;
+    }
+    return found;
+  };
+
+  it('a monster treading on a plant, or an item landing on it, brings a warden his leavings all the same', () => {
+    const { world, hero, cell } = solo();
+    hero.subclass = 'warden';
+    hero.pos = cell + 1 === hero.pos ? cell - 1 : hero.pos;
+    expect(gifts(world, cell, 'mob')).toBeGreaterThan(10);
+    expect(gifts(world, cell, 'item')).toBeGreaterThan(10);
+    // The hero who steps on one gets them and the bark; a hero who is no warden gets neither.
+    expect(gifts(world, cell, hero)).toBeGreaterThan(10);
+  });
+
+  it('nobody else gets any from a monster, and a hero who is no warden gets none from stepping', () => {
+    const { world, hero, cell } = solo('mage');
+    expect(gifts(world, cell, 'mob')).toBe(0);
+    expect(gifts(world, cell, hero)).toBe(0);
+  });
+
+  it("in a party, a monster's plant is the nearest warden's, once; a stepping hero's is his own", () => {
+    const { world, hero, cell } = solo('mage');
+    const near = addHero(world, { id: 'q', name: 'Q', heroClass: 'warrior' });
+    const far = addHero(world, { id: 'r', name: 'R', heroClass: 'warrior' });
+    near.subclass = 'warden';
+    far.subclass = 'warden';
+    near.depth = far.depth = hero.depth;
+    near.pos = cell + 1;
+    far.pos = cell + 40;
+    // One roll for the one warden: about what a single roll gives (a seed or a dewdrop, a fifth each), not two heroes' worth.
+    const many = gifts(world, cell, 'mob', 400);
+    expect(many).toBeGreaterThan(40);
+    expect(many).toBeLessThan(180);
+    // A hero who is no warden, stepping, gets none, though wardens stand near.
+    expect(gifts(world, cell, hero)).toBe(0);
+  });
+
+  it('one dart out of a stack leaves as a plain new dart', () => {
+    const { world, hero, cell } = solo();
+    hero.items = [createItem('missile.dart', 3)];
+    ok(world, { type: 'throw', item: 0, target: cell });
+    expect(hero.items[0]!.qty).toBe(2);
+    expect(lyingAt(world, cell)).toEqual([createItem('missile.dart')]);
   });
 });

@@ -6,7 +6,7 @@ import { audio } from './audio';
 import { adjacentFoes, backpackMustClose, gearDrops, keepsOpen, type Place, resolveDrop, SNAP_BACK_MS } from './bagflow';
 import { seenEnemies } from './sight';
 import { haptic } from './telegram';
-import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
+import { chooseQuickslot, quickItem, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
@@ -352,7 +352,7 @@ function titleFor(world: World, item: Item, box: HTMLElement): void {
 }
 
 /** The item is the one the quickslot shows. */
-const inQuickslot = (hero: Hero, item: Item): boolean => hero.items[quickIndex(hero)] === item;
+const inQuickslot = (hero: Hero, item: Item): boolean => quickItem(hero) === item;
 
 /* Menu */
 
@@ -1495,7 +1495,7 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   const wide = Boolean(document.querySelector('#ui.pd-wide'));
   const quicks = el('div', { className: 'pd-bag-quick' });
   for (const n of wide ? [0, 1] : [0]) {
-    const held = hero.items[quickIndex(hero, n)];
+    const held = quickItem(hero, n);
     const place = el('div', { className: 'pd-slot pd-quick-drop', ariaLabel: wide ? t.quickslotN(n + 1) : t.quickslotShort }, held ? itemIcon(world, held) : el('span', { className: 'pd-quick-bolt' }));
     place.dataset.drop = `quick${n}`;
     quicks.append(place, el('span', { className: 'pd-quick-name', textContent: wide ? t.quickslotN(n + 1) : t.quickslotShort }));
@@ -1604,17 +1604,22 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
     const act = (action: Action): Drop => ({ act: action });
     // What is worn, back into the pack; what is in the pack, onto its place among the worn things.
     for (const [place, action] of gearDrops(hero, from, item)) drops.set(place, act(action));
-    if (!('index' in from)) return drops;
+    // The quick slots take what has a use (and on a phone there is one), worn things too (a stack of darts in the hand).
+    const quickDrops = (): void => {
+      if (!quickUse(item.kind)) return;
+      const wide = Boolean(document.querySelector('#ui.pd-wide'));
+      for (const n of wide ? [0, 1] : [0]) drops.set(`quick${n}`, { quick: n });
+    };
+    if (!('index' in from)) {
+      quickDrops();
+      return drops;
+    }
     const index = from.index;
     const category = itemDef(item.kind).category;
     if (category === 'scroll' && isKnown(world, item) && (TARGETED_SCROLLS as readonly string[]).includes(item.kind)) {
       for (const ref of scrollTargets(world, hero, item.kind)) drops.set(String(ref), act({ type: 'use', item: index, on: ref }));
     }
-    // The quick slots take what has a use (and on a phone there is one).
-    if (quickUse(item.kind)) {
-      const wide = Boolean(document.querySelector('#ui.pd-wide'));
-      for (const n of wide ? [0, 1] : [0]) drops.set(`quick${n}`, { quick: n });
-    }
+    quickDrops();
     drops.set('away', act({ type: 'drop', item: index }));
     return drops;
   };
@@ -2080,6 +2085,18 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     }, main.length === 0 ? 'primary' : '');
     (main.length === 0 ? main : more).push(node);
   };
+  /** QuickSlot: any item with a use can be kept one tap away (one slot on a phone; a wide screen has two, keys 1 and 2), worn or not. */
+  const addQuickslots = (): void => {
+    if (!quickUse(item.kind)) return;
+    const wide = Boolean(document.querySelector('#ui.pd-wide'));
+    for (const slotNo of wide ? [0, 1] : [0]) {
+      if (quickItem(hero, slotNo) === item) continue;
+      more.push(button(wide ? t.quickslotN(slotNo + 1) : t.quickslotShort, () => {
+        chooseQuickslot(item.kind, slotNo);
+        refreshBackpack(world, hero);
+      }));
+    }
+  };
   if (index !== null) {
     if (category === 'potion') {
       const back = (): void => showBackpack(options, { index });
@@ -2154,19 +2171,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'honeypot') use(t.shatterPot, () => act({ type: 'use', item: index }));
     // Item.AC_THROW: anything in the pack can be thrown where the player taps (a bag would scatter what it holds).
     if (!['bag', 'missile', 'bomb', 'honeypot', 'potion', 'seed'].includes(category)) use(t.throwItem, () => aimWith('throw', index));
-    // QuickSlot: any item with a use can be kept one tap away.
-    // QuickSlot: one on a phone; a wide screen has two (keys 1 and 2).
-    if (quickUse(item.kind)) {
-      const wide = Boolean(document.querySelector('#ui.pd-wide'));
-      const slots = wide ? [0, 1] : [0];
-      for (const slotNo of slots) {
-        if (hero.items[quickIndex(hero, slotNo)] === item) continue;
-        more.push(button(wide ? t.quickslotN(slotNo + 1) : t.quickslotShort, () => {
-          chooseQuickslot(item.kind, slotNo);
-          refreshBackpack(world, hero);
-        }));
-      }
-    }
+    addQuickslots();
     danger.push(button(t.dropItem, () => act({ type: 'drop', item: index }), 'danger'));
   } else {
     // Worn: taken off (UNEQUIP), or thrown (every item has AC_THROW; EquipableItem.cast takes it off first).
@@ -2180,6 +2185,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (ring !== undefined) use(t.takeOff, () => stay({ type: 'remove', ring }));
     else use(t.takeOff, () => stay(ref === 'weapon' ? { type: 'unequip' } : { type: 'unequip', slot: 'armor' }));
     use(t.throwItem, () => aimWith('throw', ref));
+    addQuickslots();
     // EquipableItem.doDrop: taken off first, then dropped.
     danger.push(button(t.dropItem, () => act({ type: 'drop', item: ref }), 'danger'));
   }

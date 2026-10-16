@@ -48,6 +48,20 @@ function witherDrops(ctx: Ctx, pos: number, hero: Hero | null): void {
 }
 
 /**
+ * Plant.wither asks Dungeon.hero, the player at the game, whoever set the plant off: so a monster treading on a plant, or an item
+ * landing on one, brings a warden his leavings all the same. Here: the hero who stepped on it, if a hero did; else (a party has
+ * no single Dungeon.hero) the warden on the depth nearest the plant, the first of them on a tie, and the one roll is his alone.
+ */
+function whoseGarden(ctx: Ctx, who: Char | null, pos: number): Hero | null {
+  if (who && isHero(who)) return who;
+  let best: Hero | null = null;
+  for (const hero of heroesOn(ctx.world, ctx.depth)) {
+    if (hero.subclass === 'warden' && (!best || distance(hero.pos, pos) < distance(best.pos, pos))) best = hero;
+  }
+  return best;
+}
+
+/**
  * Level.plant: a new plant takes the place of what grew there, which withers (Plant.wither); no terrain changes, whatever the cell is.
  * `hero`: whose subclass matters to the withering plant.
  */
@@ -76,10 +90,8 @@ export function stepOnPlant(ctx: Ctx, who: Char | null, pos: number): void {
   ctx.effects.push({ type: 'plantTriggered', depth: ctx.depth, pos, kind: found.kind, who: who?.id ?? '' });
   const { world, depth, level, rng } = ctx;
   // Plant.activate and wither: a warden draws bark from it, and now and then a seed or a dewdrop.
-  if (who && isHero(who) && who.subclass === 'warden') {
-    who.barkskin = Math.max(who.barkskin, Math.trunc(who.ht / 3));
-    witherDrops(ctx, pos, who);
-  }
+  if (who && isHero(who) && who.subclass === 'warden') who.barkskin = Math.max(who.barkskin, Math.trunc(who.ht / 3));
+  witherDrops(ctx, pos, whoseGarden(ctx, who, pos));
   switch (found.kind) {
     case 'firebloom':
       burst(ctx, pos, 'fire', 0);
