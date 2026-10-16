@@ -352,6 +352,13 @@ const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image
 /** The views of a sheet by the name of its picture (dirs.ts SPRITE_VIEWS), if it has any. */
 const viewsOf = (name: string): { faces?: Faces } => (SPRITE_VIEWS[name] ? { faces: SPRITE_VIEWS[name] } : {});
 
+/**
+ * The picture a monster kind is drawn from (the rare variants share their kind's sheet). A mirror image is drawn with its hero's own sheet
+ * (see View.sync); the warrior's stands in here.
+ */
+export const sheetNameOf = (kind: MobKind): string =>
+  kind === 'mirror' ? 'warrior' : kind === 'fetidRat' ? 'rat' : kind === 'curse' ? 'wraith' : kind === 'impShopkeeper' ? 'imp' : baseKind(kind);
+
 /** Loads every sprite sheet; `onProgress` hears the share done, from 0 to 1. */
 /** Where the sprite sheets are, for the looks loaded later. */
 let assetBase = '';
@@ -416,8 +423,7 @@ export async function loadAssets(base: string, onProgress?: (done: number) => vo
   const hero = (image: HTMLImageElement, name: string): CharSprite => ({ sheet: sheet(image, 12, 15), anims: HERO_ANIMS, ...viewsOf(name) });
   const mob = (kind: MobKind): CharSprite => {
     const spec = MOB_SPRITES[kind];
-    // A mirror image is drawn with its hero's own sheet (see View.sync); the warrior's stands in here.
-    const image = kind === 'mirror' ? 'warrior' : kind === 'fetidRat' ? 'rat' : kind === 'curse' ? 'wraith' : kind === 'impShopkeeper' ? 'imp' : baseKind(kind);
+    const image = sheetNameOf(kind);
     return { sheet: sheet(images[image as (typeof names)[number]], spec.w, spec.h), anims: spec.anims, ...viewsOf(image) };
   };
   return {

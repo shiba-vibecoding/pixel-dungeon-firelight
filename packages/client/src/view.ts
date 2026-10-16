@@ -4,7 +4,7 @@ import {
   type Look,
 } from '@pd/core';
 import { audio, type Sound } from './audio';
-import { turnable, turnAt, turnBetween, type Turnable } from './dirs';
+import { initialFacing, turnable, turnAt, turnBetween, type Turnable } from './dirs';
 import { BLUNT_MOBS, BLUNT_WEAPONS, BOLT_SOUND, TRAP_SOUND } from './soundmap';
 import { capitalize, t } from './i18n';
 import { itemName, plainName } from './itemtext';
@@ -389,7 +389,7 @@ export class View {
       let puppet = this.puppets.get(id);
       if (!puppet) {
         puppet = {
-          id, kind, sprite, isHero, from: pos, to: pos, moveStart: 0, ...turnable(isHero || kind === 'mirror' ? 'front' : 'side'), anim: 'idle', animStart: now,
+          id, kind, sprite, isHero, from: pos, to: pos, moveStart: 0, ...turnable(initialFacing(isHero, kind)), anim: 'idle', animStart: now,
           alive: hp > 0, removeAt: Infinity, flashUntil: 0, alertUntil: 0, sleeping, pumped, invisible, row: 0, label: '',
           hp, ht,
         };

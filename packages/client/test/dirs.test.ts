@@ -1,8 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import type { MobKind } from '@pd/core';
+import { sheetNameOf } from '../src/sprites';
 import {
-  conventionFaces, type Face, FACING_HOLD_MS, type Facing, facingFor, figureOf, PET_VIEWS, settle, SPRITE_VIEWS, turn, turnable, turnAt, turnBetween,
+  conventionFaces, type Face, FACING_HOLD_MS, type Facing, facingFor, figureOf, initialFacing, PET_VIEWS, settle, SPRITE_VIEWS, turn, turnable, turnAt, turnBetween,
   type Turnable, withView,
 } from '../src/dirs';
 import type { Puppet } from '../src/view';
@@ -109,6 +111,30 @@ describe('the direction rule of part 8', () => {
   });
 });
 
+describe('what a new figure faces', () => {
+  it('stands a hero and a mirror image on the front, and a monster on the side as the original draws it', () => {
+    expect(initialFacing(true, 'warrior')).toBe('front');
+    expect(initialFacing(false, 'mirror')).toBe('front');
+    for (const kind of ['rat', 'gnoll', 'bee', 'sheep', 'spinner', 'bat', 'goo', 'tengu']) expect(initialFacing(false, kind)).toBe('side');
+  });
+
+  it('turns a monster by the same rule once it moves, and holds it for 120 ms', () => {
+    const rat = turnable(initialFacing(false, 'rat'));
+    expect([rat.facing, rat.flip]).toEqual(['side', false]);
+    // Toward the hero from above: straight down shows the face, then up the back, and a zigzag does not flicker.
+    turnBetween(rat, at, cell(10, 11), WIDTH, 1000);
+    expect(rat.facing).toBe('front');
+    turnBetween(rat, cell(10, 11), at, WIDTH, 1060);
+    settle(rat, 1100);
+    expect(rat.facing).toBe('front');
+    settle(rat, 1120);
+    expect(rat.facing).toBe('back');
+    // A bite at a neighbour on the diagonal turns it to the side, mirrored to the left.
+    turnAt(rat, at, cell(9, 11), WIDTH, 2000);
+    expect([rat.facing, rat.flip]).toEqual(['side', true]);
+  });
+});
+
 const image = (name: string): HTMLImageElement => ({ name }) as unknown as HTMLImageElement;
 const face = (name: string, glow = false): Face => ({ image: name, img: image(name), ...(glow ? { glow: `${name}-glow`, glowImg: image(`${name}-glow`) } : {}) });
 
@@ -175,6 +201,23 @@ describe('the paths of the other views', () => {
   });
 
   const assets = (path: string): string => fileURLToPath(new URL(`../public/assets/${path}`, import.meta.url));
+
+  it('has the sheets of stage 2 in the layout of their side sheets, and gives the right monsters their views', () => {
+    const size = (path: string): [number, number] => {
+      const head = readFileSync(assets(path)).subarray(0, 24);
+      return [head.readUInt32BE(16), head.readUInt32BE(20)];
+    };
+    for (const [key, faces] of Object.entries(SPRITE_VIEWS)) {
+      for (const f of [faces.front, faces.back]) if (f) expect([key, size(f.image)]).toEqual([key, size(`${key}.png`)]);
+    }
+    const kinds: MobKind[] = ['rat', 'albino', 'fetidRat', 'gnoll', 'shaman', 'skeleton', 'thief', 'bandit', 'bee', 'sheep', 'spinner', 'bat'];
+    for (const kind of kinds) expect([kind, SPRITE_VIEWS[sheetNameOf(kind)]?.back !== undefined]).toEqual([kind, true]);
+    // Facing the camera already: no front of their own (it is the side picture).
+    for (const kind of ['spinner', 'bat'] as const) expect(SPRITE_VIEWS[sheetNameOf(kind)]!.front).toBeUndefined();
+    for (const kind of ['rat', 'albino', 'fetidRat', 'gnoll', 'thief', 'bandit', 'bee', 'sheep'] as const) expect(SPRITE_VIEWS[sheetNameOf(kind)]!.front).toBeDefined();
+    // Stage 3 and the symmetric ones stay on the side view for now.
+    for (const kind of ['brute', 'monk', 'golem', 'goo', 'eye', 'tengu', 'dm300', 'king', 'ratKing', 'undead'] as MobKind[]) expect(SPRITE_VIEWS[sheetNameOf(kind)]).toBeUndefined();
+  });
 
   it('finds every view the catalogue and the hero classes need on disk', () => {
     const catalog = JSON.parse(readFileSync(assets('mart/fl/catalog.json'), 'utf8')) as { items: Array<Record<string, unknown>> };

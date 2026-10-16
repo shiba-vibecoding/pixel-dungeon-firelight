@@ -31,6 +31,12 @@ export interface Turnable {
   facingAt: number;
 }
 
+/**
+ * The view a new figure starts in: a hero (and a mirror image of one) faces the front, a monster the side, as the original draws it,
+ * until it moves.
+ */
+export const initialFacing = (isHero: boolean, kind: string): Facing => (isHero || kind === 'mirror' ? 'front' : 'side');
+
 /** A fresh turnable: it faces the front (a new level, a load) unless told otherwise. */
 export const turnable = (facing: Facing = 'front'): Turnable => ({ flip: false, facing, facingWant: facing, facingAt: -1e9 });
 
@@ -172,6 +178,17 @@ export const SPRITE_VIEWS: Readonly<Record<string, Faces>> = {
   mage: conventionFaces('dirs/mage.png'),
   rogue: conventionFaces('dirs/rogue.png'),
   ranger: conventionFaces('dirs/ranger.png'),
+  // Stage 2 (the monsters of the first depths). The albino and the fetid rat use the rat's sheets, the bandit the thief's.
+  rat: conventionFaces('dirs/rat.png'),
+  gnoll: conventionFaces('dirs/gnoll.png'),
+  shaman: conventionFaces('dirs/shaman.png'),
+  skeleton: conventionFaces('dirs/skeleton.png'),
+  thief: conventionFaces('dirs/thief.png'),
+  bee: conventionFaces('dirs/bee.png'),
+  sheep: conventionFaces('dirs/sheep.png'),
+  // Drawn facing the camera already: the front is the side picture, only the back is new.
+  spinner: conventionFaces('dirs/spinner.png', undefined, { back: true }),
+  bat: conventionFaces('dirs/bat.png', undefined, { back: true }),
 };
 
 /**
