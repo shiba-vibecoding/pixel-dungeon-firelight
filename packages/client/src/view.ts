@@ -443,7 +443,7 @@ export class View {
         puppet.burning = hero.burning > 0;
         puppet.poisoned = hero.poison > 0;
         puppet.levitating = (hero.levitating ?? 0) > 0;
-        puppet.row = itemDef(hero.armor.kind).tier ?? 0;
+        puppet.row = hero.armor ? itemDef(hero.armor.kind).tier ?? 0 : 0;
         puppet.label = hero.id === myId ? '' : hero.name;
       }
     }
@@ -453,7 +453,7 @@ export class View {
       if (twin) {
         place(mob.id, 'mirror', this.assets.heroes[twin.heroClass], false, mob.pos, mob.hp, mob.ht, false, false, true);
         this.puppets.get(mob.id)!.sprite = heroSprite(this.assets, twin.heroClass, this.looks[twin.id]?.skin);
-        this.puppets.get(mob.id)!.row = itemDef(twin.armor.kind).tier ?? 0;
+        this.puppets.get(mob.id)!.row = twin.armor ? itemDef(twin.armor.kind).tier ?? 0 : 0;
         continue;
       }
       place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht,

@@ -5,7 +5,7 @@ import {
   type Hero, type Item, type Level,
   type Bones, hasAmulet, heroById, type HeroClass, leaveBones, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, type PlanStep, PLANT_KINDS, type SmithLine, T,
-  chargesKnown, WIDTH,
+  chargesKnown, WIDTH, itemAt,
   type World, charAt, swapsWithHero,
 } from '@pd/core';
 import * as core from '@pd/core';
@@ -1234,7 +1234,11 @@ const heapAt = (world: World, depth: number, pos: number): boolean =>
  * Aiming a thrown weapon or a wand: the next tap on the map picks the target. Aiming from a quick slot (`slot`) may
  * have the last target marked: the same slot tapped again fires at it (targeting.ts).
  */
-let aim: { index: number; kind: 'throw' | 'zap' | 'special'; slot?: number; marked?: boolean } | null = null;
+/**
+ * What is being aimed: a pack slot's `index`, or (index -2) the thing worn named by `worn`, which a throw takes off first
+ * (EquipableItem.cast).
+ */
+let aim: { index: number; worn?: 'weapon' | 'armor' | 'ring0' | 'ring1'; kind: 'throw' | 'zap' | 'special'; slot?: number; marked?: boolean } | null = null;
 
 /** The aim from a quick slot is on a marked target: fire at it (autoAim: angled round what is in the way, if need be). False: it is gone. */
 function fireMarked(): boolean {
@@ -1776,6 +1780,7 @@ function tapCell(cell: number, quiet = false): void {
       rememberTarget(seenEnemies(world, me).find((m) => m.pos === end));
     }
     if (shot.kind === 'special') send({ type: 'special', target: cell }, performance.now());
+    else if (cell !== me.pos && shot.worn && itemAt(me, shot.worn)) send({ type: 'throw', item: shot.worn, target: cell }, performance.now());
     else if (cell !== me.pos && me.items[shot.index]) send({ type: shot.kind, item: shot.index, target: cell }, performance.now());
     return;
   }
@@ -1927,8 +1932,8 @@ function backpackOptions(world: World, me: Hero): Parameters<typeof showBackpack
     world,
     hero: me,
     onAction: (action) => send(action, performance.now()),
-    onAim: (index, kind) => {
-      aim = { index, kind };
+    onAim: (at, kind) => {
+      aim = typeof at === 'string' ? { index: -2, worn: at, kind } : { index: at, kind };
     },
     onClose: hideOverlay,
   };
@@ -3228,7 +3233,7 @@ function tick(now: number): void {
     examining = false;
   };
   // One state at a time, the most pressing: the connection, death, a target to choose, examining, companions.
-  const aimed = aim && aim.index >= 0 ? me.items[aim.index] : undefined;
+  const aimed = aim?.worn ? itemAt(me, aim.worn) : aim && aim.index >= 0 ? me.items[aim.index] : undefined;
   const status: HudStatus | null =
     session.status ? { kind: session.status === t.reconnecting ? 'reconnecting' : 'connecting', text: session.status }
     : !isAlive(me) && !world.over ? { kind: 'dead', text: `${t.youDied}. ${t.youDiedCoop}` }

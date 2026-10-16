@@ -229,7 +229,7 @@ function chaosAction(world: World, rng: Rng, cases?: readonly number[]): Action 
     case 0: case 16: case 17: return { type: 'move', to: hero.pos + rng.element(NEIGHBOURS8)! };
     case 1: case 18: return mobs.length > 0 ? { type: 'attack', target: rng.element(mobs)!.id } : { type: 'search' };
     case 2: return { type: 'use', item, target: rng.int(2) === 0 ? 'weapon' : 'armor' };
-    case 3: return { type: 'throw', item, target };
+    case 3: return { type: 'throw', item: ref(), target };
     case 4: return { type: 'zap', item, target };
     case 5: return { type: 'equip', item };
     case 6: return { type: 'drop', item };
@@ -241,7 +241,7 @@ function chaosAction(world: World, rng: Rng, cases?: readonly number[]): Action 
         case 0: return { type: 'balance', item: of('weightstone'), imbue: rng.oneOf(['speed', 'accuracy'] as const), ...(rng.int(2) === 0 ? { weapon: item } : {}) };
         case 1: return { type: 'master', item: of('tome'), subclass: rng.int(5) === 0 ? rng.oneOf(SUBCLASSES.warrior) : rng.oneOf(SUBCLASSES[hero.heroClass]) };
         case 2: return { type: 'mine' };
-        case 3: return { type: 'unequip' };
+        case 3: return rng.oneOf<Action>([{ type: 'unequip' }, { type: 'unequip', slot: 'armor' }]);
         default: return { type: 'beacon', item: of('beacon'), mode: rng.oneOf(['set', 'return'] as const) };
       }
     case 11: return hero.pos === level.exit ? { type: 'descend' } : { type: 'move', to: hero.pos + rng.element(NEIGHBOURS8)! };
