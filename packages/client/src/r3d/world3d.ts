@@ -17,14 +17,14 @@
  */
 import {
   AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
-  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, NoBlending, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
+  Color, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, NoBlending, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
   PlaneGeometry, RepeatWrapping, Scene, SRGBColorSpace, Texture, WebGLRenderer,
 } from 'three';
-import { LENGTH, type Level, type MobKind, WIDTH } from '@pd/core';
+import { LENGTH, type Level, type MobKind, T, WIDTH } from '@pd/core';
 import { brightness } from '../brightness';
 import { type Assets, frameAt, levelRegion } from '../sprites';
 import { sheet as worldSheet } from '../worldsheets';
-import { fx } from '../fx';
+import { type BurstOptions, fx } from '../fx';
 import { knockback, LUNGE_MS } from '../render';
 import { FALL_MS, type Puppet, TILE, type View } from '../view';
 import { figureOf } from '../dirs';
@@ -34,7 +34,7 @@ import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrai
 import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, type MistKit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
-import { type Buffers, doorLeafBuffers, type GeomKit, K_WALL, LevelGeom } from './levelgeom';
+import { type Buffers, doorLeafBuffers, type GeomKit, K_WALL, K_WATER, LevelGeom } from './levelgeom';
 import { DoorSwing, writeLeafMatrix } from './doorswing';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
 import type { Tier } from './governor';
@@ -47,7 +47,8 @@ import { bakeBody } from './bodyart';
 import { bakeItem } from './itemblood';
 import { GoreLayer } from './gorelayer';
 import { gore } from '../gore';
-import { Grass } from './grass3d';
+import { Grass, Tufts } from './grass3d';
+import { gapRows } from './feet';
 import { withGlint } from './ore';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
@@ -84,7 +85,7 @@ export interface Shown {
 }
 
 const MAX_SPRITES = 360;
-const MAX_DEAD = 96;
+const MAX_DEAD = 160;
 /** How long a body lies in the 3D view before it fades away (MobSprite.FADE_TIME: the original's dead sprite fades out over three seconds). */
 const CORPSE_FADE_MS = 3000;
 /** The most soft-bodied figures (a ghost, a wraith, bees) drawn at once, in their own blended batch. */
@@ -126,6 +127,26 @@ const SCONCE_REACH = 14;
  * With the bloom on, what glows is brighter than 1 in the frame before the tone map takes it down (the way light is, and the way the
  * designer's frames were made), so the bloom has it to take: by this much for what is lit by its glow map, and for lava.
  */
+/**
+ * What stands a figure on the floor (the owner's «sticker over the tiles»): the contact shadow's size and strength, the hop of a
+ * knockback and of a leap (cells), the squash of the landing after them (one art pixel, this many ms), the rows of water a wader's
+ * feet are under, and the dust, splash and sparks of a footfall.
+ */
+const CONTACT_WIDTH = 0.3;
+const CONTACT_OPACITY = 0.72;
+const KNOCK_HOP = 0.1;
+const LEAP_HOP = 0.4;
+const KNOCK_MS = 120;
+const LAND_MS = 150;
+const WADE_ROWS = 3;
+const DUST: BurstOptions = { count: 3, colors: ['#b9ad96', '#9c917e', '#d2c8b0'], speed: [5, 15], life: [260, 440], size: [1, 2], spread: 2, rise: 10, drag: 0.02, low: true };
+const SPLASH: BurstOptions = { count: 4, colors: ['#c4e6f2', '#8ec6dc', '#eaf7fb'], speed: [14, 34], life: [280, 460], size: [1, 2], spread: 2, rise: 26, gravity: 90, drag: 0.03 };
+const CRUNCH: BurstOptions = { count: 3, colors: ['#ffb050', '#ff7a2a', '#ffd890'], speed: [10, 30], life: [200, 380], size: [1, 2], spread: 2, rise: 22, drag: 0.03, glow: true, low: true };
+/** How a walker's footfall is kept: the step it last stepped for, and when it last stirred the water standing. */
+interface Feet {
+  step: number;
+  ring: number;
+}
 /** How far the heat haze of the halls moves the picture where it burns, in device pixels (the kit says half a pixel; whole pixels are moved). */
 const HEAT_PIXELS = 1.5;
 /** What a mirror is given for a level whose water shows no reflection. */
@@ -273,10 +294,19 @@ export class World3D {
   /** The cells of the level that carry a signpost, and the cut-out of it; the high grass and fungi stand in their own batch (grass3d.ts). */
   private props: number[] = [];
   private grass: Grass | null = null;
+  /** A few blades over the feet of those who stand in short grass (grass3d.ts). */
+  private tufts: Tufts | null = null;
+  /** The feet's shader: per sprite the clear rows under its feet, the rows of water over them, and whether it is a figure standing on the floor. */
+  private readonly spriteFeet: InstancedBufferAttribute;
+  private readonly gnd = { on: 0, gap: 0, wade: 0 };
+  private readonly feet = new WeakMap<Puppet, Feet>();
+  /** The floor tile's average colour (in linear light), which a figure's feet take back (the bounce). */
+  private readonly floorAvg = new Color(0.2, 0.18, 0.15);
   private grassCells: number[] = [];
   /** The time of the last frame (the clock the grass folds by when it is trampled between frames). */
   private lastNow = 0;
   private grassCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
+  private shortCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
   private signCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
 
   // Characters.
@@ -392,7 +422,7 @@ export class World3D {
     const makeMaterial = (): MeshLambertMaterial => {
       // (No blending: a cut-out pixel is whole, and its alpha in the frame says how much of it glows, post.ts.)
       const m = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide, blending: NoBlending });
-      withFog(m, this.air, 'instance', { selfLight: this.kit.sprites.selfLight, texel: [this.kit.sprites.rim.px / ATLAS_W, this.kit.sprites.rim.px / ATLAS_H] });
+      withFog(m, this.air, 'instance', { selfLight: this.kit.sprites.selfLight, texel: [this.kit.sprites.rim.px / ATLAS_W, this.kit.sprites.rim.px / ATLAS_H], row: 1 / ATLAS_H });
       return m;
     };
     const spriteMaterial = makeMaterial();
@@ -413,6 +443,8 @@ export class World3D {
     this.spriteRimColor = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 3), 3).setUsage(DynamicDrawUsage);
     quad.setAttribute('aRim', this.spriteRim);
     quad.setAttribute('aRimColor', this.spriteRimColor);
+    this.spriteFeet = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 3), 3).setUsage(DynamicDrawUsage);
+    quad.setAttribute('aFeet', this.spriteFeet);
     this.sprites.frustumCulled = false;
     // Drawn after the doors' leaves (renderOrder 1): a figure is never under a door.
     this.sprites.renderOrder = 2;
@@ -651,6 +683,8 @@ export class World3D {
     this.rig.configure(L, this.fires, this.tier.shadowLights);
     this.fog.setPools(bakePools([...this.fires, ...doorGlow(this.geom.terrain), ...stairGlow(this.geom.terrain)], this.geom.kinds));
     this.lightBase = { ambient: L.ambient.intensity, hemi: L.hemi.intensity };
+    // The floor in the light of the level, for the bounce on the feet.
+    this.air.uFloor.value.copy(this.floorAvg).multiplyScalar(MathUtils.clamp((L.ambient.intensity + L.hemi.intensity) * 0.5, 0.15, 0.7));
     this.bright = 0;
     if (a.accent) this.rig.setAccent(hex(a.accent.color), a.accent.intensity * 2.2);
     else this.rig.setAccent(0xffffff, 0);
@@ -712,7 +746,26 @@ export class World3D {
   /** Cuts the region's props (high grass or fungi, the signpost) out of its tiles, and puts them on the sprite atlas. */
   private cutProps(images: RegionImages, region: number): void {
     this.grassCut = propCutout(images, HIGH_GRASS, region >= 2 ? 1 : 2);
+    this.shortCut = propCutout(images, T.GRASS, T.EMPTY);
+    this.measureFloor(images);
     this.signCut = propCutout(images, SIGN, 1);
+  }
+
+  /** The average colour of the region's plain floor tile, in linear light. */
+  private measureFloor(images: RegionImages): void {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 16;
+      const g = canvas.getContext('2d', { willReadFrequently: true })!;
+      const cols = images.tiles.width / 16;
+      g.drawImage(images.tiles, (T.EMPTY % cols) * 16, Math.trunc(T.EMPTY / cols) * 16, 16, 16, 0, 0, 16, 16);
+      const d = g.getImageData(0, 0, 16, 16).data;
+      let r = 0, gr = 0, b = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 127) { r += d[i]!; gr += d[i + 1]!; b += d[i + 2]!; n++; }
+      if (n > 0) this.floorAvg.setRGB(r / n / 255, gr / n / 255, b / n / 255, SRGBColorSpace);
+    } catch {
+      this.floorAvg.setRGB(0.2, 0.18, 0.15);
+    }
   }
 
   /** The region's high grass: its crossed quads, made from the cut-out of its tile. */
@@ -724,6 +777,13 @@ export class World3D {
     const cut = this.grassCut!;
     this.grass = new Grass(this.air, cut.color, cut.glow, this.kit.sprites.selfLight);
     this.scene.add(this.grass.mesh);
+    if (this.tufts) {
+      this.scene.remove(this.tufts.mesh);
+      this.tufts.dispose();
+    }
+    const short = this.shortCut!;
+    this.tufts = new Tufts(this.air, short.color, short.glow, this.kit.sprites.selfLight);
+    this.scene.add(this.tufts.mesh);
     this.applyGlowGain();
   }
 
@@ -953,6 +1013,7 @@ export class World3D {
     blend = false,
   ): void {
     const dead = this.toDead && !blend;
+    if (blend || dead) this.gnd.on = 0;
     if (blend ? this.ghostCount >= MAX_BLENDED : dead ? this.deadCount >= MAX_DEAD : this.spriteCount >= MAX_SPRITES) return;
     const spot = this.atlas.place(image, glow);
     if (!spot) return;
@@ -999,6 +1060,12 @@ export class World3D {
     const r = this.spriteRim.array as Float32Array;
     r[i * 3] = r[i * 3 + 1] = 0;
     r[i * 3 + 2] = 1;
+    const feet = this.spriteFeet.array as Float32Array;
+    const g = this.gnd;
+    feet[i * 3] = g.gap;
+    feet[i * 3 + 1] = g.wade;
+    feet[i * 3 + 2] = g.on;
+    g.on = 0;
   }
 
   /** Puts the blended figures back to front (north to south: the camera is in the south), so soft bodies overlap as they should. */
@@ -1076,11 +1143,27 @@ export class World3D {
     const hover = puppet.levitating && puppet.alive ? 4 + Math.round(Math.sin(now / 320)) : 0;
     // The sad ghost floats a little off the floor and bobs gently, slowly, with a cold light round it.
     const spectral = puppet.kind === 'ghost' && puppet.alive;
-    const ground = this.geom!.groundAt(px / TILE, py / TILE);
-    const lift = ground + (flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7)
+    const geom = this.geom!;
+    const ground = geom.groundAt(px / TILE, py / TILE);
+    // A knockback and a leap throw it a little up, and it lands with a squash.
+    const segEnd = puppet.aim ?? puppet.to;
+    const run = Math.max(Math.abs((segEnd % WIDTH) - (puppet.from % WIDTH)), Math.abs(Math.trunc(segEnd / WIDTH) - Math.trunc(puppet.from / WIDTH)));
+    const dur = puppet.moveDur ?? f.view.stepMs;
+    const stepK = (now - puppet.moveStart) / dur;
+    const leaping = run >= 2 && run <= 7;
+    let hop = 0;
+    if (!flyer && leaping && stepK >= 0 && stepK < 1) hop = LEAP_HOP * Math.sin(Math.PI * stepK);
+    if (!flyer && knock > 0) hop = Math.max(hop, KNOCK_HOP * knock);
+    const landed = leaping && stepK >= 1 ? now - puppet.moveStart - dur : puppet.knockStart !== undefined ? now - puppet.knockStart - KNOCK_MS : -1;
+    const squash = !flyer && landed >= 0 && landed < LAND_MS ? Math.sin((Math.PI * landed) / LAND_MS) : 0;
+    const lift = ground + hop + (flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7)
       : spectral ? 0.12 + 0.05 * Math.sin(now / 650 + puppet.to * 0.9) : hover / TILE);
     // A figure whose picture has soft pixels (a ghost, a wraith, bees' wings) is drawn blended, with its own alpha, not cut at one half.
     const blend = !puppet.isHero && hasSoftBody(sheet.image);
+    // Where it stands: the cell under its feet; whether it is a figure on the floor, and in what.
+    const feetCell = Math.floor(px / TILE) + Math.floor(py / TILE) * WIDTH;
+    const standing = !flyer && !spectral && hover === 0 && !blend && puppet.alive && puppet.fallStart === undefined;
+    const wading = standing && !this.lava && geom.kinds[feetCell] === K_WATER;
     let tint = 1;
     let scale = 1;
     if (puppet.invisible) tint = 0.45;
@@ -1102,6 +1185,15 @@ export class World3D {
     if (tint <= 0 || scale <= 0 || alpha <= 0) return;
     const tx = px / TILE;
     const tz = py / TILE;
+    // Its lowest opaque row on the floor, in this frame of its picture (a clear row or two under the feet, or a foot lifted in a stride, is
+    // put right), and the squash of a landing: the figure is a pixel lower and a half pixel wider.
+    const gap = standing ? gapRows(fig.image, sx, sy, sheet.w, sheet.h) : 0;
+    const fw = 1 + (0.5 * squash) / sheet.w;
+    const fh = 1 - squash / sheet.h;
+    const down = (gap / sheet.h) * (sheet.h / TILE) * scale * fh * LEAN_STRETCH;
+    const by = lift - down * Math.cos(LEAN);
+    const bz = tz + down * Math.sin(LEAN);
+    if (standing && this.tier.particles) this.footsteps(puppet, px, py, now, stepK, run, feetCell, wading);
     const worn = puppet.worn;
     const look = worn?.look;
     // A legendary look's aura stands just behind the hero, bright (its own glow: it does not dim), a pixel lower.
@@ -1116,7 +1208,12 @@ export class World3D {
       this.deadFade = tint < 1 ? 1 - tint : 0;
       if (tint < 1) tint = 1;
     }
-    this.sprite(fig.image, sx, sy, sheet.w, sheet.h, fig.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, fig.glow, blend);
+    if (standing) {
+      this.gnd.on = 1;
+      this.gnd.gap = gap;
+      this.gnd.wade = wading ? WADE_ROWS : 0;
+    }
+    this.sprite(fig.image, sx, sy, sheet.w, sheet.h, fig.flip, tx, by, bz, (sheet.w / TILE) * scale * fw, (sheet.h / TILE) * scale * fh, tint, LEANED, 0, fig.glow, blend);
     this.toDead = false;
     if (spectral) this.effects.halo(tx, 0.55 + lift, tz, COLD, 1.7, 0.2 + 0.05 * Math.sin(now / 520 + puppet.to));
     if (look && fig.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
@@ -1127,7 +1224,7 @@ export class World3D {
     if (hat && fig.hat) {
       const col = frame % sheet.cols;
       const row = Math.floor(frame / sheet.cols) + puppet.row;
-      this.sprite(fig.hat, col * hat.w, row * hat.h, hat.w, hat.h, fig.flip, tx, lift, tz, (hat.w / TILE) * scale, (hat.h / TILE) * scale, tint, LEANED, 0, fig.hatGlow);
+      this.sprite(fig.hat, col * hat.w, row * hat.h, hat.w, hat.h, fig.flip, tx, by, bz, (hat.w / TILE) * scale * fw, (hat.h / TILE) * scale * fh, tint, LEANED, 0, fig.hatGlow);
       if (fig.hatGlow) this.glowLast(0.9);
       this.rimLast(tx, tz, fig.flip);
     }
@@ -1135,7 +1232,20 @@ export class World3D {
       const air = flyer || spectral || hover > 0;
       const size = Math.max(0.35, sk.shadow.width * (sheet.w / TILE)) * (air ? sk.fly.shadowScale : 1) * scale;
       const away = lit ? sk.shadow.offset : 0;
-      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1), sk.shadow.squash, ground);
+      const up = lift - ground;
+      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1) * Math.max(0.35, 1 - hop * 2.5), sk.shadow.squash, ground);
+      // Under the feet, tight and dark: a small hard ellipse in front of the soft one, weaker for what flies, smaller and fainter the higher it is.
+      const width = Math.min(0.62, CONTACT_WIDTH + 0.12 * (sheet.w / 12)) * scale;
+      this.effects.contactShadow(tx - this.strong.ux * away * 0.4, tz - this.strong.uz * away * 0.4, width * (air ? 0.8 : 1), CONTACT_OPACITY * (air ? 0.5 : 1), ground, up);
+      // Blades of short grass over the feet.
+      if (standing && geom.terrain[feetCell] === T.GRASS) {
+        const t = this.tufts;
+        if (t) {
+          t.add(tx - 0.14, tz + 0.1, 0.26);
+          t.add(tx + 0.13, tz + 0.14, 0.22);
+          t.add(tx + 0.01, tz + 0.21, 0.28);
+        }
+      }
     }
     if (BOSS_KINDS.has(puppet.kind) && puppet.alive) {
       this.bossFound = true;
@@ -1146,6 +1256,32 @@ export class World3D {
     mark.puppet = puppet;
     mark.x = pos.x;
     mark.y = pos.y;
+  }
+
+  /**
+   * A foot comes down: a puff of dust on dry floor, a splash and a ring on water, a crunch of sparks on embers; and, standing in water, a ring
+   * now and then. One a step, in the middle of it. The particles are the effects module's own pool; nothing here is made in the frame but the
+   * particles themselves, on the step.
+   */
+  private footsteps(puppet: Puppet, px: number, py: number, now: number, stepK: number, run: number, cell: number, wading: boolean): void {
+    let feet = this.feet.get(puppet);
+    if (!feet) {
+      feet = { step: -1, ring: -1e9 };
+      this.feet.set(puppet, feet);
+    }
+    if (run === 1 && stepK >= 0.4 && stepK < 1 && feet.step !== puppet.moveStart) {
+      feet.step = puppet.moveStart;
+      if (wading) {
+        fx.burst(px, py, now, SPLASH);
+        this.effects.ripple(px / TILE, py / TILE, now);
+        feet.ring = now;
+      } else if (!this.lava && this.geom!.terrain[cell] === T.EMBERS) fx.burst(px, py, now, CRUNCH);
+      else if (!this.lava) fx.burst(px, py + 1, now, DUST);
+    }
+    if (wading && now - feet.ring > 900) {
+      feet.ring = now;
+      this.effects.ripple(px / TILE, py / TILE, now);
+    }
   }
 
   // ---- the frame -----------------------------------------------------------------------------------------------------------
@@ -1220,7 +1356,9 @@ export class World3D {
     gore.sweep(f.now, CORPSE_FADE_MS);
     if (this.doorStained !== gore.version * 100000 + gore.stains) this.tintDoors();
     this.effects.begin();
+    this.tufts?.begin();
     f.view.puppets.forEach(this.puppetPass);
+    this.tufts?.end();
     this.addWear(f);
     this.addItems(f);
     this.addProps(f, hx, hz);
@@ -1240,7 +1378,7 @@ export class World3D {
     this.sprites.instanceColor!.clearUpdateRanges();
     this.sprites.instanceColor!.addUpdateRange(0, this.spriteCount * 3);
     this.sprites.instanceColor!.needsUpdate = true;
-    for (const a of [this.spriteRim, this.spriteRimColor]) {
+    for (const a of [this.spriteRim, this.spriteRimColor, this.spriteFeet]) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, this.spriteCount * 3);
       a.needsUpdate = true;
@@ -1376,12 +1514,19 @@ export class World3D {
       // Only where it is in sight, as in the original (heapsight.ts): not what lies in the rooms remembered.
       if (!heapDrawn(visible, heap.pos)) continue;
       const x = (heap.pos % WIDTH) + 0.5;
-      const z = Math.trunc(heap.pos / WIDTH) + 0.6;
-      const bob = visible[heap.pos] && !f.seeAll ? Math.sin(f.now / 520 + heap.pos) * 0.012 : 0;
+      const z = Math.trunc(heap.pos / WIDTH) + 0.62;
+      // It lies on the floor: a flat picture, in the batch that is drawn under every figure (a thing dropped on the hero's own cell is
+      // under the hero, not over them), with a little contact shadow of its own; a heap caught in a fight shows its blood (gore).
       const blood = gore.data.heaps.get(heap.pos);
-      if (blood) this.sprite(this.itemPicture(heap.sprite, heap.pos, blood), 0, 0, 16, 16, false, x, 0.02 + bob, z, 0.7, 0.7, 1, LEANED, 0);
-      else this.sprite(items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, false, x, 0.02 + bob, z, 0.7, 0.7, 1, LEANED, 0, this.shared.itemsEmissive);
-      if (visible[heap.pos]) this.effects.shadowBlob(x, z, 0.6, this.kit.sprites.shadow.opacity, this.kit.sprites.shadow.squash);
+      this.toDead = true;
+      this.deadFade = 0;
+      if (blood) this.sprite(this.itemPicture(heap.sprite, heap.pos, blood), 0, 0, 16, 16, false, x, 0.035, z + 0.38, 0.76, 0.76, 1, FLAT, 0);
+      else this.sprite(items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, false, x, 0.035, z + 0.38, 0.76, 0.76, 1, FLAT, 0, this.shared.itemsEmissive);
+      this.toDead = false;
+      if (visible[heap.pos]) {
+        this.effects.shadowBlob(x, z, 0.7, this.kit.sprites.shadow.opacity * 0.8, this.kit.sprites.shadow.squash);
+        this.effects.contactShadow(x, z + 0.04, 0.46, CONTACT_OPACITY * 0.5);
+      }
     }
     const plants = f.plants;
     if (plants) {
@@ -1563,6 +1708,10 @@ export class World3D {
     if (this.grass) {
       this.scene.remove(this.grass.mesh);
       this.grass.dispose();
+    }
+    if (this.tufts) {
+      this.scene.remove(this.tufts.mesh);
+      this.tufts.dispose();
     }
     this.mirror?.dispose();
     this.blankMirror.dispose();

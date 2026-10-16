@@ -29,6 +29,8 @@ export interface Particle {
   color: string;
   /** Drawn additively, as light. */
   glow: boolean;
+  /** Kept low over the floor in the 3D view (dust at a footfall): it rises a hand's breadth, not to the knee. */
+  low?: boolean;
 }
 
 export interface BurstOptions {
@@ -48,6 +50,8 @@ export interface BurstOptions {
   cone?: number;
   /** Extra upward drift, pixels per second. */
   rise?: number;
+  /** Stays near the floor in the 3D view (see Particle). */
+  low?: boolean;
 }
 
 /** A chunk's colour and the darker one along its edge. */
@@ -333,6 +337,7 @@ class Fx {
         size: Math.round(size[0] + Math.random() * (size[1] - size[0])),
         color: o.colors[Math.floor(Math.random() * o.colors.length)]!,
         glow: o.glow ?? false,
+        ...(o.low ? { low: true } : {}),
       });
     }
   }
