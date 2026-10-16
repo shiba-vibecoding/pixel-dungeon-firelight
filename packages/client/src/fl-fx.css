@@ -1,0 +1,26 @@
+/* Firelight · effects (design part 6): the boss's card. A dark band across the screen between two ember rules, on it the plate
+   (fx/boss/plate.png, border-image slice 10) with the boss's portrait (fx/boss/portrait-<boss>.png, x2 on a phone, x3 from 900 px),
+   the depth and region in gold, the name in the boss red, the epithet under it. Timeline: fx.json → bossCards.timeline. */
+.fl-boss-card { position: fixed; left: 0; right: 0; top: 64%; transform: translateY(-50%); z-index: var(--z-toast, 30); pointer-events: none;
+  display: grid; place-items: center; padding: 18px 12px; --s: 2;
+  background: linear-gradient(transparent, rgba(11, 11, 9, .82) 18%, rgba(11, 11, 9, .82) 82%, transparent);
+  animation: fl-boss-band .22s steps(4) both; }
+.fl-boss-card::before, .fl-boss-card::after { content: ""; position: absolute; left: 10%; right: 10%; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--fire-ember, #e8641f) 20%, var(--fire-gold, #ffcc66) 50%, var(--fire-ember, #e8641f) 80%, transparent); }
+.fl-boss-card::before { top: 6px; } .fl-boss-card::after { bottom: 6px; }
+.fl-boss-plate { box-sizing: border-box; display: flex; align-items: center; gap: 14px; max-width: min(92vw, 720px); padding: 4px 18px 4px 4px;
+  border: calc(10px * var(--s)) solid transparent; border-image: url("/assets/fx/boss/plate.png") 10 fill / calc(10px * var(--s)) stretch; image-rendering: pixelated;
+  margin: calc(-6px * var(--s)) 0; }
+.fl-boss-face { flex: none; width: calc(32px * var(--s)); height: calc(32px * var(--s)); image-rendering: pixelated; animation: fl-boss-face .26s steps(2, jump-none) .12s both; }
+.fl-boss-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fl-boss-depth { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--fire-gold, #ffcc66); letter-spacing: .5px; animation: fl-boss-in .2s steps(3) .26s both; }
+.fl-boss-name { font: 400 36px/40px var(--font-ui, Galmuri11); color: var(--fx-boss, #ff6a4a); text-shadow: 0 3px 0 var(--fire-ash, #1a0a06), 0 0 0 #000;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: fl-boss-in .26s steps(4) .26s both; }
+.fl-boss-sub { font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--ink-muted, #b0b5a3); animation: fl-boss-in .22s steps(3) .48s both; }
+@keyframes fl-boss-band { from { clip-path: inset(48% 0 48% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes fl-boss-face { from { transform: scale(calc((var(--s) + 1) / var(--s))); filter: brightness(3); } to { transform: none; filter: none; } }
+@keyframes fl-boss-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+@media (min-width: 900px) { .fl-boss-card { --s: 3; padding: 26px 12px; } .fl-boss-name { font-size: 60px; line-height: 64px; } .fl-boss-depth { font-size: 20px; line-height: 26px; }
+  .fl-boss-sub { font-size: 24px; line-height: 30px; } .fl-boss-plate { gap: 26px; padding-right: 36px; min-width: 520px; } }
+@media (max-width: 420px) { .fl-boss-name { font-size: 26px; line-height: 30px; white-space: normal; text-wrap: balance; } .fl-boss-region { display: none; } .fl-boss-plate { gap: 10px; padding-right: 8px; } .fl-boss-sub { font: var(--text-caption, 400 15px/20px var(--font-small)); } }
+@media (prefers-reduced-motion: reduce) { .fl-boss-card, .fl-boss-face, .fl-boss-depth, .fl-boss-name, .fl-boss-sub { animation: none; } }

@@ -17,3 +17,8 @@ node sheet-shot.js ../../../../docs/design/previews/firelight/world "lighting-sh
 Headless Chromium needs WebGL: `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` (set in render.js).
 
 The art scripts: `python3 tools/art/firelight/p3_kit.py` writes `hd2d-kit.json`, then `python3 tools/art/firelight/p3_art.py` draws the maps.
+
+Part 6 (effects): `fx=<scene>` puts effects from `assets/fx/fx.json` into the room: flat on the floor or standing like a sprite,
+added or blended, each with its PointLight; screen tints as an overlay. Scenes: `bolts`, `rays`, `waves`, `terror`, `lullaby`,
+`psionic`, `gas`, `traps`, `hero`, `ankh`, `amulet` (see `S` in `viewer.js`). `close=1` uses the close-up rooms of the sprite rules
+(`CLOSE` in `maps.js`); a kit without the `sprites` block falls back to the same values (firelight-sprites.md).

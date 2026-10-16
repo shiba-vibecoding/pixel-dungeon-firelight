@@ -7,7 +7,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
-import { MAPS, BOSS_MAPS, MOBS, BOSSES } from './maps.js';
+import { MAPS, BOSS_MAPS, MOBS, BOSSES, CLOSE, CLOSE_MOBS } from './maps.js';
 
 const Q = new URLSearchParams(location.search);
 const R = +(Q.get('r') || 0);
@@ -25,7 +25,9 @@ let seed = 1234 + R * 77 + (BOSS ? 999 : 0);
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
 /* ---------- map ---------- */
-const rows = (BOSS ? BOSS_MAPS : MAPS)[RN];
+const CL = Q.has('close');
+const rows = CL ? CLOSE[RN] : (BOSS ? BOSS_MAPS : MAPS)[RN];
+const RULES = Q.get('rules') !== '0'; // the sprite rules: lean 20 deg, stretch, rim, shadow offset
 const PAD = 7;
 const W = 16, H = rows.length + PAD * 2;
 const ch = (x, y) => (y < PAD || y >= H - PAD || x < 0 || x >= W) ? '#' : (rows[y - PAD][x] || '#');
@@ -35,13 +37,14 @@ const isChasm = (c) => c === 'C';
 const isWater = (c) => c === '~';
 const solid = (x, y) => isWall(ch(x, y));
 const open = (x, y) => { const c = ch(x, y); return !isWall(c) && !isChasm(c); };
-const TILE = { '.': 1, ',': 24, '_': 14, G: 2, h: 15, '~': 63, C: 0, D: 5, '>': 8, '<': 7, e: 9, S: 35, P: 11, g: 29, x: 17, y: 32, H: 1, M: 1, K: 1 };
-let hero = [8, 10], mob = null, boss = null;
+const TILE = { '.': 1, ',': 24, '_': 14, G: 2, h: 15, '~': 63, C: 0, D: 5, '>': 8, '<': 7, e: 9, S: 35, P: 11, g: 29, x: 17, y: 32, H: 1, M: 1, K: 1, a: 1, b: 1, c: 1 };
+let hero = [8, 10], mob = null, boss = null; const extra = [];
 for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
   const c = ch(x, y);
   if (c === 'H') hero = [x, y];
   if (c === 'M') mob = [x, y];
   if (c === 'K') boss = [x, y];
+  if (CL && 'abc'.includes(c)) extra.push([c, x, y]);
 }
 
 /* ---------- textures ---------- */
@@ -103,8 +106,8 @@ const camera = new THREE.PerspectiveCamera(cam.fov, vw / vh, 1, 200);
 const cells = +(Q.get('cells') || (vw / vh < 0.8 ? 9 : 12));
 const hTan = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * (vw / vh);
 const dist = (cells / 2) / hTan;
-const target = new THREE.Vector3(hero[0] + 0.5 + (+(Q.get('dx') || 0)), 0.5, hero[1] + 0.5 + (+(Q.get('dz') || 0)) - (vw / vh < 0.8 ? 3 : 2));
-const pitch = THREE.MathUtils.degToRad(cam.pitch);
+const target = new THREE.Vector3(hero[0] + 0.5 + (+(Q.get('dx') || 0)), 0.5, hero[1] + 0.5 + (+(Q.get('dz') || 0)) - (CL ? 0.3 : (vw / vh < 0.8 ? 3 : 2)));
+const pitch = THREE.MathUtils.degToRad(+(Q.get('pitch') || cam.pitch));
 camera.position.copy(target).add(new THREE.Vector3(0, Math.sin(pitch) * dist, Math.cos(pitch) * dist));
 camera.lookAt(target);
 scene.fog = new THREE.Fog(fogC, env.fog.near + dist, env.fog.far + dist);
@@ -299,33 +302,68 @@ for (const p of props) {
 }
 
 /* ---------- characters ---------- */
+// Sprite rules (kit.sprites): an upright quad, feet at the bottom middle, leaned back LEAN toward the camera and stretched
+// 1 / cos(pitch - lean) so it keeps the proportions of its art; lit like the floor (the region tints it), never darker than
+// its self light; a rim of the strongest light nearby on the silhouette's side that faces it; a soft blob under the feet.
+// the sprite rules ship in hd2d-kit.json (firelight-sprites); the same values stand in when a kit without the block is linked
+const SP = kit.sprites || { camera_pitch: 70, lean: 20, feet: 0, selfLight: 0.14, shadow: { width: 0.9, squash: 0.42, opacity: 0.55, offset: 0.08 },
+  fly: { hover: 0.35, shadowScale: 0.7, shadowFade: 0.55, bob: { hz: 1.2, amp: 0.06 } }, rim: { on: true, strength: 0.3, max: 0.6, px: 1 }, castShadow: false };
+const LEAN = THREE.MathUtils.degToRad(SP.lean);
+const STRETCH = 1 / Math.cos(pitch - LEAN);
 const sheetCache = {};
-async function charSprite(name, fw, fh, frame, row, at, scale = 1) {
+const figures = [];
+function rimMaterial(tex, fw, fh) {
+  const m = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, roughness: 1, emissiveMap: tex, emissive: 0xffffff,
+    emissiveIntensity: RULES ? SP.selfLight : 0.12, side: THREE.DoubleSide });
+  m.userData.u = { uRimDir: { value: new THREE.Vector2(0, 1) }, uRimColor: { value: new THREE.Color(0) }, uTexel: { value: new THREE.Vector2(1 / fw, 1 / fh) } };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, m.userData.u);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec2 uRimDir; uniform vec3 uRimColor; uniform vec2 uTexel;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        { // the rim: this texel is solid, the one toward the light is empty (or off the sprite)
+          vec2 q = vMapUv + uRimDir * uTexel;
+          float out_ = (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) ? 1.0 : step(texture2D(map, q).a, 0.5);
+          totalEmissiveRadiance += uRimColor * out_;
+        }`);
+  };
+  return m;
+}
+async function charSprite(name, fw, fh, frame, row, at, scale = 1, fly = false) {
   const img = sheetCache[name] || (sheetCache[name] = await loadImg(`assets/${name}.png`));
   const cols = Math.floor(img.width / fw);
   const tex = cellTexture(img, (frame % cols) * fw, row * fh + Math.floor(frame / cols) * fh, fw, fh);
-  const w = fw / 16 * scale, h = fh / 16 * scale;
+  const w = fw / 16 * scale, h = fh / 16 * scale * (RULES ? STRETCH : 1);
   const g = new THREE.PlaneGeometry(w, h); g.translate(0, h / 2, 0);
-  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, roughness: 1, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.12 }));
-  m.rotation.x = -pitch * 0.85; m.position.set(at[0] + 0.5, 0.02, at[1] + 0.55);
-  m.castShadow = true; m.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.5 });
+  const mat_ = rimMaterial(tex, fw, fh);
+  const m = new THREE.Mesh(g, mat_);
+  const hover = fly ? SP.fly.hover : 0;
+  m.rotation.x = RULES ? -LEAN : -pitch * 0.85; m.position.set(at[0] + 0.5, 0.02 + hover, at[1] + 0.5 + SP.feet);
+  m.castShadow = !!SP.castShadow; m.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.5 });
   scene.add(m);
-  // a soft contact shadow under the feet
-  const s = new THREE.Mesh(new THREE.CircleGeometry(w * 0.42, 16), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.45, depthWrite: false }));
-  s.rotation.x = -Math.PI / 2; s.scale.y = 0.55; s.position.set(at[0] + 0.5, 0.012, at[1] + 0.58); scene.add(s);
+  const sw = w * SP.shadow.width * (fly ? SP.fly.shadowScale : 1);
+  const s = new THREE.Mesh(new THREE.CircleGeometry(sw / 2, 20), new THREE.MeshBasicMaterial({ map: blobTex, color: 0, transparent: true,
+    opacity: SP.shadow.opacity * (fly ? SP.fly.shadowFade : 1), depthWrite: false }));
+  s.rotation.x = -Math.PI / 2; s.scale.y = SP.shadow.squash; s.position.set(at[0] + 0.5, 0.012, at[1] + 0.5 + SP.feet + 0.02); scene.add(s);
+  figures.push({ m, s, at: new THREE.Vector3(at[0] + 0.5, hover + h * 0.5, at[1] + 0.5 + SP.feet), mat: mat_ });
   return m;
 }
+const blobTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, 'rgba(255,255,255,.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
 const MOBDIM = { gnoll: [12, 15], skeleton: [12, 15], bat: [15, 15], monk: [15, 14], succubus: [12, 15],
   goo: [20, 14], tengu: [14, 16], dm300: [22, 20], king: [16, 16], yog: [20, 19] };
 await charSprite('warrior', 12, 15, 0, 1, hero);
-if (mob) await charSprite(MOBS[R], ...MOBDIM[MOBS[R]], 0, 0, mob);
+if (mob) await charSprite(MOBS[R], ...MOBDIM[MOBS[R]], 0, 0, mob, 1, MOBS[R] === 'bat');
 if (boss) await charSprite(BOSSES[R], ...MOBDIM[BOSSES[R]], 0, 0, boss, BOSSES[R] === 'yog' ? 1.6 : 1.25);
+for (const [k, x, y] of extra) { const [n, fw, fh, f] = CLOSE_MOBS[RN][k]; await charSprite(n, fw, fh, 0, 0, [x, y], 1, f === 'fly'); }
+const rimLights = [];
 
 /* ---------- light ---------- */
 scene.add(new THREE.AmbientLight(env.ambient.color, env.ambient.intensity * kit.three.ambientScale));
 scene.add(new THREE.HemisphereLight(reg.hemi.sky, reg.hemi.ground, reg.hemi.intensity * kit.three.hemiScale));
 const hl = kit.hero_light;
-const heroL = new THREE.PointLight(hl.color, hl.intensity, hl.distance, hl.decay); heroL.position.set(hero[0] + 0.5, 0.9, hero[1] + 0.6); scene.add(heroL);
+const heroL = new THREE.PointLight(hl.color, hl.intensity, hl.distance, hl.decay); heroL.position.set(hero[0] + 0.5, RULES ? SP.heroLightY ?? 1.8 : 0.9, hero[1] + 0.6); scene.add(heroL);
 const tk = reg.torch; const torchTex = cellTexture(itemsImg, 4 * 16, 10 * 16, 16, 16);
 const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -363,6 +401,107 @@ if (BOSS && boss) {
   const L = new THREE.PointLight(a.color, a.intensity * 2.2 * pulse, 7, 1.2); L.position.set(boss[0] + 0.5, 2.2, boss[1] + 1.2);
   if (RN === 'prison' || RN === 'city') { L.castShadow = true; L.shadow.mapSize.set(512, 512); L.shadow.bias = -0.004; }
   scene.add(L);
+}
+
+/* ---------- effects of part 6 (fx/fx.json): a scene of them in the room ---------- */
+const FXS = Q.get('fx');
+const tints = [];
+if (FXS) {
+  const FX = await (await fetch('fx/fx.json')).json();
+  const imgCache = {};
+  const sheetImg = async (src) => imgCache[src] || (imgCache[src] = await loadImg(src));
+  const [hxp, hzp] = hero;
+  /** one frame of an effect at a cell (x, z in cells, may be fractional): flat on the floor or standing, with its light */
+  async function put(id, frame, x, z, o = {}) {
+    const e = FX.fx[id]; const img = await sheetImg(e.sheet);
+    const tex = cellTexture(img, frame * e.w, (o.row ?? e.row) * e.h, e.w, e.h);
+    const sc = o.scale || 1; const w = e.w / 16 * sc, h = e.h / 16 * sc;
+    const add = e.blend === 'add';
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), add
+      ? new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: id.startsWith('gas.') ? new THREE.Color(0.9, 0.9, 0.9) : (e.w >= 48 ? new THREE.Color(1, 1, 1) : new THREE.Color(1.4, 1.4, 1.4)) })
+      : new THREE.MeshStandardMaterial({ map: tex, transparent: true, opacity: id.startsWith('gas.') ? 0.78 : 1, depthWrite: false, roughness: 1, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.25 }));
+    const flat = (o.at || (e.anchor === 'floor' || e.anchor === 'feet-floor' ? 'floor' : 'stand')) === 'floor';
+    if (flat) { m.rotation.x = -Math.PI / 2; m.position.set(x, (e.lift ?? 0.02) + (o.y || 0), z); }
+    else {
+      m.rotation.x = -LEAN; if (o.rot) m.rotation.z = o.rot;
+      const up = e.anchor === 'feet' ? h / 2 + (e.rise || 0) : 0.55 + (o.y || 0);
+      m.position.set(x, up * STRETCH ** (e.anchor === 'feet' ? 1 : 0), z + 0.1); if (e.anchor === 'feet') m.scale.y = STRETCH;
+    }
+    m.renderOrder = 5; scene.add(m);
+    if (o.light !== false && e.light) {
+      const L_ = e.light; const k = o.lk ?? 1;
+      const pl = new THREE.PointLight(L_.color, L_.intensity * k, L_.radius, 1.4); pl.position.set(x, flat ? 0.5 : 0.8, z + 0.2); scene.add(pl);
+    }
+    if (o.tint && e.tint) tints.push(e.tint);
+    return m;
+  }
+  const along = async (id, x0, z, x1, frame0 = 0, o = {}) => { for (let x = x0, i = 0; x < x1; x += 1, i++) await put(id, (frame0 + i) % FX.fx[id].frames, x + 0.5, z, { light: false, ...o }); };
+  const S = {
+    bolts: async () => {    // sewers close: a firebolt at the gnoll, a magic missile, lightning from the hero to the crab and its strike
+      await put('bolt.fire', 1, hxp + 2.3, hzp - 0.6, { rot: 0.45, scale: 1 });
+      await put('bolt.fire.hit', 2, hxp + 1.6 + 1.6, hzp - 1.2, { light: false });
+      await put('bolt.magic', 2, hxp - 1.4, hzp - 1.6, { rot: 2.4 });
+      for (let i = 0; i < 2; i++) await put('bolt.lightning', (i + 1) % 4, hxp - 0.2 - i * 1, hzp + 0.7 + i * 0.25, { rot: -2.9, light: i === 0 });
+      await put('bolt.lightning.strike', 1, hxp - 2.5, hzp + 1.3);
+    },
+    rays: async () => {     // caves close: disintegration across the cave, poison and teleport bolts
+      await put('bolt.beam.start', 1, hxp + 1, hzp + 0.1, { light: false }); await along('bolt.beam', hxp + 1.5, hzp + 0.1, hxp + 4, 0, {});
+      await put('bolt.beam', 0, hxp + 3, hzp + 0.1, { light: true }); await put('bolt.beam.end', 2, hxp + 4.5, hzp + 0.1);
+      await put('bolt.poison', 1, hxp - 1.6, hzp - 1.3, { rot: 2.6 }); await put('bolt.teleport', 2, hxp - 2.2, hzp + 1.1);
+      await put('bolt.regrowth', 1, hxp + 0.4, hzp - 2, { rot: 1.4 });
+    },
+    waves: async () => {    // city: the challenge's roar round the hero, two rings, specks, the red tint
+      await put('wave.challenge', 5, hxp + 0.5, hzp + 0.5, { scale: 3, tint: true }); await put('wave.challenge', 2, hxp + 0.5, hzp + 0.5, { scale: 2, light: false });
+      for (let i = 0; i < 8; i++) await put('wave.challenge.specks', i % 4, hxp + 0.5 + Math.cos(i * 0.8) * 2.4, hzp + 0.5 + Math.sin(i * 0.8) * 2, { light: false });
+    },
+    terror: async () => { await put('wave.terror', 4, hxp + 0.5, hzp + 0.5, { scale: 3, tint: true }); for (let i = 0; i < 6; i++) await put('wave.terror.specks', i % 4, hxp + 0.5 + Math.cos(i) * 2.2, hzp + Math.sin(i) * 1.6, { light: false }); },
+    lullaby: async () => { await put('wave.lullaby', 5, hxp + 0.5, hzp + 0.5, { scale: 3, tint: true }); await put('wave.lullaby', 2, hxp + 0.5, hzp + 0.5, { scale: 2, light: false }); for (let i = 0; i < 6; i++) await put('wave.lullaby.specks', i % 4, hxp + 0.5 + Math.cos(i * 1.1) * 2, hzp + Math.sin(i * 1.1) * 1.6, { light: false }); },
+    psionic: async () => { await put('wave.psionic', 5, hxp + 0.5, hzp + 0.5, { scale: 3, tint: false }); for (let i = 0; i < 8; i++) await put('wave.psionic.specks', i % 4, hxp + 0.5 + Math.cos(i * 0.8) * 2.8, hzp + Math.sin(i * 0.8) * 2.2, { light: false }); },
+    gas: async () => {      // sewers close: a cloud of toxic gas, a paralytic one, a crimson flask broken, flames
+      const cloud = async (id, cx, cz, wdt, hgt) => { for (let z = 0; z < hgt; z++) for (let x = 0; x < wdt; x++) {
+        const d = (x > 0 && x < wdt - 1 && z > 0 && z < hgt - 1) ? 2 : ((x > 0 && x < wdt - 1) || (z > 0 && z < hgt - 1) ? 1 : 0);
+        await put(id, (x + z) % 4, cx + x + 0.5, cz + z + 0.5, { row: d, light: false }); } };
+      await cloud('gas.toxic', hxp + 1, hzp - 2, 4, 3); await cloud('gas.paralytic', hxp - 4, hzp - 1, 3, 3);
+      await put('potion.splash.crimson', 3, hxp - 1.5, hzp + 2, {}); await put('potion.splash.turquoise', 5, hxp + 2.5, hzp + 2.2, { light: false });
+      for (let i = 0; i < 3; i++) await put('gas.fire', i, hxp + 2.5 + i, hzp + 1, { row: 2 - (i % 2), light: i === 1 });
+    },
+    traps: async () => {    // prison: four traps going off along the corridor
+      await put('trap.fire', 2, hxp - 2.5, hzp + 0.5); await put('trap.lightning', 1, hxp + 2.5, hzp + 0.5, { tint: false });
+      await put('trap.summoning', 4, hxp + 0.5, hzp + 2.5); await put('trap.alarm', 1, hxp - 2.5, hzp + 2.5);
+      await put('trap.toxic', 3, hxp + 4.5, hzp + 2.5); await put('trap.poison', 2, hxp + 0.5, hzp - 1.5);
+    },
+    hero: async () => {     // city: a level gained, a critical blow on the monk, a miss, healing
+      await put('hero.levelup', 3, hxp + 0.5, hzp + 0.55, { scale: 1 });
+      await put('hit.crit', 1, hxp + 3.5, hzp - 0.5); await put('hit.miss', 2, hxp + 2.8, hzp - 0.2, { light: false });
+      await put('hit', 1, hxp - 1.5, hzp + 1);
+    },
+    ankh: async () => { await put('hero.ankh', 4, hxp + 0.5, hzp + 0.55, { tint: true }); },
+    amulet: async () => { await put('hero.amulet', 3, hxp + 0.5, hzp + 0.55, { tint: false }); },
+  };
+  await S[FXS]?.();
+}
+
+/* ---------- the rim of the strongest light on each figure ---------- */
+if (RULES && SP.rim.on && !Q.has('norim')) {
+  const lights = []; scene.traverse((o) => { if (o.isPointLight || o.isSpotLight) lights.push(o); });
+  const up = new THREE.Vector3(0, Math.cos(LEAN), -Math.sin(LEAN));
+  for (const f of figures) {
+    let best = null, bw = 0;
+    for (const L of lights) {
+      const d = L.position.clone().sub(f.at); const len = d.length();
+      if (len < 0.45 || len > (L.distance || 8)) continue;
+      const w = L.intensity * Math.pow(1 - len / (L.distance || 8), 2) / Math.max(len, 0.6);
+      if (w > bw) { bw = w; best = { L, d }; }
+    }
+    if (!best) continue;
+    let u = best.d.x, v = best.d.dot(up); const n = Math.hypot(u, v) || 1; u /= n; v /= n;
+    f.mat.userData.u.uRimDir.value.set(Math.abs(u) > 0.38 ? Math.sign(u) : 0, Math.abs(v) > 0.38 ? Math.sign(v) : 0);
+    const k = Math.min(SP.rim.max, bw * SP.rim.strength);
+    f.mat.userData.u.uRimColor.value.copy(best.L.color).multiplyScalar(k);
+    // the blob slips a little away from that light
+    const away = new THREE.Vector2(-best.d.x, -best.d.z).normalize().multiplyScalar(SP.shadow.offset);
+    f.s.position.x += away.x; f.s.position.z += away.y;
+  }
 }
 
 /* ---------- mist ---------- */
@@ -414,4 +553,5 @@ composer.addPass(new UnrealBloomPass(new THREE.Vector2(vw, vh), bl.strength, bl.
 composer.addPass(new OutputPass());
 composer.render();
 composer.render();
+for (const t of tints) { const d = document.createElement('div'); d.style.cssText = `position:fixed;inset:0;pointer-events:none;background:${t.color};opacity:${t.alpha * 0.6};mix-blend-mode:screen`; document.body.append(d); }
 window.__ready = true;
