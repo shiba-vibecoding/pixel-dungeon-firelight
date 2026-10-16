@@ -1,0 +1,82 @@
+{
+ "sewers": {
+  "cpu": 0.618,
+  "render": 0.489,
+  "gpu": 2.178,
+  "calls": 13,
+  "n": 160,
+  "tris": 2974
+ },
+ "prison": {
+  "cpu": 0.722,
+  "render": 0.591,
+  "gpu": 2.413,
+  "calls": 16,
+  "n": 162,
+  "tris": 5802
+ },
+ "caves": {
+  "cpu": 0.55,
+  "render": 0.438,
+  "gpu": 1.314,
+  "calls": 12,
+  "n": 168,
+  "tris": 3042
+ },
+ "city": {
+  "cpu": 0.488,
+  "render": 0.412,
+  "gpu": 1.727,
+  "calls": 12,
+  "n": 169,
+  "tris": 2852
+ },
+ "halls": {
+  "cpu": 0.5,
+  "render": 0.425,
+  "gpu": 1.779,
+  "calls": 12,
+  "n": 168,
+  "tris": 4202
+ },
+ "sewers-all-seen": {
+  "cpu": 1.293,
+  "render": 1.099,
+  "gpu": 2.37,
+  "calls": 16,
+  "n": 109,
+  "tris": 5028
+ },
+ "prison-all-seen": {
+  "cpu": 1.35,
+  "render": 1.128,
+  "gpu": 2.456,
+  "calls": 16,
+  "n": 113,
+  "tris": 5980
+ },
+ "caves-all-seen": {
+  "cpu": 1.116,
+  "render": 0.905,
+  "gpu": 1.862,
+  "calls": 18,
+  "n": 95,
+  "tris": 5194
+ },
+ "city-all-seen": {
+  "cpu": 1.453,
+  "render": 1.277,
+  "gpu": 2.561,
+  "calls": 18,
+  "n": 114,
+  "tris": 4846
+ },
+ "halls-all-seen": {
+  "cpu": 1.273,
+  "render": 1.044,
+  "gpu": 2.883,
+  "calls": 18,
+  "n": 117,
+  "tris": 7130
+ }
+}

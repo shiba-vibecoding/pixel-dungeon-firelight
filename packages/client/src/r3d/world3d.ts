@@ -11,8 +11,8 @@
  *   - the fog of war is a 48 x 48 texture read by the vertex shaders, the region's haze is a line in the same shaders: no pass;
  *   - nothing is made in the frame loop: vectors, matrices and records are made once and written in place.
  * The kit's bloom is a pass (post.ts) at the two highest tiers: the frame goes through a half-float target and a blurred copy of its
- * bright part is added. What does not come over yet: the kit's mirror under water (the water is a bright surface that shines under
- * the lights instead), and the haze pass of the demon halls.
+ * bright part is added. At the highest, the water carries a faint mirror of the walls and what glows above them (mirror.ts). What
+ * does not come over yet: the haze pass of the demon halls.
  */
 import {
   AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
@@ -36,6 +36,7 @@ import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf }
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
 import { canPost, Post } from './post';
+import { blankMirror, makeMirrorUniforms, Mirror, reflects, withMirror } from './mirror';
 import { BloodWater, withBlood } from './bloodwater';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
@@ -114,6 +115,8 @@ const SCONCE_REACH = 14;
  * With the bloom on, what glows is brighter than 1 in the frame before the tone map takes it down (the way light is, and the way the
  * designer's frames were made), so the bloom has it to take: by this much for what is lit by its glow map, and for lava.
  */
+/** What a mirror is given for a level whose water shows no reflection. */
+const NO_KINDS = new Uint8Array(LENGTH);
 const GLOW_GAIN = { sprites: 1.5, terrain: 1.4, lava: 1.6 };
 
 /** How the sprite batch stands a picture up: leaned toward the camera (characters, items) or straight up (a sconce on a wall). */
@@ -226,6 +229,8 @@ export class World3D {
   private terrainMaterial: MeshStandardMaterial | null = null;
   /** The glow of the water as the kit has it (lava glows; plain water shines a little), and whether it is lava. */
   private waterGlow = 1;
+  /** The water of this region reflects (not lava). */
+  private reflective = false;
   private lava = false;
   private decalMaterial: MeshBasicMaterial | null = null;
   private waterMaterial: MeshStandardMaterial | null = null;
@@ -290,6 +295,10 @@ export class World3D {
   /** The bloom's targets and passes (post.ts), while the tier has the bloom and the device can draw into half-float targets. */
   private post: Post | null = null;
   private postFailed = false;
+  /** The mirror under the water (mirror.ts): the highest tier, with the bloom's targets, in the orthographic view. */
+  private mirror: Mirror | null = null;
+  private readonly blankMirror = blankMirror();
+  private readonly mirrorUniforms = makeMirrorUniforms(this.blankMirror);
   private width = 1;
   private height = 1;
 
@@ -330,6 +339,9 @@ export class World3D {
     this.scene.add(this.ambient, this.hemi);
     this.rig = new LightRig(this.scene, options.phone);
     this.effects = new Effects3D(this.scene, this.air, this.shared);
+    // What the mirror under the water sees: the lights (a camera's layer filters lights too), the batch of light, the sprites (below).
+    for (const light of [this.ambient, this.hemi, ...this.rig.all]) reflects(light);
+    reflects(this.effects.glow.mesh);
 
     // The sprite batch: one quad, many instances, one atlas (and the atlas of what glows).
     const quad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
@@ -360,6 +372,7 @@ export class World3D {
     this.sprites.frustumCulled = false;
     this.sprites.count = 0;
     this.sprites.renderOrder = 3.5;
+    reflects(this.sprites);
     this.scene.add(this.sprites);
 
     const deadMaterial = makeMaterial();
@@ -453,6 +466,26 @@ export class World3D {
     // The stand-in for the bloom (a soft glow over the shining tiles) is drawn only where there is no real one.
     this.effects.setBloom(this.post !== null);
     this.applyGlowGain();
+    this.setMirror(on && this.tier.mirror && this.post !== null && this.ortho !== null);
+  }
+
+  /** The mirror under the water on or off: made when first wanted, given back when the tier goes without. */
+  private setMirror(on: boolean): void {
+    if (on && !this.mirror) {
+      this.mirror = new Mirror(this.mirrorUniforms, this.kit.camera.pitch);
+      this.mirror.resize(this.width, this.height);
+      this.configureMirror();
+    } else if (!on && this.mirror) {
+      this.mirror.dispose();
+      this.mirror = null;
+      this.mirrorUniforms.tMirror.value = this.blankMirror;
+      this.mirrorUniforms.uMirrorOn.value = 0;
+    }
+  }
+
+  private configureMirror(): void {
+    // (Lava reflects nothing: its level has a mirror with no water to show.)
+    if (this.mirror && this.geom) this.mirror.configure(this.reflective ? this.geom.kinds : NO_KINDS, materialOf(this.kit, this.region, 'water').height);
   }
 
   /** What glows is brightened for the bloom (GLOW_GAIN), or put back as the kit has it. */
@@ -468,6 +501,7 @@ export class World3D {
     this.height = height;
     this.renderer.setSize(width, height, false);
     this.post?.resize(width, height);
+    this.mirror?.resize(width, height);
   }
 
   /** The kit's heights, in the form the geometry takes them. */
@@ -510,6 +544,7 @@ export class World3D {
     this.geom = new LevelGeom(level.map, 16, 16, this.geomKit(region), under);
     this.makeMeshes();
     this.scanProps();
+    this.configureMirror();
 
     // The air: the kit's light, haze and particles of the region, or of the boss's arena.
     const L = lights(this.kit, a);
@@ -563,6 +598,12 @@ export class World3D {
     if (!lava) this.waterMaterial.color.multiplyScalar(1.6);
     withFog(this.waterMaterial, this.air, 'attribute');
     withBlood(this.waterMaterial, this.blood);
+    // The kit's mirror: its colour and how much of the water it takes (0.6 of its strength, as the designer's frames have it); lava has none.
+    const mu = this.mirrorUniforms;
+    mu.uReflect.value.setHex(a.reflect ? hex(a.reflect) : 0xffffff);
+    mu.uReflectK.value = a.reflect && !lava ? 0.6 * a.reflectStrength : 0;
+    this.reflective = Boolean(a.reflect) && !lava;
+    if (a.reflect && !lava) withMirror(this.waterMaterial, mu);
     this.waterGlow = this.waterMaterial.emissiveIntensity;
     this.lava = lava;
     this.applyGlowGain();
@@ -592,6 +633,7 @@ export class World3D {
       this.makeMeshes();
     }
     this.scanProps();
+    this.configureMirror();
     if (change !== 'patched') {
       this.rig.shadowsStale = true;
       // A wall or a door went: the pools of the fixed fires reach differently.
@@ -630,6 +672,7 @@ export class World3D {
     this.boxMesh = new Mesh(boxes, this.terrainMaterial!);
     this.boxMesh.castShadow = true;
     this.boxMesh.receiveShadow = true;
+    reflects(this.boxMesh);
     const water = new BufferGeometry();
     attrs(water, geom.water);
     this.waterMesh = new Mesh(water, this.waterMaterial!);
@@ -1013,6 +1056,14 @@ export class World3D {
     const r0 = performance.now();
     const post = this.post;
     if (post) {
+      const mirror = this.mirror;
+      if (mirror && this.ortho) {
+        // The cells in view, with a margin for what stands over the shore.
+        const reach = f.height / ys / (2 * unit) + 2;
+        if (mirror.seen(cx - halfW - 2, cx + halfW + 2, cz - reach, cz + reach, f.explored)) {
+          mirror.render(this.renderer, cx, cz, halfW + 1, reach, (target, camera) => post.renderScene(this.renderer, this.scene, camera, target));
+        } else this.mirrorUniforms.uMirrorOn.value = 0;
+      }
       post.renderScene(this.renderer, this.scene, cam);
       post.composite(this.renderer);
     } else this.renderer.render(this.scene, cam);
@@ -1234,6 +1285,8 @@ export class World3D {
     this.waterMaterial?.dispose();
     this.terrain?.dispose();
     this.waterTex?.dispose();
+    this.mirror?.dispose();
+    this.blankMirror.dispose();
     this.post?.dispose();
     this.atlas.dispose();
     this.fog.dispose();

@@ -131,6 +131,11 @@ export class LightRig {
     this.shadowSize = phone ? 512 : 1024;
   }
 
+  /** Every light of the rig (the mirror's camera sees them through its layer too). */
+  get all(): readonly PointLight[] {
+    return this.lights;
+  }
+
   /** The level's own light: the kit's hero light, the region's torches. */
   configure(lights: Lights, sources: Source[], shadowLights: number): void {
     this.sources = sources;
