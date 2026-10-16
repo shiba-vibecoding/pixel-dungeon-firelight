@@ -785,10 +785,10 @@ export class World3D {
       const x = (cell % WIDTH) + 0.5;
       const z = Math.trunc(cell / WIDTH) + 1;
       // On the face of the wall, a little over half its height, standing straight up.
-      this.sprite(sheet.image, frame.x, frame.y, frame.w, frame.h, false, x, 0.5, z + 0.02, 1.0, 1.0, 1.15, UPRIGHT, 0, sheet.image);
+      this.sprite(sheet.image, frame.x, frame.y, frame.w, frame.h, false, x, 0.2, z + 0.02, 1.1, 1.4, 1.15, UPRIGHT, 0, sheet.image);
       if (f.visible[cell]) {
-        const flicker = 0.55 + 0.25 * Math.sin(f.now / 70 + cell) * Math.sin(f.now / 23 + cell * 3);
-        this.effects.halo(x, 1.05, z + 0.25, rgb, 2.2, flicker);
+        const flicker = 0.38 + 0.16 * Math.sin(f.now / 70 + cell) * Math.sin(f.now / 23 + cell * 3);
+        this.effects.halo(x, 1.1, z + 0.3, rgb, 2.4, flicker);
       }
     }
   }
