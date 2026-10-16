@@ -1,6 +1,7 @@
 import type { CardLook } from './cardlook';
 import { artUrl, loadCompete } from './compete';
 import { loadFl } from './flart';
+import { canDownloadFile, downloadFile } from './telegram';
 import { drawScene, fireColour, sceneLayout, whenWhole } from './herocard';
 import { lang } from './i18n';
 import { tx, txn } from './compete-ui';
@@ -188,14 +189,9 @@ export async function chatPicture(d: HeroPicture): Promise<Blob | null> {
  * (a link with `download`). Resolves to whether something was offered.
  */
 export async function savePicture(blob: Blob, fileName: string, publicUrl: string | null): Promise<boolean> {
-  const telegram = (window as unknown as { Telegram?: { WebApp?: { downloadFile?: (p: { url: string; file_name: string }, cb?: (ok: boolean) => void) => void } } }).Telegram?.WebApp;
-  if (publicUrl && telegram?.downloadFile) {
-    try {
-      const accepted = await new Promise<boolean>((resolve) => telegram.downloadFile!({ url: publicUrl, file_name: fileName }, (ok) => resolve(ok)));
-      if (accepted) return true;
-    } catch {
-      // A popup already open, a refused address: the browser's way next.
-    }
+  if (publicUrl && canDownloadFile()) {
+    // Telegram's own download (8.0 and later) wants a public address: the server's copy of the picture.
+    if (await downloadFile(publicUrl, fileName)) return true;
   }
   try {
     const url = URL.createObjectURL(blob);

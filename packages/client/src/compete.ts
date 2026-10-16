@@ -132,7 +132,11 @@ export function loadCompete(): Promise<CompeteData | null> {
       data = compete as CompeteData;
       anchors = layers as Anchors;
       // The Beacon fire is a style of the camp's fires: the card's art loader finds it with the shop's.
-      addFlItems([{ ...data.fire.beacon, stars: 0 } as FlRaw]);
+      addFlItems([
+        { ...data.fire.beacon, stars: 0 } as FlRaw,
+        // The honour titles' plates and icons, found the way the shop's are.
+        ...data.titles.map((title) => ({ sku: title.sku, kind: 'title', stars: 0, name: title.name, rarity: title.rarity, plate: title.plate, icon: title.icon }) as FlRaw),
+      ]);
       for (const listener of [...listeners]) listener();
       return data;
     })
@@ -185,4 +189,10 @@ export function word(lang: Lang, path: string): string {
 export function sayWord(lang: Lang, path: string, n: number, extra: Readonly<Record<string, string | number>> = {}): string {
   const found = at(lang, path);
   return typeof found === 'string' || Array.isArray(found) ? say(found as string | readonly string[], n, lang, extra) : path;
+}
+
+/** The id of the designer's art that a season wears: the four palettes come round again after the fourth. */
+export function artSeason(number: number): string {
+  const seasons = data?.season.seasons ?? [];
+  return seasons.length > 0 ? seasons[(Math.max(1, number) - 1) % seasons.length]!.id : 's1';
 }

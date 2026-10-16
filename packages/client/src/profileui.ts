@@ -1,5 +1,5 @@
 import type { Profile } from './checked';
-import { loadCompete } from './compete';
+import { compete, loadCompete } from './compete';
 import { competeShell, nameNode, number, stage, titleBadge, tx, txn, wide } from './compete-ui';
 import { cosmetics } from './cosmetics';
 import { myLook } from './herocard';
@@ -44,6 +44,7 @@ function build(options: ProfileOptions, shell: ReturnType<typeof competeShell>):
   if (title) who.append(title);
   const facts = el('div', { className: 'fl-facts' });
   if (profile?.best) facts.append(el('span', {}, `${tx('best')} `, el('b', { textContent: number(profile.best) })));
+  if (profile?.heat) facts.append(el('span', {}, `${tx('heatNow')} `, el('b', { textContent: number(profile.heat) })));
   if (profile) facts.append(el('span', {}, `${tx('played')} `, el('b', { textContent: number(profile.games) })));
   if (profile && profile.wins > 0) facts.append(el('span', {}, `${tx('wins')} `, el('b', { textContent: number(profile.wins) })));
   if (profile && profile.deepest > 0) facts.append(el('span', {}, `${tx('deepest')} `, el('b', { textContent: String(profile.deepest) })));
@@ -53,6 +54,22 @@ function build(options: ProfileOptions, shell: ReturnType<typeof competeShell>):
 
   const main = el('div', { className: 'fl-mart-main' }, hero);
 
+  // The honour titles: the ones won are lit, the others are shown dark with how they are won (never sold).
+  const won = new Set(profile?.honour ?? []);
+  const titles = el('div', { className: 'fl-titles' });
+  for (const title of compete()?.titles ?? []) {
+    const plate = titleBadge(title.sku, false, !won.has(title.title));
+    if (!plate) continue;
+    plate.title = tx(`honourHow.${title.title}`);
+    titles.append(plate);
+  }
+  if (titles.childElementCount > 0) main.append(section(tx('titlesHonour'), tx('duelSoon'), titles));
+  // The seasons closed: the cup of each, and the place.
+  if ((profile?.seasons ?? []).length > 0) {
+    const closed = el('div', { className: 'fl-shelf' });
+    for (const result of profile!.seasons!) closed.append(el('span', { textContent: `${tx('seasonN', { n: result.id.slice(1) })} · ${tx('heatPlace', { n: result.rank || '—', m: number(result.played) })}` }));
+    main.append(section(tx('pastSeasons'), null, closed));
+  }
   // The shelf: the places won on finished boards.
   const shelf = (profile?.trophies ?? []).filter((trophy) => !trophy.board.startsWith('arena:'));
   if (shelf.length > 0) {

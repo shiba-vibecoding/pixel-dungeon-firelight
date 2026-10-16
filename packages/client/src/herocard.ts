@@ -179,7 +179,7 @@ function compose(g: CanvasRenderingContext2D, look: CardLook, layout: SceneLayou
   // The hero: the look worn for his class, else the class's own sheet, in the armour's row.
   const [hx, hy] = layout.hero;
   const [cellW, cellH] = a.hero.cell;
-  const row = Math.max(0, Math.min(a.hero.tiers - 1, Math.floor(look.ar ?? a.hero.tierDefault)));
+  const row = Math.max(0, Math.min(a.hero.tiers - 1, Math.floor(look.a ?? a.hero.tierDefault)));
   const frame = moving ? idleFrame(a.hero.idle.seq, a.hero.idle.fps, t) : 0;
   const lookItem = look.l ? itemById(look.l) : undefined;
   const worn = layer(look.l && lookItem?.category === 'look' && lookItem.heroClass === cls ? look.l : undefined, 'look', () => lookArt(look.l!));

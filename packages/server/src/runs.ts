@@ -4,7 +4,9 @@ import {
 } from '@pd/core';
 import { awardRun, type PassProgress } from '../../client/src/pass';
 import { SEASON } from './boards';
+import type { Heat } from './heat';
 import type { Letter } from './mail';
+import type { SeasonResult } from './season-flow';
 
 /*
  * A player's checked runs and what they add up to. The device plays a run at once, with no
@@ -107,6 +109,11 @@ export interface Profile {
   /** «Hide me from the boards» (privacy.ts; a setting: kept through a season's wipe): the name on the boards is the alias. */
   hidden?: boolean;
   alias?: string;
+  /** The competitions' season (heat.ts, season-flow.ts): the Heat of the season now, the one just over while its hall of fame is awaited, the seasons closed, and what has been won (honours.ts). */
+  heat?: Heat;
+  heatPrev?: Heat;
+  seasons?: SeasonResult[];
+  honour?: string[];
   /** The problem reports sent today, for the daily limit (problem.ts). */
   problems?: { day: string; count: number };
   /** The season pass's XP, from this season's checked runs only (pass.ts); a new season starts it afresh with the rest of the profile. */

@@ -18,6 +18,8 @@ export interface Facts {
   trophies: ReadonlyArray<{ board: string; place: number }>;
   /** The badges the checked runs have won (the titles of the first boss and of the amulet are earned by them). */
   badges?: readonly string[];
+  /** What the competitions have given (honours.ts keys: a title of the boards, a season's frame): earned by `by: 'honour'`. */
+  honour?: readonly string[];
 }
 
 export const noFacts = (): Facts => ({ pass: null, streakBest: 0, trophies: [], badges: [] });
@@ -51,6 +53,7 @@ export function earnedBy(facts: Facts, catalog: readonly Item[] = CATALOG): stri
     if (!earn || earn.by === 'pass') continue;
     if (earn.by === 'streak' && facts.streakBest >= earn.days) won.push(entry.id);
     if (earn.by === 'badge' && (facts.badges ?? []).includes(earn.badge)) won.push(entry.id);
+    if (earn.by === 'honour' && (facts.honour ?? []).includes(earn.id)) won.push(entry.id);
     if (earn.by === 'board' && facts.trophies.some((trophy) => trophy.board.startsWith(`${earn.kind}:`) && trophy.place <= earn.place)) won.push(entry.id);
   }
   return won;

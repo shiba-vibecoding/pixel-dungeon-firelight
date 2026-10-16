@@ -21,6 +21,7 @@ import { changeOutages, normalizeDays } from './outages';
 import { adminNotice, KEEP_PROBLEMS, newId, type Problem, type StoredProblem } from './problem';
 import { photoRoute } from './photos';
 import { Card, cardRoute, challengeRoute } from './sharing';
+import { freezeDueHall, hallRoute } from './hall';
 import { Notifier, notifierStub, notifyRoute } from './notifier';
 import { readBody, sameSecret } from './secret';
 import { SignalLimiter, validSignal } from './signals';
@@ -74,6 +75,8 @@ export interface Env {
   REPORT_KEY?: string;
   /** Days the server was down (YYYY-MM-DD, separated by commas): streaks take them as played (outages.ts). */
   OUTAGE_DAYS?: string;
+  /** The first competition season's first day, YYYY-MM-DD (a Monday; season-clock.ts): set to the day Firelight opens. */
+  COMPETE_SEASON_START?: string;
   /**
    * Secret the daily dungeon's seed is derived from (daily-seed.ts); `npx wrangler secret put DAILY_SECRET`.
    * Without it (wrangler dev, tests) a fixed development value is used, which is public: set it in production.
@@ -834,6 +837,7 @@ export default {
     if (url.pathname === '/photo') return photoRoute(request, env, url);
     if (url.pathname === '/challenge') return challengeRoute(request, env);
     if (url.pathname === '/notify') return notifyRoute(request, env);
+    if (url.pathname === '/hall') return hallRoute(request, env);
     const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
     if (day) return daily(request, env, day[1]!);
 
@@ -853,6 +857,12 @@ export default {
       await notifierStub(env).tick(controller.scheduledTime);
     } catch (error) {
       await keepReport(env, serverReport(error, 'reminders'));
+    }
+    // The season that has ended gets its hall of fame once its grace days are over (hall.ts).
+    try {
+      await freezeDueHall(env, controller.scheduledTime);
+    } catch (error) {
+      await keepReport(env, serverReport(error, 'hall of fame'));
     }
   },
 } satisfies ExportedHandler<Env>;

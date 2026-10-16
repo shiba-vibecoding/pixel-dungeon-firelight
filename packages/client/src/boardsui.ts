@@ -17,21 +17,23 @@ import { type VirtualList, type VirtualRow, virtualList } from './vlist';
  * The rows come from the server (checked runs only); a board that cannot be had says so.
  */
 
-type Tab = 'day' | 'week' | 'all' | 'device';
+type Tab = 'day' | 'week' | 'all' | 'season' | 'device';
 type BoardTab = Exclude<Tab, 'device'>;
-const TABS: readonly BoardTab[] = ['day', 'week', 'all'];
-const KIND: Record<BoardTab, BoardKind> = { day: 'daily', week: 'week', all: 'all' };
+const TABS: readonly BoardTab[] = ['day', 'week', 'all', 'season'];
+const KIND: Record<BoardTab, BoardKind | 'season'> = { day: 'daily', week: 'week', all: 'all', season: 'season' };
 const METRICS = ['score', 'speed', 'depth'] as const;
 const CLASSES = ['all', 'warrior', 'mage', 'rogue', 'huntress'] as const;
 
 /** The board names the rest of the game uses (the camp's, the results', the mail's) for the tabs. */
-const TAB_OF: Record<string, Tab> = { daily: 'day', week: 'week', all: 'all', device: 'device', arena: 'day', day: 'day' };
+const TAB_OF: Record<string, Tab> = { daily: 'day', week: 'week', all: 'all', season: 'season', device: 'device', arena: 'day', day: 'day' };
 
 /** Boards longer than this are listed virtually (only the rows on screen are mounted). */
 const EAGER_ROWS = 12;
 
 /** What the board shows big, and small beside the line under the name, for a run on a list ranked by `metric`. */
-export function valueOf(entry: BoardEntry, metric: BoardSlice['metric']): { value: string; unit: string } {
+export function valueOf(entry: BoardEntry, metric: BoardSlice['metric'], season = false): { value: string; unit: string } {
+  // The season's board ranks Heat, which is the entry's score.
+  if (season) return { value: number(entry.score), unit: tx('heatRating').toLowerCase() };
   if (metric === 'speed') {
     if (entry.turns === undefined || entry.depth < (compete()?.boards.speed.minDepth ?? 5)) return { value: '—', unit: '' };
     return { value: number(Math.round(entry.turns / entry.depth)), unit: tx('perTurn') };
@@ -57,6 +59,9 @@ export interface BoardsOptions {
   onClose(): void;
   /** The profile window (its button is in the head's line). */
   onProfile?(): void;
+  /** The season's window and the hall of fame (their buttons are on the Season tab). */
+  onSeason?(): void;
+  onHall?(): void;
 }
 
 /** The boards window: a tab a board, each loaded when first shown. */
@@ -84,7 +89,7 @@ function build(options: BoardsOptions, shell: ReturnType<typeof competeShell>): 
   };
 
   const fetchBoard = (): Promise<BoardView | null> => {
-    const key = `${tab}|${metric}|${cls ?? ''}`;
+    const key = `${tab}|${tab === 'season' ? 'score' : metric}|${tab === 'season' ? '' : (cls ?? '')}`;
     if (!cache.has(key)) cache.set(key, options.api!.board(KIND[tab as BoardTab], { metric, cls }));
     return cache.get(key)!;
   };
@@ -104,7 +109,7 @@ function build(options: BoardsOptions, shell: ReturnType<typeof competeShell>): 
       return;
     }
     shell.head(tx('boards'), tx(`tabInfo.${tab}`));
-    const bar = tabsBar(TABS, tab, { day: tx('tabs.day'), week: tx('tabs.week'), all: tx('tabs.all') } as Record<BoardTab, string>, (key) => {
+    const bar = tabsBar(TABS, tab, { day: tx('tabs.day'), week: tx('tabs.week'), all: tx('tabs.all'), season: tx('tabs.season') }, (key) => {
       if (key !== tab) select(key);
     });
     chooseTab(bar, tab);
@@ -145,11 +150,17 @@ function build(options: BoardsOptions, shell: ReturnType<typeof competeShell>): 
       if (counter && played > 0) note.append(el('span', { className: 'count', textContent: txn(counter, played) }));
       const end = tab === 'day' ? boardCloses(now) : tab === 'week' ? weekEnd(now) : null;
       if (end !== null) note.append(el('span', { className: 'closes', textContent: tx('closes', { t: countdown(end - now) }) }));
+      if (tab === 'season' && view.season) note.append(el('span', { className: 'closes', textContent: view.season.started ? tx('daysLeft', { n: view.season.daysLeft }) : tx('seasonStarts', { d: new Date(view.season.start).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }) }) }));
     });
-    parts.push(slices());
+    // The season's board has no slices: Heat is one number for the whole season.
+    if (tab !== 'season') parts.push(slices());
     // The way to the player's own profile and to his runs (on a monitor the profile is at the side as well).
     const links = el('div', { className: 'fl-board-links' });
     if (options.onProfile && !wide()) links.append(linkButton(tx('profileButton'), options.onProfile));
+    if (tab === 'season') {
+      if (options.onSeason) links.append(linkButton(tx('seasonButton'), options.onSeason));
+      if (options.onHall) links.append(linkButton(tx('hallButton'), options.onHall));
+    }
     links.append(linkButton(tx('myRuns'), () => select('device')));
     parts.push(links);
     return parts;
@@ -231,10 +242,11 @@ function build(options: BoardsOptions, shell: ReturnType<typeof competeShell>): 
     if (!view) return [info(tx('offline'), 'pd-note center')];
     const rows = compete()?.boards.rows ?? 50;
     const entries = view.top.slice(0, rows);
-    const sliced = metric !== 'score' || cls !== null;
+    const season = tab === 'season';
+    const sliced = !season && (metric !== 'score' || cls !== null);
     const rank = view.rank;
     const data = (entry: BoardEntry, place: number): RowData => {
-      const shown = valueOf(entry, metric);
+      const shown = valueOf(entry, season ? 'score' : metric, season);
       return { entry, place, value: shown.value, unit: shown.unit, me: place === rank, moving: place <= 3 || place === rank };
     };
     const parts: HTMLElement[] = [];

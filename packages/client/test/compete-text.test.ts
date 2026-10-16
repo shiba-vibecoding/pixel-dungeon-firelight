@@ -82,9 +82,9 @@ describe('the hero card\'s sizes (anchors.json, cardlook.ts)', () => {
   });
 
   it('keeps a composed card under its look, and the armour\'s tier when it is told', () => {
-    expect(cardKey({ heroClass: 'mage', ar: 2 })).toBe('mage|||||2');
+    expect(cardKey({ heroClass: 'mage', a: 2 })).toBe('mage|||||2');
     expect(cardKey({ heroClass: 'mage' })).toBe('mage||||');
-    expect(lookOfEntry({ heroClass: 'mage', w: { lg: 'flame', ar: 3, fr: 'frame.ember' } })).toEqual({ heroClass: 'mage', lg: 'flame', ar: 3, fr: 'frame.ember' });
+    expect(lookOfEntry({ heroClass: 'mage', w: { lg: 'flame', a: 3, fr: 'frame.ember' } })).toEqual({ heroClass: 'mage', lg: 'flame', a: 3, fr: 'frame.ember' });
   });
 });
 

@@ -25,6 +25,8 @@
   // Every hour: the bot's reminders that are due (notifier.ts).
   "triggers": { "crons": ["0 * * * *"] },
   "vars": {
+    // The first competition season begins on this Monday (YYYY-MM-DD, UTC): set it to the day Firelight opens. Seasons last 8 weeks.
+    "COMPETE_SEASON_START": "2026-10-19",
     // Players outside Telegram (a plain browser) may join rooms as guests.
     "ALLOW_GUESTS": "true",
     // The Mini App's t.me link: the bot's play button.

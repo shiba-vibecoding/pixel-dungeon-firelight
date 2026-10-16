@@ -25,6 +25,10 @@ import { OVERTAKEN_TOP } from './reminders';
 import { verifyInitData, WEEK_SECONDS } from './telegram-auth';
 import { speaksRussian } from './catalogue';
 import { nameOnBoards, setHidden, wornOnBoards } from './privacy';
+import { type Heat, heatOf } from './heat';
+import { freezeHall } from './hall';
+import { putHeat, rollSeason, type SeasonDeps, settleBoard } from './season-flow';
+import { seasonAt, seasonStart } from './season-clock';
 
 /*
  * Checked runs over HTTP (runs.ts):
@@ -182,17 +186,21 @@ export async function boardRoute(request: Request, env: Env): Promise<Response> 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   const body = await jsonBody(request);
   if (!body) return json({ error: 'bad json' }, 400);
+  // The season's board ranks Heat (season-flow.ts): it has no slices.
+  const season = body.kind === 'season';
   const kind = (BOARD_KINDS as readonly unknown[]).includes(body.kind) ? (body.kind as BoardKind) : null;
-  if (!kind) return json({ error: 'bad board' }, 400);
-  const slice = parseSlice(body.metric, body.cls);
+  if (!kind && !season) return json({ error: 'bad board' }, 400);
+  const slice = parseSlice(season ? undefined : body.metric, season ? undefined : body.cls);
   if (!slice) return json({ error: 'bad slice' }, 400);
-  const name = boardName(kind, Date.now());
+  const now = Date.now();
+  const current = seasonAt(now, seasonStart(env.COMPETE_SEASON_START));
+  const name = season ? `season:${current.id}` : boardName(kind!, now);
   const player = await who(body, env);
   const me = player ? await publicId(boardKey(env), name, player.key) : null;
   const sliced = `${slice.metric === 'score' ? '' : `&metric=${slice.metric}`}${slice.cls ? `&cls=${slice.cls}` : ''}`;
   const response = await boardStub(env, name).fetch(`https://board/?name=${encodeURIComponent(name)}${me ? `&me=${me}` : ''}&top=${BOARD_TOP}${sliced}`);
   const payload = (await response.json()) as { rank: number | null; top: DailyEntry[]; total?: number; played?: number; you?: DailyEntry };
-  return json({ name, ...payload });
+  return json({ name, ...payload, ...(season ? { season: { id: current.id, number: current.number, start: current.start, end: current.end, daysLeft: current.daysLeft, started: current.started } } : {}) });
 }
 
 /** Tells a player's object that what they wear changed (equipment, a refund): the boards still open show it (Player.worn). Never fails the caller. */
@@ -248,7 +256,7 @@ export class Player extends DurableObject<Env> {
     if (url.pathname === '/facts') {
       // What the shop needs of the player (shopapi.ts): the pass's XP, the best streak and the trophies that earn things.
       const p = logic.profile;
-      const facts: Facts = { pass: p.pass ?? null, streakBest: p.streak.best, trophies: p.trophies.map((trophy) => ({ board: trophy.board, place: trophy.place })), badges: p.badges.earned };
+      const facts: Facts = { pass: p.pass ?? null, streakBest: p.streak.best, trophies: p.trophies.map((trophy) => ({ board: trophy.board, place: trophy.place })), badges: p.badges.earned, honour: p.honour ?? [] };
       return json(facts);
     }
     if (url.pathname === '/worn') return json(await this.worn(logic, body.player));
@@ -374,6 +382,8 @@ export class Player extends DurableObject<Env> {
     const now = Date.now();
     const open = [boardName('daily', now), boardName('week', now)].filter((name) => profile.entered.includes(name));
     if (profile.games > 0) open.push(boardName('all', now));
+    // The season's board, where the player's Heat stands.
+    if (profile.heat?.sent) open.push(`season:${profile.heat.season}`);
     // What the entries should say: the look of each class (a wallet's word), and the name (the real one, or the alias of a hidden player).
     if (!wallet && /^tg\d+$/.test(player.key)) return { boards: 0 };
     const byClass = Object.fromEntries(Object.entries(wallet ? wornByClass(shopOf(wallet)) : {}).map(([heroClass, worn]) => [heroClass, wornOnBoards(profile, worn)]));
@@ -451,14 +461,41 @@ export class Player extends DurableObject<Env> {
   private standing(key: string): Lookup {
     return async (name) => {
       try {
-        const response = await boardStub(this.env, name).fetch(`https://board/?name=${encodeURIComponent(name)}&owner=${encodeURIComponent(key)}&top=0`);
-        const { owner, total } = (await response.json()) as { owner?: { rank: number }; total?: number };
-        return owner ? { rank: owner.rank, ...(total ? { total } : {}) } : null;
+        // By the player's id on that board: the true place, how many played, and (a day's board) the places on its speed and depth lists.
+        const id = await publicId(boardKey(this.env), name, key);
+        const lists = name.startsWith('daily:') ? '&lists=1' : '';
+        const response = await boardStub(this.env, name).fetch(`https://board/?name=${encodeURIComponent(name)}&me=${id}&top=0${lists}`);
+        const answer = (await response.json()) as { rank: number | null; played?: number; total?: number; speed?: number | null; depth?: number | null };
+        if (!answer.rank) return null;
+        const played = answer.played ?? answer.total;
+        return {
+          rank: answer.rank, ...(played ? { total: played, played } : {}),
+          ...(answer.speed !== undefined ? { speed: answer.speed } : {}), ...(answer.depth !== undefined ? { depth: answer.depth } : {}),
+        };
       } catch {
         // Asked again next time.
         return 'error';
       }
     };
+  }
+
+  /** The player's Heat on the season's board (their best stands); whether the board took it. */
+  private async putHeat(player: Who, heat: Heat, season: string, now: number): Promise<boolean> {
+    const profile = this.logic!.profile;
+    const name = `season:${season}`;
+    const wallet = await this.wallet(player.key);
+    const heroClass = profile.history[0]?.heroClass ?? 'warrior';
+    const worn = wornOnBoards(profile, wallet ? wornOf(shopOf(wallet), heroClass) : undefined);
+    const entry: DailyEntry = {
+      id: await publicId(boardKey(this.env), name, player.key), owner: player.key, name: nameOnBoards(profile, player.name), heroClass,
+      depth: Math.max(1, profile.deepest), level: 1, gold: 0, won: false, score: heatOf(heat), at: now, ...(worn ? { w: worn, ...legacyFields(worn) } : {}),
+    };
+    try {
+      const response = await boardStub(this.env, name).fetch(`https://board/put?name=${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify(entry) });
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   /** The mailbox: a letter read or claimed, or all of them; the letters and the trophies as they stand. */
@@ -474,8 +511,15 @@ export class Player extends DurableObject<Env> {
   /** The profile, with the places held now and any letters of boards finished since last asked. */
   private async me(logic: PlayerLogic, player: Who, now: number): Promise<Record<string, unknown>> {
     const p = logic.profile;
-    // Boards finished since last asked become letters (mail.ts); the trophies are claimed from them.
-    const changed = await collectMail(p, now, this.standing(player.key));
+    // The season (season-flow.ts): the Heat of the season now; every finished day counts once, and a fast or deep one wins its title.
+    const start = seasonStart(this.env.COMPETE_SEASON_START);
+    const deps: SeasonDeps = {
+      now, start, standing: this.standing(player.key), put: (heat, season) => this.putHeat(player, heat, season, now), freeze: (id) => freezeHall(this.env, id),
+    };
+    let changed = await rollSeason(p, deps);
+    // Boards finished since last asked become letters (mail.ts); the trophies are claimed from them, and the days are counted in Heat.
+    if (await collectMail(p, now, this.standing(player.key), (board, standing) => void settleBoard(p, board, standing, deps))) changed = true;
+    if (await putHeat(p, deps)) changed = true;
     if (changed) await this.persist(new Set(), new Map());
     const places: Partial<Record<BoardKind, number | null>> = {};
     const totals: Partial<Record<BoardKind, number>> = {};
@@ -493,6 +537,7 @@ export class Player extends DurableObject<Env> {
       }
     }
     const today = dayOf(now);
+    const sNow = seasonAt(now, start);
     const runs = Object.fromEntries(
       Object.entries(logic.runs).map(([slot, run]) => {
         const hero = run.world.heroes[0];
@@ -503,6 +548,9 @@ export class Player extends DurableObject<Env> {
       name: p.name, games: p.games, wins: p.wins, deepest: p.deepest, best: p.best, bestByClass: p.bestByClass,
       arenaWaves: p.arenaWaves, arenaBest: p.arenaBest, streak: streakNow(p.streak, today, await outageDays(this.env)), dailyDone: p.dailyDate === today,
       badges: p.badges, history: p.history, trophies: p.trophies, mail: p.mail, coachDone: p.coachDone, newsSeen: p.newsSeen ?? null, honors: p.honors ?? [], hidden: p.hidden === true, places, totals, runs, today,
+      // The competitions' season: its id and days left, the Heat so far, the seasons closed, what has been won.
+      season: { id: sNow.id, number: sNow.number, start: sNow.start, end: sNow.end, daysLeft: sNow.daysLeft, started: sNow.started },
+      heat: heatOf(p.heat), heatDays: Object.keys(p.heat?.days ?? {}).length, seasons: p.seasons ?? [], honour: p.honour ?? [],
     };
   }
 }

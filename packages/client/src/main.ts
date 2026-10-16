@@ -46,6 +46,8 @@ import {
 import { rankingBlock, trophyText } from './rankui';
 import { showBoards } from './boardsui';
 import { showProfile } from './profileui';
+import { showSeason } from './seasonui';
+import { showHall } from './hallui';
 import { tx } from './compete-ui';
 import { myLook } from './herocard';
 import { chatPicture, savePicture } from './sharecards';
@@ -897,14 +899,26 @@ const openings = ((): number => {
 let profile: Profile | null = null;
 
 /** The boards window; back to the title when closed. */
-function openBoards(tab?: 'daily' | 'week' | 'arena' | 'all' | 'device'): void {
+function openBoards(tab?: 'daily' | 'week' | 'arena' | 'all' | 'season' | 'device'): void {
   const rules = dailyRulesView();
   showBoards({
     api, device: rankings(), trophies: profile?.trophies, profile, heroClass, tab,
     rules: { hardship: rules.hardship.name, boon: rules.boon.name, info: rules.boon.info },
     onClose: toTitle,
     onProfile: openProfile,
+    onSeason: openSeason,
+    onHall: openHall,
   });
+}
+
+/** The season's window: its Heat, how it is earned, what it gives; back to the boards (on the Season tab). */
+function openSeason(): void {
+  showSeason({ api, profile, onBack: () => openBoards('season'), onClose: toTitle, onHall: openHall });
+}
+
+/** The hall of fame: every season's top ten, for ever. */
+function openHall(): void {
+  showHall({ api, onBack: () => openBoards('season'), onClose: toTitle });
 }
 
 /** The player's own hero as the pictures to send show him (sharecards.ts): the place on the day's board only if he has played it. */

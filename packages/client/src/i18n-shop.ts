@@ -112,6 +112,7 @@ const EN: Words = {
     if (e.by === 'streak') return `A ${e.days}-day streak`;
     if (e.by === 'badge') return 'A badge won in the dungeon';
     if (e.by === 'patron') return 'Patrons get it';
+    if (e.by === 'honour') return 'An honour of the competitions: won, never sold';
     return `Top ${e.place} of the ${e.kind === 'daily' ? 'day' : 'week'}`;
   },
   earnOnly: 'Earned, not sold',
@@ -197,6 +198,7 @@ const RU: Words = {
     if (e.by === 'streak') return `Серия ${e.days} дн.`;
     if (e.by === 'badge') return 'Значок, добытый в подземелье';
     if (e.by === 'patron') return 'Дарят Покровителям';
+    if (e.by === 'honour') return 'Честь соревнований: добывается, не продаётся';
     return `Топ-${e.place} ${e.kind === 'daily' ? 'дня' : 'недели'}`;
   },
   earnOnly: 'Только за заслуги',

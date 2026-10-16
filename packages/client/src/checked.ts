@@ -106,11 +106,36 @@ export interface Profile {
   honors?: string[];
   /** «Hide me from the boards» (off by default). */
   hidden?: boolean;
+  /** The competitions' season (server season-clock.ts): its id and days left, the Heat so far and the days it is made of, the seasons closed, what has been won. */
+  season?: SeasonInfo;
+  heat?: number;
+  heatDays?: number;
+  seasons?: SeasonResult[];
+  honour?: string[];
   places: Partial<Record<BoardKind, number | null>>;
   /** How many players each board holds now. */
   totals?: Partial<Record<BoardKind, number>>;
   runs: Partial<Record<RunSlot, RunMeta & { over: boolean; depth: number; lvl: number; heroClass?: HeroClass }>>;
   today: string;
+}
+
+/** A season of the competitions: 8 weeks from a Monday; before the first begins nothing counts. */
+export interface SeasonInfo {
+  id: string;
+  number: number;
+  start: number;
+  end: number;
+  daysLeft: number;
+  started: boolean;
+}
+
+/** A season closed for the player: the final place by Heat and what it won (honour keys: cup.s1, frame.season.s1, season_beacon). */
+export interface SeasonResult {
+  id: string;
+  heat: number;
+  rank: number;
+  played: number;
+  awards: string[];
 }
 
 export interface BoardEntry {
@@ -146,7 +171,7 @@ export interface BoardWorn {
   nc?: string;
   /** The league's step the player stood on, and the armour's tier at the end of the run (the hero card's frame and row). */
   lg?: string;
-  ar?: number;
+  a?: number;
 }
 
 /** A slice of a board (the same runs sorted another way): its metric, and the hero it is for (null: all). */
@@ -163,6 +188,18 @@ export interface BoardView {
   total?: number;
   played?: number;
   you?: BoardEntry;
+  /** The season board says which season it is of. */
+  season?: SeasonInfo;
+}
+
+/** A page of the hall of fame: the top ten of a season by Heat, written once. */
+export interface HallView {
+  current: string;
+  /** The seasons that are over (they have a page, when its grace days have passed). */
+  available: string[];
+  season: string | null;
+  frozen: boolean;
+  top: BoardEntry[];
 }
 
 export interface Identity {
@@ -193,7 +230,9 @@ export interface RunApi {
   news(version: string): Promise<boolean>;
   /** «Report a problem»: true once the server has it; false when it could not be sent (or five went today). */
   problem(report: ProblemReport): Promise<boolean>;
-  board(kind: BoardKind, slice?: BoardSlice): Promise<BoardView | null>;
+  board(kind: BoardKind | 'season', slice?: BoardSlice): Promise<BoardView | null>;
+  /** The hall of fame of a season (the latest over by default). */
+  hall(season?: string): Promise<HallView | null>;
   /** «Hide me from the boards» on or off: the setting as the server kept it, or null if it could not be told. */
   hide(on: boolean): Promise<boolean | null>;
 }
@@ -263,6 +302,7 @@ export function runApi(server: string, identity: () => Identity, development: bo
     challenge: async (text, card, mode) => (await quiet<{ id: string }>('/challenge', { text, card, mode }))?.id ?? null,
     notify: async (on) => (await quiet<{ on: boolean }>('/notify', { on })) !== null,
     board: (kind, slice) => quiet('/board', { kind, ...(slice && slice.metric !== 'score' ? { metric: slice.metric } : {}), ...(slice?.cls ? { cls: slice.cls } : {}) }),
+    hall: (season) => quiet('/hall', season ? { season } : {}),
     hide: async (on) => (await quiet<{ hidden: boolean }>('/me', { hidden: on }))?.hidden ?? null,
   };
 }

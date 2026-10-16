@@ -261,7 +261,7 @@ export function rowOf(data: RowData): VirtualRow {
 }
 
 /** One of the top three, as a big card: the place, the hero, the name, the title, the score. */
-export function podiumPlace(data: RowData & { cup?: string }): VirtualRow {
+export function podiumPlace(data: RowData & { cup?: () => HTMLElement }): VirtualRow {
   const { entry } = data;
   const w = worn(entry);
   const { node: box, card } = stage(lookOf(entry, data.tier), 'podium', true);
@@ -269,13 +269,13 @@ export function podiumPlace(data: RowData & { cup?: string }): VirtualRow {
   node.append(el('span', { className: 'fl-pod-n', textContent: `#${data.place}` }), box, nameNode(entry.name, w.nc ?? entry.nc));
   const plate = titleBadge(w.tt ?? entry.tt);
   if (plate) node.append(plate);
-  if (data.cup) node.append(art(data.cup, wide() ? 3 : 2, 'cup'));
+  if (data.cup) node.append(data.cup());
   node.append(el('span', { className: 'fl-pod-score', textContent: data.value }));
   return { node, dispose: () => card.dispose() };
 }
 
 /** The top three as a podium, 2 · 1 · 3 (the places are put in order by the CSS); the cards it made are given back to let go. */
-export function podium(places: readonly RowData[]): { node: HTMLElement; dispose: () => void } {
+export function podium(places: ReadonlyArray<RowData & { cup?: () => HTMLElement }>): { node: HTMLElement; dispose: () => void } {
   const made = places.slice(0, 3).map((data) => podiumPlace(data));
   return { node: el('div', { className: 'fl-podium' }, ...made.map((row) => row.node)), dispose: () => made.forEach((row) => row.dispose?.()) };
 }

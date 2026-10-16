@@ -1,6 +1,6 @@
 import type { HeroClass } from '@pd/core';
 import { CATALOG, HEROES, type Item } from '../src/catalog';
-import type { BoardEntry, BoardSlice, BoardView, Profile } from '../src/checked';
+import type { BoardEntry, BoardSlice, BoardView, HallView, Profile } from '../src/checked';
 
 /*
  * A made-up crowd for looking at the competitions' screens without a server (dev/compete.html): the same shape of data the server sends
@@ -73,6 +73,22 @@ export function board(kind: string, slice: BoardSlice | undefined, ru: boolean, 
   return { name: `${kind}:fake`, rank: metric === 'score' && !slice?.cls ? mine : null, top, total: top.length, played, you: me };
 }
 
+/** The season's board: Heat in place of the score, 11 406 players, 41 days left. */
+export function seasonBoard(ru: boolean): BoardView {
+  const crowd = Array.from({ length: 50 }, (_, i) => ({ ...person(i + 600, ru), score: 2406 - i * 31 - (i % 3) * 7 }));
+  const me: BoardEntry = { ...board('day', undefined, ru).you!, score: 1240 };
+  return {
+    name: 'season:s1', rank: 212, top: crowd, total: 50, played: 11406, you: me,
+    season: { id: 's1', number: 1, start: Date.parse('2026-10-19'), end: Date.parse('2026-12-14'), daysLeft: 41, started: true },
+  };
+}
+
+/** The hall of fame of season 1: the top ten, written. */
+export function hall(ru: boolean, season = 's1'): HallView {
+  const top = Array.from({ length: 10 }, (_, i) => ({ ...person(i + 700, ru), score: 2406 - i * 74 }));
+  return { current: 's3', available: ['s1', 's2'], season, frozen: true, top };
+}
+
 export function profile(ru: boolean): Profile {
   return {
     name: MY_NAME[ru ? 'ru' : 'en'], games: 87, wins: 3, deepest: 21, best: 10500, bestByClass: { mage: 10500 }, arenaWaves: 0, arenaBest: 0,
@@ -80,5 +96,7 @@ export function profile(ru: boolean): Profile {
       { board: 'daily:2026-10-12', place: 2, at: 1 }, { board: 'week:2026-W41', place: 7, at: 1 }, { board: 'daily:2026-10-09', place: 3, at: 1 },
     ],
     places: { daily: 37 }, totals: { daily: 1284 }, runs: {}, today: '2026-10-16',
+    season: { id: 's1', number: 1, start: Date.parse('2026-10-19'), end: Date.parse('2026-12-14'), daysLeft: 41, started: true }, heat: 1240, heatDays: 19,
+    honour: ['circle_champion', 'deep'], seasons: [],
   } as Profile;
 }

@@ -17,7 +17,7 @@ export interface CardLook {
   /** The league's step (spark ... beacon): its frame is the card's when no other frame is worn. */
   lg?: string;
   /** The armour's tier at the end of the run (the sheets' row); absent: the first armour. */
-  ar?: number;
+  a?: number;
 }
 
 /** What a board entry says of the hero (server worn.ts Worn): everything the card reads, and the name colour and title the row reads. */
@@ -30,7 +30,7 @@ export interface WornShape {
   tt?: string;
   nc?: string;
   lg?: string;
-  ar?: number;
+  a?: number;
 }
 
 /** A board entry's hero: its class and the server's snapshot of what the player wore (`w`; absent from older entries: the plain class). */
@@ -38,7 +38,7 @@ export function lookOfEntry(entry: { heroClass: string; w?: WornShape }): CardLo
   const w = entry.w;
   return {
     heroClass: entry.heroClass, ...(w?.l ? { l: w.l } : {}), ...(w?.h ? { h: w.h } : {}), ...(w?.p ? { p: w.p } : {}), ...(w?.f ? { f: w.f } : {}),
-    ...(w?.fr ? { fr: w.fr } : {}), ...(w?.lg ? { lg: w.lg } : {}), ...(typeof w?.ar === 'number' ? { ar: w.ar } : {}),
+    ...(w?.fr ? { fr: w.fr } : {}), ...(w?.lg ? { lg: w.lg } : {}), ...(typeof w?.a === 'number' ? { a: w.a } : {}),
   };
 }
 
@@ -46,7 +46,7 @@ export function lookOfEntry(entry: { heroClass: string; w?: WornShape }): CardLo
  * The key a composed card is kept under: `class|look|hat|pet|fire`, and the armour's tier when it is told. The frame is drawn over the
  * kept picture, so it is not in the key.
  */
-export const cardKey = (look: CardLook): string => `${look.heroClass}|${look.l ?? ''}|${look.h ?? ''}|${look.p ?? ''}|${look.f ?? ''}${look.ar === undefined ? '' : `|${look.ar}`}`;
+export const cardKey = (look: CardLook): string => `${look.heroClass}|${look.l ?? ''}|${look.h ?? ''}|${look.p ?? ''}|${look.f ?? ''}${look.a === undefined ? '' : `|${look.a}`}`;
 
 /** A store of at most `size` things, the one used least recently going first. */
 export class Lru<V> {
