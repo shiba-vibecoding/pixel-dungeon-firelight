@@ -5,7 +5,7 @@
  * real gift (the wallet's `connections`, wallet.ts):
  *   - a gift link opened: the giver and whoever opened it (shopapi.ts acceptGift);
  *   - a gift delivered: the giver and the friend (payments.ts deliverGift);
- *   - an invite or share link (`startapp=ref_<id>`, or `daily_r<id>` / `arena_r<id>`) opened by another player (shopapi.ts connectByRef).
+ *   - an invite or share link (`startapp=ref_<id>`, or `daily_r<id>`) opened by another player (shopapi.ts connectByRef).
  * Nothing else makes a connection. The list shows a name and a class, never an id: each connection has an opaque handle (`h`) that
  * names the friend to the gift flow, and only to the player it belongs to.
  */
@@ -81,10 +81,10 @@ export interface PlayerCard {
 const HANDLE = /^[0-9a-f]{12}$/;
 export const isHandle = (value: unknown): value is string => typeof value === 'string' && HANDLE.test(value);
 
-/** The inviter in a launch's start parameter: `ref_<id>`, or a share link's `daily_r<id>` / `arena_r<id>`; null for any other. */
+/** The inviter in a launch's start parameter: `ref_<id>`, or a share link's `daily_r<id>`; null for any other. */
 export function refOfStart(start: unknown): number | null {
   if (typeof start !== 'string') return null;
-  const match = /^(?:ref_|(?:daily|arena)_r)(\d{1,15})$/.exec(start);
+  const match = /^(?:ref_|daily_r)(\d{1,15})$/.exec(start);
   const id = match ? Number(match[1]) : NaN;
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }

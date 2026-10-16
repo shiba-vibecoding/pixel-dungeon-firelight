@@ -118,13 +118,13 @@ describe('enchantments and glyphs', () => {
   it('a glyph adds to the armour; a scroll of enchantment gives one, or an enchantment', () => {
     const world = solo();
     const hero = heroById(world, 'p')!;
-    const plain = armorStats(hero.armor).dr;
+    const plain = armorStats(hero.armor!).dr;
     hero.items = [createItem('scroll.enchantment', 2)];
     // (A scroll the party knows: an unknown one is read first and its item chosen after, see scroll-read.test.ts.)
     world.known.push('scroll.enchantment');
     act(world, 'p', { type: 'use', item: 0, target: 'armor' });
-    expect(hero.armor.glyph).toBeDefined();
-    expect(armorStats(hero.armor).dr).toBeGreaterThan(plain);
+    expect(hero.armor!.glyph).toBeDefined();
+    expect(armorStats(hero.armor!).dr).toBeGreaterThan(plain);
     const result = act(world, 'p', { type: 'use', item: 0, target: 'weapon' });
     expect(hero.weapon!.enchant).toBeDefined();
     expect(result.ok && result.effects.some((e) => e.type === 'imbued')).toBe(true);
@@ -146,7 +146,7 @@ describe('curses', () => {
     const leather = hero.items.findIndex((i) => i.kind === 'armor.leather');
     expect(act(world, 'p', { type: 'equip', item: leather })).toEqual({ ok: false, reason: 'it is cursed: you cannot take it off' });
     act(world, 'p', { type: 'use', item: hero.items.findIndex((i) => i.kind === 'scroll.removeCurse') });
-    expect(hero.armor.cursed).toBeUndefined();
+    expect(hero.armor!.cursed).toBeUndefined();
     expect(act(world, 'p', { type: 'equip', item: hero.items.findIndex((i) => i.kind === 'armor.leather') }).ok).toBe(true);
   });
 

@@ -22,8 +22,6 @@ export interface ShareCard {
   cause: string;
   /** The card's heading: the daily dungeon's (with the day) by default. */
   title?: string;
-  /** The arena: the waves held stand where the depth would. */
-  arena?: boolean;
 }
 
 const C = {
@@ -119,7 +117,7 @@ async function drawCard(data: ShareCard): Promise<HTMLCanvasElement> {
   fxText(g, data.name, x0, 216, 1, { scale: data.name.length > 12 ? 4 : 6, color: C.ink, align: 'left' });
   fxText(g, data.won ? t.victory : data.cause, x0, 264, 1, { scale: 2, color: data.won ? C.gold : C.bad, align: 'left', shadow: 0 });
   const stats: Array<[string, string, string]> = [
-    [data.arena ? t.arena.statWaves : t.statDepth, String(data.depth), C.ink],
+    [t.statDepth, String(data.depth), C.ink],
     [t.score, data.score.toLocaleString(locale), C.gold],
     [t.place, data.place ? String(data.place) : '—', C.ally],
   ];

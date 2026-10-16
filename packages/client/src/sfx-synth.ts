@@ -551,12 +551,6 @@ export const SFX = {
     { wave: 'noise', filter: hp(3000), decay: 0.15, gain: 0.5 },
     { wave: 'saw', freq: 80, slide: -10, filter: lp(500), decay: 0.4, gain: 0.7 }),
 
-  /* The crowd of the arena. */
-  crowd: fx(0.5,
-    { wave: 'noise', filter: bp(300, 2200, 1), trem: [5.3, 0.3], attack: 0.35, hold: 0.25, decay: 1.5, shape: 1.5 },
-    { wave: 'noise', filter: hp(1800), attack: 0.35, decay: 1.4, gain: 0.25 },
-    { wave: 'noise', decay: 0.03, delay: 0.15, scatter: [26, 1.6], gain: 0.35 }),
-
   /* The air of the places. */
   drip: fx(0.5,
     { wave: 'sine', freq: 900, slide: 16, attack: 0.001, decay: 0.12, repeat: [2, 0.12, 0.35] }),

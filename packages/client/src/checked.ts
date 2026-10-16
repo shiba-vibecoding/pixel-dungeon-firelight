@@ -9,8 +9,8 @@ import { RULES_VERSION } from '@pd/core';
  * device alone and counts nowhere.
  */
 
-export type RunSlot = 'dungeon' | 'arena' | 'daily';
-export type BoardKind = 'daily' | 'week' | 'arena' | 'all' | 'arenaAll';
+export type RunSlot = 'dungeon' | 'daily';
+export type BoardKind = 'daily' | 'week' | 'all';
 
 export interface RunMeta {
   id: string;
@@ -22,6 +22,8 @@ export interface RunMeta {
 }
 
 export interface RunSummary extends RunOutcome {
+  /** The tier of the armour worn at the end, from the server's final world (absent from runs before it). */
+  armor?: number;
   slot: RunSlot;
   ranked: boolean;
   at: number;
@@ -62,6 +64,18 @@ export interface Letter {
 /** How many letters wait to be claimed: the number on the camp's mail icon. */
 export const unclaimed = (letters: readonly Letter[]): number => letters.filter((letter) => letter.claimed === undefined).length;
 
+/**
+ * The arena of waves is gone: a server of the old edition may still hold its trophies, letters and finished runs for a player, and a
+ * client that meets them leaves them out, whatever the server says.
+ */
+const fromArena = (board: string): boolean => board.startsWith('arena');
+export const withoutArena = (profile: Profile): Profile => ({
+  ...profile,
+  history: (profile.history ?? []).filter((run) => (run as { mode?: string }).mode !== 'arena' && (run.slot as string) !== 'arena'),
+  trophies: (profile.trophies ?? []).filter((trophy) => !fromArena(trophy.board)),
+  ...(profile.mail ? { mail: profile.mail.filter((letter) => !fromArena(letter.board)) } : {}),
+});
+
 export type Trouble = 'offline' | 'unauthorized' | 'rules';
 
 /** A player's report of a problem: their words, and when attached, the run's last actions and the console's last errors (diag.ts). */
@@ -88,8 +102,6 @@ export interface Profile {
   deepest: number;
   best: number;
   bestByClass: Partial<Record<HeroClass, number>>;
-  arenaWaves: number;
-  arenaBest: number;
   streak: { last: string | null; count: number; best: number; freezes: number };
   /** Today's daily dungeon has been begun (its ranked try is spent). */
   dailyDone: boolean;
@@ -133,6 +145,8 @@ export interface BoardEntry {
 
 /** What a board entry says the hero wore, by catalogue item id (the hero card, herocard.ts). */
 export interface BoardWorn {
+  /** The tier of the armour worn at the end of the run: the row of the hero's sheet (absent: cloth). */
+  a?: number;
   l?: string;
   h?: string;
   p?: string;
@@ -163,7 +177,7 @@ export interface RunApi {
   /** The photo mode's picture (a PNG of up to 1.8 MB) at a public address, kept a day (server photos.ts); null if it cannot be had. */
   photo(png: Blob): Promise<string | null>;
   /** A message with the result the player may send to any chat (WebApp.shareMessage); its id, or null. */
-  challenge(text: string, card: string | null, mode: 'daily' | 'arena'): Promise<string | null>;
+  challenge(text: string, card: string | null): Promise<string | null>;
   /** The bot's reminders on or off; false if the server could not be told. */
   notify(on: boolean): Promise<boolean>;
   start(slot: RunSlot, hero: HeroClass, challenges: number): Promise<{ run: RunMeta; world: World } | Trouble>;
@@ -214,10 +228,16 @@ export function runApi(server: string, identity: () => Identity, development: bo
     sync: (meta, actions, hash, keepalive = false) =>
       post('/run', { op: 'sync', slot: meta.slot, run: meta.id, from: meta.seq, actions, hash }, keepalive),
     get: (slot) => post('/run', { op: 'get', slot }),
-    me: () => quiet('/me', {}),
+    me: async () => {
+      const profile = await quiet<Profile>('/me', {});
+      return profile && withoutArena(profile);
+    },
     coachDone: async () => (await quiet<{ coachDone: boolean }>('/me', { coachDone: true }))?.coachDone === true,
     news: async (version) => (await quiet<{ news: string }>('/me', { news: version }))?.news !== undefined,
-    mail: (op, id) => quiet('/mail', { op, ...(id ? { letter: id } : {}) }),
+    mail: async (op, id) => {
+      const answer = await quiet<{ mail: Letter[]; trophies: Profile['trophies'] }>('/mail', { op, ...(id ? { letter: id } : {}) });
+      return answer && { mail: answer.mail.filter((letter) => !fromArena(letter.board)), trophies: answer.trophies.filter((trophy) => !fromArena(trophy.board)) };
+    },
     problem: async (report) => {
       // The report goes in the body only (never in an address), and is sent whatever rules this build runs: an old build is the likeliest to need it.
       try {
@@ -243,7 +263,7 @@ export function runApi(server: string, identity: () => Identity, development: bo
         return null;
       }
     },
-    challenge: async (text, card, mode) => (await quiet<{ id: string }>('/challenge', { text, card, mode }))?.id ?? null,
+    challenge: async (text, card) => (await quiet<{ id: string }>('/challenge', { text, card }))?.id ?? null,
     notify: async (on) => (await quiet<{ on: boolean }>('/notify', { on })) !== null,
     board: (kind) => quiet('/board', { kind }),
   };

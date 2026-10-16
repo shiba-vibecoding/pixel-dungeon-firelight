@@ -227,32 +227,22 @@ const ownId = (): number | undefined => {
   return Number.isSafeInteger(id) && id! > 0 ? id : undefined;
 };
 
-/** The start parameter of a link the player shares: `daily`, `arena` or (nothing) a plain invitation, with the player's id in it. */
-export function inviteStart(kind?: 'daily' | 'arena'): string | undefined {
+/** The start parameter of a link the player shares: `daily` or (nothing) a plain invitation, with the player's id in it. */
+export function inviteStart(kind?: 'daily'): string | undefined {
   const id = ownId();
   if (kind) return id ? `${kind}_r${id}` : kind;
   return id ? `ref_${id}` : undefined;
 }
 
-/** The invite a launch came from (`ref_<id>`, `daily_r<id>`, `arena_r<id>`), for the server to read; null for a launch from anywhere else. */
+/** The invite a launch came from (`ref_<id>`, `daily_r<id>`), for the server to read; null for a launch from anywhere else. */
 export function launchedByInvite(): string | null {
   const start = webApp?.initDataUnsafe.start_param ?? '';
-  return /^(ref_|(daily|arena)_r)\d{1,15}$/.test(start) ? start : null;
+  return /^(ref_|daily_r)\d{1,15}$/.test(start) ? start : null;
 }
 
 /** Shares an invitation to a room; resolves to 'copied' when it went to the clipboard instead. */
 export function shareInvite(room: string, text: string): Promise<'shared' | 'copied' | 'failed'> {
   return share(`room_${room}`, { room }, text);
-}
-
-/** True when the app was opened from a shared arena result: the arena's window comes up. */
-export function launchedForArena(): boolean {
-  return /^arena(_r\d{1,15})?$/.test(webApp?.initDataUnsafe.start_param ?? '') || new URLSearchParams(location.search).has('arena');
-}
-
-/** Shares an arena result with a link that opens the arena. */
-export function shareArena(text: string): Promise<'shared' | 'copied' | 'failed'> {
-  return share(inviteStart('arena')!, { arena: '' }, text);
 }
 
 /** Shares a daily dungeon result with a link that opens today's dungeon. */
@@ -371,7 +361,7 @@ export function openLink(url: string): void {
 
 const at = (version: string): boolean => inTelegram && (webApp?.isVersionAtLeast?.(version) ?? false);
 
-/** The game's t.me link, opening at `start` (daily, arena) or at the title. */
+/** The game's t.me link, opening at `start` (daily) or at the title. */
 export const appLink = (start?: string): string => (start ? `${APP_LINK}?startapp=${encodeURIComponent(start)}` : APP_LINK);
 
 /** Whether this Telegram can post a story from the game. */

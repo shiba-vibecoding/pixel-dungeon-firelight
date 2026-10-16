@@ -5,7 +5,7 @@ import {
   type Hero, type Item, type Level,
   type Bones, hasAmulet, heroById, type HeroClass, leaveBones, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
   ORE_WANTED, type PlanStep, PLANT_KINDS, type SmithLine, T,
-  chargesKnown, WIDTH,
+  chargesKnown, WIDTH, itemAt,
   type World, charAt, swapsWithHero,
 } from '@pd/core';
 import * as core from '@pd/core';
@@ -29,9 +29,7 @@ let fallenAt = 0;
 import { adoptBadges, BADGES, type BadgeId, badgeText, checkBadges, countGame, earnedBadges, reloadBadges } from './badges';
 import { pullCloud, pushCloud } from './cloud';
 import { audio } from './audio';
-import { type ArenaHud, heroBuffs, Hud, type HudStatus, type QuickState } from './hud';
-import { arenaBest, recordArena, showArenaEnd, showArenaReward } from './arenaui';
-import { ArenaView } from './arenaview';
+import { heroBuffs, Hud, type HudStatus, type QuickState } from './hud';
 import { levelRegion } from './sprites';
 import { capitalize, lang, t } from './i18n';
 import { chargesOf, itemInfo, itemName, wearOf } from './itemtext';
@@ -39,7 +37,7 @@ import { bakeLevel, type Camera, patchLevel, render, renderOverlay3D } from './r
 import type { Frame3D, World3D } from './r3d/world3d';
 import { Governor, RefreshMeter } from './r3d/governor';
 import { FEET_PX, setPitchDeg, YS } from './r3d/project';
-import { covers3D, forgetOld3dChoice } from './r3d/setting';
+import { forgetOld3dChoice } from './r3d/setting';
 import { brightness } from './brightness';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
@@ -88,7 +86,7 @@ import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
   backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
-  shareArena, shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
+  shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen, invitedGift, inviteStart, launchedByInvite,
 } from './telegram';
 import { report, startReporting } from './report';
@@ -105,13 +103,11 @@ import { lastTargetIn, refreshTarget, rememberTarget, resetTargeting, shotPath, 
 
 /*
  * Pixel Dungeon client: title screen, then a solo run (kept in local storage),
- * the daily dungeon or the arena of waves; the server (VITE_SERVER_URL) keeps the boards.
+ * or the daily dungeon; the server (VITE_SERVER_URL) keeps the boards.
  */
 
 const HERO_CLASSES: readonly HeroClass[] = ['warrior', 'mage', 'rogue', 'huntress'];
 const SOLO_SLOT = 'pd-solo';
-/** The arena of waves' solo run has a slot of its own: it never takes the dungeon run's place. */
-const ARENA_SLOT = 'pd-arena';
 const SERVER: string = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? `ws://${location.hostname}:8787` : '');
 
 /*
@@ -238,21 +234,9 @@ const hud = new Hud({
   buff: (name, turns) => toast(turns ? `${t.buffs[name]} (${t.turnsLeft(turns)})` : t.buffs[name]),
   mate: (id) => {
     const hero = session?.world && heroById(session.world, id);
-    // (The arena has no depths to tell.)
-    if (hero) toast(`${hero.name} · ${t.classes[hero.heroClass]}${session?.world?.arena ? '' : ` · ${t.newDepth(hero.depth)}`}`, { tone: 'ally' });
-  },
-  // The arena's «To battle!»; pressed again before the wave comes, not ready after all.
-  fight: () => {
-    const world = session?.world;
-    const me = world && heroById(world, session!.myId);
-    if (!world?.arena || !me || world.arena.phase !== 'rest') return;
-    send(world.arena.ready.includes(me.id) ? { type: 'arenaReady', cancel: true } : { type: 'arenaReady' }, performance.now());
+    if (hero) toast(`${hero.name} · ${t.classes[hero.heroClass]} · ${t.newDepth(hero.depth)}`, { tone: 'ally' });
   },
 });
-/** The arena of waves dressed: sand, banners, gates, braziers, the crowd (arenaview.ts). */
-const arenaView = new ArenaView();
-/** The arena's reward window is up (it closes by itself if the wave starts meanwhile). */
-let rewardOpen = false;
 /**
  * The middle of where a level actually lies, world pixels: the grid is bigger than a level for
  * one hero (core geometry.ts), and the rest of it is solid rock.
@@ -408,7 +392,7 @@ const tutorialHost = {
   ready: (step: StepId): boolean => {
     const world = session?.world;
     const me = world && heroById(world, session!.myId);
-    if (!world || !me || !isAlive(me) || world.arena || session!.mode === 'online') return false;
+    if (!world || !me || !isAlive(me) || session!.mode === 'online') return false;
     switch (step) {
       case 'enemy':
         return attackTarget(world, me) !== null;
@@ -537,7 +521,7 @@ function stop3d(failed = false): void {
 /** Whether this floor is drawn in 3D now (the switch, the sewers, the chunk and the context all there); makes the renderer when it can. */
 function pick3d(level: Level, world: World): boolean {
   want3d = false;
-  if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena)) || failures3d >= NO_3D_AFTER) {
+  if (failures3d >= NO_3D_AFTER) {
     if (r3) stop3d();
     return false;
   }
@@ -712,7 +696,7 @@ const api = runApi(
 setPhotoUpload(api ? (png) => api.photo(png) : null);
 
 /** Each device slot's run on the server. */
-const SLOT_OF: Record<string, RunSlot> = { [SOLO_SLOT]: 'dungeon', [ARENA_SLOT]: 'arena' };
+const SLOT_OF: Record<string, RunSlot> = { [SOLO_SLOT]: 'dungeon' };
 const slotOf = (key: string): RunSlot => SLOT_OF[key] ?? 'daily';
 
 /** What a checked run needs: the server, its run, and how to get the next one in its slot. */
@@ -728,13 +712,13 @@ function checkFor(slot: RunSlot, meta: RunMeta, world?: World, log?: Action[]): 
 }
 
 /** A run in a slot: the one kept on this device (checked or not), else a new one, from the server when it can give one. */
-async function startRun(key: string, mode: 'dungeon' | 'arena', fresh: boolean, welcome?: string): Promise<void> {
+async function startRun(key: string, fresh: boolean, welcome?: string): Promise<void> {
   const slot = slotOf(key);
   const name = playerName.trim() || telegramName() || t.heroDefault;
   const chosen = slot === 'dungeon' && challengesOpen() ? challenges : 0;
   const local = (): Session =>
     soloSession(
-      key, heroClass, slot === 'daily' ? dailySeed : randomSeed, name, chosen, mode, slot === 'dungeon' ? readBones : undefined, false, undefined,
+      key, heroClass, slot === 'daily' ? dailySeed : randomSeed, name, chosen, slot === 'dungeon' ? readBones : undefined, false, undefined,
       slot === 'daily' ? core.dayOf(Date.now()) : undefined,
     );
   // The run being played is written out first: what the slot holds is read next.
@@ -746,7 +730,7 @@ async function startRun(key: string, mode: 'dungeon' | 'arena', fresh: boolean, 
   // The daily dungeon is today's: yesterday's kept run is not carried on.
   const stale = check?.meta.date !== undefined && check.meta.date !== core.dayOf(Date.now());
   if (kept && check && !stale && api) {
-    enterGame(soloSession(key, heroClass, randomSeed, name, 0, mode, undefined, false, checkFor(slot, check.meta, undefined, check.log)), null, welcome);
+    enterGame(soloSession(key, heroClass, randomSeed, name, 0, undefined, false, checkFor(slot, check.meta, undefined, check.log)), null, welcome);
   } else if (kept && !check && !stale) {
     // A run begun before runs were checked, or without the server: it goes on, counting nowhere.
     enterGame(local(), null, welcome);
@@ -767,7 +751,7 @@ async function startRun(key: string, mode: 'dungeon' | 'arena', fresh: boolean, 
       showOffline({
         kind: 'start',
         ping: async () => (await api.me()) !== null,
-        onBack: () => void startRun(key, mode, fresh, welcome),
+        onBack: () => void startRun(key, fresh, welcome),
         onPlay: () => {
           hideOverlay();
           forgetSolo(key);
@@ -783,7 +767,7 @@ async function startRun(key: string, mode: 'dungeon' | 'arena', fresh: boolean, 
       enterGame(local(), null, welcome);
     } else {
       forgetSolo(key);
-      enterGame(soloSession(key, heroClass, randomSeed, name, 0, mode, undefined, false, checkFor(slot, answer.run, answer.world)), null, welcome);
+      enterGame(soloSession(key, heroClass, randomSeed, name, 0, undefined, false, checkFor(slot, answer.run, answer.world)), null, welcome);
       if (!answer.run.ranked) toast(t.ranked.practice);
     }
   } else {
@@ -798,7 +782,7 @@ async function startRun(key: string, mode: 'dungeon' | 'arena', fresh: boolean, 
 
 function startSolo(mode: 'continue' | 'new' | 'daily'): void {
   const daily = mode === 'daily';
-  void startRun(daily ? dailySlot() : SOLO_SLOT, 'dungeon', mode === 'new', daily ? todayRules(t.ranked.rulesWelcome) : undefined);
+  void startRun(daily ? dailySlot() : SOLO_SLOT, mode === 'new', daily ? todayRules(t.ranked.rulesWelcome) : undefined);
 }
 
 /** Today's rules of the daily dungeon (core daily.ts), in words: the hardship's name, the boon's name and what it gives. */
@@ -890,7 +874,7 @@ const openings = ((): number => {
 let profile: Profile | null = null;
 
 /** The boards window; back to the title when closed. */
-function openBoards(tab?: 'daily' | 'week' | 'arena' | 'all' | 'device'): void {
+function openBoards(tab?: 'daily' | 'week' | 'all' | 'device'): void {
   showBoards({ api, device: rankings(), trophies: profile?.trophies, tab, onClose: toTitle });
 }
 
@@ -1118,7 +1102,7 @@ function openJournal(onClose: () => void = hideOverlay): void {
 function openMenu(): void {
   const labelled = session?.mode === 'solo' ? labelWords(runLabel({ checked: !!session.checked, ranked: session.checked?.meta.ranked ?? true })) : null;
   const here = session?.world && session.myId !== null ? heroById(session.world, session.myId)?.depth : undefined;
-  const depthText = here === undefined || session?.world?.arena ? '' : t.newDepth(here);
+  const depthText = here === undefined ? '' : t.newDepth(here);
   showMenu({
     ...(labelled ? { run: { label: labelled, sub: [dailyRun ? t.daily : '', depthText].filter(Boolean).join(' · ') } } : {}),
     onResume: hideOverlay,
@@ -1170,7 +1154,7 @@ function takeShot(): Shot | null {
   }
   const world = session?.world;
   const me = world && session ? heroById(world, session.myId) : undefined;
-  const caption = !me || !world ? '' : world.arena ? t.arena.title : `${t.newDepth(me.depth)} · ${t.regionNames[regionIndex(me.depth)] ?? ''}`;
+  const caption = !me || !world ? '' : `${t.newDepth(me.depth)} · ${t.regionNames[regionIndex(me.depth)] ?? ''}`;
   return { canvas: out, pixelArt: false, caption };
 }
 
@@ -1254,7 +1238,11 @@ const heapAt = (world: World, depth: number, pos: number): boolean =>
  * Aiming a thrown weapon or a wand: the next tap on the map picks the target. Aiming from a quick slot (`slot`) may
  * have the last target marked: the same slot tapped again fires at it (targeting.ts).
  */
-let aim: { index: number; kind: 'throw' | 'zap' | 'special'; slot?: number; marked?: boolean } | null = null;
+/**
+ * What is being aimed: a pack slot's `index`, or (index -2) the thing worn named by `worn`, which a throw takes off first
+ * (EquipableItem.cast).
+ */
+let aim: { index: number; worn?: 'weapon' | 'armor' | 'ring0' | 'ring1'; kind: 'throw' | 'zap' | 'special'; slot?: number; marked?: boolean } | null = null;
 
 /** The aim from a quick slot is on a marked target: fire at it (autoAim: angled round what is in the way, if need be). False: it is gone. */
 function fireMarked(): boolean {
@@ -1574,8 +1562,6 @@ function openShop(): void {
 }
 
 function useStairs(world: World, stairs: 'descend' | 'ascend', now: number): void {
-  // The arena has no stairs: its dais is no way up.
-  if (world.arena) return;
   const me = heroById(world, session!.myId)!;
   const level = levelAt(world, me.depth);
   if (stairs === 'descend' && me.pos === level.exit) {
@@ -1798,14 +1784,15 @@ function tapCell(cell: number, quiet = false): void {
       rememberTarget(seenEnemies(world, me).find((m) => m.pos === end));
     }
     if (shot.kind === 'special') send({ type: 'special', target: cell }, performance.now());
+    else if (cell !== me.pos && shot.worn && itemAt(me, shot.worn)) send({ type: 'throw', item: shot.worn, target: cell }, performance.now());
     else if (cell !== me.pos && me.items[shot.index]) send({ type: shot.kind, item: shot.index, target: cell }, performance.now());
     return;
   }
 
   if (cell === me.pos) {
     if (heapAt(world, me.depth, me.pos)) takeHere(world, me, performance.now());
-    else if (!world.arena && me.pos === level.exit) useStairs(world, 'descend', performance.now());
-    else if (!world.arena && me.pos === level.entrance && (me.depth > 1 || hasAmulet(me))) useStairs(world, 'ascend', performance.now());
+    else if (me.pos === level.exit) useStairs(world, 'descend', performance.now());
+    else if (me.pos === level.entrance && (me.depth > 1 || hasAmulet(me))) useStairs(world, 'ascend', performance.now());
     else if (me.pos === level.entrance && heapAt(world, me.depth, me.pos) === undefined && me.depth === 1 && level.map[me.pos] === T.ENTRANCE) {
       // Hero.actAscend without the Amulet: the way out stays shut.
       toast(t.wayUpSealed);
@@ -1909,7 +1896,6 @@ function tapCell(cell: number, quiet = false): void {
   if (!quiet && walk.queue.length > 1) feedback.aim(cell, false, vnow);
   if (!quiet) walk.goal = cell;
   walk.pickup = heapAt(world, me.depth, cell);
-  if (world.arena) return;
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && (me.depth > 1 || hasAmulet(me))) walk.stairs = 'ascend';
 }
@@ -1950,8 +1936,8 @@ function backpackOptions(world: World, me: Hero): Parameters<typeof showBackpack
     world,
     hero: me,
     onAction: (action) => send(action, performance.now()),
-    onAim: (index, kind) => {
-      aim = { index, kind };
+    onAim: (at, kind) => {
+      aim = typeof at === 'string' ? { index: -2, worn: at, kind } : { index: at, kind };
     },
     onClose: hideOverlay,
   };
@@ -2190,11 +2176,9 @@ function learnFromSight(world: World, me: Hero, level: Level, visible: readonly 
   }
   if (visible[level.exit] && me.depth < 26) hints.first('stairs');
   if (level.altar && visible[level.altar.pos]) hints.first('altar');
-  // The arena: a word about the waves; it has no secrets, stairs or bosses' lairs to explain.
-  if (world.arena && !overlayOpen()) hints.first('arena');
   if (world.live && !overlayOpen()) hints.first('live');
-  if (me.depth >= 2 && !world.arena) hints.first('secret');
-  if (BOSS_DEPTHS.has(me.depth) && !world.arena) hints.first('boss');
+  if (me.depth >= 2) hints.first('secret');
+  if (BOSS_DEPTHS.has(me.depth)) hints.first('boss');
   if (world.turn > 60) hints.first('examine');
   if (session?.mode === 'online' && world.heroes.some((h) => h.id !== me.id && h.depth === me.depth && visible[h.pos])) {
     hints.first('companion', () => portrait(world.heroes.find((h) => h.id !== me.id)!.heroClass));
@@ -2288,8 +2272,12 @@ function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;
   // A region's intro is read first: the tap that skips it does nothing else.
   if (view.skipIntro(fx.now)) return;
-  const x = Math.floor((camera.x + px / camera.zoom) / TILE);
-  const y = Math.floor((camera.y + py / camera.zoom) / TILE);
+  const wx = camera.x + px / camera.zoom;
+  const wy = camera.y + py / camera.zoom;
+  // In 3D a figure stands up off its cell, drawn over the cells north of it: a tap on its body is a tap on its cell.
+  const figure = figureCellAt(wx, wy);
+  const x = figure >= 0 ? figure % WIDTH : Math.floor(wx / TILE);
+  const y = figure >= 0 ? Math.floor(figure / WIDTH) : Math.floor(wy / TILE);
   // The whole level is on: a tap on the map walks there (below) and takes the view back to the normal zoom, eased.
   if (cam.overview) cam.exitOverview(true);
   if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
@@ -2304,6 +2292,41 @@ function tapAt(px: number, py: number): void {
     if (cam.heroTap(performance.now())) return;
   } else cam.otherTap();
   tapCell(x + y * WIDTH);
+}
+
+/** Figures drawn larger than a cell (the bosses), whose bodies reach further. */
+const BIG_FIGURES: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
+
+/**
+ * The cell of the figure (a monster, a hero) whose standing body is under a point of the ground plane (world pixels), or -1: only
+ * in 3D, where a figure stands up from its feet (FEET_PX into its cell) and covers about its own height of the screen, which on the
+ * ground plane is that height over sin(pitch), mostly the cells north of it. Of two, the one nearer the camera (further south) is
+ * drawn in front, and wins. Only figures in sight count, and never the player's own hero (the cell under the tap stands for it).
+ */
+function figureCellAt(wx: number, wy: number): number {
+  if (!mode3d) return -1;
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return -1;
+  const seen = seenCells(world, me.depth);
+  let best = -1;
+  let bestFeet = -Infinity;
+  const consider = (pos: number, big: boolean): void => {
+    if (!seen[pos]) return;
+    const cx = (pos % WIDTH) * TILE + TILE / 2;
+    const feet = Math.floor(pos / WIDTH) * TILE + FEET_PX;
+    const half = big ? 11 : 7.5;
+    const tall = (big ? 26 : 18) / YS;
+    if (Math.abs(wx - cx) > half || wy > feet + 4 || wy < feet - tall) return;
+    if (feet > bestFeet) {
+      bestFeet = feet;
+      best = pos;
+    }
+  };
+  for (const mob of world.floors[me.depth]?.mobs ?? []) consider(mob.pos, BIG_FIGURES.has(mob.kind));
+  // Not the player's own hero: a tap meant for a monster just north of them must never become a search or a double tap.
+  for (const hero of world.heroes) if (hero.id !== me.id && hero.depth === me.depth && isAlive(hero)) consider(hero.pos, false);
+  return best;
 }
 
 /** The examine tool is on: the next tap on the map tells what is there. */
@@ -2798,7 +2821,6 @@ function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: nu
   motion.effects(effects, world, me.depth, (e) => itemSprite(e.item, world.run.labels));
   scenery.effects(effects, me.depth, vnow);
   handleMyEffects(effects, session!.myId);
-  if (world.arena) handleArenaEffects(effects, world, me, vnow);
 }
 
 /** My hero has stepped from `from` to where they stand: the sound of the ground, the dust or splash left behind, a sign read. */
@@ -2913,33 +2935,28 @@ function tick(now: number): void {
       audio.play(justFell ? 'falling' : me.depth > lastPlace.depth ? 'descend' : 'ascend');
       // A new depth comes up out of the dark.
       fx.flash('0, 0, 0', 1, 520, vnow);
-      // GameScene's greetings: the depth, a new region, and the level's feeling (the arena, sinking, has its own: handleArenaEffects).
-      if (!world.arena) {
-        view.say(justFell ? t.fell(me.depth) : me.depth > lastPlace.depth ? t.descended(me.depth) : t.ascended(me.depth));
-        // The depth, quietly over the middle of the view (a new region's first floor shows its card instead, just below).
-        view.floorTitle = { text: t.depthTitle(me.depth), start: vnow };
-        // Down into a new region: its card.
-        if (me.depth > lastPlace.depth && me.depth % 5 === 1) view.enterRegion(me.depth, vnow);
-        if (me.depth === 6 && lastPlace.depth === 5) view.say(t.enterPrison, '#ffff44');
-        if (me.depth === 11 && lastPlace.depth === 10) view.say(t.enterCaves, '#ffff44');
-        if (me.depth === 16 && lastPlace.depth === 15) view.say(t.enterCity, '#ffff44');
-        if (me.depth === 21 && lastPlace.depth === 20) view.say(t.enterHalls, '#ffff44');
-        if (me.depth === 26 && lastPlace.depth === 25) view.say(t.enterLast, '#ffff44');
-        const feeling = t.feelings[level.feeling];
-        if (feeling && me.depth > lastPlace.depth) view.say(feeling, '#ffff44');
-      }
+      // GameScene's greetings: the depth, a new region, and the level's feeling.
+      view.say(justFell ? t.fell(me.depth) : me.depth > lastPlace.depth ? t.descended(me.depth) : t.ascended(me.depth));
+      // The depth, quietly over the middle of the view (a new region's first floor shows its card instead, just below).
+      view.floorTitle = { text: t.depthTitle(me.depth), start: vnow };
+      // Down into a new region: its card.
+      if (me.depth > lastPlace.depth && me.depth % 5 === 1) view.enterRegion(me.depth, vnow);
+      if (me.depth === 6 && lastPlace.depth === 5) view.say(t.enterPrison, '#ffff44');
+      if (me.depth === 11 && lastPlace.depth === 10) view.say(t.enterCaves, '#ffff44');
+      if (me.depth === 16 && lastPlace.depth === 15) view.say(t.enterCity, '#ffff44');
+      if (me.depth === 21 && lastPlace.depth === 20) view.say(t.enterHalls, '#ffff44');
+      if (me.depth === 26 && lastPlace.depth === 25) view.say(t.enterLast, '#ffff44');
+      const feeling = t.feelings[level.feeling];
+      if (feeling && me.depth > lastPlace.depth) view.say(feeling, '#ffff44');
       // Going down to a new floor, now and then, is worth a word.
-      if (!world.arena && !justFell && me.depth > lastPlace.depth) quipSys.offer('descend', me.heroClass, now);
+      if (!justFell && me.depth > lastPlace.depth) quipSys.offer('descend', me.heroClass, now);
       justFell = false;
     } else if (me.pos !== lastPlace.pos) {
       footfall(level, me, lastPlace.pos, vnow);
     }
   }
   // Setting out: the sewers' card.
-  // Setting out into the arena: its own card, the pit's name over the sewers' emblem.
-  if (lastPlace.generation !== session.generation && world.arena && world.arena.wave === 0 && world.turn < 3) {
-    view.arenaSinks(0, t.arena.title, t.arena.sub, vnow);
-  } else if (lastPlace.generation !== session.generation && me.depth === 1 && world.turn < 3) view.enterRegion(1, vnow);
+  if (lastPlace.generation !== session.generation && me.depth === 1 && world.turn < 3) view.enterRegion(1, vnow);
   lastPlace = { generation: session.generation, depth: me.depth, pos: me.pos };
 
   const key = `${me.depth}:${world.turn}:${session.generation}`;
@@ -3032,17 +3049,15 @@ function tick(now: number): void {
   // game, or the hero fallen, muffles the music.
   audio.listen(at.x + TILE / 2, at.y + TILE / 2);
   // The last shop (depth 21) sounds and looks like the city it was built in, though the halls' tune plays
-  // there; the arena of waves takes its tier's look and tune.
-  const region = level.region ?? regionIndex(me.depth);
+  // there.
+  const region = regionIndex(me.depth);
   audio.ambience(levelRegion(level));
   preloadSheets(levelRegion(level));
   // Each region has its tune, and a boss fight its own while it lasts.
   if (bossFight && (bossFight.session !== session || bossFight.generation !== session.generation || bossFight.depth !== me.depth)) bossFight = null;
-  // A champions' wave in the arena is a boss fight from its first monster to its last.
-  const champions = world.arena?.phase === 'fight' && core.isChampionsWave(world.arena.wave);
   audio.playMusic(REGION_MUSIC[region]!);
   // Enemies awake in sight bring the danger layer in, a boss fight the boss layer.
-  audio.situation(threats.size, !!bossFight || champions);
+  audio.situation(threats.size, !!bossFight);
   audio.muffle(overlayOpen() || !isAlive(me));
   const kick = fx.shakeOffset(vnow);
   // The hero stands in the middle of the band the HUD and the toolbar leave free, not of the screen.
@@ -3111,12 +3126,11 @@ function tick(now: number): void {
         ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
       focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
       vignette: !quality.light,
-      lights: world.arena ? [...lightsFor(level, visible, view, vnow), ...arenaView.lights(level, visible, vnow)] : lightsFor(level, visible, view, vnow),
+      lights: lightsFor(level, visible, view, vnow),
       heapLook: (pos: number, at: number) => motion.heapLook(pos, at),
       under: (c: CanvasRenderingContext2D) => {
         scenery.draw(c, level, visible, explored, vnow);
         motion.draw(c, level, visible, explored, vnow);
-        if (world.arena) arenaView.draw(c, level, explored, vnow, world.arena.phase === 'rest');
       },
       over: (c: CanvasRenderingContext2D) => {
         motion.drawOver(c, vnow);
@@ -3171,8 +3185,7 @@ function tick(now: number): void {
       // The 3D view is still coming (its chunk, the region's maps): the map stays dark till then, never drawn in 2D.
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     } else {
-      // The arena's wall and stands stand in the light of the crowd's own torches, whatever the party sees.
-      render(ctx, world.arena ? { ...scene, visible: arenaView.shown(level, visible) } : scene, view, session.myId, assets, camera, vnow);
+      render(ctx, scene, view, session.myId, assets, camera, vnow);
       coop.frame(ctx, { session, world, view, camera, free, now: vnow });
     }
     if (forShot && shotWanted) {
@@ -3263,10 +3276,10 @@ function tick(now: number): void {
     examining = false;
   };
   // One state at a time, the most pressing: the connection, death, a target to choose, examining, companions.
-  const aimed = aim && aim.index >= 0 ? me.items[aim.index] : undefined;
+  const aimed = aim?.worn ? itemAt(me, aim.worn) : aim && aim.index >= 0 ? me.items[aim.index] : undefined;
   const status: HudStatus | null =
     session.status ? { kind: session.status === t.reconnecting ? 'reconnecting' : 'connecting', text: session.status }
-    : !isAlive(me) && !world.over ? { kind: 'dead', text: `${t.youDied}. ${world.arena ? t.arena.fallenCoop : t.youDiedCoop}` }
+    : !isAlive(me) && !world.over ? { kind: 'dead', text: `${t.youDied}. ${t.youDiedCoop}` }
     : aim ? { kind: 'target', text: aim.marked ? t.safe.aimAgain : t.chooseTarget, cancel: { label: t.cancel, onClick: cancelChoice }, ...(aimed ? { item: itemSprite(aimed, world.run.labels) } : {}) }
     : examining ? { kind: 'examine', text: t.examinePrompt, cancel: { label: t.cancel, onClick: cancelChoice } }
     : waitingFor.length > 0 ? { kind: 'waiting', text: t.waitingShort, names: waitingFor }
@@ -3291,39 +3304,15 @@ function tick(now: number): void {
         quick: quickState(quickItem, aim !== null && aim.index === quickIndex(me, 0)),
         quick2: quickState(quickItem2, aim !== null && aim.index === quickIndex(me, 1)),
         waitingFor: session.mode === 'online' ? holders.filter((id) => id !== me.id) : [],
-        arena: arenaHud(world, me, session.mode === 'online'),
       },
       walk.resting,
     );
   }
   placeToasts();
-  // The arena's reward: up as soon as nothing else is, gone if the wave began meanwhile (a companion's «To battle!»).
-  if (world.arena && !world.over) {
-    const offer = world.arena.offers[me.id];
-    if (offer && isAlive(me) && !overlayOpen() && world.arena.phase === 'rest') {
-      rewardOpen = true;
-      walk.reset();
-      showArenaReward({
-        world, hero: me, wave: world.arena.wave, items: offer, coop: session.mode === 'online',
-        onTake: (index) => {
-          rewardOpen = false;
-          send({ type: 'arenaPick', choice: index }, performance.now());
-        },
-      });
-    } else if (!offer && rewardOpen) {
-      rewardOpen = false;
-      hideOverlay();
-    }
-  }
-
   // Bones laid on their depth are this run's now: the device forgets them.
   if (bonesGiven && world.bones?.placed) {
     bonesGiven = false;
     forget(BONES_KEY);
-  }
-  if (world.over && deathShown !== session.generation && world.arena) {
-    deathShown = session.generation;
-    showArenaRunEnd(world, me, session.mode === 'solo');
   }
   if (world.over && deathShown !== session.generation) {
     deathShown = session.generation;
@@ -3351,7 +3340,7 @@ function tick(now: number): void {
         place: reply?.places?.daily ?? reply?.places?.week ?? null, won: victory, cause: killer ? capitalize(t.killedBy(killer)) : t.soloFell(me.depth),
         title: dailyRun ? undefined : t.gameName,
       };
-    }, shareText, 'daily');
+    }, shareText);
     window.setTimeout(() => {
       if (!session?.world?.over) return;
       if (!victory) haptic('error');
@@ -3362,6 +3351,7 @@ function tick(now: number): void {
       const place = recordRun({
         key: `${world.run.seed}:${me.id}:${world.turn}`,
         checked: Boolean(session.checked),
+        armor: armorTier(me),
         score: scoreNow,
         name: me.name || playerName || telegramName() || t.heroLabel,
         heroClass: me.heroClass,
@@ -3399,146 +3389,16 @@ function tick(now: number): void {
   }
 }
 
-/** The arena's board, «To battle!» and who is ready, for the HUD; null in the dungeon. */
-function arenaHud(world: World, me: Hero, coop: boolean): ArenaHud | null {
-  const arena = world.arena;
-  if (!arena) return null;
-  const living = world.heroes.filter(isAlive);
-  const left = core.arenaRemaining(world);
-  // A swarm that splits makes a wave bigger than it came.
-  const total = Math.max(arena.count, left, 1);
-  const rest = arena.phase === 'rest';
-  const mates: Record<string, 'ready' | 'picking' | 'resting'> = {};
-  if (rest) for (const hero of living) mates[hero.id] = arena.ready.includes(hero.id) ? 'ready' : arena.offers[hero.id] ? 'picking' : 'resting';
-  return {
-    phase: arena.phase,
-    wave: arena.wave,
-    left,
-    beaten: rest ? 1 : 1 - left / total,
-    champions: core.isChampionsWave(arena.wave),
-    ready: coop ? [living.filter((hero) => arena.ready.includes(hero.id)).length, living.length] : null,
-    waiting: coop ? living.filter((hero) => hero.id !== me.id && !arena.ready.includes(hero.id)).map((hero) => hero.name) : [],
-    meReady: arena.ready.includes(me.id),
-    mates,
-  };
-}
-
-/** What the arena's effects mean for the screen: banners, the crowd, the log, the gates' sound. */
-function handleArenaEffects(effects: readonly Effect[], world: World, me: Hero, now: number): void {
-  for (const effect of effects) {
-    switch (effect.type) {
-      case 'arenaWave': {
-        const boss = effect.boss;
-        const kind = boss ? 'boss' : effect.champions ? 'champions' : '';
-        const sub = boss ? t.arena.bossComes(t.mobs[boss]) : effect.champions ? t.arena.champions : t.regionNames[effect.tier] ?? '';
-        view.waveBanner(t.arena.wave(effect.wave), sub, kind, now);
-        view.say(t.arena.gatesRise(effect.wave), '#ff9933');
-        audio.play(effect.champions ? 'boss' : 'alert', 1, 0.8);
-        haptic('hit');
-        break;
-      }
-      case 'arenaGates':
-        if (effect.depth === me.depth && effect.cells.length > 0) {
-          // The nearest gate is the one heard.
-          const near = effect.cells.reduce((best, cell) => (distance(cell, me.pos) < distance(best, me.pos) ? cell : best));
-          arenaView.gatesMoved(effect.open, near);
-        }
-        break;
-      case 'arenaCleared':
-        view.say(t.arena.beaten(effect.wave), '#44ff44');
-        view.say(t.arena.crowd, '#ffff44');
-        arenaView.cheer(now);
-        haptic('success');
-        break;
-      case 'arenaSinks': {
-        const region = t.regionNames[effect.tier] ?? '';
-        view.arenaSinks(effect.tier, region, t.arena.sinks, now);
-        view.say(t.arena.sunk(region), '#ffff44');
-        audio.play('descend');
-        break;
-      }
-      case 'arenaReady':
-        if (effect.ready && effect.hero !== me.id && session?.mode === 'online') view.say(t.arena.isReady(heroById(world, effect.hero)?.name ?? ''), '#5ec8c0');
-        break;
-      case 'arenaOffer':
-        if (effect.hero === me.id) view.say(t.arena.pickReward, '#ffff44');
-        break;
-      case 'revived':
-        if (effect.hero === me.id) view.say(t.arena.rose, '#44ff44');
-        break;
-      default:
-        break;
-    }
-  }
-}
-
-/** The end of an arena run: the record, the numbers, everyone's share in co-op; into the rankings. */
-function showArenaRunEnd(world: World, me: Hero, solo: boolean): void {
-  const arena = world.arena!;
-  const answer = session?.checked ? session.checked.finished() : null;
-  const cleared = core.wavesCleared(arena);
-  const score = core.arenaScore(world, me.id);
-  const best = arenaBest();
-  const newRecord = recordArena(cleared);
-  const name = me.name || playerName || telegramName() || t.heroLabel;
-  const cause = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
-  recordRun({
-    key: `${world.run.seed}:${me.id}:${world.turn}`,
-    score,
-    name,
-    heroClass: me.heroClass,
-    lvl: me.lvl,
-    depth: cleared,
-    gold: me.stats?.gold ?? me.gold,
-    won: false,
-    cause: cause ? capitalize(cause) : '',
-    mode: 'arena',
-    date: Date.now(),
-  });
-  pushCloud();
-  window.setTimeout(() => {
-    if (!session?.world?.over) return;
-    haptic('error');
-    showArenaEnd({
-      solo,
-      wave: arena.wave,
-      cleared,
-      region: t.regionNames[core.tierOf(arena.wave)] ?? '',
-      kills: arena.kills,
-      score,
-      newRecord,
-      best: newRecord ? cleared : best,
-      party: [me, ...world.heroes.filter((hero) => hero.id !== me.id)].map((hero) => ({
-        name: hero.name, heroClass: hero.heroClass, kills: hero.kills, score: core.arenaScore(world, hero.id), me: hero.id === me.id,
-      })),
-      onAgain: () => {
-        session?.restart();
-        hideOverlay();
-      },
-      ranking: rankingBlock(answer),
-      onBoards: api ? () => openBoards('arena') : undefined,
-      share: shareChoices(async () => {
-        const reply = answer ? await answer : null;
-        return {
-          name, heroClass: me.heroClass, level: me.lvl, depth: cleared, score, place: reply?.places?.arena ?? null, won: false,
-          cause: cause ? capitalize(cause) : '', title: t.arena.title, arena: true,
-        };
-      }, t.arena.shareText(cleared, score), 'arena'),
-      onExit: toTitle,
-    });
-  }, 1200);
-}
-
 /**
  * The ways to share a result: a story with its picture and a challenge sent to a chat (both through
  * the server, which keeps the picture at a public address), and a link (a picture where the phone can).
  */
-function shareChoices(card: () => Promise<ShareCard>, text: string, start: 'daily' | 'arena'): ShareChoice[] {
+function shareChoices(card: () => Promise<ShareCard>, text: string): ShareChoice[] {
   const choices: ShareChoice[] = [];
   const link = (): void => {
     void (async () => {
       const shared = await sharePicture(await card(), text);
-      if (!shared && (await (start === 'arena' ? shareArena(text) : shareDaily(text))) === 'copied') toast(t.linkCopied);
+      if (!shared && (await shareDaily(text)) === 'copied') toast(t.linkCopied);
     })();
   };
   if (api && canShareStory()) {
@@ -3549,7 +3409,7 @@ function shareChoices(card: () => Promise<ShareCard>, text: string, start: 'dail
         void (async () => {
           const blob = await storyCard(await card(), t.ranked.storyCall);
           const url = blob && (await api.card(blob));
-          if (url) shareStory(url, `${text} ${appLink(inviteStart(start))}`);
+          if (url) shareStory(url, `${text} ${appLink(inviteStart('daily'))}`);
           else toast(t.ranked.shareFailed);
         })();
       },
@@ -3563,7 +3423,7 @@ function shareChoices(card: () => Promise<ShareCard>, text: string, start: 'dail
         void (async () => {
           const blob = await shareCard(await card());
           const url = blob && (await api.card(blob));
-          const id = await api.challenge(text, url, start);
+          const id = await api.challenge(text, url);
           if (id) await shareMessage(id);
           else link();
         })();

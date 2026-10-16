@@ -715,8 +715,7 @@ export function regionFx(level: Level, visible: readonly boolean[], now: number,
 export function lightsFor(level: Level, visible: readonly boolean[], view: View, now: number): Light[] {
   const lights: Light[] = [];
   const flicker = (seed: number): number => 0.85 + 0.15 * Math.sin(now / 70 + seed) * Math.sin(now / 23 + seed * 3);
-  // (The arena's stands hold a crowd, not torches: arenaview.ts lights its braziers.)
-  if (levelRegion(level) === 1 && !level.ring) {
+  if (levelRegion(level) === 1) {
     for (let cell = 0; cell < level.map.length; cell++) {
       if (level.map[cell] !== T.WALL_DECO || !visible[cell]) continue;
       lights.push({ x: (cell % WIDTH) * TILE + 8, y: Math.trunc(cell / WIDTH) * TILE + 6, radius: 38, color: '255, 150, 60', strength: 0.22 * flicker(cell) });

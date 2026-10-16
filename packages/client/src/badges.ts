@@ -13,9 +13,6 @@ import { mergeWith } from './cloud';
 
 export type { BadgeId } from '@pd/core';
 
-/** Where the arena's badges begin: images from here on are in meta/badges-arena.png, not badges.png. */
-export const ARENA_BADGES = 64;
-
 /** Each badge's icon in badges.png, and its words. */
 export const BADGES: ReadonlyArray<{ id: BadgeId; image: number; en: string; ru: string }> = [
   { id: 'slain1', image: 0, en: '10 enemies slain', ru: 'Убито 10 врагов' },
@@ -79,11 +76,13 @@ export const BADGES: ReadonlyArray<{ id: BadgeId; image: number; en: string; ru:
   { id: 'games3', image: 62, en: '500 games played', ru: 'Сыграно 500 игр' },
   { id: 'games4', image: 63, en: '2000 games played', ru: 'Сыграно 2000 игр' },
   { id: 'champion', image: 39, en: 'Challenge won', ru: 'Испытание пройдено' },
-  // The arena of waves (design system v14): their own sheet, meta/badges-arena.png, from image 64 (see screens.ts sprites).
-  { id: 'arena5', image: ARENA_BADGES, en: 'Wave 5 held in the arena', ru: 'На арене выстояна 5-я волна' },
-  { id: 'arena10', image: ARENA_BADGES + 1, en: 'Wave 10 held in the arena', ru: 'На арене выстояна 10-я волна' },
-  { id: 'arena20', image: ARENA_BADGES + 2, en: 'Wave 20 held in the arena', ru: 'На арене выстояна 20-я волна' },
 ];
+
+/**
+ * A record may name a badge this build no longer has (the arena of waves' three, earned in an earlier edition): it is kept
+ * in the record, as it is, but never shown, counted or announced.
+ */
+const known = (id: string): id is BadgeId => BADGES.some((badge) => badge.id === id);
 
 export const badgeText = (id: BadgeId): string => {
   const badge = BADGES.find((b) => b.id === id)!;
@@ -135,10 +134,10 @@ function save(): void {
   }
 }
 
-export const earnedBadges = (): ReadonlySet<BadgeId> => new Set(store.earned);
+export const earnedBadges = (): ReadonlySet<BadgeId> => new Set(store.earned.filter(known));
 
 /** Badges earned since the badges window was last opened: they get a golden dot. */
-export const unseenBadges = (): ReadonlySet<BadgeId> => new Set(store.earned.filter((id) => !(store.seen ?? store.earned).includes(id)));
+export const unseenBadges = (): ReadonlySet<BadgeId> => new Set(store.earned.filter((id) => known(id) && !(store.seen ?? store.earned).includes(id)));
 
 export function markBadgesSeen(): void {
   store.seen = [...store.earned];
@@ -165,5 +164,5 @@ export function adoptBadges(server: BadgeProgress): BadgeId[] {
   const merged = mergeBadgeProgress(store, server);
   Object.assign(store, merged);
   save();
-  return store.earned.filter((id) => !before.has(id));
+  return store.earned.filter((id) => known(id) && !before.has(id));
 }

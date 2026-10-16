@@ -1,5 +1,5 @@
 import {
-  cellX, cellY, charAt, distance, F, hasFlag, type Hero, hostile, isAlive, type ItemKind, itemDef, type Level, type Mob, WIDTH, type World,
+  cellX, cellY, charAt, distance, F, hasFlag, type Hero, isAlive, type ItemKind, itemDef, type Level, type Mob, WIDTH, type World,
 } from '@pd/core';
 import { quickUse } from './quickslot';
 import { seenEnemies } from './sight';
@@ -34,6 +34,12 @@ export function rememberTarget(mob: Pick<Mob, 'id'> | null | undefined): void {
 export function resetTargeting(): void {
   lastTarget = null;
 }
+
+/** Allies and the harmless: never a target. */
+const ALLIES: ReadonlySet<Mob['kind']> = new Set(['mirror', 'bee', 'sheep']);
+
+/** A monster that is an enemy: not passive, not an ally, not an image. */
+const hostile = (mob: Mob): boolean => mob.state !== 'passive' && !ALLIES.has(mob.kind) && !mob.image;
 
 /** The enemy last targeted if it is still in sight and alive. */
 export function lastTargetIn(sight: readonly Mob[]): Mob | undefined {

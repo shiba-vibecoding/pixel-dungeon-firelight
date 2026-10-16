@@ -206,7 +206,9 @@ describe('friends who play', () => {
       expect(refOfStart(start), String(start)).toBeNull();
     }
     expect(refOfStart('daily_r7')).toBe(7);
-    expect(refOfStart('arena_r8')).toBe(8);
+    // The arena's links are gone with the arena: an old one is no invite (it just opens the game).
+    expect(refOfStart('arena_r8')).toBeNull();
+    expect(refOfStart('arena')).toBeNull();
     expect(await connectedIds(s, 7)).toEqual([]);
     // Nobody is connected by simply being in the game, or by paying for one's own things.
     await s.pay(7, 'hat.crown', 'own1');

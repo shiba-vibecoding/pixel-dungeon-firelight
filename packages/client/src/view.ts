@@ -13,7 +13,6 @@ import { type WearQuad, WearFx } from './wearfx';
 import { seenCells } from './sight';
 import { fxp } from './fxplayer';
 import { haptic } from './telegram';
-import { DEPTH_CARD_MS } from './cards';
 
 /*
  * What the player sees, as opposed to what the world is: characters slide
@@ -274,9 +273,7 @@ export class View {
   floorTitle: { text: string; start: number } | null = null;
   /** A new region's card on the way down: the depth, and when it appeared. */
   /** The descent's card; `intro` on a region's first visit on this device, with its few lines of text. */
-  depthCard: { depth: number; start: number; intro: boolean; title?: string; sub?: string; region?: number } | null = null;
-  /** The arena's wave banner: its words, its kind, and when it shows (after a sinking card, if one is up). */
-  waveCard: { title: string; sub: string; kind: '' | 'champions' | 'boss'; start: number } | null = null;
+  depthCard: { depth: number; start: number; intro: boolean } | null = null;
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
   projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string; bolt?: string }> = [];
 
@@ -304,7 +301,7 @@ export class View {
     if (
       this.floaters.length > 0 || this.flashes.length > 0 || this.projectiles.length > 0 ||
       this.bossIntro !== null || this.levelCard !== null || this.floorTitle !== null || this.depthCard !== null ||
-      this.waveCard !== null || this.bannerStart > 0
+      this.bannerStart > 0
     ) return true;
     if (this.wearFx.busy(now)) return true;
     for (const p of this.puppets.values()) {
@@ -325,18 +322,6 @@ export class View {
   /** Coming into a region (or setting out): its card, over the band in the middle. */
   enterRegion(depth: number, now: number): void {
     this.depthCard = { depth, start: now, intro: firstVisit(Math.floor((depth - 1) / 5)) };
-  }
-
-  /** The arena sinks to a region: its card, «Prison» and «The arena sinks deeper». */
-  arenaSinks(region: number, title: string, sub: string, now: number): void {
-    this.depthCard = { depth: region * 5 + 1, start: now, intro: false, title, sub, region };
-  }
-
-  /** A wave begins: its banner, after the sinking card if that is still up. */
-  waveBanner(title: string, sub: string, kind: '' | 'champions' | 'boss', now: number): void {
-    const card = this.depthCard;
-    const after = card && !card.intro ? card.start + DEPTH_CARD_MS : now;
-    this.waveCard = { title, sub, kind, start: Math.max(now, after) };
   }
 
   /** A tap skips a region's intro to its fading; true if there was one to skip. */
@@ -455,7 +440,7 @@ export class View {
         puppet.burning = hero.burning > 0;
         puppet.poisoned = hero.poison > 0;
         puppet.levitating = (hero.levitating ?? 0) > 0;
-        puppet.row = itemDef(hero.armor.kind).tier ?? 0;
+        puppet.row = hero.armor ? itemDef(hero.armor.kind).tier ?? 0 : 0;
         puppet.label = hero.id === myId ? '' : hero.name;
       }
     }
@@ -465,7 +450,7 @@ export class View {
       if (twin) {
         place(mob.id, 'mirror', this.assets.heroes[twin.heroClass], false, mob.pos, mob.hp, mob.ht, false, false, true);
         this.puppets.get(mob.id)!.sprite = heroSprite(this.assets, twin.heroClass, this.looks[twin.id]?.skin);
-        this.puppets.get(mob.id)!.row = itemDef(twin.armor.kind).tier ?? 0;
+        this.puppets.get(mob.id)!.row = twin.armor ? itemDef(twin.armor.kind).tier ?? 0 : 0;
         continue;
       }
       place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht,

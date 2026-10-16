@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import {
-  allowedLook, type ClientMessage, emptyWallet, type GameMode, type HeroClass, isPatron, type Look, type PlayerInfo, RULES_VERSION, type Wallet,
+  allowedLook, type ClientMessage, emptyWallet, type HeroClass, isPatron, type Look, type PlayerInfo, RULES_VERSION, type Wallet,
 } from '@pd/core';
 import { botApi, type BotConfig, handleUpdate, type TelegramUpdate } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
@@ -331,10 +331,10 @@ export class Room extends DurableObject<Env> {
     return ws.deserializeAttachment() as Seat;
   }
 
-  /** The room, loaded or made; a new one is of the kind its creator asked for (`mode`), the dungeon by default. */
-  private async room(mode: GameMode = 'dungeon'): Promise<RoomLogic> {
+  /** The room, loaded or made. */
+  private async room(): Promise<RoomLogic> {
     if (!this.logic) {
-      this.logic = RoomLogic.restore(await this.load(), Math.floor(Math.random() * 2 ** 31), mode);
+      this.logic = RoomLogic.restore(await this.load(), Math.floor(Math.random() * 2 ** 31));
       this.logic.restoreOnline(this.ctx.getWebSockets().map((ws) => this.playerOf(ws).id));
     }
     return this.logic;
@@ -500,8 +500,7 @@ export class Room extends DurableObject<Env> {
       server.close(4002, 'the game has been updated');
       return new Response(null, { status: 101, webSocket: client });
     }
-    // The creator's link says what kind of room it is (only a room that does not exist yet listens).
-    const room = await this.room(params.get('mode') === 'arena' ? 'arena' : 'dungeon');
+    const room = await this.room();
     const heroId = room.seatFor(player.id, Date.now());
     if (heroId === null) {
       // Remember since when the absent have been away, so their seats can be freed in time.

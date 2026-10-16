@@ -95,7 +95,6 @@ describe('checked runs', () => {
     const run = start(logic);
     const device = structuredClone(run.world);
     const { finish } = waitToDeath(logic, 'dungeon', 'r1', device);
-    expect(finish!.summary.mode).toBe('dungeon');
     expect(finish!.summary.ranked).toBe(true);
     expect(logic.profile.best).toBe(finish!.summary.score);
     expect(logic.profile.history).toHaveLength(1);
@@ -162,7 +161,7 @@ describe('checked runs', () => {
         hero.items.unshift(createItem(kind, 2));
         world.known = world.known.filter((known) => known !== kind);
         // (The armour is not known, for identify to have something to tell.)
-        Object.assign(hero.armor, { levelUnknown: true, curseUnknown: true });
+        Object.assign(hero.armor!, { levelUnknown: true, curseUnknown: true });
       }
       return { logic, device: structuredClone(run.world) };
     }

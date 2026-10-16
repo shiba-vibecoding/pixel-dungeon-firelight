@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardKey, Lru, lookOfEntry } from '../src/cardlook';
+import { cardKey, DEFAULT_TIER, Lru, lookOfEntry, tierOf } from '../src/cardlook';
 
 describe('the hero card (cardlook.ts)', () => {
   it('takes the hero of a board entry from the server\'s snapshot, and the plain class from an entry without one', () => {
@@ -13,10 +13,24 @@ describe('the hero card (cardlook.ts)', () => {
   it('keeps a composed card under class|look|hat|pet|fire, the same for the same combination whatever the frame', () => {
     const a = { heroClass: 'mage', l: 'skin.mage.ember', h: 'hat.crown', fr: 'frame.ember' };
     const b = { heroClass: 'mage', l: 'skin.mage.ember', h: 'hat.crown', fr: 'frame.stars' };
-    expect(cardKey(a)).toBe('mage|skin.mage.ember|hat.crown||');
+    expect(cardKey(a)).toBe('mage|1|skin.mage.ember|hat.crown||');
     expect(cardKey(a)).toBe(cardKey(b));
     expect(cardKey({ heroClass: 'mage' })).not.toBe(cardKey({ heroClass: 'warrior' }));
     expect(cardKey({ heroClass: 'mage', p: 'pet.bat' })).not.toBe(cardKey({ heroClass: 'mage', f: 'pet.bat' }));
+  });
+
+  it('draws the armour worn at the end of the run: its tier from the snapshot, cloth when there is none, and the tier is part of the key', () => {
+    expect(lookOfEntry({ heroClass: 'mage', w: { a: 5, h: 'hat.crown' } })).toEqual({ heroClass: 'mage', a: 5, h: 'hat.crown' });
+    expect(tierOf(lookOfEntry({ heroClass: 'mage', w: { a: 5 } }))).toBe(5);
+    expect(tierOf(lookOfEntry({ heroClass: 'mage', w: { a: 0 } }))).toBe(0);
+    // An entry from before the tier was kept, or a tier the sheet has no row for: cloth.
+    expect(tierOf(lookOfEntry({ heroClass: 'mage' }))).toBe(DEFAULT_TIER);
+    expect(tierOf(lookOfEntry({ heroClass: 'mage', w: {} }))).toBe(DEFAULT_TIER);
+    expect(tierOf({ heroClass: 'mage', a: 9 })).toBe(DEFAULT_TIER);
+    expect(tierOf({ heroClass: 'mage', a: -1 })).toBe(DEFAULT_TIER);
+    expect(tierOf({ heroClass: 'mage', a: 2.5 })).toBe(DEFAULT_TIER);
+    expect(cardKey({ heroClass: 'mage', a: 2 })).not.toBe(cardKey({ heroClass: 'mage', a: 4 }));
+    expect(cardKey({ heroClass: 'mage' })).toBe(cardKey({ heroClass: 'mage', a: DEFAULT_TIER }));
   });
 
   it('forgets the card used least recently, and a card looked at again is spared', () => {

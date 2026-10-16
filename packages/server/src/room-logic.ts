@@ -1,5 +1,5 @@
 import {
-  applyEvent, autoAction, blockers, type ClientMessage, createWorld, type GameMode, isAlive, liveBeatMs, liveBlockers, liveReady, type PlayerInfo, type ServerMessage,
+  applyEvent, autoAction, blockers, type ClientMessage, createWorld, isAlive, liveBeatMs, liveBlockers, liveReady, type PlayerInfo, type ServerMessage,
   type World, type WorldEvent,
 } from '@pd/core';
 
@@ -46,8 +46,6 @@ export interface RoomState {
   offlineSince?: Record<string, number>;
   /** When each hero's player last did something (ms), by hero id. */
   activeAt?: Record<string, number>;
-  /** The arena of waves, at rest: since when someone has been ready for the next wave (ms). */
-  readySince?: number;
 }
 
 /** The longest a party waits for a companion's move. */
@@ -58,14 +56,6 @@ export const TURN_TIMEOUT = 8000;
  * friend who had looked away, every turn, was the co-op's worst trouble).
  */
 export const IDLE_TIMEOUT = 4000;
-
-/**
- * The arena of waves waits for every living hero to be ready for the next wave. A hero whose
- * player is away is ready at once (they would not hold a turn up either); one whose player is
- * here but has done nothing for this long, while a companion has been ready this long, is
- * made ready too, so a party never waits on someone who has looked away.
- */
-export const ARENA_READY_TIMEOUT = 30_000;
 
 /**
  * Live turns: a fight waits for a player who has said nothing for LIVE_TURN_TIMEOUT, then their
@@ -92,11 +82,10 @@ export class RoomLogic {
   ) {}
 
   /**
-   * A new room; `mode` makes it the arena of waves (the creator's choice: whoever joins plays what the room is).
-   * New rooms play live turns (the core's liveTick, on the room's clock); rooms saved before them keep classic turns.
+   * A new room. New rooms play live turns (the core's liveTick, on the room's clock); rooms saved before them keep classic turns.
    */
-  static create(seed: number, newSeed?: () => number, mode: GameMode = 'dungeon', live = true): RoomLogic {
-    return new RoomLogic({ format: STATE_FORMAT, world: createWorld(seed, 0, mode, live), seq: 0, holdingSince: {} }, newSeed);
+  static create(seed: number, newSeed?: () => number, live = true): RoomLogic {
+    return new RoomLogic({ format: STATE_FORMAT, world: createWorld(seed, 0, live), seq: 0, holdingSince: {} }, newSeed);
   }
 
   /** Whether the room plays live turns (the core's liveTick): calm depths walk on, fights go turn by turn together. */
@@ -119,7 +108,7 @@ export class RoomLogic {
       deliveries.push(...this.commit({ type: 'tick', depth, ms }, this.onlinePlayers()));
       this.nextBeat.set(depth, now + ms);
     }
-    return [...deliveries, ...this.liveTimeouts(now), ...this.readyTheAbsent(now)];
+    return [...deliveries, ...this.liveTimeouts(now)];
   }
 
   /** When pump should run next by itself: a beat that is ready comes due, or a fight's wait runs out. Null: at the next message. */
@@ -163,13 +152,14 @@ export class RoomLogic {
   }
 
   /**
-   * A saved room, brought up to this format; a fresh one if there is none or it is too old to carry on
-   * (of the saved room's kind, else of `mode`).
+   * A saved room, brought up to this format; a fresh one if there is none, it is too old to carry on, or it is a room of a kind
+   * the game no longer has (the arena of waves: its world says `mode: 'arena'`), which is let go quietly like one of an old format.
    */
-  static restore(saved: RoomState | undefined, seed: number, mode: GameMode = 'dungeon'): RoomLogic {
-    if (!saved) return RoomLogic.create(seed, undefined, mode);
+  static restore(saved: RoomState | undefined, seed: number): RoomLogic {
+    if (!saved) return RoomLogic.create(seed);
     for (; saved.format < STATE_FORMAT && MIGRATIONS[saved.format]; saved.format++) MIGRATIONS[saved.format]!(saved.world);
-    return saved.format === STATE_FORMAT ? new RoomLogic(saved) : RoomLogic.create(seed, undefined, saved.world?.mode ?? mode);
+    const obsolete = (saved.world as { mode?: string } | undefined)?.mode === 'arena';
+    return saved.format === STATE_FORMAT && !obsolete ? new RoomLogic(saved) : RoomLogic.create(seed);
   }
 
   state(): RoomState {
@@ -290,42 +280,7 @@ export class RoomLogic {
   /** When the room next needs to act on its own, if ever. */
   deadline(): number | null {
     const times = Object.entries(this.saved.holdingSince).map(([id, since]) => Math.min(since + TURN_TIMEOUT, this.idleAt(id, since)));
-    const since = this.saved.readySince;
-    if (since !== undefined) {
-      for (const id of this.notReady()) times.push(Math.max(since, this.saved.activeAt?.[id] ?? since) + ARENA_READY_TIMEOUT);
-    }
     return times.length > 0 ? Math.min(...times) : null;
-  }
-
-  /** The arena at rest: living heroes not yet ready for the next wave. */
-  private notReady(): string[] {
-    const arena = this.saved.world.arena;
-    if (!arena || arena.phase !== 'rest' || this.saved.world.over) return [];
-    return this.saved.world.heroes.filter((hero) => isAlive(hero) && !arena.ready.includes(hero.id)).map((hero) => hero.id);
-  }
-
-  /**
-   * The arena at rest, once someone is ready: heroes whose players are away are ready too, and so
-   * are those whose players have done nothing for ARENA_READY_TIMEOUT while a companion waited as long.
-   */
-  private readyTheAbsent(now: number): Delivery[] {
-    const arena = this.saved.world.arena;
-    if (!arena || arena.phase !== 'rest' || arena.ready.length === 0 || this.saved.world.over) {
-      delete this.saved.readySince;
-      return [];
-    }
-    const since = (this.saved.readySince ??= now);
-    const deliveries: Delivery[] = [];
-    for (const id of this.notReady()) {
-      const idle = now >= Math.max(since, this.saved.activeAt?.[id] ?? since) + ARENA_READY_TIMEOUT;
-      if (this.online.has(id) && !idle) continue;
-      const event: WorldEvent = { type: 'act', heroId: id, action: { type: 'arenaReady' } };
-      if (applyEvent(this.saved.world, event).ok) deliveries.push(this.broadcast(event));
-      // The wave may have begun.
-      if (this.saved.world.arena?.phase !== 'rest') break;
-    }
-    if (this.saved.world.arena?.phase !== 'rest') delete this.saved.readySince;
-    return deliveries;
   }
 
   /** When a hero's player counts as idle: IDLE_TIMEOUT after they last acted. */
@@ -362,9 +317,6 @@ export class RoomLogic {
       }
       for (const id of absent) deliveries.push(...this.autoWait(id));
     }
-    // The arena's rest is no turn: whoever is away is ready for the next wave.
-    const ready = this.readyTheAbsent(now);
-    if (ready.length > 0) return [...deliveries, ...ready, ...this.settle(now)];
     return deliveries;
   }
 
