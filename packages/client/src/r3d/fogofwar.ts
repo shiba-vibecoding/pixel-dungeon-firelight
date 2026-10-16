@@ -97,12 +97,40 @@ export class Fog {
 const NEWLINE = String.fromCharCode(10);
 
 /**
+ * What a sprite batch's material adds to the fog (firelight-sprites.md): a light of its own (`selfLight` of its colour, so a figure
+ * is never black), and the one-pixel rim of the strongest light, picked on the CPU and sent per instance (`aRim`: direction as
+ * -1/0/1 in the texture's own axes, `aRimColor`: the light's colour times its strength). `texel` is one art pixel in atlas uv.
+ */
+export interface SpriteLook {
+  selfLight: number;
+  texel: readonly [number, number];
+}
+
+function spriteFragment(look: SpriteLook): string {
+  const f = (n: number): string => n.toFixed(6);
+  return [
+    '#include <emissivemap_fragment>',
+    `totalEmissiveRadiance += diffuseColor.rgb * ${f(look.selfLight)};`,
+    'if (vRim.x != 0.0 || vRim.y != 0.0) {',
+    '  vec2 lo = min(vRect.xy, vRect.xy + vRect.zw);',
+    '  vec2 hi = max(vRect.xy, vRect.xy + vRect.zw);',
+    `  vec2 q = vMapUv + vRim.xy * vec2(${f(look.texel[0])}, ${f(look.texel[1])});`,
+    '  bool outside = any(lessThan(q, lo)) || any(greaterThan(q, hi));',
+    '  float edge = outside ? 1.0 : step(texture2D(map, q).a, 0.5);',
+    '  totalEmissiveRadiance += vRimColor * edge;',
+    '}',
+  ].join(NEWLINE);
+}
+
+/**
  * Gives a material the fog of war and the haze: a vertex reads the darkness where it stands from the fog texture (a terrain vertex
  * at its own place, a sprite's at its feet) and the fragment drains the colour of what is remembered, fades the distance into the
  * region's haze and the unknown into the dark. `mode`: 'attribute' for geometry carrying its own fog coordinates (`aFog`),
  * 'instance' for instanced sprites (which also carry their rectangle of the atlas, `aUv`).
  */
-export function withFog(material: MeshLambertMaterial | MeshBasicMaterial | MeshStandardMaterial, air: AirUniforms, mode: 'attribute' | 'instance'): void {
+export function withFog(
+  material: MeshLambertMaterial | MeshBasicMaterial | MeshStandardMaterial, air: AirUniforms, mode: 'attribute' | 'instance', sprite?: SpriteLook,
+): void {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.tFog = air.tFog;
     shader.uniforms.uHero = air.uHero;
@@ -112,6 +140,7 @@ export function withFog(material: MeshLambertMaterial | MeshBasicMaterial | Mesh
     const declarations = [
       '#include <common>', 'uniform sampler2D tFog;', 'varying float vFog;', 'varying vec2 vWPos;',
       mode === 'attribute' ? 'attribute vec2 aFog;' : 'attribute vec4 aUv;',
+      ...(sprite ? ['attribute vec3 aRim;', 'attribute vec3 aRimColor;', 'varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec4 vRect;'] : []),
     ].join(NEWLINE);
     const fetch =
       mode === 'attribute'
@@ -121,9 +150,11 @@ export function withFog(material: MeshLambertMaterial | MeshBasicMaterial | Mesh
     if (mode === 'instance') {
       vertex = vertex.replace('#include <uv_vertex>', ['#ifdef USE_MAP', 'vMapUv = aUv.xy + uv * aUv.zw;', '#endif', '#ifdef USE_EMISSIVEMAP', 'vEmissiveMapUv = aUv.xy + uv * aUv.zw;', '#endif'].join(NEWLINE));
     }
+    if (sprite) vertex = vertex.replace('#include <begin_vertex>', ['#include <begin_vertex>', 'vRim = aRim; vRimColor = aRimColor; vRect = aUv;'].join(NEWLINE));
     shader.vertexShader = vertex;
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', ['#include <common>', 'varying float vFog;', 'varying vec2 vWPos;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;'].join(NEWLINE))
+      .replace('#include <common>', ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec4 vRect;'] : []), 'varying float vFog;', 'varying vec2 vWPos;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;'].join(NEWLINE))
+      .replace('#include <emissivemap_fragment>', sprite ? spriteFragment(sprite) : '#include <emissivemap_fragment>')
       .replace(
         '#include <opaque_fragment>',
         [
@@ -139,5 +170,5 @@ export function withFog(material: MeshLambertMaterial | MeshBasicMaterial | Mesh
         ].join(NEWLINE),
       );
   };
-  material.customProgramCacheKey = () => `pdair-${mode}`;
+  material.customProgramCacheKey = () => `pdair-${mode}${sprite ? `-${sprite.selfLight}-${sprite.texel[0]}` : ''}`;
 }

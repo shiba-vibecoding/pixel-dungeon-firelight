@@ -80,6 +80,18 @@ export function sourcesOf(kit: Kit, region: RegionKit, geom: LevelGeom, depthTor
   return out;
 }
 
+/** The strongest light on a figure (LightRig.strongest): which way it lies, its colour, and how hard it rims the figure. */
+export interface Strongest {
+  /** Unit vector on the floor plane from the figure toward the light. */
+  ux: number;
+  uz: number;
+  r: number;
+  g: number;
+  b: number;
+  /** 0 to the kit's rim maximum. */
+  strength: number;
+}
+
 /** Scratch for the nearest three, so choosing allocates nothing. */
 const top = new Int32Array(3);
 const topD = new Float64Array(3);
@@ -95,6 +107,10 @@ export class LightRig {
   readonly accent: PointLight;
   private sources: Source[] = [];
   private d2 = new Float64Array(0);
+  /** The sources within reach of the hero (explored, near), chosen in assign(): what a figure's rim light is picked from. */
+  private near = new Int32Array(0);
+  private nearCount = 0;
+  private readonly rgb = new Float32Array(3);
   /** The source each of the four static lights shows (an index into `sources`), or -1. */
   private readonly slots = [-1, -1, -1, -1];
   private lights = new Array<PointLight>();
@@ -119,6 +135,8 @@ export class LightRig {
   configure(lights: Lights, sources: Source[], shadowLights: number): void {
     this.sources = sources;
     this.d2 = new Float64Array(sources.length);
+    this.near = new Int32Array(sources.length);
+    this.nearCount = 0;
     this.slots.fill(-1);
     this.hero.color.setHex(lights.hero.color);
     this.heroBase = lights.hero.intensity;
@@ -147,13 +165,16 @@ export class LightRig {
   assign(hx: number, hz: number, explored: readonly boolean[], accents: number): void {
     const n = this.sources.length;
     const sources = this.sources;
+    let nearCount = 0;
     for (let i = 0; i < n; i++) {
       const s = sources[i]!;
       const dx = s.x - hx;
       const dz = s.z - hz;
       const d = dx * dx + dz * dz;
       this.d2[i] = explored[s.cell] && d <= REACH * REACH ? d : Infinity;
+      if (this.d2[i] !== Infinity) this.near[nearCount++] = i;
     }
+    this.nearCount = nearCount;
     // Torches first: the two nearest cast the shadows.
     this.nearest(true, -1, -1);
     this.fill(0, 2, top, true);
@@ -222,6 +243,44 @@ export class LightRig {
       const flicker = src.hz > 0 ? 1 + src.amp * Math.sin((time / 1000) * src.hz * 6.2832 + src.cell * 2.1) * 0.8 : 1;
       light.intensity = src.intensity * flicker;
     }
+  }
+
+  /**
+   * The light that rims a figure standing at (x, z), 0.5 up: of the sources near the hero, the one with the most
+   * `k * intensity * (1 - d / distance)^2 / max(d, 0.6)` (capped at `max`), as the sprite rules say. False if none reaches it.
+   * Reads the list assign() made, allocates nothing.
+   */
+  strongest(x: number, z: number, k: number, max: number, out: Strongest): boolean {
+    const sources = this.sources;
+    let best = 0;
+    let bi = -1;
+    for (let n = 0; n < this.nearCount; n++) {
+      const i = this.near[n]!;
+      const s = sources[i]!;
+      const dx = s.x - x;
+      const dy = s.y - 0.5;
+      const dz = s.z - z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (d >= s.distance) continue;
+      const fall = 1 - d / s.distance;
+      const w = (k * s.intensity * fall * fall) / Math.max(d, 0.6);
+      if (w > best) {
+        best = w;
+        bi = i;
+      }
+    }
+    if (bi < 0) return false;
+    const s = sources[bi]!;
+    const dx = s.x - x;
+    const dz = s.z - z;
+    const len = Math.hypot(dx, dz) || 1;
+    out.ux = dx / len;
+    out.uz = dz / len;
+    out.r = ((s.color >> 16) & 255) / 255;
+    out.g = ((s.color >> 8) & 255) / 255;
+    out.b = (s.color & 255) / 255;
+    out.strength = Math.min(max, best);
+    return true;
   }
 
   /** The nearest source's kind of the slot, for tests and the overlay: the index in the sources, or -1. */

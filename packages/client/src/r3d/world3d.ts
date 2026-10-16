@@ -30,7 +30,7 @@ import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
 import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
-import { LightRig, sourcesOf } from './lightrig';
+import { LightRig, type Strongest, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
@@ -65,6 +65,8 @@ export interface Shown {
 
 const MAX_SPRITES = 360;
 const BOSS_KINDS: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
+/** Monsters that hover (sprite rules: 0.35 cells up, bobbing, a smaller paler blob): the bat, the eye and the fly-like swarms. */
+const FLYERS: ReadonlySet<string> = new Set(['bat', 'eye', 'bee', 'swarm']);
 /** The tile props of the region that stand over the floor (high grass, fungi; a signpost) are cut out of. */
 const HIGH_GRASS = 15;
 const SIGN = 29;
@@ -183,6 +185,10 @@ export class World3D {
   // Characters.
   private readonly sprites: InstancedMesh;
   private readonly spriteUv: InstancedBufferAttribute;
+  /** Per instance: the rim light's direction (texture axes, -1/0/1) and colour times strength. */
+  private readonly spriteRim: InstancedBufferAttribute;
+  private readonly spriteRimColor: InstancedBufferAttribute;
+  private readonly strong: Strongest = { ux: 0, uz: 0, r: 0, g: 0, b: 0, strength: 0 };
   private spriteCount = 0;
   /** Drawn this frame, for the marks the 2D layer puts over them. */
   readonly shown: Shown[] = [];
@@ -251,7 +257,7 @@ export class World3D {
     // The sprite batch: one quad, many instances, one atlas (and the atlas of what glows).
     const quad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
     const spriteMaterial = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide });
-    withFog(spriteMaterial, this.air, 'instance');
+    withFog(spriteMaterial, this.air, 'instance', { selfLight: this.kit.sprites.selfLight, texel: [this.kit.sprites.rim.px / ATLAS_W, this.kit.sprites.rim.px / ATLAS_H] });
     this.sprites = new InstancedMesh(quad, spriteMaterial, MAX_SPRITES);
     this.sprites.instanceMatrix.setUsage(DynamicDrawUsage);
     this.sprites.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 3).fill(1), 3);
@@ -259,6 +265,10 @@ export class World3D {
     this.spriteUv = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 4), 4);
     this.spriteUv.setUsage(DynamicDrawUsage);
     quad.setAttribute('aUv', this.spriteUv);
+    this.spriteRim = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 3), 3).setUsage(DynamicDrawUsage);
+    this.spriteRimColor = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 3), 3).setUsage(DynamicDrawUsage);
+    quad.setAttribute('aRim', this.spriteRim);
+    quad.setAttribute('aRimColor', this.spriteRimColor);
     this.sprites.frustumCulled = false;
     this.sprites.count = 0;
     this.scene.add(this.sprites);
@@ -526,6 +536,36 @@ export class World3D {
     uv[q + 3] = h / ATLAS_H;
     const c = this.sprites.instanceColor!.array as Float32Array;
     c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = tint;
+    const r = this.spriteRim.array as Float32Array;
+    r[i * 3] = r[i * 3 + 1] = r[i * 3 + 2] = 0;
+  }
+
+  /**
+   * Gives the sprite just written its rim: the one-pixel edge, on the side of its silhouette that faces the strongest light near it
+   * (a torch, lava, a fungus, a boss's accent), in that light's colour. The direction is rounded to eight sides, so it is a pixel
+   * edge and not a gradient, and turned into the texture's own axes (a flipped sprite reads its picture backwards). It also gives
+   * back where that light lies, for the shade to slip away from; false if no light reaches the figure.
+   */
+  private rimLast(x: number, z: number, flip: boolean): boolean {
+    const rim = this.kit.sprites.rim;
+    if (!rim.on || this.spriteCount === 0) return false;
+    const s = this.strong;
+    if (!this.rig.strongest(x, z, rim.strength, rim.max, s)) return false;
+    const i = this.spriteCount - 1;
+    // Screen-right is +x and screen-up is -z; in the picture's own axes the first is flipped with the sprite.
+    const up = -s.uz;
+    const dx = s.ux > 0.383 ? 1 : s.ux < -0.383 ? -1 : 0;
+    const dy = up > 0.383 ? 1 : up < -0.383 ? -1 : 0;
+    if (dx === 0 && dy === 0) return true;
+    const r = this.spriteRim.array as Float32Array;
+    r[i * 3] = flip ? -dx : dx;
+    r[i * 3 + 1] = dy;
+    r[i * 3 + 2] = 1;
+    const c = this.spriteRimColor.array as Float32Array;
+    c[i * 3] = s.r * s.strength;
+    c[i * 3 + 1] = s.g * s.strength;
+    c[i * 3 + 2] = s.b * s.strength;
+    return true;
   }
 
   private addPuppet(puppet: Puppet): void {
@@ -544,7 +584,11 @@ export class World3D {
     // The 2D renderer's cell corner is the walker's own: the feet stand a little north of the cell's middle.
     const px = pos.x + TILE / 2 + lunge * (puppet.lungeX ?? 0) + knock * (puppet.knockX ?? 0);
     const py = pos.y + FEET_PX + lunge * (puppet.lungeY ?? 0) + knock * (puppet.knockY ?? 0);
+    const sk = this.kit.sprites;
+    const flyer = FLYERS.has(puppet.kind) && puppet.alive;
+    // A flyer hangs 0.35 cells up and bobs at 1.2 Hz (each out of step with the next); a levitating hero floats as before.
     const hover = puppet.levitating && puppet.alive ? 4 + Math.round(Math.sin(now / 320)) : 0;
+    const lift = flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7) : hover / TILE;
     let tint = 1;
     let scale = 1;
     if (puppet.invisible) tint = 0.45;
@@ -561,8 +605,15 @@ export class World3D {
     if (tint <= 0 || scale <= 0) return;
     const tx = px / TILE;
     const tz = py / TILE;
-    this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, hover / TILE, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint);
-    if (puppet.alive || !puppet.laid) this.effects.shadowBlob(tx, tz, (hover ? 0.75 : 1.1) * Math.max(0.45, sheet.w / 14));
+    this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint);
+    // The rim of the strongest light on the silhouette (not on the dead: they lie flat), and the shade slipping away from that light.
+    const lit = puppet.alive && this.rimLast(tx, tz, puppet.flip);
+    if (puppet.alive || !puppet.laid) {
+      const air = flyer || hover > 0;
+      const size = Math.max(0.35, sk.shadow.width * (sheet.w / TILE)) * (air ? sk.fly.shadowScale : 1) * scale;
+      const away = lit ? sk.shadow.offset : 0;
+      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1), sk.shadow.squash);
+    }
     if (BOSS_KINDS.has(puppet.kind) && puppet.alive) {
       this.bossFound = true;
       this.bossX = tx;
@@ -648,6 +699,11 @@ export class World3D {
     this.sprites.instanceColor!.clearUpdateRanges();
     this.sprites.instanceColor!.addUpdateRange(0, this.spriteCount * 3);
     this.sprites.instanceColor!.needsUpdate = true;
+    for (const a of [this.spriteRim, this.spriteRimColor]) {
+      a.clearUpdateRanges();
+      a.addUpdateRange(0, this.spriteCount * 3);
+      a.needsUpdate = true;
+    }
     this.spriteUv.clearUpdateRanges();
     this.spriteUv.addUpdateRange(0, this.spriteCount * 4);
     this.spriteUv.needsUpdate = true;
@@ -707,7 +763,7 @@ export class World3D {
       const z = Math.trunc(heap.pos / WIDTH) + 0.6;
       const bob = visible[heap.pos] && !f.seeAll ? Math.sin(f.now / 520 + heap.pos) * 0.012 : 0;
       this.sprite(items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, false, x, 0.02 + bob, z, 0.7, 0.7, 1, LEANED, 0, this.shared.itemsEmissive);
-      if (visible[heap.pos]) this.effects.shadowBlob(x, z, 0.6);
+      if (visible[heap.pos]) this.effects.shadowBlob(x, z, 0.6, this.kit.sprites.shadow.opacity, this.kit.sprites.shadow.squash);
     }
     const plants = f.plants;
     if (plants) {
@@ -766,7 +822,7 @@ export class World3D {
       const cells = Math.max(Math.abs((p.to % WIDTH) - (p.from % WIDTH)), Math.abs(Math.trunc(p.to / WIDTH) - Math.trunc(p.from / WIDTH)));
       const height = Math.sin(k * Math.PI) * Math.min(0.9, 0.15 + cells * 0.15);
       this.sprite(this.assets.items, (p.sprite % 8) * 16, Math.floor(p.sprite / 8) * 16, 16, 16, false, x, 0.25 + height, z, 0.6, 0.6, 1, LEANED, 0, this.shared.itemsEmissive);
-      this.effects.shadowBlob(x, z, 0.5 - height * 0.2);
+      this.effects.shadowBlob(x, z, 0.5 - height * 0.2, this.kit.sprites.shadow.opacity * (1 - height * 0.5), this.kit.sprites.shadow.squash);
     }
   }
 

@@ -122,8 +122,29 @@ export interface BoltKit {
   distance: number;
 }
 
+/**
+ * How the kit says flat sprites stand in the world (the `sprites` block, firelight-sprites.md): the blob of shade under a
+ * figure, how a flyer hovers, the one-pixel rim of the strongest light, and the light a sprite carries so it is never black.
+ */
+export interface SpriteKit {
+  /** Share of the light a sprite is lit by itself (emissive = its colour times this). */
+  selfLight: number;
+  shadow: { width: number; squash: number; opacity: number; offset: number };
+  fly: { hover: number; shadowScale: number; shadowFade: number; bobHz: number; bobAmp: number };
+  rim: { on: boolean; strength: number; max: number; px: number };
+}
+
+/** What the sprites are drawn with when a kit has no `sprites` block (the numbers of firelight-sprites.md). */
+export const DEFAULT_SPRITES: SpriteKit = {
+  selfLight: 0.14,
+  shadow: { width: 0.9, squash: 0.42, opacity: 0.55, offset: 0.08 },
+  fly: { hover: 0.35, shadowScale: 0.7, shadowFade: 0.55, bobHz: 1.2, bobAmp: 0.06 },
+  rim: { on: true, strength: 0.3, max: 0.6, px: 1 },
+};
+
 export interface Kit {
   camera: { pitch: number; fov: number };
+  sprites: SpriteKit;
   three: { ambientScale: number; hemiScale: number; torchDecayAdd: number };
   bloom: { threshold: number; strength: number; radius: number };
   hero_light: { color: string; intensity: number; distance: number; decay: number };
@@ -256,6 +277,37 @@ function parseRegion(name: RegionName, value: unknown): RegionKit {
   };
 }
 
+/** The `sprites` block: every number optional (the defaults above stand in), but a number that is there must be one. */
+function parseSprites(value: unknown): SpriteKit {
+  if (value === undefined) return DEFAULT_SPRITES;
+  const o = obj(value, 'sprites');
+  const d = DEFAULT_SPRITES;
+  const pick = (block: unknown, key: string, fallback: number, what: string): number => {
+    const b = block as Record<string, unknown>;
+    return b[key] === undefined ? fallback : num(b[key], `${what}.${key}`);
+  };
+  const shadow = o.shadow === undefined ? {} : obj(o.shadow, 'sprites.shadow');
+  const fly = o.fly === undefined ? {} : obj(o.fly, 'sprites.fly');
+  const bob = fly.bob === undefined ? {} : obj(fly.bob, 'sprites.fly.bob');
+  const rim = o.rim === undefined ? {} : obj(o.rim, 'sprites.rim');
+  return {
+    selfLight: pick(o, 'selfLight', d.selfLight, 'sprites'),
+    shadow: {
+      width: pick(shadow, 'width', d.shadow.width, 'sprites.shadow'), squash: pick(shadow, 'squash', d.shadow.squash, 'sprites.shadow'),
+      opacity: pick(shadow, 'opacity', d.shadow.opacity, 'sprites.shadow'), offset: pick(shadow, 'offset', d.shadow.offset, 'sprites.shadow'),
+    },
+    fly: {
+      hover: pick(fly, 'hover', d.fly.hover, 'sprites.fly'), shadowScale: pick(fly, 'shadowScale', d.fly.shadowScale, 'sprites.fly'),
+      shadowFade: pick(fly, 'shadowFade', d.fly.shadowFade, 'sprites.fly'), bobHz: pick(bob, 'hz', d.fly.bobHz, 'sprites.fly.bob'),
+      bobAmp: pick(bob, 'amp', d.fly.bobAmp, 'sprites.fly.bob'),
+    },
+    rim: {
+      on: rim.on === undefined ? d.rim.on : rim.on === true, strength: pick(rim, 'strength', d.rim.strength, 'sprites.rim'),
+      max: pick(rim, 'max', d.rim.max, 'sprites.rim'), px: pick(rim, 'px', d.rim.px, 'sprites.rim'),
+    },
+  };
+}
+
 /** Reads the kit's JSON; whatever is missing or the wrong shape is named in the error (a kit that cannot be read leaves the game in 2D). */
 export function parseKit(json: unknown): Kit {
   const o = obj(json, 'kit');
@@ -281,6 +333,7 @@ export function parseKit(json: unknown): Kit {
   }
   return {
     camera: { pitch: num(camera.pitch, 'camera.pitch'), fov: num(camera.fov, 'camera.fov') },
+    sprites: parseSprites(o.sprites),
     three: {
       ambientScale: num(three.ambientScale, 'three.ambientScale'),
       hemiScale: num(three.hemiScale, 'three.hemiScale'),
