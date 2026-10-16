@@ -4,6 +4,7 @@ import type { BoardEntry, BoardKind, BoardSlice, BoardView, Profile, RunApi } fr
 import { compete, loadCompete } from './compete';
 import { chooseTab, classIcon, competeShell, nameNode, number, podium, rowOf, ROW_GAP, ROW_H, type RowData, stage, tabsBar, tx, txn, wide } from './compete-ui';
 import { myLook } from './herocard';
+import { lastArmor } from './profileui';
 import { lang, t } from './i18n';
 import type { RunRecord } from './rankings';
 import { boardCloses, countdown } from './rankui';
@@ -216,7 +217,7 @@ function build(options: BoardsOptions, shell: ReturnType<typeof competeShell>): 
     if (!wide()) return [];
     const parts: HTMLElement[] = [];
     const heroClass = options.heroClass ?? 'warrior';
-    const { node, card } = stage(() => myLook(heroClass), 'podium', true);
+    const { node, card } = stage(() => myLook(heroClass, lastArmor(options.profile ?? null, heroClass)), 'podium', true);
     held.push(() => card.dispose());
     const profile = options.profile;
     const facts = el('div', { className: 'fl-facts' });
@@ -329,7 +330,7 @@ function mineRows(records: readonly RunRecord[], trophies: Profile['trophies'], 
     const look = myLook(record.heroClass);
     const entry: BoardEntry = {
       id: record.key, name: record.name, heroClass: record.heroClass, score: record.score, depth: record.depth, level: record.lvl, gold: record.gold, won: record.won, at: record.date,
-      w: { ...(look.l ? { l: look.l } : {}), ...(look.h ? { h: look.h } : {}), ...(look.p ? { p: look.p } : {}), ...(look.f ? { f: look.f } : {}), ...(look.fr ? { fr: look.fr } : {}) },
+      w: { ...(record.armor !== undefined ? { a: record.armor } : {}), ...(look.l ? { l: look.l } : {}), ...(look.h ? { h: look.h } : {}), ...(look.p ? { p: look.p } : {}), ...(look.f ? { f: look.f } : {}), ...(look.fr ? { fr: look.fr } : {}) },
     };
     // A run the server did not check (played before checked runs, or without the server) is on no board: it says so.
     const unit = `${shortDate(record.date)}${record.checked ? '' : ` · ${tx('offBoard')}`}`;

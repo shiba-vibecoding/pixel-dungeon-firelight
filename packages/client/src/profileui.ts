@@ -26,6 +26,12 @@ export interface ProfileOptions {
   onClose(): void;
 }
 
+/** The armour of the player's last run (of this class, else of the last at all): he is shown in what he died or finished in. */
+export function lastArmor(profile: Profile | null, heroClass: string): number | undefined {
+  const runs = profile?.history ?? [];
+  return (runs.find((run) => run.heroClass === heroClass && run.armor !== undefined) ?? runs.find((run) => run.armor !== undefined))?.armor;
+}
+
 export function showProfile(options: ProfileOptions): void {
   const shell = competeShell(options.onClose);
   show(shell.win, options.onClose);
@@ -38,7 +44,7 @@ function build(options: ProfileOptions, shell: ReturnType<typeof competeShell>):
   shell.head(tx('profile'), null, options.onBack);
 
   // The card: the hero as he is dressed now, big, and who he is.
-  const { node: box } = stage(() => myLook(options.heroClass), 'big', true);
+  const { node: box } = stage(() => myLook(options.heroClass, lastArmor(options.profile, options.heroClass)), 'big', true);
   const who = el('div', { className: 'who' }, nameNode(options.name, cosmetics.nameColor?.id));
   const title = titleBadge(cosmetics.title?.id, false);
   if (title) who.append(title);

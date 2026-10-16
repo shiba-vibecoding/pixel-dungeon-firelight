@@ -5,6 +5,7 @@ import {
 import { awardRun, type PassProgress } from '../../client/src/pass';
 import { SEASON } from './boards';
 import type { Heat } from './heat';
+import { armorTierOf } from './worn';
 import type { Letter } from './mail';
 import type { SeasonResult } from './season-flow';
 
@@ -51,6 +52,8 @@ export interface Run {
 
 /** A finished run, as the player's history keeps it. */
 export interface RunSummary extends RunOutcome {
+  /** The tier of the armour the hero wore at the end (the row of the hero's sheet: 1 cloth ... 5 plate, 6 the class armour), from the final world; absent from runs before it was kept. */
+  armor?: number;
   slot: RunSlot;
   ranked: boolean;
   at: number;
@@ -320,7 +323,7 @@ export class PlayerLogic {
     const me = heroById(run.world, ME)!;
     const outcome = runOutcome(run.world, me);
     run.finished = outcome;
-    const summary: RunSummary = { ...outcome, slot: run.slot, ranked: run.ranked, at: now, ...(run.date ? { date: run.date } : {}) };
+    const summary: RunSummary = { ...outcome, armor: armorTierOf(me), slot: run.slot, ranked: run.ranked, at: now, ...(run.date ? { date: run.date } : {}) };
     run.summary = summary;
     const p = this.profile;
     let record = false;

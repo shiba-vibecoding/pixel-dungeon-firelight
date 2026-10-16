@@ -22,6 +22,8 @@ export interface RunMeta {
 }
 
 export interface RunSummary extends RunOutcome {
+  /** The tier of the armour worn at the end, from the server's final world (absent from runs before it). */
+  armor?: number;
   slot: RunSlot;
   ranked: boolean;
   at: number;
@@ -162,6 +164,8 @@ export interface BoardEntry {
 
 /** What a board entry says the hero wore, by catalogue item id (the hero card, herocard.ts). */
 export interface BoardWorn {
+  /** The tier of the armour worn at the end of the run: the row of the hero's sheet (absent: cloth). */
+  a?: number;
   l?: string;
   h?: string;
   p?: string;
@@ -169,9 +173,8 @@ export interface BoardWorn {
   fr?: string;
   tt?: string;
   nc?: string;
-  /** The league's step the player stood on, and the armour's tier at the end of the run (the hero card's frame and row). */
+  /** The league's step the player stood on (the hero card's frame when no other is worn). */
   lg?: string;
-  a?: number;
 }
 
 /** A slice of a board (the same runs sorted another way): its metric, and the hero it is for (null: all). */

@@ -89,8 +89,11 @@ export interface CorpseOptions {
   pool?: { start: number; radius: number; color: string; edge: string };
 }
 
-interface Corpse {
+export interface Corpse {
+  /** Darkened and turned, for the flat canvas. */
   image: HTMLCanvasElement;
+  /** The frame as it is in the sheet, for the 3D view (which draws the body upright like a living figure). */
+  src: { image: CanvasImageSource; sx: number; sy: number; w: number; h: number; flip: boolean };
   x: number;
   y: number;
   at: number;
@@ -147,6 +150,21 @@ interface Slash {
   sin: number;
   born: number;
 }
+
+/** Blood in water: where it was shed (world pixels), when, how much, and how far the red spreads (cells). */
+interface Bleed {
+  x: number;
+  y: number;
+  born: number;
+  power: number;
+  reach: number;
+}
+
+/** The red cloud in water spreads over about a second and a half, holds, and is gone by this long. */
+const BLEED_MS = 9000;
+const BLEED_SPREAD_MS = 900;
+const MAX_BLEEDS = 10;
+const MAX_BLEEDS_LIGHT = 4;
 
 /** Expanding rings around a point (a scroll's shout, a hush, a pulse): how many are alive at once. */
 const MAX_WAVES = 6;
@@ -220,6 +238,8 @@ class Fx {
   corpses: Corpse[] = [];
   slashes: Slash[] = [];
   waves: Wave[] = [];
+  /** Blood shed in water, which the water shows as a red cloud (the 3D water and the 2D overlay read `waterRed`). */
+  bleeds: Bleed[] = [];
   /** Bursts of light at a place (a blast, a bolt striking): the 3D view lights the room with them. Position in world pixels, colour as `r, g, b`. */
   pulses: Array<{ x: number; y: number; color: string; power: number; born: number; life: number }> = [];
   /** The level's map, for where chunks may land. */
@@ -381,13 +401,84 @@ class Fx {
     });
   }
 
+  /**
+   * A creature struck or slain in water (world pixels): the water goes red round it, `reach` cells at most, for several seconds.
+   * Nothing is made if it stands on dry ground. A second wound soon after, close by, only deepens the same cloud.
+   */
+  bleedWater(x: number, y: number, now: number, power: number, reach: number): void {
+    if (!this.isWater(x, y)) return;
+    for (const b of this.bleeds) {
+      if (now - b.born < 600 && Math.hypot(b.x - x, b.y - y) < TILE) {
+        b.power = Math.min(1, b.power + power * 0.5);
+        b.reach = Math.max(b.reach, reach);
+        return;
+      }
+    }
+    const cap = quality.light ? MAX_BLEEDS_LIGHT : MAX_BLEEDS;
+    if (this.bleeds.length >= cap) this.bleeds.shift();
+    this.bleeds.push({ x, y, born: now, power: Math.min(1, power), reach });
+  }
+
+  /**
+   * How red the water is at a cell's middle (cell units: x, z), 0 to 1: the cloud spreads out from where the blood fell, thins to its
+   * edge and fades away. Reduced motion shows it at its full spread from the start.
+   */
+  waterRed(cx: number, cz: number, now: number): number {
+    let v = 0;
+    for (const b of this.bleeds) {
+      const t = now - b.born;
+      if (t < 0 || t >= BLEED_MS) continue;
+      const spread = quality.reducedMotion ? 1 : 1 - Math.exp(-t / BLEED_SPREAD_MS);
+      const r = 0.55 + b.reach * spread;
+      const d = Math.hypot(cx - b.x / TILE, cz - b.y / TILE);
+      if (d >= r) continue;
+      const fade = t < 1200 ? 1 : 1 - (t - 1200) / (BLEED_MS - 1200);
+      const edge = 1 - d / r;
+      v = Math.max(v, b.power * fade * edge * Math.sqrt(edge));
+    }
+    return v;
+  }
+
+  /** The water cells near live blood, for the 2D overlay: red over each, under the characters. */
+  drawWaterRed(ctx: CanvasRenderingContext2D, now: number, visible: (x: number, y: number) => boolean): void {
+    if (this.bleeds.length === 0) return;
+    ctx.fillStyle = '#8c0a14';
+    for (const b of this.bleeds) {
+      const c0 = Math.floor(b.x / TILE - b.reach - 1);
+      const r0 = Math.floor(b.y / TILE - b.reach - 1);
+      const n = Math.ceil(b.reach * 2 + 3);
+      for (let dz = 0; dz < n; dz++) {
+        for (let dx = 0; dx < n; dx++) {
+          const cx = c0 + dx;
+          const cz = r0 + dz;
+          if (cx < 0 || cz < 0 || cx >= WIDTH || cz >= HEIGHT || !this.isWater(cx * TILE + 8, cz * TILE + 8) || !visible(cx * TILE + 8, cz * TILE + 8)) continue;
+          const v = this.waterRed(cx + 0.5, cz + 0.5, now);
+          if (v < 0.03) continue;
+          ctx.globalAlpha = Math.min(0.6, v * 0.65);
+          ctx.fillRect(cx * TILE, cz * TILE, TILE, TILE);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Whether a world pixel is over water (a liquid that is not a chasm). */
+  private isWater(x: number, y: number): boolean {
+    const map = this.floor;
+    const cx = Math.floor(x / TILE);
+    const cy = Math.floor(y / TILE);
+    if (!map || cx < 0 || cy < 0 || cx >= WIDTH || cy >= HEIGHT) return false;
+    const flags = terrainFlags[map[cy * WIDTH + cx] ?? 0] ?? 0;
+    return (flags & F.LIQUID) !== 0 && (flags & F.PIT) === 0;
+  }
+
   /** A body lying where it fell, darkened, with a pool spreading under it. */
   corpse(o: CorpseOptions): void {
     if (typeof document === 'undefined') return;
     const pool = o.pool
       ? { cx: Math.round(o.x + o.w / 2), cy: Math.round(o.y + o.h - 2), start: o.pool.start, radius: o.pool.radius, color: o.pool.color, edge: o.pool.edge }
       : null;
-    this.corpses.push({ image: bodyImage(o), x: Math.round(o.x), y: Math.round(o.y), at: o.at, life: o.life, pool });
+    this.corpses.push({ image: bodyImage(o), src: { image: o.image, sx: o.sx, sy: o.sy, w: o.w, h: o.h, flip: o.flip }, x: Math.round(o.x), y: Math.round(o.y), at: o.at, life: o.life, pool });
     const cap = quality.light ? MAX_CORPSES_LIGHT : MAX_CORPSES;
     if (this.corpses.length > cap) this.corpses.splice(0, this.corpses.length - cap);
   }
@@ -500,6 +591,9 @@ class Fx {
     }
     this.particles.length = n;
     this.updateGibs(now, step);
+    n = 0;
+    for (const b of this.bleeds) if (now - b.born < BLEED_MS) this.bleeds[n++] = b;
+    this.bleeds.length = n;
     n = 0;
     for (const w of this.waves) if (now - w.born < w.duration + (w.rings - 1) * w.stagger) this.waves[n++] = w;
     this.waves.length = n;
@@ -672,6 +766,7 @@ class Fx {
     this.corpses = [];
     this.slashes = [];
     this.waves = [];
+    this.bleeds = [];
     this.flashes = [];
     this.shakeUntil = 0;
   }

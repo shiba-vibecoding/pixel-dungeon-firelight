@@ -8,6 +8,8 @@ import type { HeroClass } from '@pd/core';
 /** The class and what is worn (catalogue item ids, as the board's `w`). */
 export interface CardLook {
   heroClass: HeroClass | string;
+  /** The tier of the armour worn at the end of the run: the row of the hero's sheet (0 none, 1 cloth ... 5 plate, 6 the class armour). Absent: cloth, what every hero sets out in. */
+  a?: number;
   /** The look for this class, the hat, the pet, the camp fire, the profile frame. */
   l?: string;
   h?: string;
@@ -16,12 +18,11 @@ export interface CardLook {
   fr?: string;
   /** The league's step (spark ... beacon): its frame is the card's when no other frame is worn. */
   lg?: string;
-  /** The armour's tier at the end of the run (the sheets' row); absent: the first armour. */
-  a?: number;
 }
 
 /** What a board entry says of the hero (server worn.ts Worn): everything the card reads, and the name colour and title the row reads. */
 export interface WornShape {
+  a?: number;
   l?: string;
   h?: string;
   p?: string;
@@ -30,23 +31,26 @@ export interface WornShape {
   tt?: string;
   nc?: string;
   lg?: string;
-  a?: number;
 }
 
 /** A board entry's hero: its class and the server's snapshot of what the player wore (`w`; absent from older entries: the plain class). */
 export function lookOfEntry(entry: { heroClass: string; w?: WornShape }): CardLook {
   const w = entry.w;
-  return {
-    heroClass: entry.heroClass, ...(w?.l ? { l: w.l } : {}), ...(w?.h ? { h: w.h } : {}), ...(w?.p ? { p: w.p } : {}), ...(w?.f ? { f: w.f } : {}),
-    ...(w?.fr ? { fr: w.fr } : {}), ...(w?.lg ? { lg: w.lg } : {}), ...(typeof w?.a === 'number' ? { a: w.a } : {}),
-  };
+  return { heroClass: entry.heroClass, ...(isTier(w?.a) ? { a: w!.a! } : {}), ...(w?.l ? { l: w.l } : {}), ...(w?.h ? { h: w.h } : {}), ...(w?.p ? { p: w.p } : {}), ...(w?.f ? { f: w.f } : {}), ...(w?.fr ? { fr: w.fr } : {}), ...(w?.lg ? { lg: w.lg } : {}) };
 }
 
-/**
- * The key a composed card is kept under: `class|look|hat|pet|fire`, and the armour's tier when it is told. The frame is drawn over the
- * kept picture, so it is not in the key.
- */
-export const cardKey = (look: CardLook): string => `${look.heroClass}|${look.l ?? ''}|${look.h ?? ''}|${look.p ?? ''}|${look.f ?? ''}${look.a === undefined ? '' : `|${look.a}`}`;
+/** The rows of a hero's sheet (the armour tiers). */
+export const MAX_TIER = 6;
+/** The tier a hero without one is drawn in: cloth, the armour every hero sets out in (and the camp's). */
+export const DEFAULT_TIER = 1;
+
+const isTier = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_TIER;
+
+/** The row of the hero's sheet a card is drawn from: its armour tier, or cloth. */
+export const tierOf = (look: CardLook): number => (isTier(look.a) ? look.a : DEFAULT_TIER);
+
+/** The key a composed card is kept under: `class|tier|look|hat|pet|fire`. The frame is drawn over the kept picture, so it is not in the key. */
+export const cardKey = (look: CardLook): string => `${look.heroClass}|${tierOf(look)}|${look.l ?? ''}|${look.h ?? ''}|${look.p ?? ''}|${look.f ?? ''}`;
 
 /** A store of at most `size` things, the one used least recently going first. */
 export class Lru<V> {

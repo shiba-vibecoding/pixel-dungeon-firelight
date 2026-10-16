@@ -25,6 +25,8 @@ export interface Worn {
   fr?: string;
   tt?: string;
   nc?: string;
+  /** The tier of the armour worn at the end of the run (the row of the hero's sheet: 1 cloth ... 6 the class armour), from the verified final world. Absent: cloth. */
+  a?: number;
 }
 
 export interface DailyEntry extends DailyResult {
@@ -156,7 +158,10 @@ export class Leaderboard {
     let changed = false;
     for (const entry of this.board) {
       if (entry.owner !== owner) continue;
-      const worn = byClass[entry.heroClass];
+      // The armour is the run's own (the final world), not the wallet's: it stays.
+      const armor = entry.w?.a;
+      const base = byClass[entry.heroClass];
+      const worn: Worn | undefined = base || armor !== undefined ? { ...base, ...(armor !== undefined ? { a: armor } : {}) } : undefined;
       // What the entry should say: `w`, and the old per-field values (a client of before `w` reads those).
       const want = { w: worn, nc: worn?.nc, tt: worn?.tt, fr: worn?.fr };
       if (JSON.stringify(want) === JSON.stringify({ w: entry.w, nc: entry.nc, tt: entry.tt, fr: entry.fr })) continue;

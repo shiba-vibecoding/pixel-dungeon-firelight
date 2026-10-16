@@ -11,6 +11,7 @@ import {
 import * as core from '@pd/core';
 import './ui.css';
 import './game.css';
+import './fl-fx.css';
 import './fl-mart.css';
 import './fl-mart-ext.css';
 import './fl-compete.css';
@@ -18,6 +19,9 @@ import './photo.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
+import { fxp } from './fxplayer';
+import { loadFx, whenFx } from './fxsheet';
+import { hideBossCard } from './bosscard';
 import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
 /** The visual clock's last reading, for frame-to-frame particle steps. */
 let lastVisual = 0;
@@ -45,7 +49,7 @@ import {
 } from './screens';
 import { rankingBlock, trophyText } from './rankui';
 import { showBoards } from './boardsui';
-import { showProfile } from './profileui';
+import { lastArmor, showProfile } from './profileui';
 import { showSeason } from './seasonui';
 import { showHall } from './hallui';
 import { tx } from './compete-ui';
@@ -169,6 +173,9 @@ const progressText = document.createElement('p');
   hint.append(Object.assign(document.createElement('b'), { textContent: t.tip }), ` ${tip}`);
   loading.replaceChildren(logo, sub, progress, progressText, hint);
 }
+// The designer's effects (fx.json and its sheets) come beside the game, never in front of it: until they have, the older ones play.
+void loadFx(`${import.meta.env.BASE_URL}assets/`);
+whenFx(({ lib }) => fxp.use(lib));
 const assets = await loadAssets(`${import.meta.env.BASE_URL}assets/`, (done) => {
   const percent = Math.round(done * 100);
   progress.style.setProperty('--v', String(done));
@@ -924,7 +931,7 @@ function openHall(): void {
 /** The player's own hero as the pictures to send show him (sharecards.ts): the place on the day's board only if he has played it. */
 function myHeroPicture(): import('./sharecards').HeroPicture {
   return {
-    name: profile?.name || (inTelegram ? telegramName() : playerName.trim()) || t.heroDefault, look: myLook(heroClass), heroClass,
+    name: profile?.name || (inTelegram ? telegramName() : playerName.trim()) || t.heroDefault, look: myLook(heroClass, lastArmor(profile, heroClass)), heroClass,
     place: profile?.dailyDone ? (profile.places.daily ?? null) : null, depth: profile?.deepest ?? 1, streak: profile?.streak.count ?? 0,
   };
 }
@@ -2941,6 +2948,8 @@ function tick(now: number): void {
     quipSys.reset();
     view.reset(me.depth);
     fx.reset();
+    fxp.clear();
+    hideBossCard();
     heroWasAlive = true;
     walk.reset();
     bakedKey = '';
@@ -3070,6 +3079,7 @@ function tick(now: number): void {
     }
   }
   fx.update(vnow, dt);
+  fxp.update(vnow);
   ambientFx(view, vnow, dt);
   regionFx(level, visible, vnow, dt);
 
@@ -3138,16 +3148,18 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
     const clouds = world.floors[me.depth]?.gas ?? {};
-    const gas = [
+    // The designer's clouds (fxplayer.ts) are drawn from the floor's record; the older puffs only until they have come.
+    fxp.gas = clouds;
+    const gas = fxp.ready ? [] : [
       ...(clouds.toxic ?? []).map(([pos, volume]) => ({ pos, volume, color: '80, 200, 60' })),
       ...(clouds.paralytic ?? []).map(([pos, volume]) => ({ pos, volume, color: '230, 220, 70' })),
     ];
-    const webs = (clouds.web ?? []).map(([pos, volume]) => ({ pos, volume }));
+    const webs = fxp.ready ? [] : (clouds.web ?? []).map(([pos, volume]) => ({ pos, volume }));
     const explored = exploredCells(world, me.depth);
     // A snapshot has been asked for: this frame is drawn without the marks of a walk and copied when it is done.
     const forShot = shotWanted !== null;
@@ -3397,7 +3409,7 @@ function tick(now: number): void {
         title: dailyRun ? undefined : t.gameName,
         // The pictures of the hero by his fire (sharecards.ts), with the day's place when this was the daily dungeon; never the seed.
         hero: {
-          name: me.name || playerName || telegramName() || t.heroLabel, look: myLook(me.heroClass), heroClass: me.heroClass,
+          name: me.name || playerName || telegramName() || t.heroLabel, look: myLook(me.heroClass, armorTier(me)), heroClass: me.heroClass,
           place: dailyRun ? (reply?.places?.daily ?? null) : null, depth: deepestNow, streak: profile?.streak.count ?? 0,
         },
       };
@@ -3412,6 +3424,7 @@ function tick(now: number): void {
       const place = recordRun({
         key: `${world.run.seed}:${me.id}:${world.turn}`,
         checked: Boolean(session.checked),
+        armor: armorTier(me),
         score: scoreNow,
         name: me.name || playerName || telegramName() || t.heroLabel,
         heroClass: me.heroClass,
@@ -3534,6 +3547,7 @@ function showArenaRunEnd(world: World, me: Hero, solo: boolean): void {
   const cause = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
   recordRun({
     key: `${world.run.seed}:${me.id}:${world.turn}`,
+    armor: armorTier(me),
     score,
     name,
     heroClass: me.heroClass,
@@ -3683,5 +3697,5 @@ if (import.meta.env.DEV) {
     }
   };
   Object.assign(window, { __release: { news: () => showNews({ release: CURRENT, onClose: () => toTitle(false) }), report: () => api && showReport({ api, run: runFacts, onClose: () => toTitle(false) }), crash: showCrash } });
-  Object.assign(window, { __pd: { cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, startSolo, audio, tick, held, tapCell } });
+  Object.assign(window, { __pd: { cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
 }

@@ -14,7 +14,7 @@ import { outageDays } from './outages';
 import { giveHonor, MAX_PROBLEM_BYTES, parseProblem, PROBLEMS_PER_DAY, takeProblemSlot } from './problem';
 import { readBody } from './secret';
 import { claimGifts, giftLetters, type Facts } from './shopapi';
-import { shopOf, type WalletView } from './wallet';
+import { emptyShop, shopOf, type WalletView } from './wallet';
 import { walletsOf } from './walletsdo';
 import { sanitizeAction } from './messages';
 import { loadPlayer } from './season';
@@ -412,7 +412,7 @@ export class Player extends DurableObject<Env> {
     // What the hero wears on the boards (hero card, name colour, title, frame): built here from what the wallet owns and wears; never the device's word.
     // A player who asked to be hidden is «Hero» there, without the colour and the title that would say who.
     const profile = this.logic!.profile;
-    const worn = wornOnBoards(profile, wallet ? wornOf(shopOf(wallet), summary.heroClass) : undefined);
+    const worn = wornOnBoards(profile, wornOf(wallet ? shopOf(wallet) : emptyShop(), summary.heroClass, summary.armor));
     const shownName = nameOnBoards(profile, player.name);
     for (const kind of boardsFor(summary)) {
       const name = boardOfRun(kind, summary, now);

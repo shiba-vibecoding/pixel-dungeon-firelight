@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Boss card</title>
+<style>
+@font-face { font-family: "Galmuri11"; src: url(fonts/Galmuri11.woff2); } @font-face { font-family: "Galmuri9"; src: url(fonts/Galmuri9.woff2); }
+:root { --font-ui: "Galmuri11", monospace; --font-small: "Galmuri9", monospace; --text-caption: 400 15px/20px var(--font-small); --text-body: 400 18px/24px var(--font-ui);
+  --fire-ember: #e8641f; --fire-gold: #ffcc66; --fire-ash: #1a0a06; --fx-boss: #ff6a4a; --ink-muted: #b0b5a3; }
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; -webkit-font-smoothing: none; }
+.bg { position: fixed; inset: 0; background: center / cover no-repeat; image-rendering: pixelated; filter: brightness(.82); }
+.fl-boss-plate { border-image-source: url(fx/boss/plate.png) !important; }
+</style><link rel="stylesheet" href="fl-fx.css"></head><body><div class="bg" id="bg"></div><div id="card"></div><script type="module">
+const Q = new URLSearchParams(location.search); const B = Q.get('b') || 'goo', L = Q.get('lang') || 'en';
+const D = await (await fetch('fx/fx.json')).json(); const b = D.bossCards.bosses[B];
+const REG = { en: ['Sewers', 'Prison', 'Caves', 'Dwarven City', 'Demon Halls'], ru: ['Канализация', 'Тюрьма', 'Пещеры', 'Город гномов', 'Демонические залы'] }[L];
+const R = { goo: 0, tengu: 1, dm300: 2, king: 3, yog: 4 }[B];
+document.getElementById('bg').style.backgroundImage = `url(bossbg/${['sewers', 'prison', 'caves', 'city', 'halls'][R]}-${innerWidth}x${innerHeight}.png)`;
+document.getElementById('card').innerHTML = `<div class="fl-boss-card" style="--accent:${b.accent}"><div class="fl-boss-plate">
+  <img class="fl-boss-face" src="${b.portrait}" alt="">
+  <div class="fl-boss-text"><span class="fl-boss-depth">${L === 'ru' ? 'Глубина' : 'Depth'} ${b.depth}<span class="fl-boss-region"> · ${REG[R]}</span></span><span class="fl-boss-name">${b.name[L]}</span><span class="fl-boss-sub">${b.sub[L]}</span></div></div></div>`;
+await document.fonts.ready; await new Promise((ok) => { const i = new Image(); i.onload = i.onerror = ok; i.src = getComputedStyle(document.getElementById('bg')).backgroundImage.slice(5, -2); });
+await new Promise((ok) => setTimeout(ok, 150)); const t = +(Q.get('t') ?? 99999); for (const a of document.getAnimations()) { a.pause(); a.currentTime = t; } await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))); window.__ready = true;
+</script></body></html>

@@ -1,7 +1,7 @@
 import { image as campImage, ready as campReady, SHEET } from './camp';
 import { itemById, type Slot } from './catalog';
 import { cosmetics } from './cosmetics';
-import { type CardLook, cardKey, cardSize, idleFrame, Lru, sparkState, wholeScale } from './cardlook';
+import { type CardLook, cardKey, cardSize, idleFrame, Lru, sparkState, tierOf as armourOf, wholeScale } from './cardlook';
 import { type Anchors, anchorsOf, compete, onCompeteChange, type SceneLayout, tierOf } from './compete';
 import { type FireArt, fireArt, flCatalog, flImage, flItem, flReady, hatArt, lookArt, onFlChange, petArt } from './flart';
 import './herocard.css';
@@ -27,11 +27,12 @@ import { quality } from './quality';
 export { type CardLook, lookOfEntry } from './cardlook';
 
 /** This player's own hero of a class, as they wear it now (owned things only: cosmetics.ts). */
-export function myLook(heroClass: string): CardLook {
+/** `armor`: the tier of the armour he wears (the row of his sheet); absent, cloth. */
+export function myLook(heroClass: string, armor?: number): CardLook {
   const id = (slot: Slot): string | undefined => cosmetics.inSlot(slot)?.id;
   const look = id(`look.${heroClass}` as Slot);
   const [hat, pet, fire, frame] = [id('hat'), id('pet'), id('campfire'), id('frame')];
-  return { heroClass, ...(look ? { l: look } : {}), ...(hat ? { h: hat } : {}), ...(pet ? { p: pet } : {}), ...(fire ? { f: fire } : {}), ...(frame ? { fr: frame } : {}) };
+  return { heroClass, ...(armor !== undefined ? { a: armor } : {}), ...(look ? { l: look } : {}), ...(hat ? { h: hat } : {}), ...(pet ? { p: pet } : {}), ...(fire ? { f: fire } : {}), ...(frame ? { fr: frame } : {}) };
 }
 
 /* ---- What is shown less on a phone that saves data, and when nothing moves ---- */
@@ -179,7 +180,8 @@ function compose(g: CanvasRenderingContext2D, look: CardLook, layout: SceneLayou
   // The hero: the look worn for his class, else the class's own sheet, in the armour's row.
   const [hx, hy] = layout.hero;
   const [cellW, cellH] = a.hero.cell;
-  const row = Math.max(0, Math.min(a.hero.tiers - 1, Math.floor(look.a ?? a.hero.tierDefault)));
+  // The row of the sheets: the armour the hero ended the run in (cloth when it is not told).
+  const row = Math.min(a.hero.tiers - 1, armourOf(look));
   const frame = moving ? idleFrame(a.hero.idle.seq, a.hero.idle.fps, t) : 0;
   const lookItem = look.l ? itemById(look.l) : undefined;
   const worn = layer(look.l && lookItem?.category === 'look' && lookItem.heroClass === cls ? look.l : undefined, 'look', () => lookArt(look.l!));

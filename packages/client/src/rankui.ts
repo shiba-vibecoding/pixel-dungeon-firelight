@@ -76,7 +76,9 @@ export function profileCard(options: CardOptions): HTMLElement {
   const streak = profile?.streak.count ?? 0;
   // The portrait is the hero card: this player's hero in the look, hat, pet and camp fire worn now, in the profile frame, moving.
   const heroClass = options.heroClass ?? (['warrior', 'mage', 'rogue', 'huntress'][options.avatar] ?? 'warrior');
-  const card = heroCard(() => myLook(heroClass), { animate: true, className: 'pd-profile-art' });
+  // He wears the armour of his last run (of this class, else of the last run at all): the tier he died or finished in.
+  const last = profile?.history.find((run) => run.heroClass === heroClass && run.armor !== undefined) ?? profile?.history.find((run) => run.armor !== undefined);
+  const card = heroCard(() => myLook(heroClass, last?.armor), { animate: true, className: 'pd-profile-art' });
   const portrait = el('span', { className: 'pd-profile-face card' }, card.canvas);
   // The name colour and title worn (Pixel-Mart's catalogue).
   const worn = { color: cosmetics.nameColor, title: cosmetics.title };
