@@ -1,6 +1,7 @@
 import { FURY_LEVEL, type Hero, isAlive, isHungry, isStarving, type Look, maxExp, STARVING } from '@pd/core';
 import { audio } from './audio';
 import { t } from './i18n';
+import { P } from './i18n-photo';
 import { AVATAR, durabilityBar, markWear, sprites } from './screens';
 import type { LogLine } from './view';
 
@@ -72,6 +73,8 @@ export interface HudHandlers {
   quick2(): void;
   backpack(): void;
   journal(): void;
+  /** The camera: a snapshot of the map for the photo mode. */
+  photo(): void;
   settings(): void;
   history(): void;
   /** A tap on a buff icon: what it is. */
@@ -358,6 +361,7 @@ export class Hud {
       'div',
       'pd-dcorner',
       cornerButton('journal', t.meta.journal, 'J', () => handlers.journal()),
+      cornerButton('photo', P.cameraTitle, 'P', () => handlers.photo()),
       cornerButton('prefs', t.meta.settings, '', () => handlers.settings()),
     );
     this.islandLeft = el('nav', 'pd-dbar left');

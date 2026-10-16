@@ -13,6 +13,7 @@ import './ui.css';
 import './game.css';
 import './fl-mart.css';
 import './fl-mart-ext.css';
+import './photo.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -62,6 +63,8 @@ import { watchErrors } from './diag';
 import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { showStore } from './storeui';
+import { flash, sceneShot, setPhotoUpload, type Shot, showPhoto } from './photoui';
+import { P as photoText } from './i18n-photo';
 import { cosmetics } from './cosmetics';
 import { fireArt, loadFl, onFlChange } from './flart';
 import { wornFor } from './wear';
@@ -218,6 +221,7 @@ const hud = new Hud({
     toggleQuickslot(1);
   },
   journal: () => openJournal(),
+  photo: () => openPhoto(),
   settings: () => settings(hideOverlay),
   backpack: () => {
     examining = false;
@@ -686,6 +690,9 @@ const api = runApi(
   import.meta.env.DEV,
 );
 
+// The photo mode puts its picture at a public address through the server (a story and Telegram's download take no other).
+setPhotoUpload(api ? (png) => api.photo(png) : null);
+
 /** Each device slot's run on the server. */
 const SLOT_OF: Record<string, RunSlot> = { [SOLO_SLOT]: 'dungeon', [ARENA_SLOT]: 'arena' };
 const slotOf = (key: string): RunSlot => SLOT_OF[key] ?? 'daily';
@@ -950,9 +957,9 @@ function maybeNews(answer: Profile | null): boolean {
 }
 
 /** Pixel-Mart's storefront; the first shop (recolours, effects, the patronage) is one button away and comes back to it. */
-function openStore(heroClass: HeroClass, onClose: () => void): void {
+function openStore(heroClass: HeroClass, onClose: () => void, tab?: 'photo'): void {
   const again = (): void => openStore(heroClass, onClose);
-  showStore({ heroClass, onClose, classic: () => showMart({ heroClass, onClose: again }) });
+  showStore({ heroClass, onClose, classic: () => showMart({ heroClass, onClose: again }), ...(tab ? { tab } : {}) });
 }
 
 /** The mail window; back to the camp when closed. */
@@ -1049,6 +1056,7 @@ function toTitle(ask = true): void {
     onPractice: () => startSolo('daily'),
     onRankings: () => openBoards(),
     onMart: () => openStore(heroClass, toTitle),
+    onPhoto: () => campPhoto(),
     onSettings: () => settings(toTitle),
     mail: api && profile?.mail ? { count: unclaimed(profile.mail), onOpen: openMail } : undefined,
     challenges: challengesOpen() ? challenges : 0,
@@ -1108,9 +1116,90 @@ function openMenu(): void {
       }
       : undefined,
     onMart: () => openStore(myClass(), hideOverlay),
+    onPhoto: session?.world ? openPhoto : undefined,
     onTreat: () => showTreat(hideOverlay),
     onExit: toTitle,
   });
+}
+
+/*
+ * The photo mode (photoui.ts). The camera button asks for a snapshot, and the next frame the map is drawn on is drawn clean (without the
+ * marks of a walk) and copied at once: the 3D renderer keeps no picture of its last frame (no preserveDrawingBuffer), so it can be read
+ * only in the task that drew it. Nothing of this costs a frame in ordinary play: it is one flag, read where the frame ends.
+ */
+let shotWanted: ((shot: Shot | null) => void) | null = null;
+let shotTimer = 0;
+
+/** The map as the canvases hold it now (the 3D scene under, what is drawn over it above); the HUD is in the page, not on them, so it is not in the picture. */
+function takeShot(): Shot | null {
+  if (canvas.width < 1 || canvas.height < 1) return null;
+  const out = document.createElement('canvas');
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const g = out.getContext('2d');
+  if (!g) return null;
+  try {
+    if (mode3d && canvas3d) g.drawImage(canvas3d, 0, 0, out.width, out.height);
+    else {
+      g.fillStyle = '#0b0b09';
+      g.fillRect(0, 0, out.width, out.height);
+      // The classic view's brightness is a CSS filter on its canvas: it goes into the picture too, where the webview can draw with one.
+      if (Math.abs(brightness.value - 1) >= 0.01 && 'filter' in g) g.filter = `brightness(${brightness.value})`;
+    }
+    g.drawImage(canvas, 0, 0);
+  } catch {
+    return null;
+  }
+  const world = session?.world;
+  const me = world && session ? heroById(world, session.myId) : undefined;
+  const caption = !me || !world ? '' : world.arena ? t.arena.title : `${t.newDepth(me.depth)} · ${t.regionNames[regionIndex(me.depth)] ?? ''}`;
+  return { canvas: out, pixelArt: false, caption };
+}
+
+/** Asks for a snapshot of the map; `done` has it after the next frame drawn (null if none came in time). */
+function requestShot(done: (shot: Shot | null) => void): void {
+  shotWanted = done;
+  clearTimeout(shotTimer);
+  shotTimer = window.setTimeout(() => {
+    const waiting = shotWanted;
+    shotWanted = null;
+    waiting?.(null);
+  }, 1500);
+  drawPace.force();
+}
+
+/** The camera, in the dungeon: the window is put away, the map photographed, the photo mode opened over it. */
+function openPhoto(): void {
+  if (!session?.world || shotWanted) return;
+  hideOverlay();
+  requestShot((shot) => {
+    if (!shot) {
+      toast(photoText.shotFailed, { tone: 'warn' });
+      return;
+    }
+    flash();
+    showPhoto({ shot, onClose: hideOverlay, onShop: () => openStore(myClass(), hideOverlay, 'photo') });
+  });
+}
+
+/** The camera, at the camp: the scene as it is on the screen, without the cards and the sheet over it. */
+function campPhoto(): void {
+  const scene = activeCamp;
+  let view: DOMRect | null = null;
+  if (scene) {
+    // The screen's part that holds the room: on a wide screen, not the dark sides the filled scene runs out into.
+    const host = scene.host.getBoundingClientRect();
+    const room = scene.roomSpan();
+    const left = Math.max(host.left, room.left);
+    view = new DOMRect(left, host.top, Math.max(1, Math.min(host.right, room.right) - left), host.height);
+  }
+  const shot = scene && sceneShot(scene.canvas, view, photoText.campCaption);
+  if (!shot) {
+    toast(photoText.shotFailed, { tone: 'warn' });
+    return;
+  }
+  flash();
+  showPhoto({ shot, onClose: () => toTitle(false), onShop: () => openStore(heroClass, () => toTitle(false), 'photo') });
 }
 
 /* Walking: a path is sent one step at a time; each waits for the last to be done. */
@@ -2339,6 +2428,8 @@ addEventListener('keydown', (event) => {
     mapControlsActions.whole();
   } else if (event.code === 'KeyJ') {
     openJournal();
+  } else if (event.code === 'KeyP') {
+    openPhoto();
   } else if (event.code === 'Equal' || event.code === 'NumpadAdd') {
     cam.zoomStep(1, null);
   } else if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
@@ -2995,6 +3086,8 @@ function tick(now: number): void {
     ];
     const webs = (clouds.web ?? []).map(([pos, volume]) => ({ pos, volume }));
     const explored = exploredCells(world, me.depth);
+    // A snapshot has been asked for: this frame is drawn without the marks of a walk and copied when it is done.
+    const forShot = shotWanted !== null;
     const scene = {
       level, baked: baked!, visible, explored, heaps, plants, gas, webs, seeAll: me.mindVision > 0,
         ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
@@ -3010,10 +3103,12 @@ function tick(now: number): void {
         motion.drawOver(c, vnow);
         // QuickSlotButton.crossM: aiming from a slot, the target the slot tapped again fires at is marked on the map.
         feedback.mark(aim?.marked && isAlive(me) ? lastTargetIn(seenEnemies(world, me))?.id ?? null : null);
-        feedback.draw(
-          c, walk.queue, (id) => mobById(world, me.depth, id)?.pos,
-          walk.queue.length === 0 && !walk.chase && !session!.busy, vnow,
-        );
+        if (!forShot) {
+          feedback.draw(
+            c, walk.queue, (id) => mobById(world, me.depth, id)?.pos,
+            walk.queue.length === 0 && !walk.chase && !session!.busy, vnow,
+          );
+        }
       },
       mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
       overview: cam.overviewShown,
@@ -3057,6 +3152,13 @@ function tick(now: number): void {
       // The arena's wall and stands stand in the light of the crowd's own torches, whatever the party sees.
       render(ctx, world.arena ? { ...scene, visible: arenaView.shown(level, visible) } : scene, view, session.myId, assets, camera, vnow);
       coop.frame(ctx, { session, world, view, camera, free, now: vnow });
+    }
+    if (forShot && shotWanted) {
+      const done = shotWanted;
+      shotWanted = null;
+      clearTimeout(shotTimer);
+      const shot = takeShot();
+      setTimeout(() => done(shot), 0);
     }
     placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom * ground());
     mapControls.update(

@@ -147,6 +147,8 @@ export interface Identity {
 export interface RunApi {
   /** The result's picture at a public address (a story and a challenge need one); null if it cannot be had. */
   card(png: Blob): Promise<string | null>;
+  /** The photo mode's picture (a PNG of up to 1.8 MB) at a public address, kept a day (server photos.ts); null if it cannot be had. */
+  photo(png: Blob): Promise<string | null>;
   /** A message with the result the player may send to any chat (WebApp.shareMessage); its id, or null. */
   challenge(text: string, card: string | null, mode: 'daily' | 'arena'): Promise<string | null>;
   /** The bot's reminders on or off; false if the server could not be told. */
@@ -215,6 +217,14 @@ export function runApi(server: string, identity: () => Identity, development: bo
     card: async (png) => {
       try {
         const response = await fetch(`${base}/card`, { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Init-Data': identity().initData ?? '' }, body: png });
+        return response.ok ? ((await response.json()) as { url: string }).url : null;
+      } catch {
+        return null;
+      }
+    },
+    photo: async (png) => {
+      try {
+        const response = await fetch(`${base}/photo`, { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Init-Data': identity().initData ?? '' }, body: png });
         return response.ok ? ((await response.json()) as { url: string }).url : null;
       } catch {
         return null;
