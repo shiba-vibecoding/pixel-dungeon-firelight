@@ -1,4 +1,5 @@
 import type { HeroClass, Offer } from '@pd/core';
+import { type Category, type Item, itemById, itemName } from '../../client/src/catalog';
 
 /*
  * What an invoice says an offer is, in the buyer's language. Written on the
@@ -87,4 +88,27 @@ export function invoiceText(offer: Offer, language?: string): InvoiceText {
     case 'tip':
       return fit({ title: `${w.tip.title} ${offer.stars}★`, description: w.tip.description });
   }
+}
+
+const CATEGORY_WORD: Record<Category, [ru: string, en: string]> = {
+  look: ['Облик', 'Look'], campfire: ['Костёр', 'Campfire'], hat: ['Шапка', 'Hat'], pet: ['Питомец', 'Pet'], trail: ['След', 'Trail'],
+  killfx: ['Эффект убийства', 'Kill effect'], deathfx: ['Эффект гибели', 'Death effect'], numbers: ['Числа урона', 'Damage numbers'],
+  quips: ['Набор реплик', 'Quip pack'], decor: ['Украшение лагеря', 'Camp decoration'], frame: ['Рамка профиля', 'Profile frame'],
+  title: ['Титул', 'Title'], namecolor: ['Цвет имени', 'Name colour'], photoframe: ['Рамка для фото', 'Photo frame'], sticker: ['Наклейка', 'Sticker'],
+  bundle: ['Набор', 'Bundle'], pass: ['Пропуск сезона', 'Season pass'],
+};
+
+/** What an invoice says a catalogue item is: its name, and what it is, in the buyer's language; a gift says so. Looks only: never the game. */
+export function itemInvoiceText(entry: Item, language?: string, gift = false): InvoiceText {
+  const ru = speaksRussian(language);
+  const lang = ru ? 'ru' : 'en';
+  const name = itemName(entry, lang);
+  const word = CATEGORY_WORD[entry.category][ru ? 0 : 1];
+  const parts = entry.items?.map((id) => itemById(id)).filter((part): part is Item => part !== undefined).map((part) => itemName(part, lang));
+  const what = entry.category === 'pass'
+    ? (ru ? 'Платная дорожка сезона: награды за уровни. Только облик.' : 'The season’s paid track: a reward at every level. Looks only.')
+    : parts && parts.length > 0 ? `${ru ? 'В наборе' : 'Includes'}: ${parts.join(', ')}.` : `${word}. ${ru ? 'Только облик, на игру не влияет.' : 'A look only: it changes nothing in the game.'}`;
+  const prefix = gift ? (ru ? 'Подарок: ' : 'Gift: ') : '';
+  const fit = (text: InvoiceText): InvoiceText => ({ title: text.title.slice(0, 32), description: text.description.slice(0, 255) });
+  return fit({ title: `${prefix}${name}`, description: gift ? `${ru ? 'Подарок другу. ' : 'A gift for a friend. '}${what}` : what });
 }

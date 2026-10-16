@@ -2,7 +2,9 @@ import type { Effect, Hero } from '@pd/core';
 import { audio } from './audio';
 import { lang } from './i18n';
 import { lazy } from './lazy';
+import { cosmetics } from './cosmetics';
 import { FADE_MS, holdFor, LAST_WORDS_HOLD_MS, type Moment, POP_MS, QuipPicker, type QuipClass, quipMode, type QuipData } from './quips';
+import { packLines } from './quip-packs';
 import { QuipWatch } from './quipwatch';
 
 /*
@@ -83,7 +85,7 @@ class QuipSystem {
   offer(moment: Moment, heroClass: QuipClass, now: number): void {
     const lines = data.ready();
     if (!lines) return;
-    this.picker ??= new QuipPicker(lines);
+    this.picker ??= new QuipPicker(lines, undefined, undefined, (m, c) => packLines(cosmetics.quipPack, lang, m, c));
     const line = this.picker.offer(moment, heroClass, now);
     if (line === null) return;
     this.lastLine = line;

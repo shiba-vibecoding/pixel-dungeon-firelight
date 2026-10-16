@@ -23,6 +23,10 @@ export interface DailyEntry extends DailyResult {
   kills?: number;
   /** A patron of the game (Pixel-Mart): a star by the name. */
   patron?: boolean;
+  /** What the player wears for the boards (Pixel-Mart's catalogue): the name colour, the title and the portrait frame, by item id. Looks only. */
+  nc?: string;
+  tt?: string;
+  fr?: string;
   /** Who it is, privately: the player's account key, never served (see servedEntry). */
   owner?: string;
 }

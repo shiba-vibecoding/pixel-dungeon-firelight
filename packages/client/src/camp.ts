@@ -154,6 +154,28 @@ interface Particle {
 
 type Mode = 'idle' | 'tap' | 'sulk' | 'swipe' | 'blink';
 
+/** A small picture drawn on the scene at scene pixels (the shop's try-on: placeholder icons for what the scene has no art for yet). */
+export interface CampExtra {
+  img: CanvasImageSource;
+  x: number;
+  y: number;
+  /** Bobs a little. */
+  bob?: boolean;
+  alpha?: number;
+}
+
+/**
+ * What the scene wears on top of the plain camp, from Pixel-Mart's catalogue (catalog.ts, cosmetics.ts): never the rules, only looks.
+ * Changed with `dress()` while the scene runs.
+ */
+export interface CampDress {
+  /** A campfire style: the flame's tint, then the sparks' colours (hot, warm, cool). */
+  fire?: readonly [flame: string, hot: string, warm: string, cool: string] | null;
+  /** A tint over a class's sprite: a look's placeholder until its recoloured sheet is drawn. */
+  tint?: Readonly<Record<string, { color: string; strength: number } | undefined>>;
+  extras?: readonly CampExtra[];
+}
+
 export interface CampOptions {
   scene: CampScene;
   season: Season;
@@ -213,6 +235,8 @@ export class Camp {
   private lastSwipe = -1e9;
   private raf = 0;
   private readonly blinks = new Map<string, HTMLCanvasElement>();
+  private dressing: CampDress = {};
+  private fireScratch: HTMLCanvasElement | null = null;
   private readonly silhouette = document.createElement('canvas');
   private readonly heroButton = document.createElement('button');
   private readonly bubble = document.createElement('div');
@@ -458,6 +482,7 @@ export class Camp {
       ...this.place.torches.map((tc): LightSpec => [tc[0], tc[1] - 3, 9, '#ffb050', 2]),
       ...this.place.lights,
     ];
+    if (this.dressing.fire) specs[0] = [FIRE[0], FIRE[1] - 6, 30, this.dressing.fire[0], 2];
     this.lights = specs.map((spec) => ({
       x: spec[0], y: spec[1], pulse: spec[4],
       rings: [lightCanvas(spec[2] - 1, spec[3]), lightCanvas(spec[2], spec[3]), lightCanvas(spec[2] + 1, spec[3])],
@@ -482,6 +507,17 @@ export class Camp {
     for (let i = 0; i < data.length; i += 4) {
       if (data[i] === 232 && data[i + 1] === 226 && data[i + 2] === 200) this.stars.push([(i / 4) % W, Math.floor(i / 4 / W), this.random() * 9]);
     }
+  }
+
+  /** Puts on (or takes off) a campfire style, tints and extras; the scene goes on running. */
+  dress(patch: CampDress): void {
+    this.dressing = { ...this.dressing, ...patch };
+    if ('fire' in patch) this.setScene();
+  }
+
+  /** The hero says a line in his bubble (the try-on shows a quip pack so). */
+  speak(text: string, ms = 2600): void {
+    this.say(text, ms);
   }
 
   /** The sheet and row a class is drawn from: its own sheet, or a Pixel-Mart look's (the sheets share their layout). */
@@ -567,6 +603,15 @@ export class Camp {
     const blinked = blink && f === 0 ? this.blinkFrame(src) : null;
     if (blinked) sg.drawImage(blinked, 0, 0);
     else if (ready(src.img)) sg.drawImage(src.img, f * 12, src.row * 15, 12, 15, 0, 0, 12, 15);
+    const tint = this.dressing.tint?.[this.classes[this.hero] ?? ''];
+    if (tint) {
+      sg.globalCompositeOperation = 'source-atop';
+      sg.globalAlpha = tint.strength;
+      sg.fillStyle = tint.color;
+      sg.fillRect(0, 0, 12, 15);
+      sg.globalAlpha = 1;
+      sg.globalCompositeOperation = 'source-over';
+    }
     if (dark) {
       sg.globalCompositeOperation = 'source-atop';
       sg.fillStyle = `rgba(6,6,10,${Math.min(1, dark).toFixed(2)})`;
@@ -652,7 +697,8 @@ export class Camp {
       p.y += p.vy * dt;
       if (p.k === 'spark') {
         p.vx += (R() - 0.5) * 0.0006 * dt;
-        ctx.fillStyle = q < 0.3 ? '#fff3a0' : q < 0.65 ? '#ffb02e' : '#c0301a';
+        const sparks = this.dressing.fire;
+        ctx.fillStyle = q < 0.3 ? (sparks?.[1] ?? '#fff3a0') : q < 0.65 ? (sparks?.[2] ?? '#ffb02e') : (sparks?.[3] ?? '#c0301a');
       } else if (p.k === 'snow') {
         p.x += Math.sin((now + p.l) / 700) * 0.01;
         ctx.fillStyle = p.near ? '#ffffff' : 'rgba(230,238,248,.9)';
@@ -738,8 +784,13 @@ export class Camp {
     this.place.torches.forEach((tc, i) => {
       if (ready(torch)) ctx.drawImage(torch, ((Math.floor(t / 130) + i * 2) % 4) * 5, 0, 5, 7, tc[0] - 2 - crop[0], tc[1] - 7 - crop[1], 5, 7);
     });
-    if (ready(fire)) ctx.drawImage(fire, (Math.floor(t / 100) % 6) * 13, 0, 13, 17, FIRE[0] - 6 - crop[0], FIRE[1] - 17 - crop[1], 13, 17);
+    if (ready(fire)) this.drawFire(fire, (Math.floor(t / 100) % 6) * 13, FIRE[0] - 6 - crop[0], FIRE[1] - 17 - crop[1]);
     this.drawHero(t, now);
+    for (const extra of this.dressing.extras ?? []) {
+      ctx.globalAlpha = extra.alpha ?? 1;
+      ctx.drawImage(extra.img, Math.round(extra.x - crop[0]), Math.round(extra.y - crop[1] + (extra.bob ? Math.sin(t / 320) : 0)));
+    }
+    ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'lighter';
     this.lights.forEach((l, i) => {
       let v = l.pulse === 2 ? Math.floor((Math.sin(t / 97 + i) + Math.sin(t / 43 + i * 2)) * 0.8 + 1) : l.pulse ? Math.floor(Math.sin(t / 900 + i) * 1.5 + 1) : 1;
@@ -749,6 +800,27 @@ export class Camp {
     });
     ctx.globalCompositeOperation = 'source-over';
     this.drawParts(now, dt);
+  }
+
+  /** One frame of the fire, in the style's tint when it has one. */
+  private drawFire(sheet: HTMLImageElement, sx: number, x: number, y: number): void {
+    const flame = this.dressing.fire?.[0];
+    if (!flame) {
+      this.ctx.drawImage(sheet, sx, 0, 13, 17, x, y, 13, 17);
+      return;
+    }
+    const scratch = (this.fireScratch ??= Object.assign(document.createElement('canvas'), { width: 13, height: 17 }));
+    const g = scratch.getContext('2d')!;
+    g.clearRect(0, 0, 13, 17);
+    g.globalCompositeOperation = 'source-over';
+    g.drawImage(sheet, sx, 0, 13, 17, 0, 0, 13, 17);
+    g.globalCompositeOperation = 'source-atop';
+    g.globalAlpha = 0.62;
+    g.fillStyle = flame;
+    g.fillRect(0, 0, 13, 17);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    this.ctx.drawImage(scratch, x, y);
   }
 
   private say(text: string, ms: number): void {

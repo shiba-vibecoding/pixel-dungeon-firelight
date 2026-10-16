@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { type Action, dayOf, type HeroClass, isPatron, RULES_VERSION, type Wallet } from '@pd/core';
+import { type Action, dayOf, type HeroClass, isPatron, RULES_VERSION } from '@pd/core';
 import { BOARD_KINDS, type BoardKind, boardName, boardObject, boardOfRun, boardsFor } from './boards';
 import { secretDailySeed } from './daily-seed';
 import { CORS, json, jsonBody } from './http';
@@ -10,6 +10,9 @@ import { newsSeenAfter, parseVersion } from './news';
 import { outageDays } from './outages';
 import { giveHonor, MAX_PROBLEM_BYTES, parseProblem, PROBLEMS_PER_DAY, takeProblemSlot } from './problem';
 import { readBody } from './secret';
+import { claimGifts, giftLetters, type Facts } from './shopapi';
+import { shopOf, type WalletView } from './wallet';
+import { walletsOf } from './walletsdo';
 import { sanitizeAction } from './messages';
 import { loadPlayer } from './season';
 import { EntryWriter, toEntries } from './run-store';
@@ -90,7 +93,28 @@ export async function meRoute(request: Request, env: Env): Promise<Response> {
   const response = await playerStub(env, player.key).fetch('https://player/me', {
     method: 'POST', body: JSON.stringify({ player, coachDone: body.coachDone === true, ...(news ? { news } : {}) }),
   });
-  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', ...CORS } });
+  return withGifts(env, player.key, response);
+}
+
+/**
+ * An answer with a mailbox in it, with the gifts of Pixel-Mart's catalogue (shopapi.ts) among its letters: they are kept in the wallet,
+ * which a season's wipe never touches, and come to the player's mail from there. Any other answer, and a wallet that cannot be reached, go through.
+ */
+async function withGifts(env: Env, key: string, response: Response): Promise<Response> {
+  const headers = { 'Content-Type': 'application/json', ...CORS };
+  const text = await response.text();
+  const user = /^tg(\d+)$/.exec(key)?.[1];
+  if (!response.ok || !user) return new Response(text, { status: response.status, headers });
+  try {
+    const answer = JSON.parse(text) as { mail?: Array<{ at: number }> };
+    if (!Array.isArray(answer.mail)) return new Response(text, { status: response.status, headers });
+    const gifts = giftLetters(await walletsOf(env).get(Number(user)), Date.now());
+    if (gifts.length === 0) return new Response(text, { status: response.status, headers });
+    answer.mail = [...gifts, ...answer.mail].sort((a, b) => b.at - a.at);
+    return new Response(JSON.stringify(answer), { status: response.status, headers });
+  } catch {
+    return new Response(text, { status: response.status, headers });
+  }
 }
 
 /** POST /mail: read, claim or claim all; the player's own object does it. */
@@ -103,8 +127,18 @@ export async function mailRoute(request: Request, env: Env): Promise<Response> {
   const op = body.op === 'readAll' || body.op === 'claim' || body.op === 'claimAll' ? body.op : null;
   if (!op) return json({ error: 'bad op' }, 400);
   const id = typeof body.letter === 'string' ? body.letter.slice(0, 64) : '';
-  const response = await playerStub(env, player.key).fetch('https://player/mail', { method: 'POST', body: JSON.stringify({ player, op, id }) });
-  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', ...CORS } });
+  // A gift's letter is claimed in the wallet (it grants the item there); the player's own object hears of the rest.
+  const user = /^tg(\d+)$/.exec(player.key)?.[1];
+  const gift = op === 'claim' && id.startsWith('gift:');
+  if (user && (gift || op === 'claimAll')) {
+    try {
+      await claimGifts(walletsOf(env), Number(user), gift ? id.slice('gift:'.length) : null, Date.now());
+    } catch {
+      return json({ error: 'wallet' }, 502);
+    }
+  }
+  const response = await playerStub(env, player.key).fetch('https://player/mail', { method: 'POST', body: JSON.stringify({ player, op: gift ? 'none' : op, id }) });
+  return withGifts(env, player.key, response);
 }
 
 /**
@@ -187,6 +221,12 @@ export class Player extends DurableObject<Env> {
     const logic = await this.load();
     const now = Date.now();
     if (url.pathname === '/mail') return json(await this.mail(logic, body, now));
+    if (url.pathname === '/facts') {
+      // What the shop needs of the player (shopapi.ts): the pass's XP, the best streak and the trophies that earn things.
+      const p = logic.profile;
+      const facts: Facts = { pass: p.pass ?? null, streakBest: p.streak.best, trophies: p.trophies.map((trophy) => ({ board: trophy.board, place: trophy.place })) };
+      return json(facts);
+    }
     if (url.pathname === '/honor') {
       // The admin confirmed a problem report (index.ts adminOps): the badge goes to the profile, once.
       const granted = giveHonor(logic.profile, String(body.honor ?? ''));
@@ -290,13 +330,17 @@ export class Player extends DurableObject<Env> {
   /** A finished run onto the boards it counts for; its place on each. */
   private async submit(player: Who, summary: RunSummary, now: number): Promise<Partial<Record<BoardKind, number | null>>> {
     const places: Partial<Record<BoardKind, number | null>> = {};
-    const patron = await this.patron(player.key, now);
+    const wallet = await this.wallet(player.key);
+    const patron = wallet ? isPatron(wallet, now) : false;
+    // What the player wears for the boards: a name colour, a title and a portrait frame (Pixel-Mart's catalogue; looks only).
+    const worn = wallet ? shopOf(wallet).equipped.slots : {};
     for (const kind of boardsFor(summary)) {
       const name = boardOfRun(kind, summary, now);
       const entry: DailyEntry = {
         id: await publicId(boardKey(this.env), name, player.key), owner: player.key, name: player.name,
         heroClass: summary.heroClass, depth: summary.depth, level: summary.level, gold: summary.gold, won: summary.won,
         score: summary.score, turns: summary.turns, kills: summary.kills, at: now, ...(patron ? { patron } : {}),
+        ...(worn.namecolor ? { nc: worn.namecolor } : {}), ...(worn.title ? { tt: worn.title } : {}), ...(worn.frame ? { fr: worn.frame } : {}),
       };
       noteEntered(this.logic!.profile, name);
       try {
@@ -309,14 +353,13 @@ export class Player extends DurableObject<Env> {
     return places;
   }
 
-  /** Whether a Telegram player is a patron now (Pixel-Mart): a star by their name on the boards. */
-  private async patron(key: string, now: number): Promise<boolean> {
-    if (!/^tg\d+$/.test(key)) return false;
+  /** A Telegram player's wallet (Pixel-Mart): a patron's star by their name on the boards, what they wear for them. Null if it cannot be had. */
+  private async wallet(key: string): Promise<WalletView | null> {
+    if (!/^tg\d+$/.test(key)) return null;
     try {
-      const wallet = (await (await this.env.WALLET.get(this.env.WALLET.idFromName(key)).fetch('https://wallet/')).json()) as Wallet;
-      return isPatron(wallet, now);
+      return (await (await this.env.WALLET.get(this.env.WALLET.idFromName(key)).fetch('https://wallet/')).json()) as WalletView;
     } catch {
-      return false;
+      return null;
     }
   }
 

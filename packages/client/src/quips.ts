@@ -127,6 +127,8 @@ export class QuipPicker {
     private readonly data: QuipData,
     private readonly mode: () => QuipMode = () => quipMode.value,
     private readonly random: () => number = Math.random,
+    /** A quip pack worn (Pixel-Mart, quip-packs.ts): the lines it has for the moment, which are said in place of the ordinary ones. */
+    private readonly pack: (moment: Moment, heroClass: QuipClass) => readonly string[] | null = () => null,
   ) {}
 
   /** A line for the moment, or null: switched off, too soon after the last, not this time, or nothing to say. */
@@ -140,7 +142,7 @@ export class QuipPicker {
     if (!sure && this.random() >= chance) return null;
     const general = GENERAL[moment];
     const from = general && this.random() < general[1] ? general[0] : moment;
-    const line = this.choose(poolOf(this.data[mode], from, heroClass));
+    const line = this.choose(this.pack(moment, heroClass) ?? poolOf(this.data[mode], from, heroClass));
     if (line === null) return null;
     this.last = now;
     this.recent.push(line);

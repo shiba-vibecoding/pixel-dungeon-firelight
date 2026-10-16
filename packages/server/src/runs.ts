@@ -1,7 +1,9 @@
 import {
-  act, type Action, addHero, applyBoon, type BadgeId, type BadgeProgress, type Bones, checkBadges, countGame, createWorld, dailyRules, deriveSeed,
+  act, type Action, addHero, applyBoon, type BadgeId, type BadgeProgress, type Bones, checkBadges, countGame, createWorld, dailyRules, dayOf, deriveSeed,
   emptyBadgeProgress, fingerprint, giveBones, type HeroClass, heroById, leaveBones, Rng, type RunOutcome, runOutcome, type World,
 } from '@pd/core';
+import { awardRun, type PassProgress } from '../../client/src/pass';
+import { SEASON } from './boards';
 import type { Letter } from './mail';
 
 /*
@@ -104,6 +106,8 @@ export interface Profile {
   honors?: string[];
   /** The problem reports sent today, for the daily limit (problem.ts). */
   problems?: { day: string; count: number };
+  /** The season pass's XP, from this season's checked runs only (pass.ts); a new season starts it afresh with the rest of the profile. */
+  pass?: PassProgress;
 }
 
 export const MAX_FREEZES = 2;
@@ -329,6 +333,10 @@ export class PlayerLogic {
       p.bones = leaveBones(me, rng.int(4), rng.float());
     }
     p.history = [summary, ...p.history].slice(0, HISTORY);
+    // Pass XP for the run, once (pass.ts): from the server's own copy of the run, so nothing a device says can add to it.
+    p.pass = awardRun(p.pass, SEASON, {
+      id: run.id, mode: outcome.mode, daily: run.slot === 'daily', ranked: run.ranked, depth: outcome.depth, kills: outcome.kills, won: outcome.won,
+    }, dayOf(now)).progress;
     run.record = record;
     return { summary, record };
   }
