@@ -1,10 +1,12 @@
-import { CATALOG, type Item, passSku } from './catalog';
+import { CATALOG, forSale, type Item, itemById, passSku } from './catalog';
 
 /*
  * The season pass: 30 levels, a free track and a paid one, a season long (the season is the world's, boards.ts SEASON on the server;
  * a new season starts a new pass, and the checked-run XP starts from nothing with the player's profile). XP comes from checked runs
  * only (the server adds it as a run ends, once per run: see awardRun), so a device cannot give itself any. The rewards are catalogue
- * items, the earn-only ones that name a level (catalog.ts); buying the paid track is one Stars purchase a season (passSku).
+ * items, those that name a level (an earn-only one, or the catalogue's `reward`; catalog.ts PASS_FREE and PASS_PAID: the designer's lines);
+ * buying the paid track is one Stars purchase a season (passSku), 300 Stars. The paid line is worth at least PAID_VALUE_MIN Stars at
+ * the shop's prices, and its last level is something the shop does not sell (validatePass).
  *
  * Pure data and arithmetic, shared by the server (which keeps the XP and the claims) and the client (which shows the track).
  */
@@ -105,13 +107,17 @@ export interface Reward {
   paid?: string;
 }
 
-/** The pass's rewards by level, from the catalogue's earn-only items that name a level. */
+/** The least the paid line's rewards add up to at the shop's prices, Stars: the pass is worth buying. */
+export const PAID_VALUE_MIN = 1000;
+
+/** The pass's rewards by level, from the catalogue's items that name a level. */
 export function rewardsOf(catalog: readonly Item[] = CATALOG): Reward[] {
   const rewards: Reward[] = Array.from({ length: PASS_LEVELS }, (_, i) => ({ level: i + 1 }));
   for (const entry of catalog) {
-    if (entry.earn?.by !== 'pass') continue;
-    const reward = rewards[entry.earn.level - 1];
-    if (reward) reward[entry.earn.track] = entry.id;
+    const at = entry.earn?.by === 'pass' ? entry.earn : entry.reward;
+    if (!at) continue;
+    const reward = rewards[at.level - 1];
+    if (reward) reward[at.track] = entry.id;
   }
   return rewards;
 }
@@ -126,8 +132,9 @@ export function validatePass(catalog: readonly Item[] = CATALOG): string[] {
   const problems: string[] = [];
   const seen = new Set<string>();
   for (const entry of catalog) {
-    if (entry.earn?.by !== 'pass') continue;
-    const { level, track } = entry.earn;
+    const at = entry.earn?.by === 'pass' ? entry.earn : entry.reward;
+    if (!at) continue;
+    const { level, track } = at;
     if (!Number.isInteger(level) || level < 1 || level > PASS_LEVELS) problems.push(`${entry.id}: level ${level} is off the track`);
     const key = `${track}:${level}`;
     if (seen.has(key)) problems.push(`${entry.id}: two rewards at ${key}`);
@@ -137,6 +144,11 @@ export function validatePass(catalog: readonly Item[] = CATALOG): string[] {
   if (!REWARDS.some((reward) => reward.paid)) problems.push('the paid track is empty');
   // The top of each track ends with its best reward.
   if (!rewardAt('free', PASS_LEVELS) || !rewardAt('paid', PASS_LEVELS)) problems.push('level 30 gives nothing on a track');
+  const value = REWARDS.reduce((sum, reward) => sum + (reward.paid ? itemById(reward.paid)?.stars ?? 0 : 0), 0);
+  if (value < PAID_VALUE_MIN) problems.push(`the paid line is worth ${value} Stars at the shop, under ${PAID_VALUE_MIN}`);
+  const last = REWARDS[PASS_LEVELS - 1]?.paid;
+  const lastItem = last ? itemById(last) : undefined;
+  if (lastItem && forSale(lastItem)) problems.push(`level 30 of the paid line (${last}) is sold in the shop: it must be exclusive`);
   return problems;
 }
 

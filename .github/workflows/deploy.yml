@@ -85,6 +85,6 @@ jobs:
           cache: npm
       - run: npm ci
         if: env.CLOUDFLARE_API_TOKEN != ''
-      # Firelight is not live yet: CI deploys only the test server (wrangler.staging.jsonc), never the live pd-coop.
-      - run: npx wrangler deploy --config packages/server/wrangler.staging.jsonc
+      # Firelight is live: CI deploys the live server pd-coop with the client, so their rules never drift. The test server is deployed by hand (wrangler.staging.jsonc).
+      - run: npx wrangler deploy --config packages/server/wrangler.jsonc
         if: env.CLOUDFLARE_API_TOKEN != ''

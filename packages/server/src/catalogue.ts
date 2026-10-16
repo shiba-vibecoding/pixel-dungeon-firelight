@@ -90,6 +90,8 @@ export function invoiceText(offer: Offer, language?: string): InvoiceText {
   }
 }
 
+const CLASS_WORD: Record<HeroClass, [ru: string, en: string]> = { warrior: ['Воин', 'Warrior'], mage: ['Маг', 'Mage'], rogue: ['Разбойник', 'Rogue'], huntress: ['Охотница', 'Huntress'] };
+
 const CATEGORY_WORD: Record<Category, [ru: string, en: string]> = {
   look: ['Облик', 'Look'], campfire: ['Костёр', 'Campfire'], hat: ['Шапка', 'Hat'], pet: ['Питомец', 'Pet'], trail: ['След', 'Trail'],
   killfx: ['Эффект убийства', 'Kill effect'], deathfx: ['Эффект гибели', 'Death effect'], numbers: ['Числа урона', 'Damage numbers'],
@@ -102,7 +104,8 @@ const CATEGORY_WORD: Record<Category, [ru: string, en: string]> = {
 export function itemInvoiceText(entry: Item, language?: string, gift = false): InvoiceText {
   const ru = speaksRussian(language);
   const lang = ru ? 'ru' : 'en';
-  const name = itemName(entry, lang);
+  // A look is of a class: the receipt says whose (the card names it by its colour alone).
+  const name = entry.category === 'look' && entry.heroClass ? `${CLASS_WORD[entry.heroClass][ru ? 0 : 1]}: ${itemName(entry, lang)}` : itemName(entry, lang);
   const word = CATEGORY_WORD[entry.category][ru ? 0 : 1];
   const parts = entry.items?.map((id) => itemById(id)).filter((part): part is Item => part !== undefined).map((part) => itemName(part, lang));
   const what = entry.category === 'pass'

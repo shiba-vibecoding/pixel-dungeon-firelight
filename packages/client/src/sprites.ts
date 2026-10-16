@@ -347,6 +347,18 @@ const sheet = (image: HTMLImageElement, w: number, h: number): Sheet => ({ image
 /** Where the sprite sheets are, for the looks loaded later. */
 let assetBase = '';
 
+/** The sprite of a hero drawn from a Pixel-Mart look's sheet (the designer's, in the layout of the original), made once for each sheet. */
+const lookSprites = new WeakMap<HTMLImageElement, CharSprite>();
+
+export function lookSprite(image: HTMLImageElement): CharSprite {
+  let sprite = lookSprites.get(image);
+  if (!sprite) {
+    sprite = { sheet: sheet(image, 12, 15), anims: HERO_ANIMS };
+    lookSprites.set(image, sprite);
+  }
+  return sprite;
+}
+
 /** Hero looks bought in Pixel-Mart (assets/skins/<sheet>-<variant>.png), loaded when first worn. */
 const looks = new Map<string, CharSprite | null>();
 

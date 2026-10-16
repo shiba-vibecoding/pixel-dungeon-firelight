@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Scene } from 'three';
 import { LENGTH, T, WIDTH, createWorld, levelAt } from '@pd/core';
 import { LevelGeom } from '../src/r3d/levelgeom';
-import { LightRig, sourcesOf } from '../src/r3d/lightrig';
+import { LightRig, type Strongest, sourcesOf } from '../src/r3d/lightrig';
 import { atmosphere, lights, parseKit, regionKit } from '../src/r3d/kit';
 import { parseCss } from '../src/r3d/effects3d';
 
@@ -112,5 +112,25 @@ describe('the colours the game\'s effects write', () => {
     expect(parseCss('#ff8000')).toBe(hex);
     // What cannot be read is white, not an error in the middle of a frame.
     expect(Array.from(parseCss('mauve'))).toEqual([1, 1, 1, 1]);
+  });
+
+  it('picks the strongest light near a figure for its rim, nothing when none reaches it', () => {
+    const level = levelAt(createWorld(7), 1);
+    const geom = new LevelGeom(level.map, 16, 16);
+    const sources = sourcesOf(kit, regionKit(kit, 0), geom, true);
+    const rig = new LightRig(new Scene(), false);
+    rig.configure(lights(kit, atmosphere(kit, 0, 1)), sources, 0);
+    const torch = sources.find((s) => s.torch)!;
+    const explored = new Array<boolean>(LENGTH).fill(true);
+    rig.assign(torch.x, torch.z + 3, explored, 2);
+    const out: Strongest = { ux: 0, uz: 0, r: 0, g: 0, b: 0, strength: 0 };
+    // Three cells south of a torch: it lies due north (toward -z), and is as strong as the cap allows.
+    expect(rig.strongest(torch.x, torch.z + 3, 0.3, 0.6, out)).toBe(true);
+    expect(out.uz).toBeLessThan(-0.9);
+    expect(out.strength).toBeGreaterThan(0);
+    expect(out.strength).toBeLessThanOrEqual(0.6);
+    expect(Math.hypot(out.ux, out.uz)).toBeCloseTo(1, 5);
+    // Far from every light (past each one's distance): none.
+    expect(rig.strongest(-100, -100, 0.3, 0.6, out)).toBe(false);
   });
 });

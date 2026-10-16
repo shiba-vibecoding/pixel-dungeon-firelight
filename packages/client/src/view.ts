@@ -7,7 +7,9 @@ import { audio, type Sound } from './audio';
 import { BLUNT_MOBS, BLUNT_WEAPONS, BOLT_SOUND, TRAP_SOUND } from './soundmap';
 import { capitalize, t } from './i18n';
 import { itemName, plainName } from './itemtext';
-import { type AnimName, type Assets, type CharSprite, duration, heroSprite } from './sprites';
+import { type AnimName, type Assets, type CharSprite, duration, heroSprite, lookSprite } from './sprites';
+import { wornFor, type Worn } from './wear';
+import { type WearQuad, WearFx } from './wearfx';
 import { seenCells } from './sight';
 import { haptic } from './telegram';
 import { DEPTH_CARD_MS } from './cards';
@@ -78,6 +80,8 @@ export interface Puppet {
   moveDur?: number;
   /** A hero's Pixel-Mart look (effect, the patron's star); undefined for monsters. */
   look?: Look;
+  /** What the player's own hero wears, as pictures (a look's glow and aura, a hat); undefined for anyone else. */
+  worn?: Worn;
   /** Hero class or monster kind. */
   kind: string;
   sprite: CharSprite;
@@ -256,6 +260,10 @@ export class View {
   log: LogLine[] = [];
   /** What each player wears (Pixel-Mart), by hero id: their look, effect and frame, and the patron's star. */
   looks: Record<string, Look> = {};
+  /** What my hero's cosmetics put on the floor: footprints, the effects of a kill and a fall, the pet. */
+  readonly wearFx = new WearFx();
+  /** Who last struck each foe (a kill's effect is played for my own kills only). */
+  private readonly struck = new Map<string, string>();
   depth = 0;
   /** When the "boss slain" banner appeared, or 0. */
   bannerStart = 0;
@@ -279,6 +287,8 @@ export class View {
   reset(depth: number): void {
     this.depth = depth;
     this.puppets.clear();
+    this.struck.clear();
+    this.wearFx.reset();
     this.floaters = [];
     this.flashes = [];
     this.bannerStart = 0;
@@ -298,6 +308,7 @@ export class View {
       this.bossIntro !== null || this.levelCard !== null || this.floorTitle !== null || this.depthCard !== null ||
       this.waveCard !== null || this.bannerStart > 0
     ) return true;
+    if (this.wearFx.busy(now)) return true;
     for (const p of this.puppets.values()) {
       if (!p.alive) {
         if (!p.laid && now < p.removeAt + 100) return true;
@@ -438,8 +449,10 @@ export class View {
           hero.invisible > 0,
         );
         const puppet = this.puppets.get(hero.id)!;
-        // Pixel-Mart: the hero's look, once its sheet has loaded.
-        puppet.sprite = heroSprite(this.assets, hero.heroClass, this.looks[hero.id]?.skin);
+        // Pixel-Mart: the hero's look, once its sheet has loaded (my own hero wears what the shop's catalogue gives: flart.ts).
+        const worn = hero.id === myId ? wornFor(hero.heroClass) : undefined;
+        puppet.worn = worn?.any ? worn : undefined;
+        puppet.sprite = worn?.look ? lookSprite(worn.look.sheet) : heroSprite(this.assets, hero.heroClass, this.looks[hero.id]?.skin);
         puppet.look = this.looks[hero.id];
         puppet.burning = hero.burning > 0;
         puppet.poisoned = hero.poison > 0;
@@ -510,6 +523,17 @@ export class View {
       left = Math.max(left, puppet.moveStart + (puppet.moveDur ?? this.stepMs) + (puppet.queue?.length ?? 0) * this.stepMs - now);
     }
     return left;
+  }
+
+  /**
+   * The pictures my hero's cosmetics put on the floor now (wearfx.ts): footprints, kill and fall effects, the pet. Empty unless
+   * something is worn and the art has come.
+   */
+  wearQuads(myId: string, now: number): { quads: readonly WearQuad[]; count: number } {
+    const hero = this.puppets.get(myId);
+    const worn = hero?.worn;
+    if (!hero || !worn) return this.wearFx.collect({ any: false }, null, now);
+    return this.wearFx.collect(worn, { cell: this.cellOf(hero, now), depth: this.depth, stepMs: this.stepMs }, now);
   }
 
   /** Interpolated position in world pixels. */
@@ -586,6 +610,7 @@ export class View {
           }
           if (effect.hit) {
             if (target) target.flashUntil = now + 160;
+            if (effect.target.startsWith('#')) this.struck.set(effect.target, effect.attacker);
             const toHero = !effect.target.startsWith('#');
             this.float(effect.target, String(effect.damage), toHero ? COLORS.negative : COLORS.warning, now);
             audio.play(blowSound(world, effect.attacker, this.puppets.get(effect.attacker)?.kind), 0.8 + Math.random() * 0.45, 1, this.placeOf(effect.target, now));
@@ -616,7 +641,17 @@ export class View {
           if (effect.who.startsWith('#')) {
             const kind = this.puppets.get(effect.who)?.kind as MobKind | undefined;
             if (kind && effect.depth === this.depth) this.say(t.killed(t.mobs[kind]), COLORS.neutral, now);
+            // My own kill: the effect of the one I wear, where the foe stood.
+            const fallen = this.puppets.get(effect.who);
+            if (fallen && effect.depth === this.depth && this.struck.get(effect.who) === myId) {
+              const at = this.position(fallen, now);
+              this.wearFx.kill(Math.round(at.x), Math.round(at.y), now);
+            }
           } else {
+            if (effect.who === myId && effect.depth === this.depth) {
+              const grave = this.puppets.get(effect.who);
+              if (grave) this.wearFx.fall(cellX(grave.to) * TILE, cellY(grave.to) * TILE, now);
+            }
             audio.play('death');
             if (effect.who === myId) audio.stinger('death');
             if (effect.who !== myId) this.say(t.heroDied(this.name(world, effect.who)), COLORS.negative, now);

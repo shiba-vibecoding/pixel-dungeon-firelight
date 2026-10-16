@@ -1,6 +1,6 @@
 import { emptyWallet, type Wallet, walletPay, walletRefund } from '@pd/core';
 import {
-  cleanEquipped, DECOR_MAX, type Equipped, earnOnly, emptyEquipped, grantedBy, isPassSku, itemById, passSeason, passSku, type Slot, slotOf,
+  canonical, cleanEquipped, DECOR_MAX, DEFAULT_OWNED, type Equipped, earnOnly, emptyEquipped, grantedBy, isPassSku, itemById, passSeason, passSku, type Slot, slotOf,
 } from '../../client/src/catalog';
 import { PASS_LEVELS, rewardAt, type Track } from '../../client/src/pass';
 
@@ -95,11 +95,25 @@ export const REFUNDS_KEPT = 500;
 /** How many gifts the mail keeps at once. */
 export const INBOX_MAX = 60;
 
-/** Every item the shop state grants. */
+/** Every item the shop state grants (what every player has, the classic campfire, is not a grant: see mayWear). */
 export function ownedItems(shop: ShopState): Set<string> {
   const owned = new Set<string>();
-  for (const items of Object.values(shop.grants)) for (const id of items) owned.add(id);
+  // A grant of the first catalogue's placeholder counts as the item it became (catalog.ts LEGACY); storage keeps the old id.
+  for (const items of Object.values(shop.grants)) for (const id of items) owned.add(canonical(id));
   return owned;
+}
+
+/**
+ * The once-only offers (the starter kit, whatever the class) this wallet has bought: by its charges, so a refund frees the offer again.
+ * Gifts are never once-only offers.
+ */
+export function onceTaken(wallet: Wallet): Set<string> {
+  const taken = new Set<string>();
+  for (const paid of Object.values(wallet.charges)) {
+    const once = itemById(paid.sku)?.once;
+    if (once) taken.add(once);
+  }
+  return taken;
 }
 
 /** Why an equip is refused, or null: the slot is known, the item fits it and is owned. */
@@ -108,7 +122,7 @@ export function equipProblem(owned: ReadonlySet<string>, slot: string, id: strin
   const entry = itemById(id);
   if (!entry) return 'unknown item';
   if (slotOf(entry) !== slot) return 'does not fit the slot';
-  if (!owned.has(id)) return 'not owned';
+  if (!owned.has(id) && !DEFAULT_OWNED.includes(id)) return 'not owned';
   return null;
 }
 
@@ -128,7 +142,7 @@ export function decorProblem(owned: ReadonlySet<string>, ids: readonly string[])
 function pruneEquipped(shop: ShopState): void {
   const owned = ownedItems(shop);
   const slots: Equipped['slots'] = {};
-  for (const [slot, id] of Object.entries(shop.equipped.slots)) if (id && owned.has(id)) slots[slot as Slot] = id;
+  for (const [slot, id] of Object.entries(shop.equipped.slots)) if (id && (owned.has(id) || DEFAULT_OWNED.includes(id))) slots[slot as Slot] = id;
   shop.equipped = { slots, decor: shop.equipped.decor.filter((id) => owned.has(id)) };
 }
 
@@ -150,7 +164,7 @@ export function applyWalletChange(record: WalletRecord, change: WalletChange): W
   switch (change.kind) {
     case 'pay':
       if (record.refunded.includes(change.charge)) return record;
-      if (itemById(change.sku)) return payItem(record, change);
+      if (itemById(canonical(change.sku))) return payItem(record, change);
       return { ...record, wallet: walletPay(record.wallet, change.sku, change.charge, change.stars, change.at, change.expiresAt) };
     case 'refund': {
       const paid = record.wallet.charges[change.charge];
@@ -179,8 +193,11 @@ export function applyWalletChange(record: WalletRecord, change: WalletChange): W
 /** A purchase of a catalogue item: it, or the parts of a bundle, are granted by the charge; a gift is granted to the friend instead. */
 function payItem(record: WalletRecord, change: Extract<WalletChange, { kind: 'pay' }>): WalletRecord {
   if (record.wallet.charges[change.charge]) return record;
+  // A once-only offer paid for twice at once (two checkouts open together) is granted once: the second charge is kept for a refund.
+  const again = !change.gift && itemById(change.sku)?.once !== undefined && onceTaken(record.wallet).has(itemById(change.sku)!.once!);
   const wallet: Wallet = { ...record.wallet, charges: { ...record.wallet.charges, [change.charge]: { sku: change.sku, stars: change.stars, at: change.at } } };
   const shop = clone(record.shop);
+  if (again) return { ...record, wallet, shop };
   if (change.gift) {
     shop.sent[change.charge] = {
       sku: change.sku, at: change.at, delivered: 'link' in change.gift,
@@ -196,7 +213,7 @@ function payItem(record: WalletRecord, change: Extract<WalletChange, { kind: 'pa
 function applyShopChange(shop: ShopState, change: Exclude<WalletChange, { kind: 'pay' | 'refund' }>): ShopState {
   switch (change.kind) {
     case 'gift':
-      if (shop.inbox.some((note) => note.id === change.id) || !itemById(change.sku)) return shop;
+      if (shop.inbox.some((note) => note.id === change.id) || !itemById(canonical(change.sku))) return shop;
       shop.inbox = [{ id: change.id, sku: change.sku, from: change.from, at: change.at, ...(change.name ? { name: change.name.slice(0, 32) } : {}) }, ...shop.inbox].slice(0, INBOX_MAX);
       return shop;
     case 'delivered':
