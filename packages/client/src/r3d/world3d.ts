@@ -25,6 +25,7 @@ import { sheet as worldSheet } from '../worldsheets';
 import { fx } from '../fx';
 import { knockback, LUNGE_MS } from '../render';
 import { FALL_MS, type Puppet, TILE, type View } from '../view';
+import { puppetAlpha } from '../puppetfade';
 import { ATLAS_H, ATLAS_W, Atlas } from './atlas';
 import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrain, loadKit, loadRegion, propCutout } from './assets3d';
 import { Effects3D, type FxContext, parseCss } from './effects3d';
@@ -71,8 +72,8 @@ export interface Shown {
 
 const MAX_SPRITES = 360;
 const MAX_DEAD = 96;
-/** How long a body lies in the 3D view before it fades away (the original's dead sprite fades out in about this). */
-const CORPSE_FADE_MS = 1000;
+/** How long a body lies in the 3D view before it fades away (MobSprite.FADE_TIME: the original's dead sprite fades out over three seconds). */
+const CORPSE_FADE_MS = 3000;
 /** The most soft-bodied figures (a ghost, a wraith, bees) drawn at once, in their own blended batch. */
 const MAX_BLENDED = 48;
 /** The cold glow round a ghost. */
@@ -250,6 +251,10 @@ export class World3D {
   /** The blended batch for figures with soft bodies: alpha-blended, no depth written, sorted back to front; drawn only when one is on screen. */
   private readonly ghosts: InstancedMesh;
   private readonly ghostUv: InstancedBufferAttribute;
+  /** Each blended figure's own opacity (a wraith rising, a ghost turning into its curse): the alpha of its picture is scaled by it. */
+  private readonly ghostAlpha: InstancedBufferAttribute;
+  /** The opacity of the next figure written (0 to 1). */
+  private figureAlpha = 1;
   private ghostCount = 0;
   private readonly ghostZ = new Float32Array(MAX_BLENDED);
   /** Drawn this frame, for the marks the 2D layer puts over them. */
@@ -383,6 +388,19 @@ export class World3D {
       map: this.atlas.color, emissive: 0x86aedb, transparent: true, depthWrite: false, alphaTest: 0.02, side: DoubleSide,
     });
     withFog(softMaterial, this.air, 'instance');
+    // The fade is through the picture's alpha: a per-instance `aAlpha` scales it (the dead batch dissolves by dither; this one blends).
+    const softBefore = softMaterial.onBeforeCompile;
+    const softKey = softMaterial.customProgramCacheKey;
+    softMaterial.onBeforeCompile = (shader, renderer) => {
+      softBefore.call(softMaterial, shader, renderer);
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aAlpha;\nvarying float vAlpha;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vAlpha = aAlpha;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vAlpha;')
+        .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.a *= vAlpha;');
+    };
+    softMaterial.customProgramCacheKey = () => `${softKey.call(softMaterial)}-alpha`;
     this.ghosts = new InstancedMesh(softQuad, softMaterial, MAX_BLENDED);
     this.ghosts.instanceMatrix.setUsage(DynamicDrawUsage);
     this.ghosts.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_BLENDED * 3).fill(1), 3);
@@ -390,6 +408,8 @@ export class World3D {
     this.ghostUv = new InstancedBufferAttribute(new Float32Array(MAX_BLENDED * 4), 4);
     this.ghostUv.setUsage(DynamicDrawUsage);
     softQuad.setAttribute('aUv', this.ghostUv);
+    this.ghostAlpha = new InstancedBufferAttribute(new Float32Array(MAX_BLENDED).fill(1), 1).setUsage(DynamicDrawUsage);
+    softQuad.setAttribute('aAlpha', this.ghostAlpha);
     this.ghosts.frustumCulled = false;
     this.ghosts.renderOrder = 3.7;
     this.ghosts.count = 0;
@@ -657,7 +677,10 @@ export class World3D {
     // Three batches: the living, the dead (under them, dissolving) and the soft-bodied (blended, sorted back to front).
     const batch = blend ? this.ghosts : dead ? this.deadMesh : this.sprites;
     const i = blend ? this.ghostCount++ : dead ? this.deadCount++ : this.spriteCount++;
-    if (blend) this.ghostZ[i] = z;
+    if (blend) {
+      this.ghostZ[i] = z;
+      (this.ghostAlpha.array as Float32Array)[i] = this.figureAlpha;
+    }
     const m = batch.instanceMatrix.array as Float32Array;
     const o = i * 16;
     m[o] = width; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
@@ -704,7 +727,9 @@ export class World3D {
     const m = this.ghosts.instanceMatrix.array as Float32Array;
     const uv = this.ghostUv.array as Float32Array;
     const c = this.ghosts.instanceColor!.array as Float32Array;
+    const al = this.ghostAlpha.array as Float32Array;
     const swap = (a: number, b: number): void => {
+      const ta = al[a]!; al[a] = al[b]!; al[b] = ta;
       for (let k = 0; k < 16; k++) { const t = m[a * 16 + k]!; m[a * 16 + k] = m[b * 16 + k]!; m[b * 16 + k] = t; }
       for (let k = 0; k < 4; k++) { const t = uv[a * 4 + k]!; uv[a * 4 + k] = uv[b * 4 + k]!; uv[b * 4 + k] = t; }
       for (let k = 0; k < 3; k++) { const t = c[a * 3 + k]!; c[a * 3 + k] = c[b * 3 + k]!; c[b * 3 + k] = t; }
@@ -780,11 +805,16 @@ export class World3D {
       tint = 1 - k;
     } else if (!puppet.alive) {
       if (puppet.isHero) tint = 0.75;
-      else if (!puppet.laid) tint = Math.max(0, Math.min(1, (puppet.removeAt - now) / 700));
+      else if (!puppet.laid && !blend) tint = Math.max(0, Math.min(1, (puppet.removeAt - now) / (puppet.fadeMs ?? 700)));
     }
     if (now < puppet.flashUntil) tint = 2.4;
     else if (puppet.pumped && puppet.alive) tint = 1.35 + 0.35 * Math.sin(now / 60);
-    if (tint <= 0 || scale <= 0) return;
+    // A soft-bodied figure fades through its alpha (AlphaTweener: rising, turning into its curse, fading away after death); a solid
+    // one through its tint.
+    const alpha = puppetAlpha(puppet, now, blend);
+    this.figureAlpha = blend ? alpha : 1;
+    if (!blend && alpha < 1) tint *= alpha;
+    if (tint <= 0 || scale <= 0 || alpha <= 0) return;
     const tx = px / TILE;
     const tz = py / TILE;
     const worn = puppet.worn;
@@ -953,6 +983,9 @@ export class World3D {
       this.ghostUv.clearUpdateRanges();
       this.ghostUv.addUpdateRange(0, g * 4);
       this.ghostUv.needsUpdate = true;
+      this.ghostAlpha.clearUpdateRanges();
+      this.ghostAlpha.addUpdateRange(0, g);
+      this.ghostAlpha.needsUpdate = true;
     }
     this.atlas.flush();
 
@@ -1083,8 +1116,8 @@ export class World3D {
       const image = src.image as HTMLImageElement;
       const cell = Math.trunc((c.y + src.h - 2) / TILE) * WIDTH + Math.trunc((c.x + src.w / 2) / TILE);
       if (!f.visible[cell]) continue;
-      // Whole for the first part of its second, then dissolving.
-      this.deadFade = Math.max(0, (age / CORPSE_FADE_MS - 0.3) / 0.7);
+      // Dissolving from the first moment, over the three seconds.
+      this.deadFade = Math.max(0, age / CORPSE_FADE_MS);
       this.sprite(image, src.sx, src.sy, src.w, src.h, src.flip, (c.x + src.w / 2) / TILE, 0, (c.y + src.h - (TILE - FEET_PX)) / TILE, src.w / TILE, src.h / TILE, 1);
     }
     this.toDead = false;

@@ -338,6 +338,24 @@ class Fx {
   }
 
   /**
+   * ShadowParticle.CURSE: dark specks that draw in to a point from all round, each starting where it must to arrive as it ends
+   * (a wraith rising, the curse taking shape, the curse falling on a hero). Half a second.
+   */
+  curse(x: number, y: number, now: number, count: number): void {
+    const room = MAX_PARTICLES - this.particles.length;
+    for (let i = 0; i < Math.min(count, room); i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 16 + Math.random() * 16;
+      const vx = Math.cos(angle) * speed;
+      const vy = Math.sin(angle) * speed;
+      this.particles.push({
+        x: x - vx * 0.5, y: y - vy * 0.5, vx, vy, gravity: 0, drag: 1, born: now, life: 500,
+        size: 3 + Math.round(Math.random()), color: pick(['#440044', '#330033', '#4a1a4a']), glow: false,
+      });
+    }
+  }
+
+  /**
    * A ring kicked up along the floor around a point: dust and gore spreading
    * flat (squashed, as the floor is seen from above) and settling at once.
    */

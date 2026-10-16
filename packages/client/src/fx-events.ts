@@ -623,13 +623,20 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       fx.shake(1.5, 120, now);
       return;
     }
-    case 'wraiths': case 'cursed': {
+    case 'wraiths': {
       if (!here(effect.depth)) return;
-      const at = cellCentre(effect.pos);
-      fx.burst(at.x, at.y, now, { count: 30, colors: VOID, glow: true, speed: [10, 40], life: [600, 1200], rise: 18, drag: 0.4, spread: 8 });
-      fx.flash('60, 0, 80', 0.3, 400, now);
+      // Wraith.spawnAt: each wraith fades in with a draw-in of dark specks (ambientFx sees it rise). Heap.open: when no wraith can rise, the
+      // curse falls on the hero who stands on the remains: six specks round them.
+      for (const puppet of view.puppets.values()) {
+        if (!puppet.isHero || puppet.to !== effect.pos) continue;
+        const at = centreOf(view, puppet.id, now);
+        if (at) fx.curse(at.x, at.y, now, 6);
+      }
       return;
     }
+    case 'cursed':
+      // Ghost.replace: the curse is shown with its sprite, which fades in as the ghost fades out (ambientFx).
+      return;
     case 'sacrifice': {
       if (!here(effect.depth)) return;
       const at = cellCentre(effect.pos);
@@ -741,9 +748,27 @@ const SNOW = ['#ffffff', '#e8f4ff', '#bfe3ff'];
 
 export function ambientFx(view: View, now: number, dt: number): void {
   const chance = (perSecond: number): boolean => Math.random() < (perSecond * dt) / 1000;
+  // The sad ghost taking its leave (Ghost.die): shafts of light, four a third of a second apart, and three glinting specks.
+  const leaving = view.departing;
+  if (leaving) {
+    view.departing = null;
+    for (let k = 0; k < 4; k++) {
+      for (let j = 0; j < 5; j++) fx.burst(leaving.x, leaving.y - 2 - j * 3, now + k * 300, { count: 1, colors: ['#fff6c8', '#ffffff'], glow: true, speed: [0, 1], life: [1100, 1200], rise: 6, drag: 1, size: [1, 2], spread: 1 });
+    }
+    for (let k = 0; k < 3; k++) fx.burst(leaving.x, leaving.y, now + k * 200, { count: 1, colors: ['#ffffff', '#e8f4ff'], glow: true, speed: [0, 3], life: [900, 1000], drag: 1, size: [1, 2], spread: 4 });
+  }
   for (const puppet of view.puppets.values()) {
     if (!puppet.alive) continue;
     const { x, y } = view.position(puppet, now);
+    // A wraith rising, the curse taking shape: five dark specks draw in to it (ShadowParticle.CURSE), as it fades in.
+    if (!puppet.arrived) {
+      puppet.arrived = true;
+      fx.curse(x + TILE / 2, y + TILE / 2, now, 5);
+    }
+    // The curse's own cloud (CursePersonificationSprite): dark specks rising off it, one every tenth of a second.
+    if (puppet.kind === 'curse' && chance(10)) {
+      fx.burst(x + 3 + Math.random() * 10, y + 8, now, { count: 1, colors: ['#440044', '#330033'], speed: [32, 48], angle: -Math.PI / 2, cone: 0.4, life: [1000, 1000], drag: 1, size: [2, 3], spread: 0 });
+    }
     if (puppet.burning && chance(14)) {
       fx.burst(x + 3 + Math.random() * 10, y + 6 + Math.random() * 8, now, { count: 1, colors: FIRE, glow: true, speed: [2, 8], life: [400, 800], rise: 22, drag: 0.5, size: [1, 1], spread: 0 });
     }

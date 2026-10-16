@@ -118,6 +118,15 @@ export interface Puppet {
   knockY?: number;
   /** Slain and leaving a body: its sprite stays whole to the end of its death, then lies as a corpse (fx.ts). */
   laid?: boolean;
+  /**
+   * AlphaTweener: its alpha goes from `from` to `to` over `ms` from `start` (a wraith rising, a ghost turning into the curse that binds
+   * it and back). One that fades out is a copy of the figure that was, kept only while it does.
+   */
+  fade?: { start: number; ms: number; from: number; to: number };
+  /** How long the dead sprite takes to fade away after its death (MobSprite.FADE_TIME is 3 s for the soft-bodied; 0.7 s otherwise here). */
+  fadeMs?: number;
+  /** Its arrival (the cloud of curse) has been shown. */
+  arrived?: boolean;
   /** Burning or poisoned: embers or bubbles rise off it. */
   burning?: boolean;
   poisoned?: boolean;
@@ -248,8 +257,21 @@ function firstVisit(region: number): boolean {
   }
 }
 
+/** The kinds that rise out of nothing (Wraith.spawnAt, Ghost.replace), and the two figures of the sad ghost's cell. */
+const SPAWNED: ReadonlySet<string> = new Set(['wraith', 'curse']);
+const TURNED: ReadonlySet<string> = new Set(['ghost', 'curse']);
+/** AlphaTweener's half a second, and how soon after the event a new figure of these kinds counts as having risen from it. */
+const FADE_IN_MS = 500;
+const RISING_MS = 1500;
+/** MobSprite.FADE_TIME. */
+const DEAD_FADE_MS = 3000;
+
 export class View {
   readonly puppets = new Map<string, Puppet>();
+  /** Until when a figure of the kinds that rise is taken to have risen from an event just seen. */
+  private risingUntil = 0;
+  /** The sad ghost taking its leave: where, and when (fx-events.ts shows the shaft of light). */
+  departing: { x: number; y: number; start: number } | null = null;
   /** How long a step takes on screen (ms): STEP_MS, or under live turns the room's beat, so walks never pause. */
   stepMs = STEP_MS;
   /** While a step just taken is being shown (main.ts): walkers set off this many ms before `now`, so it is already under way on the first frame. */
@@ -307,6 +329,7 @@ export class View {
       this.bannerStart > 0
     ) return true;
     if (this.wearFx.busy(now)) return true;
+    for (const p of this.puppets.values()) if (p.fade) return true;
     for (const p of this.puppets.values()) {
       if (!p.alive) {
         if (!p.laid && now < p.removeAt + 100) return true;
@@ -375,7 +398,20 @@ export class View {
           puppet.anim = 'die';
           puppet.animStart = -1e9;
         }
+        // Wraith.spawnAt: it fades in over half a second where it rises (the cloud of curse is shown with it, fx-events.ts).
+        if (!isHero && now < this.risingUntil && SPAWNED.has(kind)) puppet.fade = { start: now, ms: FADE_IN_MS, from: 0, to: 1 };
+        else puppet.arrived = true;
         this.puppets.set(id, puppet);
+      } else if (!isHero && puppet.kind !== kind && TURNED.has(kind) && TURNED.has(puppet.kind)) {
+        // Ghost.replace: the ghost and the curse that binds it (and back) are one cell's two figures: the old fades out as the new fades in.
+        const was: Puppet = { ...puppet, id: `${id}~was`, fade: { start: now, ms: FADE_IN_MS, from: 1, to: 0 }, queue: undefined };
+        this.puppets.set(was.id, was);
+        puppet.kind = kind;
+        puppet.sprite = sprite;
+        puppet.fade = { start: now, ms: FADE_IN_MS, from: 0, to: 1 };
+        puppet.arrived = kind !== 'curse';
+        puppet.anim = 'idle';
+        puppet.animStart = now;
       } else if (puppet.to !== pos) {
         const map = world.levels[this.depth]?.map;
         // Where the walker will stand once what is on screen has played out.
@@ -464,7 +500,11 @@ export class View {
       puppet.poisoned = (mob.poison ?? 0) > 0;
     }
     for (const [id, puppet] of this.puppets) {
-      if (!seen.has(id) && (puppet.alive || now >= puppet.removeAt)) this.puppets.delete(id);
+      if (seen.has(id)) {
+        if (puppet.fade && puppet.fade.to === 1 && now >= puppet.fade.start + puppet.fade.ms) puppet.fade = undefined;
+      } else if (puppet.fade?.to === 0) {
+        if (now >= puppet.fade.start + puppet.fade.ms) this.puppets.delete(id);
+      } else if (puppet.alive || now >= puppet.removeAt) this.puppets.delete(id);
     }
     for (const puppet of this.puppets.values()) advance(puppet, now, this.stepMs);
 
@@ -621,7 +661,9 @@ export class View {
               puppet.alive = false;
               puppet.anim = 'die';
               puppet.animStart = now;
-              puppet.removeAt = puppet.isHero ? Infinity : now + duration(puppet.sprite.anims.die) + 700;
+              // The soft-bodied (the original's MobSprite fades every dead sprite over 3 s) take their time; the rest are quick.
+              puppet.fadeMs = SPAWNED.has(puppet.kind) || puppet.kind === 'ghost' ? DEAD_FADE_MS : 700;
+              puppet.removeAt = puppet.isHero ? Infinity : now + duration(puppet.sprite.anims.die) + puppet.fadeMs;
             }
           }
           if (effect.who.startsWith('#')) {
@@ -725,6 +767,8 @@ export class View {
           haptic('success');
           break;
         case 'opened':
+          // Heap.open on a tomb or on remains: what rises from it (wraiths, Wraith.spawnAt) fades in.
+          if (effect.depth === this.depth && (effect.heap === 'tomb' || effect.heap === 'skeleton')) this.risingUntil = now + RISING_MS;
           audio.play('item', 0.8);
           break;
         case 'pickedUp': {
@@ -1174,7 +1218,23 @@ export class View {
             audio.play('bee');
           }
           break;
+        case 'ghost':
+          // WndSadGhost: «Farewell, adventurer!» and Ghost.die: its die frame, a shaft of light and specks (fx-events.ts), and the
+          // sprite fades away over three seconds.
+          if (effect.line === 'farewell') {
+            for (const puppet of this.puppets.values()) {
+              if (puppet.kind !== 'ghost' || !puppet.alive || puppet.id.endsWith('~was')) continue;
+              puppet.alive = false;
+              puppet.anim = 'die';
+              puppet.animStart = now;
+              puppet.fadeMs = DEAD_FADE_MS;
+              puppet.removeAt = now + duration(puppet.sprite.anims.die) + DEAD_FADE_MS;
+              this.departing = { x: this.position(puppet, now).x + TILE / 2, y: this.position(puppet, now).y + TILE / 2, start: now };
+            }
+          }
+          break;
         case 'wraiths':
+          this.risingUntil = now + RISING_MS;
           audio.play('cursed');
           if (effect.depth === this.depth) {
             this.flashes.push({ cell: effect.pos, start: now, duration: 500 });
@@ -1182,6 +1242,7 @@ export class View {
           }
           break;
         case 'cursed':
+          this.risingUntil = now + RISING_MS;
           audio.play('ghost');
           if (effect.depth === this.depth) this.say(t.cursed, COLORS.negative, now);
           break;

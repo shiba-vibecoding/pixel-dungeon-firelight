@@ -2,6 +2,7 @@ import { drawVignette } from './vignette';
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
+import { puppetAlpha } from './puppetfade';
 import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
 
 import { fx } from './fx';
@@ -200,9 +201,11 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
       ctx.globalAlpha = 0.75;
     } else if (!puppet.laid) {
       const left = puppet.removeAt - now;
-      ctx.globalAlpha = Math.max(0, Math.min(1, left / 700));
+      ctx.globalAlpha = Math.max(0, Math.min(1, left / (puppet.fadeMs ?? 700)));
     }
   }
+  // AlphaTweener: a wraith rising, a ghost turning into its curse and back.
+  if (puppet.fade) ctx.globalAlpha *= puppetAlpha(puppet, now, false);
   if (puppet.flip) {
     ctx.translate(dx + sheet.w, dy);
     ctx.scale(-1, 1);
