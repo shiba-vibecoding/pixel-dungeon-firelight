@@ -501,7 +501,7 @@ body:has(#overlay.open) .pd-mapctl { visibility: hidden; }
 .pd-report-check { width: 54px; height: 48px; background: var(--spr-check) center / contain no-repeat; image-rendering: pixelated; }
 /* нет связи и обновление */
 .pd-offline-ico { width: 64px; height: 64px; margin: 0 auto; background: var(--spr-offline) center / contain no-repeat; image-rendering: pixelated; }
-.pd-net-badge { position: absolute; left: 50%; top: calc(var(--safe-t, 0px) + 104px); transform: translateX(-50%); z-index: var(--z-hud, 10); display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; white-space: nowrap; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--danger); background: rgba(58, 33, 38, .92); border: var(--u) solid var(--danger); clip-path: var(--notch); }
+.pd-net-badge { position: absolute; left: 50%; top: max(calc(var(--safe-t, 0px) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))); transform: translateX(-50%); z-index: var(--z-hud, 10); display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; white-space: nowrap; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--danger); background: rgba(58, 33, 38, .92); border: var(--u) solid var(--danger); clip-path: var(--notch); }
 .pd-net-badge::before { content: ""; width: 20px; height: 20px; background: var(--spr-offline) center / contain no-repeat; image-rendering: pixelated; }
 .pd-toast.update { display: flex; align-items: center; gap: 8px; }
 .pd-toast.update::before { content: ""; flex: none; width: 24px; height: 24px; background: var(--spr-update) center / contain no-repeat; image-rendering: pixelated; animation: pd-spin 1.2s steps(8) infinite; }
@@ -866,9 +866,3 @@ body.pd-3d canvas#game { position: relative; z-index: 1; }
 .pd-camp-edges { min-height: 0; }
 .pd-camp-sheet { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
-/* The shop's cards on a narrow screen: a title's plate keeps inside its card (the name is under it in full), and a long word wraps rather than runs out. */
-.fl-card-art { grid-template-columns: minmax(0, 1fr); }
-.fl-card-art .pd-item-art.title { width: 100%; display: flex; justify-content: center; }
-.fl-card-art .fl-title-plate { max-width: calc(100% - 8px); box-sizing: border-box; font-size: 15px; padding-right: 6px; }
-.fl-card-art .fl-title-plate > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fl-card-name { overflow-wrap: anywhere; hyphens: auto; }
