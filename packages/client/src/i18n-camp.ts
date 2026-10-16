@@ -44,6 +44,7 @@ export const CAMP_EN = {
     dailyResets: (time: string) => `New rules at ${time} your time`,
     attemptHint: 'The attempt is spent when the run starts.',
     rulesMore: 'The day’s rules: details',
+    rulesTitle: 'Day rules',
     units: { d: 'd', h: 'h', m: 'min', soon: 'a moment' },
   },
   mail: {

@@ -2,6 +2,7 @@ import type { Hero } from '@pd/core';
 import { itemDef } from '@pd/core';
 import { cleanEquipped, DEFAULT_OWNED, HEROES, type Slot } from '../../client/src/catalog';
 import type { Worn } from './leaderboard';
+import { TIERS as LEAGUE_KEYS } from './league-rules';
 import { ownedItems, type ShopState } from './wallet';
 
 /*
@@ -12,7 +13,7 @@ import { ownedItems, type ShopState } from './wallet';
  */
 
 /** The wallet's slot of each field of a Worn (the look is `look.<class>`). */
-const FIELDS: ReadonlyArray<readonly [field: Exclude<keyof Worn, 'l' | 'a'>, slot: Slot]> = [
+const FIELDS: ReadonlyArray<readonly [field: Exclude<keyof Worn, 'l' | 'a' | 'lg'>, slot: Slot]> = [
   ['h', 'hat'], ['p', 'pet'], ['f', 'campfire'], ['fr', 'frame'], ['tt', 'title'], ['nc', 'namecolor'],
 ];
 
@@ -20,7 +21,7 @@ const FIELDS: ReadonlyArray<readonly [field: Exclude<keyof Worn, 'l' | 'a'>, slo
 const CLASSIC = 'fire.classic';
 
 /** What a player's hero of `heroClass` wears on a board: only owned things in their own slots; undefined if nothing is worn. */
-export function wornOf(shop: ShopState, heroClass: string, armor?: number): Worn | undefined {
+export function wornOf(shop: ShopState, heroClass: string, armor?: number, league?: string): Worn | undefined {
   const slots = cleanEquipped(shop.equipped).slots;
   const owned = ownedItems(shop);
   const has = (id: string | undefined): id is string => id !== undefined && (owned.has(id) || DEFAULT_OWNED.includes(id));
@@ -33,6 +34,8 @@ export function wornOf(shop: ShopState, heroClass: string, armor?: number): Worn
     worn[field] = id;
   }
   if (armor !== undefined && Number.isInteger(armor) && armor >= 0 && armor <= ARMOR_TIERS) worn.a = armor;
+  // The step of the league (a player's record, league-flow.ts), never a device's word.
+  if (league !== undefined && LEAGUE_KEYS.includes(league)) worn.lg = league;
   return Object.keys(worn).length > 0 ? worn : undefined;
 }
 
@@ -45,8 +48,8 @@ export function armorTierOf(hero: Pick<Hero, 'armor'>): number {
 }
 
 /** The snapshot for each class a player may have played: what a patch of the open boards carries (the board picks by the entry's class). */
-export function wornByClass(shop: ShopState): Record<string, Worn | undefined> {
-  return Object.fromEntries(HEROES.map((heroClass) => [heroClass, wornOf(shop, heroClass)]));
+export function wornByClass(shop: ShopState, league?: string): Record<string, Worn | undefined> {
+  return Object.fromEntries(HEROES.map((heroClass) => [heroClass, wornOf(shop, heroClass, undefined, league)]));
 }
 
 /** The old per-field entry values (name colour, title, frame) a Worn stands for; kept on entries so a client of before `w` still shows them. */
@@ -54,7 +57,7 @@ export function legacyFields(worn: Worn | undefined): Pick<Worn, 'nc' | 'tt' | '
   return { ...(worn?.nc ? { nc: worn.nc } : {}), ...(worn?.tt ? { tt: worn.tt } : {}), ...(worn?.fr ? { fr: worn.fr } : {}) };
 }
 
-const WORN_KEYS: ReadonlyArray<Exclude<keyof Worn, 'a'>> = ['l', 'h', 'p', 'f', 'fr', 'tt', 'nc'];
+const WORN_KEYS: ReadonlyArray<Exclude<keyof Worn, 'a'>> = ['l', 'h', 'p', 'f', 'fr', 'tt', 'nc', 'lg'];
 
 /** A Worn as it came between the objects (a patch): only the known fields, as short strings; undefined if none. */
 export function cleanWorn(raw: unknown): Worn | undefined {

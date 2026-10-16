@@ -1,0 +1,24 @@
+{
+ "flame": {
+  "sheet": "compete/fires/beacon-flame.png",
+  "frames": 6,
+  "w": 13,
+  "h": 17,
+  "ms": 90
+ },
+ "logs": "compete/fires/beacon-logs.png",
+ "logsAt": [
+  -8,
+  -4
+ ],
+ "sparks": {
+  "sheet": "compete/fires/beacon-sparks.png",
+  "frames": 4,
+  "w": 3,
+  "h": 3,
+  "rise": "straight up in a column, 1 px a frame"
+ },
+ "light": "#ffe9b0",
+ "icon": "compete/fires/icons/beacon.png",
+ "honour": true
+}

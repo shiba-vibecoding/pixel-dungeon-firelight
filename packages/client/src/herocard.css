@@ -36,3 +36,19 @@
 .pd-profile-face.card { width: 80px; height: 56px; background: none; overflow: visible; display: grid; place-items: center; }
 /* a name colour of the shop is the name's colour here, not its size */
 .pd-rank-name .fl-name, .pd-profile-name.fl-name { font: inherit; line-height: inherit; }
+
+/* ---------- The competitions' cards (design part 7): the canvas draws its own frame; the box only lays it out ---------- */
+span.fl-stage { border: 0; background: none; padding: 0; display: block; line-height: 0; }
+.fl-stage > .pd-card { background: none; }
+.fl-stage > .pd-card.fb { background: var(--atlas-heroes) no-repeat; background-size: 96px 30px; background-position: calc(28px - var(--av, 0) * 24px) 13px; }
+.fl-rows.virtual { box-sizing: border-box; gap: 0; }
+.fl-rows.virtual > .fl-row { margin-bottom: 2px; }
+.fl-row.click { cursor: pointer; }
+.fl-title-plate.small img { width: 9px !important; height: 9px !important; }
+.fl-rules-line { margin: 0; font: var(--text-caption); color: var(--ink-muted); }
+.fl-rules-line b { color: var(--fire-light, #ffeba4); font-weight: 400; }
+/* the day's rules on the camp's daily card carry their name in front */
+.pd-daily-rules .pd-rules-title { flex: none; width: 100%; line-height: 16px; }
+/* a row with no place (the player's own runs, a list he is not on): no column for it */
+.fl-row.no-n { grid-template-columns: 80px minmax(0, 1fr) auto; grid-template-areas: "stage name score" "stage sub sub"; padding-left: 0; }
+.fl-board-links { display: flex; gap: 6px; flex-wrap: wrap; }

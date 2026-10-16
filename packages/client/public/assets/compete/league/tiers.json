@@ -1,0 +1,87 @@
+[
+ {
+  "key": "spark",
+  "tier": 1,
+  "name": {
+   "en": "Spark",
+   "ru": "Искра"
+  },
+  "color": "#7e796e",
+  "accent": "#ffb02e",
+  "frame": {
+   "sprite": "compete/league/frame-spark.png",
+   "slice": 4
+  },
+  "badge": "compete/league/badge-spark.png",
+  "mini": "compete/league/mini-spark.png"
+ },
+ {
+  "key": "coal",
+  "tier": 2,
+  "name": {
+   "en": "Coal",
+   "ru": "Уголь"
+  },
+  "color": "#33282a",
+  "accent": "#e8441f",
+  "frame": {
+   "sprite": "compete/league/frame-coal.png",
+   "slice": 4
+  },
+  "badge": "compete/league/badge-coal.png",
+  "mini": "compete/league/mini-coal.png"
+ },
+ {
+  "key": "flame",
+  "tier": 3,
+  "name": {
+   "en": "Flame",
+   "ru": "Пламя"
+  },
+  "color": "#e8641f",
+  "accent": "#ff9a3a",
+  "frame": {
+   "sprite": "compete/league/frame-flame.png",
+   "slice": 4
+  },
+  "badge": "compete/league/badge-flame.png",
+  "mini": "compete/league/mini-flame.png"
+ },
+ {
+  "key": "bonfire",
+  "tier": 4,
+  "name": {
+   "en": "Bonfire",
+   "ru": "Костёр"
+  },
+  "color": "#ffb02e",
+  "accent": "#ffcc66",
+  "frame": {
+   "sprite": "compete/league/frame-bonfire.png",
+   "slice": 4
+  },
+  "badge": "compete/league/badge-bonfire.png",
+  "mini": "compete/league/mini-bonfire.png"
+ },
+ {
+  "key": "beacon",
+  "tier": 5,
+  "name": {
+   "en": "Beacon",
+   "ru": "Маяк"
+  },
+  "color": "#e8c870",
+  "accent": "#bff4ff",
+  "frame": {
+   "sprite": "compete/league/frame-beacon.png",
+   "slice": 4,
+   "anim": {
+    "sheet": "compete/league/frame-beacon-anim.png",
+    "frames": 4,
+    "ms": 160
+   }
+  },
+  "badge": "compete/league/badge-beacon.png",
+  "mini": "compete/league/mini-beacon.png"
+ }
+]

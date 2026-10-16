@@ -10,6 +10,9 @@ export interface TelegramUser {
   first_name?: string;
   username?: string;
   language_code?: string;
+  /** The chat the game was opened from (signed with the rest: a device cannot say another): its mark, and its kind (group, supergroup, channel, private, sender). */
+  chat_instance?: string;
+  chat_type?: string;
 }
 
 /** How long init data is good for: a day for anything that spends, a week to read (the Mini App can stay open for long). */
@@ -59,7 +62,10 @@ export async function verifyInitData(
 
   try {
     const user = JSON.parse(params.get('user') ?? '') as TelegramUser;
-    return typeof user.id === 'number' ? user : null;
+    if (typeof user.id !== 'number') return null;
+    const instance = params.get('chat_instance');
+    const type = params.get('chat_type');
+    return { ...user, ...(instance ? { chat_instance: instance } : {}), ...(type ? { chat_type: type } : {}) };
   } catch {
     return null;
   }

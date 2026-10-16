@@ -125,8 +125,11 @@ export function pruneMail(profile: MailProfile, now: number): boolean {
   return changed;
 }
 
-/** What a board says of a player: their place and how many were on it; null if they are not on it (or it is gone). */
-export type Standing = { rank: number; total?: number } | null;
+/**
+ * What a board says of a player: their place and how many were on it (`played`: how many ever played it, the list holds fewer); null if
+ * they are not on it (or it is gone). A finished day's board also says where they stood on its speed and depth lists.
+ */
+export type Standing = { rank: number; total?: number; played?: number; speed?: number | null; depth?: number | null } | null;
 /** 'error': the board could not be asked; try again next time. */
 export type Lookup = (board: string) => Promise<Standing | 'error'>;
 
@@ -149,12 +152,17 @@ export function addLetter(profile: MailProfile, board: string, standing: NonNull
  * letters. A board that cannot be asked is left for next time; one that is gone or never held
  * the player gives no letter, and no error. True if the profile changed.
  */
-export async function collectMail(profile: MailProfile, now: number, lookup: Lookup): Promise<boolean> {
+export async function collectMail(
+  profile: MailProfile, now: number, lookup: Lookup, onStanding?: (board: string, standing: NonNullable<Standing>) => void,
+): Promise<boolean> {
   let changed = pruneMail(profile, now);
   for (const board of boardsToCheck(profile, now)) {
     const standing = await lookup(board);
     if (standing === 'error') continue;
-    if (standing) addLetter(profile, board, standing);
+    if (standing) {
+      addLetter(profile, board, standing);
+      onStanding?.(board, standing);
+    }
     profile.claimed = [board, ...profile.claimed].slice(0, BOOKS_MAX);
     changed = true;
   }

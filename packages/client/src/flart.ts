@@ -108,7 +108,7 @@ export function loadFl(): Promise<FlCatalog | null> {
       strings = words;
       if (json) {
         catalog = json;
-        byId = new Map(json.items.map((item) => [item.sku, item]));
+        byId = new Map([...json.items, ...extras].map((item) => [item.sku, item]));
         bump();
       }
       return json;
@@ -121,6 +121,16 @@ export function loadFl(): Promise<FlCatalog | null> {
 }
 
 export const flCatalog = (): FlCatalog | null => catalog;
+
+/** Things of the art that are not in the shop's catalogue (the competitions' Beacon fire, design part 7): known by their sku like the rest. */
+const extras: FlRaw[] = [];
+export function addFlItems(items: readonly FlRaw[]): void {
+  for (const item of items) {
+    extras.push(item);
+    byId.set(item.sku, item);
+  }
+  bump();
+}
 
 /** One of the designer's shop strings (strings.json) in a language, `{n}` filled; the key itself until they have come. */
 export function flStr(lang: 'ru' | 'en', key: string, n?: number | string): string {

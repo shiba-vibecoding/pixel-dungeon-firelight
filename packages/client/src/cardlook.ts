@@ -16,12 +16,27 @@ export interface CardLook {
   p?: string;
   f?: string;
   fr?: string;
+  /** The league's step (spark ... beacon): its frame is the card's when no other frame is worn. */
+  lg?: string;
+}
+
+/** What a board entry says of the hero (server worn.ts Worn): everything the card reads, and the name colour and title the row reads. */
+export interface WornShape {
+  a?: number;
+  l?: string;
+  h?: string;
+  p?: string;
+  f?: string;
+  fr?: string;
+  tt?: string;
+  nc?: string;
+  lg?: string;
 }
 
 /** A board entry's hero: its class and the server's snapshot of what the player wore (`w`; absent from older entries: the plain class). */
-export function lookOfEntry(entry: { heroClass: string; w?: { a?: number; l?: string; h?: string; p?: string; f?: string; fr?: string; tt?: string; nc?: string } }): CardLook {
+export function lookOfEntry(entry: { heroClass: string; w?: WornShape }): CardLook {
   const w = entry.w;
-  return { heroClass: entry.heroClass, ...(isTier(w?.a) ? { a: w!.a! } : {}), ...(w?.l ? { l: w.l } : {}), ...(w?.h ? { h: w.h } : {}), ...(w?.p ? { p: w.p } : {}), ...(w?.f ? { f: w.f } : {}), ...(w?.fr ? { fr: w.fr } : {}) };
+  return { heroClass: entry.heroClass, ...(isTier(w?.a) ? { a: w!.a! } : {}), ...(w?.l ? { l: w.l } : {}), ...(w?.h ? { h: w.h } : {}), ...(w?.p ? { p: w.p } : {}), ...(w?.f ? { f: w.f } : {}), ...(w?.fr ? { fr: w.fr } : {}), ...(w?.lg ? { lg: w.lg } : {}) };
 }
 
 /** The rows of a hero's sheet (the armour tiers). */
@@ -66,3 +81,23 @@ export class Lru<V> {
     return this.map.size;
   }
 }
+
+/** The size of a card in CSS pixels: the scene at its scale inside a frame (slice art pixels thick, at the frame's own scale). The board's row is 80 x 56. */
+export function cardSize(scene: readonly [number, number], scale: number, slice: number, frameScale: number): [number, number] {
+  return [scene[0] * scale + 2 * slice * frameScale, scene[1] * scale + 2 * slice * frameScale];
+}
+
+/** The hero's idle frame at a time (PD 1.9: a sequence of frames at a rate, looping). */
+export function idleFrame(seq: readonly number[], fps: number, t: number): number {
+  return seq[Math.floor((t / 1000) * fps) % seq.length] ?? 0;
+}
+
+/** A spark of the fire at a time: how far it has risen (art pixels) and which of the spark's frames it shows; undefined once it is out of the card. */
+export function sparkState(dy: number, k: number, t: number, fireY: number): { rise: number; frame: number } | undefined {
+  const rise = Math.floor((t / 120 + k * 1.7) % 6);
+  if (dy - rise < -fireY + 1) return undefined;
+  return { rise, frame: (k + rise) % 4 };
+}
+
+/** How the card's own draw scales: whole device pixels to an art pixel (so the art stays crisp), at least 1. */
+export const wholeScale = (scale: number, dpr: number): number => Math.max(1, Math.floor(scale * Math.max(1, dpr)));

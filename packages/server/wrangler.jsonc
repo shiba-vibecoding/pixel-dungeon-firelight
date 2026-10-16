@@ -11,7 +11,9 @@
       { "name": "REPORTS", "class_name": "ReportStore" },
       { "name": "PLAYER", "class_name": "Player" },
       { "name": "CARD", "class_name": "Card" },
-      { "name": "NOTIFIER", "class_name": "Notifier" }
+      { "name": "NOTIFIER", "class_name": "Notifier" },
+      { "name": "LEAGUE", "class_name": "League" },
+      { "name": "CIRCLE", "class_name": "Circle" }
     ]
   },
   "migrations": [
@@ -20,11 +22,17 @@
     { "tag": "v3", "new_sqlite_classes": ["WalletStore"] },
     { "tag": "v4", "new_sqlite_classes": ["ReportStore"] },
     { "tag": "v5", "new_sqlite_classes": ["Player"] },
-    { "tag": "v6", "new_sqlite_classes": ["Card", "Notifier"] }
+    { "tag": "v6", "new_sqlite_classes": ["Card", "Notifier"] },
+    // The weekly leagues: desks and rooms of 30 (league.ts).
+    { "tag": "v7", "new_sqlite_classes": ["League"] },
+    // Circles: members and weekly champions of friends and of Telegram groups (circle.ts).
+    { "tag": "v8", "new_sqlite_classes": ["Circle"] }
   ],
   // Every hour: the bot's reminders that are due (notifier.ts).
   "triggers": { "crons": ["0 * * * *"] },
   "vars": {
+    // The first competition season begins on this Monday (YYYY-MM-DD, UTC): set it to the day Firelight opens. Seasons last 8 weeks.
+    "COMPETE_SEASON_START": "2026-10-12",
     // Players outside Telegram (a plain browser) may join rooms as guests.
     "ALLOW_GUESTS": "true",
     // The Mini App's t.me link: the bot's play button.

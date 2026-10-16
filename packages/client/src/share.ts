@@ -2,6 +2,7 @@ import type { HeroClass } from '@pd/core';
 import { fxText } from './cards';
 import { lang, locale, t } from './i18n';
 import { AVATAR } from './screens';
+import { chatPicture, type HeroPicture, storyPicture } from './sharecards';
 
 /*
  * The daily result as a picture (the design system's PD.share.card, 1200x630):
@@ -22,6 +23,8 @@ export interface ShareCard {
   cause: string;
   /** The card's heading: the daily dungeon's (with the day) by default. */
   title?: string;
+  /** The hero as he is dressed, for the hero pictures (sharecards.ts): with it the story and the card for a chat are those. */
+  hero?: HeroPicture;
 }
 
 const C = {
@@ -57,12 +60,14 @@ function floor(g: CanvasRenderingContext2D, tiles: HTMLImageElement, width: numb
 
 /** Draws the card; resolves to a PNG. */
 export async function shareCard(data: ShareCard): Promise<Blob | null> {
+  if (data.hero) return chatPicture(data.hero);
   const canvas = await drawCard(data);
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'));
 }
 
 /** The card on a phone's whole screen (1080×1920) for a story: the logo above, the card, a call below. */
 export async function storyCard(data: ShareCard, call: string): Promise<Blob | null> {
+  if (data.hero) return storyPicture(data.hero);
   const card = await drawCard(data);
   const base = `${import.meta.env.BASE_URL}assets/`;
   const [tiles, logo] = await Promise.all([loadImage(`${base}tiles0.png`), loadImage(`${base}banner-title.png`)]);

@@ -5,21 +5,25 @@ import {
 import { botApi, type BotConfig, handleUpdate, type TelegramUpdate } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { guestId } from './guest';
-import { type DailyEntry, isPublicId, Leaderboard, publicId, servedEntry } from './leaderboard';
+import { DailyBoard } from './daily-board';
+import { type DailyEntry, isPublicId, publicId } from './leaderboard';
 import { CLOSE_TOO_BIG, MAX_MESSAGE_BYTES, MessageLimiter, messageBytes, WindowLimiter } from './limits';
 import { parseClientMessage } from './messages';
 import { type Delivery, RoomLogic, type RoomState } from './room-logic';
 import {
   ADDRESS_HEADER, addReport, MAX_REPORT_BYTES, parseReport, type Report, REPORT_WINDOW_MS, REPORTS_PER_WINDOW,
 } from './reports';
-import { boardObject, boardTtl } from './boards';
+import { boardObject } from './boards';
 import { CORS, json, jsonBody } from './http';
-import { boardRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRoute } from './player';
+import { boardRoute, circleRoute, leagueRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRoute } from './player';
 import type { AdminOps } from './admin';
 import { changeOutages, normalizeDays } from './outages';
 import { adminNotice, KEEP_PROBLEMS, newId, type Problem, type StoredProblem } from './problem';
 import { photoRoute } from './photos';
 import { Card, cardRoute, challengeRoute } from './sharing';
+import { freezeDueHall, hallRoute } from './hall';
+import { Circle } from './circle';
+import { League } from './league';
 import { Notifier, notifierStub, notifyRoute } from './notifier';
 import { readBody, sameSecret } from './secret';
 import { SignalLimiter, validSignal } from './signals';
@@ -57,6 +61,10 @@ export interface Env {
   CARD: DurableObjectNamespace<Card>;
   /** The bot's reminders (notifier.ts). */
   NOTIFIER: DurableObjectNamespace<Notifier>;
+  /** The weekly leagues' desks and rooms (league.ts). */
+  LEAGUE: DurableObjectNamespace<League>;
+  /** The circles: who is in each, and who won each week (circle.ts). */
+  CIRCLE: DurableObjectNamespace<Circle>;
   /** The secret Telegram sends with every webhook call (setWebhook's secret_token). */
   WEBHOOK_SECRET?: string;
   /** The Mini App's t.me link, for the bot's play button. */
@@ -75,6 +83,8 @@ export interface Env {
   REPORT_KEY?: string;
   /** Days the server was down (YYYY-MM-DD, separated by commas): streaks take them as played (outages.ts). */
   OUTAGE_DAYS?: string;
+  /** The first competition season's first day, YYYY-MM-DD (a Monday; season-clock.ts): set to the day Firelight opens. */
+  COMPETE_SEASON_START?: string;
   /**
    * Secret the daily dungeon's seed is derived from (daily-seed.ts); `npx wrangler secret put DAILY_SECRET`.
    * Without it (wrangler dev, tests) a fixed development value is used, which is public: set it in production.
@@ -803,70 +813,6 @@ async function webhook(request: Request, env: Env, ctx: ExecutionContext): Promi
   return new Response('ok');
 }
 
-/**
- * One board (boards.ts names them): a day's daily dungeon, a week's best, the best ever.
- * Entries are by public id (leaderboard.ts publicId); each knows its owner privately.
- *
- *   GET  ?name=&me=<public id>|owner=<account>&top=<n>   the best n, and that player's place
- *   POST /put?name=   an entry of a checked run (from the player's object only)
- *   POST /worn?name=  what a player wears now: their entries show it (from the player's object only)
- *
- * Boards named by a bare date are the daily boards of before checked runs, read as they were.
- */
-export class DailyBoard extends DurableObject<Env> {
-  override async fetch(request: Request): Promise<Response> {
-    const board = new Leaderboard((await this.ctx.storage.get<DailyEntry[]>('board')) ?? []);
-    const url = new URL(request.url);
-    const name = url.searchParams.get('name') ?? url.searchParams.get('date') ?? '';
-    if (request.method === 'POST' && url.pathname === '/put') {
-      const entry = (await request.json()) as DailyEntry;
-      const rank = board.put(entry);
-      await this.ctx.storage.put('board', board.entries());
-      await this.expireAfter(name);
-      return json({ rank, total: board.entries().length });
-    }
-    if (request.method === 'POST' && url.pathname === '/worn') {
-      // The player's equipment changed (player.ts Player.worn): their entries on this board show the look of their class as worn now.
-      const patch = (await request.json()) as { owner?: unknown; byClass?: unknown };
-      if (typeof patch.owner !== 'string' || typeof patch.byClass !== 'object' || patch.byClass === null) return json({ error: 'bad patch' }, 400);
-      const byClass = Object.fromEntries(Object.entries(patch.byClass).map(([heroClass, worn]) => [heroClass, cleanWorn(worn)]));
-      const changed = board.patchWorn(patch.owner, byClass);
-      if (changed) await this.ctx.storage.put('board', board.entries());
-      return json({ changed });
-    }
-    if (request.method === 'POST') return json({ error: 'results come from checked runs only' }, 410);
-    // Every player's place, by account (the reminders' weekly results); never served outside.
-    if (url.searchParams.get('owners') === '1') {
-      const owners: Record<string, number> = {};
-      board.entries().forEach((entry, i) => {
-        if (entry.owner) owners[entry.owner] = i + 1;
-      });
-      return json({ owners, total: board.entries().length });
-    }
-    const me = url.searchParams.get('me');
-    const owner = url.searchParams.get('owner');
-    const count = Math.min(100, Math.max(0, Number(url.searchParams.get('top') ?? 20) || 0));
-    const mine = owner ? board.ofOwner(owner) : null;
-    const rank = me ? board.rank(me) : (mine?.rank ?? null);
-    const you = me && rank !== null ? board.entries()[rank - 1] : undefined;
-    return json({
-      rank, top: board.top(count), total: board.entries().length,
-      ...(you ? { you: servedEntry(you) } : {}), ...(mine ? { owner: { rank: mine.rank } } : {}),
-    });
-  }
-
-  /** Sets the board's deletion some time after its day or week (boards.ts boardTtl); the best ever are kept. */
-  private async expireAfter(name: string): Promise<void> {
-    const ttl = boardTtl(name);
-    if (ttl === null || (await this.ctx.storage.getAlarm()) !== null) return;
-    await this.ctx.storage.setAlarm(Date.now() + ttl);
-  }
-
-  override async alarm(): Promise<void> {
-    await this.ctx.storage.deleteAll();
-  }
-}
-
 /** Only today's board (UTC, give or take a day for time zones) takes results. */
 function isCurrentDay(date: string, now: number): boolean {
   const day = Date.parse(`${date}T00:00:00Z`);
@@ -910,6 +856,9 @@ export default {
     if (url.pathname === '/photo') return photoRoute(request, env, url);
     if (url.pathname === '/challenge') return challengeRoute(request, env);
     if (url.pathname === '/notify') return notifyRoute(request, env);
+    if (url.pathname === '/hall') return hallRoute(request, env);
+    if (url.pathname === '/league') return leagueRoute(request, env);
+    if (url.pathname === '/circle') return circleRoute(request, env);
     const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
     if (day) return daily(request, env, day[1]!);
 
@@ -930,7 +879,13 @@ export default {
     } catch (error) {
       await keepReport(env, serverReport(error, 'reminders'));
     }
+    // The season that has ended gets its hall of fame once its grace days are over (hall.ts).
+    try {
+      await freezeDueHall(env, controller.scheduledTime);
+    } catch (error) {
+      await keepReport(env, serverReport(error, 'hall of fame'));
+    }
   },
 } satisfies ExportedHandler<Env>;
 
-export { Card, Notifier, Player };
+export { Card, Circle, DailyBoard, League, Notifier, Player };

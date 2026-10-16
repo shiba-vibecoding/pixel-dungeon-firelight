@@ -1,52 +1,33 @@
-import { background, image as campImage, lightCanvas, ready as campReady, SHEET, seasonOf } from './camp';
+import { image as campImage, ready as campReady, SHEET } from './camp';
 import { itemById, type Slot } from './catalog';
 import { cosmetics } from './cosmetics';
-import { type CardLook, cardKey, Lru, tierOf } from './cardlook';
-import { fireArt, flCatalog, flImage, flItem, flReady, hatArt, lookArt, onFlChange, petArt } from './flart';
+import { type CardLook, cardKey, cardSize, idleFrame, Lru, sparkState, tierOf as armourOf, wholeScale } from './cardlook';
+import { type Anchors, anchorsOf, compete, onCompeteChange, type SceneLayout, tierOf } from './compete';
+import { type FireArt, fireArt, flCatalog, flImage, flItem, flReady, hatArt, lookArt, onFlChange, petArt } from './flart';
 import './herocard.css';
 import { quality } from './quality';
 
 /*
- * The hero card: a player's hero as they look, in one small canvas. It is shown on every row of every board, on the profile and
- * wherever else a hero stands for a player. Layers, back to front: the camp's ground, the glow of the camp fire the player chose,
- * the fire (logs and flame), the hero in the look worn for the class (or the class's own sheet) in the armour he ended the run in, the hat over it, the pet at his feet,
- * and the profile frame round the whole card. The name colour and the title stay DOM text beside it (rankui.ts).
+ * The hero card: a player's hero as they look, in one small canvas (design part 7). It is shown on every row of every board, on the
+ * profile, on the share pictures, wherever a hero stands for a player. A little scene, back to front: night and the ground, the glow of
+ * the camp fire the player chose, the fire (logs, flame, sparks), his shadow, the aura of a legendary look, the hero in the look worn
+ * for the class (or the class's own sheet) with the hat over him, the glow of a legendary look, the pet facing him; round it the frame:
+ * the profile frame worn, or the frame of his league (the Spark's when the league is not told).
  *
- * It composes the same layers as the camp and the shop's try-on (camp.ts, wear.ts, flart.ts), from the same art, at the same pixels:
+ * Where each layer stands, and how big each card is, is the designer's anchors.json (layouts `row` 80 x 56, `big` 216 x 156, `podium`
+ * 96 x 96, and the share pictures' own). The layers are the shop's own art (flart.ts), at the same pixels as the camp:
  * no atlases of its own. Cheap enough for a hundred rows:
- *  - one canvas per visible row (rankui.ts mounts only the rows on screen): the stage of 36 x 24 art pixels at x2 in the frame's border (80 x 56);
- *  - the composed picture of a combination is kept (LRU, key `class|armour tier|look|hat|pet|fire`) and drawn again with one drawImage;
- *  - only the top three, the player's own row and the profile move, from ONE ticker (about 6 frames a second, stopped while the
- *    page is hidden or when reduced motion is asked for); every other row is a still frame;
- *  - the canvas holds whole device pixels per art pixel (an integer scale), so the art stays crisp on any screen;
- *  - a layer whose art is not here yet is left out, and the card is drawn again when it arrives; an id the art does not know is skipped.
+ *  - a row's card is drawn once and kept (LRU, `layout|scale|class|look|hat|pet|fire`), so the next row of the same look is one drawImage;
+ *  - only the top three, the player's own row and the profile move, from ONE clock (about 12 frames a second, stopped while the page is
+ *    hidden or when reduced motion is asked for); every other row is a still frame;
+ *  - the canvas holds whole device pixels to an art pixel, so the art stays crisp on any screen;
+ *  - a layer whose art is not here yet is left out and the card drawn again when it arrives; an id the art does not know is skipped.
  */
-
-/**
- * The scene in art pixels (the designer's row layout, compete/anchors.json `row`): the stage is 36 x 24, shown at x2 (72 x 48) inside
- * a frame of 14 x 14 (4 pixels of border) at x1: a card of 80 x 56 on a phone. Nothing is drawn under the frame's border.
- */
-export const STAGE_W = 36;
-export const STAGE_H = 24;
-/** The frame's border, in the frame's own pixels (one frame pixel is half a stage pixel). */
-const BORDER = 4;
-/** Where the hero's feet stand, the fire's, and the pet's, in the stage: the hero the subject, the fire behind him on the left, the pet at his feet. */
-const HERO_X = 19;
-const FEET_Y = 23;
-const FIRE_X = 8;
-const FIRE_Y = 21;
-const PET_X = 30;
-/** The fire's light, in stage pixels. */
-const LIGHT = 22;
-/** The ground's corner in the camp's background (a piece of the dirt path, with no wall and no fire pit). */
-const GROUND: readonly [number, number] = [36, 104];
-/** The hero's own 12 x 15 frame, and the hat's cell (16 x 22, the frame at (2, 7) in it): see camp.ts. */
-const HERO_W = 12;
-const HERO_H = 15;
 
 export { type CardLook, lookOfEntry } from './cardlook';
 
 /** This player's own hero of a class, as they wear it now (owned things only: cosmetics.ts). */
+/** `armor`: the tier of the armour he wears (the row of his sheet); absent, cloth. */
 export function myLook(heroClass: string, armor?: number): CardLook {
   const id = (slot: Slot): string | undefined => cosmetics.inSlot(slot)?.id;
   const look = id(`look.${heroClass}` as Slot);
@@ -79,7 +60,16 @@ function layer<T>(id: string | undefined, category: string, get: () => T | undef
   return art ? { art, pending: false } : { pending: true };
 }
 
-/** A piece of the camp's art (its own loader: the camp and the cards share the pictures). */
+/** A picture of the art folder: drawn when it is there, waited for when not. */
+function picture(path: string): { img: HTMLImageElement; ok: boolean } {
+  const img = flImage(path);
+  return { img, ok: flReady(img) };
+}
+
+/** Things waiting for art to come (the share pictures): told whenever a picture of the camp's has loaded. */
+const waiters = new Set<() => void>();
+
+/** A piece of the camp's art (its own loader: the camp and the cards share the pictures); redrawn when it has come. */
 function camp(path: string): { img: HTMLImageElement; ok: boolean } {
   const img = campImage(path);
   const ok = campReady(img);
@@ -91,202 +81,254 @@ const watched = new WeakSet<HTMLImageElement>();
 function watch(img: HTMLImageElement): void {
   if (watched.has(img)) return;
   watched.add(img);
-  img.addEventListener('load', redrawPending, { once: true });
+  img.addEventListener('load', () => {
+    redrawPending();
+    for (const waiter of [...waiters]) waiter();
+  }, { once: true });
+}
+
+/** The colour of the camp's light for a look: its fire's (the classic orange when it is not known yet). */
+export function fireColour(look: CardLook): string {
+  const id = look.f && itemById(look.f)?.category === 'campfire' ? look.f : 'fire.classic';
+  return flItem(id)?.light ?? '#ff9a3a';
 }
 
 /* ---- Composing ---- */
 
-const ringCache = new Map<string, HTMLCanvasElement[]>();
-/** The fire's light as the camp lays it (stepped, dithered rings): three strengths for the flicker. */
-function rings(color: string): HTMLCanvasElement[] {
-  let set = ringCache.get(color);
-  if (!set) {
-    set = [lightCanvas(LIGHT - 1, color), lightCanvas(LIGHT, color), lightCanvas(LIGHT + 1, color)];
-    ringCache.set(color, set);
-  }
-  return set;
-}
+/** The hero's class sheet; a class this build does not know has none. */
+const sheetOf = (heroClass: string): string | undefined => (SHEET[heroClass] ? `${SHEET[heroClass]}.png` : undefined);
 
 interface Composed {
   /** Everything the card wants is drawn (nothing is still on its way). */
   complete: boolean;
 }
 
-/** The hero's class sheet; a class this build does not know has none. */
-const sheetOf = (heroClass: string): string | undefined => SHEET[heroClass] ? `${SHEET[heroClass]}.png` : undefined;
+const layoutOf = (name: string): SceneLayout | undefined => anchorsOf()?.layouts[name];
+
+/** The fire's glow: a radial light of the style's colour at the fire, added over what is behind the figures. */
+function light(g: CanvasRenderingContext2D, a: Anchors, layout: SceneLayout, colour: string): void {
+  const [fx, fy] = layout.fire;
+  const radius = layout.light || a.fire.light.radius;
+  const gradient = g.createRadialGradient(fx, fy - 4, 0, fx, fy - 4, radius);
+  for (const [at, alpha] of a.fire.light.stops) gradient.addColorStop(at, `${colour}${alpha}`);
+  g.globalCompositeOperation = 'lighter';
+  g.fillStyle = gradient;
+  g.fillRect(0, 0, layout.scene[0], layout.scene[1]);
+  g.globalCompositeOperation = 'source-over';
+}
+
+/** Night and the ground, or the camp's own picture behind (the share pictures). */
+function backdrop(g: CanvasRenderingContext2D, layout: SceneLayout): boolean {
+  const [w, h] = layout.scene;
+  if (layout.bg) {
+    const [cx, cy, cw, ch] = layout.bg.crop;
+    const ground = camp(layout.bg.sheet.replace(/^camp\//, 'camp/'));
+    if (ground.ok) g.drawImage(ground.img, cx, cy, cw, ch, 0, 0, cw, ch);
+    g.fillStyle = `rgba(8,10,24,${layout.bg.night})`;
+    g.fillRect(0, 0, w, h);
+    return ground.ok;
+  }
+  const sky = g.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#0f100d');
+  sky.addColorStop(1, '#1d1e19');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, w, h);
+  const ground = layout.hero[1] - 2;
+  g.fillStyle = '#16130e';
+  g.fillRect(0, ground, w, h - ground);
+  g.fillStyle = '#2a241a';
+  g.fillRect(0, ground, w, 1);
+  return true;
+}
 
 /**
- * Draws the card (everything but the frame) at art pixels onto `g`, `t` ms into the animation (still frames: 0, `moving` false).
- * What is not here yet is left out and reported as not complete.
+ * Draws the scene of a layout at art pixels onto `g` (the origin at the scene's corner), `t` ms into the animation (a still: 0, `moving`
+ * false). What is not here yet is left out and reported as not complete.
  */
-function compose(g: CanvasRenderingContext2D, look: CardLook, t: number, moving: boolean): Composed {
+function compose(g: CanvasRenderingContext2D, look: CardLook, layout: SceneLayout, a: Anchors, t: number, moving: boolean): Composed {
   let complete = true;
   const lite = saveData();
-  /** The row of the sheets: the armour worn at the end of the run (hero, hat and glow have the same rows). */
-  const row = tierOf(look);
   const cls = String(look.heroClass);
   g.imageSmoothingEnabled = false;
-  g.clearRect(0, 0, STAGE_W, STAGE_H);
-  // The ground, darkened so that the fire's light is what lights it.
-  g.fillStyle = '#1a1511';
-  g.fillRect(0, 0, STAGE_W, STAGE_H);
-  const ground = camp(background('outdoor', seasonOf(new Date())));
-  if (ground.ok) g.drawImage(ground.img, GROUND[0], GROUND[1], STAGE_W, STAGE_H, 0, 0, STAGE_W, STAGE_H);
-  else complete = false;
-  g.fillStyle = 'rgba(10,8,6,.5)';
-  g.fillRect(0, 0, STAGE_W, STAGE_H);
+  if (!backdrop(g, layout)) complete = false;
 
-  // The camp fire the player chose (unknown ids and the classic one: the camp's own).
+  // The camp fire the player chose (an id the art does not know, and the classic one: the classic fire).
   const fireId = look.f && itemById(look.f)?.category === 'campfire' ? look.f : 'fire.classic';
-  const fire = layer(fireId, 'campfire', () => fireArt(fireId));
-  const art = fire.art;
+  const fire = layer<FireArt>(fireId, 'campfire', () => fireArt(fireId));
+  const [fx, fy] = layout.fire;
   if (!lite) {
     if (fire.pending) complete = false;
-    const light = art?.light ?? '#ff9a3a';
-    const flicker = moving ? Math.max(0, Math.min(2, Math.floor((Math.sin(t / 97) + Math.sin(t / 43 + 2)) * 0.8 + 1))) : 1;
-    g.globalCompositeOperation = 'lighter';
-    const ring = rings(light)[flicker]!;
-    // Twice: the camp's light is laid over a lit ground; here the ground is darkened, and the fire must glow behind him.
-    g.drawImage(ring, FIRE_X - (ring.width >> 1), FIRE_Y - 6 - (ring.height >> 1));
-    g.drawImage(ring, FIRE_X - (ring.width >> 1), FIRE_Y - 6 - (ring.height >> 1));
-    g.globalCompositeOperation = 'source-over';
-    if (art && flReady(art.flame) && flReady(art.logs)) {
-      g.drawImage(art.logs, FIRE_X + art.logsAt[0], FIRE_Y + art.logsAt[1]);
-      g.drawImage(art.flame, (Math.floor(t / art.ms) % art.frames) * art.w, 0, art.w, art.h, FIRE_X - 6, FIRE_Y - 18, art.w, art.h);
-    } else {
+    light(g, a, layout, fire.art?.light ?? '#ff9a3a');
+    const art = fire.art;
+    if (art) {
+      g.drawImage(art.logs, fx + a.fire.logsAt[0], fy + a.fire.logsAt[1]);
+      g.drawImage(art.flame, (Math.floor(t / art.ms) % art.frames) * art.w, 0, art.w, art.h, fx + a.fire.flameAt[0], fy + a.fire.flameAt[1], art.w, art.h);
+      for (const [dx, dy, k] of a.fire.sparksAt) {
+        const spark = sparkState(dy, k, t, fy);
+        if (!spark) continue;
+        // The Beacon's sparks rise in a straight column; the others drift a pixel to the side.
+        const drift = fireId === 'fire.beacon' ? 0 : spark.rise % 2;
+        g.drawImage(art.sparks, spark.frame * art.sparkW, 0, art.sparkW, art.sparkH, fx + dx + drift, fy + dy - spark.rise, art.sparkW, art.sparkH);
+      }
+    } else if (!fire.pending) {
       const plain = camp('camp/fire.png');
-      if (plain.ok) g.drawImage(plain.img, (Math.floor(t / 100) % 6) * 13, 0, 13, 17, FIRE_X - 6, FIRE_Y - 17, 13, 17);
+      if (plain.ok) g.drawImage(plain.img, (Math.floor(t / 100) % 6) * 13, 0, 13, 17, fx - 6, fy - 17, 13, 17);
       else complete = false;
     }
   }
 
-  // The hero: the look worn for his class, else the class's own sheet (first armour, as in the camp).
-  const heroX = HERO_X - HERO_W / 2;
-  const heroY = FEET_Y - HERO_H;
+  // The hero: the look worn for his class, else the class's own sheet, in the armour's row.
+  const [hx, hy] = layout.hero;
+  const [cellW, cellH] = a.hero.cell;
+  // The row of the sheets: the armour the hero ended the run in (cloth when it is not told).
+  const row = Math.min(a.hero.tiers - 1, armourOf(look));
+  const frame = moving ? idleFrame(a.hero.idle.seq, a.hero.idle.fps, t) : 0;
   const lookItem = look.l ? itemById(look.l) : undefined;
   const worn = layer(look.l && lookItem?.category === 'look' && lookItem.heroClass === cls ? look.l : undefined, 'look', () => lookArt(look.l!));
   const own = sheetOf(cls);
   const sheet = worn.art?.sheet ?? (own ? camp(own).img : undefined);
   if (worn.pending) complete = false;
   if (sheet && campReady(sheet)) {
-    // A legendary look's aura behind him (its feet at (12, 26), his at (6, 14)).
+    // A legendary look's aura behind him.
     const aura = worn.art?.aura;
-    if (aura) g.drawImage(aura.image, (moving ? Math.floor(t / aura.ms) % aura.frames : 0) * aura.w, 0, aura.w, aura.h, heroX + 6 - aura.feetX, heroY + 14 - aura.feetY, aura.w, aura.h);
-    // A shadow under the feet, then him.
-    g.fillStyle = 'rgba(0,0,0,.45)';
-    g.fillRect(heroX + 2, heroY + 14, 8, 1);
-    g.fillRect(heroX + 3, heroY + 15, 6, 1);
-    g.drawImage(sheet, 0, row * HERO_H, HERO_W, HERO_H, heroX, heroY, HERO_W, HERO_H);
-    const glow = worn.art?.glow;
-    if (glow && flReady(glow)) {
-      const pulse = worn.art!.pulse;
-      g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = pulse.min + (pulse.max - pulse.min) * (moving ? 0.5 + 0.5 * Math.sin((t / 1000) * pulse.hz * Math.PI * 2) : 0.75);
-      g.drawImage(glow, 0, row * HERO_H, HERO_W, HERO_H, heroX, heroY, HERO_W, HERO_H);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
-    }
+    if (aura) g.drawImage(aura.image, (moving ? Math.floor(t / aura.ms) % aura.frames : 0) * aura.w, 0, aura.w, aura.h, hx - aura.feetX, hy - aura.feetY, aura.w, aura.h);
+    g.fillStyle = 'rgba(0,0,0,.5)';
+    g.fillRect(hx - 4, hy, 8, 1);
+    g.drawImage(sheet, frame * cellW, row * cellH, cellW, cellH, hx - cellW / 2, hy - cellH, cellW, cellH);
     const hat = layer(look.h, 'hat', () => hatArt(look.h!, cls));
     if (hat.pending) complete = false;
     if (hat.art) {
       const h = hat.art;
-      g.drawImage(h.image, 0, row * h.h, h.w, h.h, heroX - h.heroX, heroY - h.heroY, h.w, h.h);
+      g.drawImage(h.image, frame * h.w, row * h.h, h.w, h.h, hx - cellW / 2 - h.heroX, hy - cellH - h.heroY, h.w, h.h);
       if (h.glow) {
         g.globalCompositeOperation = 'lighter';
         g.globalAlpha = 0.7;
-        g.drawImage(h.glow, 0, row * h.h, h.w, h.h, heroX - h.heroX, heroY - h.heroY, h.w, h.h);
+        g.drawImage(h.glow, frame * h.w, row * h.h, h.w, h.h, hx - cellW / 2 - h.heroX, hy - cellH - h.heroY, h.w, h.h);
         g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
       }
+    }
+    const glow = worn.art?.glow;
+    if (glow && flReady(glow)) {
+      const pulse = worn.art!.pulse;
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = (pulse.min + (pulse.max - pulse.min) * (moving ? 0.5 + 0.5 * Math.sin((t / 1000) * pulse.hz * Math.PI * 2) : 0.75)) * 0.7;
+      g.drawImage(glow, frame * cellW, row * cellH, cellW, cellH, hx - cellW / 2, hy - cellH, cellW, cellH);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
     }
   } else if (own) {
     complete = false;
   }
 
-  // The pet at his feet (it stands, or hovers when it flies).
-  if (!lite) {
+  // The pet at his feet, facing him (a flyer hangs above the floor and bobs).
+  if (!lite && layout.pet) {
     const pet = layer(look.p, 'pet', () => petArt(look.p!));
     if (pet.pending) complete = false;
     if (pet.art) {
       const p = pet.art;
-      const frame = p.idle[moving ? Math.floor(t / p.ms) % p.idle.length : 0]!;
-      const lift = p.fly ? Math.round(5.6 + (moving ? 0.96 * Math.sin((t / 1000) * 1.2 * Math.PI * 2) : 0)) : 0;
-      const py = FEET_Y + 1;
-      g.fillStyle = `rgba(0,0,0,${p.fly ? 0.3 : 0.45})`;
-      const sw = Math.round(p.w * (p.fly ? 0.65 : 0.85));
-      g.fillRect(PET_X - (sw >> 1), py, sw, 1);
-      g.drawImage(p.image, frame * p.w, 0, p.w, p.h, PET_X - p.feetX, py - p.feetY - 1 - lift, p.w, p.h);
+      const [px, py] = layout.pet;
+      const frameAt = p.idle[moving ? Math.floor(t / p.ms) % p.idle.length : 0] ?? 0;
+      const lift = p.fly ? a.pet.flyLift + (moving ? Math.floor(t / 400) % 2 : 0) : 0;
+      const sw = p.fly ? a.pet.shadow.fly[0] : a.pet.shadow.ground[0];
+      g.fillStyle = `rgba(0,0,0,${p.fly ? a.pet.shadow.alpha[1] : a.pet.shadow.alpha[0]})`;
+      g.fillRect(px - sw / 2, py, sw, 1);
+      g.save();
+      g.translate(px + p.feetX, 0);
+      g.scale(-1, 1);
+      g.drawImage(p.image, frameAt * p.w, 0, p.w, p.h, 0, py - p.feetY - lift, p.w, p.h);
       if (p.glow) {
         g.globalCompositeOperation = 'lighter';
-        g.drawImage(p.glow, frame * p.w, 0, p.w, p.h, PET_X - p.feetX, py - p.feetY - 1 - lift, p.w, p.h);
-        g.globalCompositeOperation = 'source-over';
+        g.drawImage(p.glow, frameAt * p.w, 0, p.w, p.h, 0, py - p.feetY - lift, p.w, p.h);
       }
+      g.restore();
     }
   }
   return { complete };
 }
 
-/** The border of a card with no frame of the designer's picture: a rim in the tones given (an earn-only frame's), or the plain dark edge every card has. */
-function rim(g: CanvasRenderingContext2D, w: number, h: number, kf: number, tones: readonly string[] | null): void {
-  const edge = BORDER * kf;
-  g.fillStyle = tones ? (tones[1] ?? tones[0]!) : '#14110e';
-  g.fillRect(0, 0, w, edge);
-  g.fillRect(0, h - edge, w, edge);
-  g.fillRect(0, 0, edge, h);
-  g.fillRect(w - edge, 0, edge, h);
-  g.fillStyle = tones ? tones[0]! : '#2c261f';
-  // The outer pixel's line, and (plain) the inner one: a rim of two pixels is a frame at this size.
-  g.fillRect(0, 0, w, kf);
-  g.fillRect(0, h - kf, w, kf);
-  g.fillRect(0, 0, kf, h);
-  g.fillRect(w - kf, 0, kf, h);
+/* ---- Frames ---- */
+
+/** A frame's picture: where it is, the nine-slice's border, and its moving sheet if it has one. */
+interface FrameArt {
+  sprite?: string;
+  slice: number;
+  anim?: { sheet: string; frames: number; ms: number };
+  /** No picture (an earn-only frame the designer did not draw): a rim in these tones. */
+  tones?: readonly string[];
+}
+
+/** The frame of a card: the profile frame worn (the shop's, a league's `frame.league.<tier>`, a season's `frame.season.<id>`), else the league's. */
+function frameArt(look: CardLook): FrameArt | undefined {
+  const c = compete();
+  const worn = look.fr;
+  if (worn) {
+    const league = /^(?:frame\.)?league\.(\w+)$/.exec(worn)?.[1];
+    if (league) {
+      const tier = tierOf(league);
+      if (tier) return { sprite: tier.frame.sprite, slice: tier.frame.slice, ...(tier.frame.anim ? { anim: tier.frame.anim } : {}) };
+    }
+    const season = /^(?:frame\.)?season\.(\w+)$/.exec(worn)?.[1];
+    if (season) {
+      const found = c?.season.seasons.find((s) => s.id === season);
+      if (found) return { sprite: found.frame.sprite, slice: found.frame.slice };
+    }
+    const item = itemById(worn);
+    if (item?.category === 'frame') {
+      if (!flCatalog()) {
+        flItem(worn);
+        return undefined;
+      }
+      const raw = flItem(worn);
+      if (raw?.sprite) return { sprite: raw.sprite, slice: raw.slice ?? 4, ...(raw.anim ? { anim: raw.anim } : {}) };
+      return { slice: 2, tones: raw?.color ? [raw.color] : item.tones ?? ['#c8c8c8', '#444444'] };
+    }
+  }
+  const tier = tierOf(look.lg);
+  return tier ? { sprite: tier.frame.sprite, slice: tier.frame.slice, ...(tier.frame.anim ? { anim: tier.frame.anim } : {}) } : undefined;
 }
 
 /**
- * The frame round the card: the designer's 14 x 14 picture as a nine-slice (4 pixels of border), at `kf` device pixels to a frame
- * pixel, over the border the stage leaves free (so it hides nothing of the scene), moving if it has frames. Returns whether it is
- * still to come.
+ * Draws the frame round a card of `w` x `h` device pixels: the picture as a nine-slice (`slice` art pixels of border at `k` device pixels
+ * each), moving if it has a sheet and the card moves. Returns whether its picture is still to come.
  */
-function framed(g: CanvasRenderingContext2D, frameId: string | undefined, t: number, moving: boolean, w: number, h: number, kf: number): boolean {
-  const item = frameId ? itemById(frameId) : undefined;
-  if (!frameId || item?.category !== 'frame') {
-    rim(g, w, h, kf, null);
+function drawFrame(g: CanvasRenderingContext2D, art: FrameArt | undefined, w: number, h: number, k: number, t: number, moving: boolean): boolean {
+  if (!art) return !compete();
+  if (!art.sprite) {
+    const [tone, rim] = [art.tones?.[0] ?? '#c8c8c8', art.tones?.[1] ?? art.tones?.[0] ?? '#444444'];
+    const b = art.slice * k;
+    g.fillStyle = rim;
+    g.fillRect(0, 0, w, b);
+    g.fillRect(0, h - b, w, b);
+    g.fillRect(0, 0, b, h);
+    g.fillRect(w - b, 0, b, h);
+    g.fillStyle = tone;
+    g.fillRect(0, 0, w, k);
+    g.fillRect(0, h - k, w, k);
+    g.fillRect(0, 0, k, h);
+    g.fillRect(w - k, 0, k, h);
     return false;
   }
-  if (!flCatalog()) {
-    flItem(frameId);
-    rim(g, w, h, kf, null);
-    return true;
-  }
-  const raw = flItem(frameId);
-  if (!raw?.sprite) {
-    // No picture of the designer's (a streak's or a board's reward): a rim in its tones.
-    rim(g, w, h, kf, raw?.color ? [raw.color] : item.tones ?? ['#c8c8c8', '#444444']);
-    return false;
-  }
-  const still = flImage(raw.sprite);
-  const sliding = moving && raw.anim ? flImage(raw.anim.sheet) : undefined;
-  const sheet = sliding && flReady(sliding) ? sliding : still;
-  if (!flReady(sheet)) {
-    rim(g, w, h, kf, null);
-    return true;
-  }
-  const frame = sheet === sliding && raw.anim ? Math.floor(t / raw.anim.ms) % raw.anim.frames : 0;
-  const s = raw.slice ?? BORDER;
+  const still = picture(art.sprite);
+  const sliding = moving && art.anim ? picture(art.anim.sheet) : undefined;
+  const sheet = sliding?.ok ? sliding.img : still.img;
+  if (!(sliding?.ok || still.ok)) return true;
+  const frame = sliding?.ok && art.anim ? Math.floor(t / art.anim.ms) % art.anim.frames : 0;
+  const s = art.slice;
   const size = 14;
   const x0 = frame * size;
   const mid = size - 2 * s;
-  const edge = s * kf;
+  const b = s * k;
   g.imageSmoothingEnabled = false;
-  // Corners, then the four edges stretched between them.
-  g.drawImage(sheet, x0, 0, s, s, 0, 0, edge, edge);
-  g.drawImage(sheet, x0 + size - s, 0, s, s, w - edge, 0, edge, edge);
-  g.drawImage(sheet, x0, size - s, s, s, 0, h - edge, edge, edge);
-  g.drawImage(sheet, x0 + size - s, size - s, s, s, w - edge, h - edge, edge, edge);
-  g.drawImage(sheet, x0 + s, 0, mid, s, edge, 0, w - 2 * edge, edge);
-  g.drawImage(sheet, x0 + s, size - s, mid, s, edge, h - edge, w - 2 * edge, edge);
-  g.drawImage(sheet, x0, s, s, mid, 0, edge, edge, h - 2 * edge);
-  g.drawImage(sheet, x0 + size - s, s, s, mid, w - edge, edge, edge, h - 2 * edge);
+  // The corners, then the four edges stretched between them.
+  g.drawImage(sheet, x0, 0, s, s, 0, 0, b, b);
+  g.drawImage(sheet, x0 + size - s, 0, s, s, w - b, 0, b, b);
+  g.drawImage(sheet, x0, size - s, s, s, 0, h - b, b, b);
+  g.drawImage(sheet, x0 + size - s, size - s, s, s, w - b, h - b, b, b);
+  g.drawImage(sheet, x0 + s, 0, mid, s, b, 0, w - 2 * b, b);
+  g.drawImage(sheet, x0 + s, size - s, mid, s, b, h - b, w - 2 * b, b);
+  g.drawImage(sheet, x0, s, s, mid, 0, b, b, h - 2 * b);
+  g.drawImage(sheet, x0 + size - s, s, s, mid, w - b, b, b, h - 2 * b);
   return false;
 }
 
@@ -294,13 +336,15 @@ function framed(g: CanvasRenderingContext2D, frameId: string | undefined, t: num
 
 const kept = new Lru<HTMLCanvasElement>(80);
 
-/** A still composition of a look: kept once it is whole (so that the next row of the same look is one drawImage). */
-function still(look: CardLook): { canvas: HTMLCanvasElement; complete: boolean } {
-  const key = cardKey(look);
+/** A still composition of a scene, at `k` device pixels to an art pixel: kept once it is whole (the next row of the same look is one drawImage). */
+function still(look: CardLook, name: string, layout: SceneLayout, a: Anchors, k: number): { canvas: HTMLCanvasElement; complete: boolean } {
+  const key = `${name}|${k}|${cardKey(look)}`;
   const had = kept.get(key);
   if (had) return { canvas: had, complete: true };
-  const canvas = Object.assign(document.createElement('canvas'), { width: STAGE_W, height: STAGE_H });
-  const { complete } = compose(canvas.getContext('2d')!, look, 0, false);
+  const canvas = Object.assign(document.createElement('canvas'), { width: layout.scene[0] * k, height: layout.scene[1] * k });
+  const g = canvas.getContext('2d')!;
+  g.scale(k, k);
+  const { complete } = compose(g, look, layout, a, 0, false);
   if (complete) kept.set(key, canvas);
   return { canvas, complete };
 }
@@ -310,25 +354,17 @@ export function forgetCards(): void {
   kept.clear();
 }
 
-/**
- * The stage of a card (without the frame) drawn onto any canvas: for a picture made in one go (the card for sharing). `scale` pixels
- * of the target to a stage pixel; false while some of the art has not come (the picture is then not whole: ask again).
- */
-export function paintHeroCard(g: CanvasRenderingContext2D, look: CardLook, x: number, y: number, scale: number): boolean {
-  const picture = still(look);
-  const smoothing = g.imageSmoothingEnabled;
-  g.imageSmoothingEnabled = false;
-  g.drawImage(picture.canvas, 0, 0, STAGE_W, STAGE_H, x, y, STAGE_W * scale, STAGE_H * scale);
-  g.imageSmoothingEnabled = smoothing;
-  return picture.complete;
-}
-
 /* ---- Cards on the page ---- */
 
+/** The card's size: `row` (a board's row, 80 x 56), `big` (the profile, 216 x 156), `podium` (the top three, the hall of fame, 96 x 96). */
+export type CardKind = 'row' | 'big' | 'podium';
+
 export interface CardOptions {
+  /** Which layout of the designer's (default `row`). */
+  kind?: CardKind;
   /** Moves (the flame, the pet, the frame): the top three, the player's own row, the profile. Everything else is a still. */
   animate?: boolean;
-  /** Screen pixels to an art pixel, a whole number (default 2: a card of 80 x 56). */
+  /** Screen pixels to an art pixel of the scene, a whole number (default: the layout's own). */
   scale?: number;
   className?: string;
 }
@@ -341,41 +377,35 @@ export interface CardHandle {
   dispose(): void;
 }
 
+/** The scale the layout asks for here: a phone's or a monitor's. */
+function layoutScale(layout: SceneLayout): number {
+  const scale = layout.scale;
+  if (typeof scale === 'number') return scale;
+  return scale ? (innerWidth >= 900 ? scale.monitor : scale.phone) : 2;
+}
+
 class HeroCard implements CardHandle {
   readonly canvas: HTMLCanvasElement;
-  private readonly g: CanvasRenderingContext2D;
-  /** Device pixels to a stage pixel, and to a frame pixel (half that: the frame is drawn at x1 where the stage is at x2). */
-  private readonly k: number;
-  private readonly kf: number;
-  /** The scene for a card that moves (a still one is drawn from the kept picture). */
-  private readonly stage: HTMLCanvasElement | null;
-  private pending = false;
+  private g: CanvasRenderingContext2D | null = null;
+  private k = 1;
+  private kf = 1;
+  private w = 0;
+  private h = 0;
+  private pending = true;
   private disposed = false;
+  private sized = false;
   /** A class this build has no sheet for: only the frame is drawn, over the old portrait. */
-  private readonly plain: boolean;
+  private plain = false;
   readonly born = performance.now();
+  private readonly dpr = Math.max(1, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1);
 
-  constructor(private readonly source: CardLook | (() => CardLook), readonly animate: boolean, scale: number, className: string) {
-    const dpr = Math.max(1, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1);
-    // Whole device pixels to a stage pixel, and to a frame pixel (so the art stays crisp): `scale` screen pixels' worth, rounded down.
-    this.k = Math.max(2, Math.floor(scale * dpr));
-    this.kf = Math.max(1, Math.floor(this.k / 2));
-    this.stage = animate ? Object.assign(document.createElement('canvas'), { width: STAGE_W, height: STAGE_H }) : null;
+  constructor(private readonly source: CardLook | (() => CardLook), readonly animate: boolean, private readonly kind: CardKind, private readonly scale: number | undefined, className: string) {
     this.canvas = document.createElement('canvas');
-    this.canvas.width = STAGE_W * this.k + 2 * BORDER * this.kf;
-    this.canvas.height = STAGE_H * this.k + 2 * BORDER * this.kf;
     this.canvas.className = `pd-card ${className}`.trim();
-    this.canvas.style.width = `${this.canvas.width / dpr}px`;
-    this.canvas.style.height = `${this.canvas.height / dpr}px`;
     this.canvas.setAttribute('aria-hidden', 'true');
     this.g = this.canvas.getContext('2d')!;
-    // A class this build has no sheet for keeps the old portrait (avatars.png), shown through the canvas's own background.
-    const first = String(this.look().heroClass);
-    this.plain = !sheetOf(first);
-    if (this.plain) {
-      this.canvas.classList.add('fb');
-      this.canvas.style.setProperty('--av', String(Math.max(0, ['warrior', 'mage', 'rogue', 'huntress'].indexOf(first))));
-    }
+    // The size is known once the anchors have come; until then a row's own size is held so that the page does not jump.
+    this.holdSpace();
     this.draw(0);
     pendingCards.add(this);
     if (typeof this.source === 'function') functional.add(this);
@@ -385,35 +415,70 @@ class HeroCard implements CardHandle {
     }
   }
 
+  private holdSpace(): void {
+    const fallback: Record<CardKind, [number, number]> = { row: [80, 56], big: [216, 156], podium: [96, 96] };
+    const [w, h] = fallback[this.kind];
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
+  }
+
   private look(): CardLook {
     return typeof this.source === 'function' ? this.source() : this.source;
+  }
+
+  /** Sizes the canvas to its layout: the scene at a whole scale inside the frame at its own. */
+  private size(layout: SceneLayout): void {
+    const scale = this.scale ?? layoutScale(layout);
+    const frame = layout.frame ?? { slice: 4, scale: 1 };
+    this.k = wholeScale(scale, this.dpr);
+    this.kf = wholeScale(frame.scale, this.dpr);
+    const [cssW, cssH] = cardSize(layout.scene, scale, frame.slice, frame.scale);
+    this.w = layout.scene[0] * this.k + 2 * frame.slice * this.kf;
+    this.h = layout.scene[1] * this.k + 2 * frame.slice * this.kf;
+    this.canvas.width = this.w;
+    this.canvas.height = this.h;
+    this.canvas.style.width = `${cssW}px`;
+    this.canvas.style.height = `${cssH}px`;
+    this.sized = true;
   }
 
   /** Draws the card; `t` is the time of the animation. */
   draw(t: number): void {
     if (this.disposed) return;
+    const a = anchorsOf();
+    const layout = a?.layouts[this.kind];
     const look = this.look();
+    const first = String(look.heroClass);
+    if (!a || !layout) {
+      this.pending = true;
+      return;
+    }
+    if (!this.sized) this.size(layout);
+    // A class this build has no sheet for keeps the old portrait (avatars.png), shown through the canvas's own background.
+    this.plain = !sheetOf(first);
+    this.canvas.classList.toggle('fb', this.plain);
+    if (this.plain) this.canvas.style.setProperty('--av', String(Math.max(0, ['warrior', 'mage', 'rogue', 'huntress'].indexOf(first))));
     const moving = this.animate && !reduced();
-    const { g, k, kf } = this;
-    const { width, height } = this.canvas;
+    const g = this.g!;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, width, height);
+    g.clearRect(0, 0, this.w, this.h);
     g.imageSmoothingEnabled = false;
     let waiting = false;
+    const slice = (layout.frame ?? { slice: 4 }).slice;
+    const border = slice * this.kf;
     if (!this.plain) {
-      // The stage (36 x 24 art pixels) inside the border the frame owns.
-      let scene: HTMLCanvasElement;
-      if (moving && this.stage) {
-        waiting = !compose(this.stage.getContext('2d')!, look, t, true).complete;
-        scene = this.stage;
+      if (moving) {
+        g.translate(border, border);
+        g.scale(this.k, this.k);
+        waiting = !compose(g, look, layout, a, t, true).complete;
+        g.setTransform(1, 0, 0, 1, 0, 0);
       } else {
-        const picture = still(look);
-        scene = picture.canvas;
+        const picture = still(look, this.kind, layout, a, this.k);
+        g.drawImage(picture.canvas, border, border);
         waiting = !picture.complete;
       }
-      g.drawImage(scene, 0, 0, STAGE_W, STAGE_H, BORDER * kf, BORDER * kf, STAGE_W * k, STAGE_H * k);
     }
-    if (framed(g, look.fr, t, moving, width, height, kf)) waiting = true;
+    if (drawFrame(g, frameArt(look), this.w, this.h, this.kf, t, moving)) waiting = true;
     this.pending = waiting;
   }
 
@@ -437,7 +502,7 @@ class HeroCard implements CardHandle {
   }
 }
 
-/** Cards that moves, cards whose art is still coming (or may), and cards whose look is a function of what is worn now. */
+/** Cards that move, cards whose art is still coming (or may), and cards whose look is a function of what is worn now. */
 const movers = new Set<HeroCard>();
 const pendingCards = new Set<HeroCard>();
 const functional = new Set<HeroCard>();
@@ -458,29 +523,33 @@ function listen(): void {
   if (listening) return;
   listening = true;
   onFlChange(redrawPending);
+  onCompeteChange(redrawPending);
   // Wearing something new changes the profile's card, and every card made from what is worn now.
   cosmetics.onChange(() => {
     for (const card of functional) if (card.gone) card.dispose(); else card.refresh();
   });
 }
 
-/** The one ticker: about six frames a second, only while something moves and the page is shown. */
-const FRAME_MS = 1000 / 6;
+/** The one clock: about twelve frames a second, only while something moves and the page is shown. */
+const FRAME_MS = 1000 / 12;
 let timer = 0;
+let lastFrame = 0;
 function ensureTicker(): void {
   if (timer !== 0 || movers.size === 0) return;
-  timer = window.setInterval(() => {
-    if (document.hidden) return;
-    const now = performance.now();
+  const step = (now: number): void => {
+    timer = requestAnimationFrame(step);
+    if (document.hidden || now - lastFrame < FRAME_MS) return;
+    lastFrame = now;
     for (const card of movers) {
       if (card.gone) card.dispose();
       else card.draw(now);
     }
     if (movers.size === 0) {
-      window.clearInterval(timer);
+      cancelAnimationFrame(timer);
       timer = 0;
     }
-  }, FRAME_MS);
+  };
+  timer = requestAnimationFrame(step);
 }
 
 /**
@@ -489,5 +558,58 @@ function ensureTicker(): void {
  */
 export function heroCard(look: CardLook | (() => CardLook), options: CardOptions = {}): CardHandle {
   listen();
-  return new HeroCard(look, options.animate === true, options.scale ?? 2, options.className ?? '');
+  void compete();
+  return new HeroCard(look, options.animate === true, options.kind ?? 'row', options.scale, options.className ?? '');
+}
+
+/* ---- Scenes on a canvas of their own (the share pictures) ---- */
+
+/**
+ * Draws a layout's scene (`story`, `chat`, `notify` ...) onto `g` at `x`, `y` at a whole `scale`: the share pictures'. Returns whether it
+ * is whole (false while art is still coming: the caller waits with `whenWhole` and draws it again).
+ */
+export function drawScene(g: CanvasRenderingContext2D, look: CardLook, name: string, x: number, y: number, scale: number, t = 0): boolean {
+  const a = anchorsOf();
+  const layout = a?.layouts[name];
+  if (!a || !layout) return false;
+  g.save();
+  g.translate(x, y);
+  g.beginPath();
+  g.rect(0, 0, layout.scene[0] * scale, layout.scene[1] * scale);
+  g.clip();
+  g.scale(scale, scale);
+  const { complete } = compose(g, look, layout, a, t, false);
+  g.restore();
+  return complete;
+}
+
+/** The layout of a share picture (its canvas, where the scene stands on it and at what scale). */
+export const sceneLayout = (name: string): SceneLayout | undefined => layoutOf(name);
+
+/** Resolves once `attempt` says it is whole, trying again whenever more art has come; gives up after `limit` ms (and then resolves false). */
+export function whenWhole(attempt: () => boolean, limit = 6000): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (attempt()) {
+      resolve(true);
+      return;
+    }
+    let done = false;
+    const finish = (whole: boolean): void => {
+      if (done) return;
+      done = true;
+      stopFl();
+      stopCompete();
+      waiters.delete(check);
+      window.clearTimeout(timeout);
+      resolve(whole);
+    };
+    const check = (): void => {
+      if (attempt()) finish(true);
+    };
+    const stopFl = onFlChange(check);
+    const stopCompete = onCompeteChange(check);
+    waiters.add(check);
+    const timeout = window.setTimeout(() => finish(false), limit);
+    void compete();
+  });
 }

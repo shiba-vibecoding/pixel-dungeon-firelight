@@ -1075,7 +1075,7 @@ export const en = {
     shareFailed: 'Could not share just now. Try again.',
     storyCall: 'Can you go deeper?',
     remindersSwitch: 'Reminders from the bot',
-    remindersNote: 'An evening word when the streak is at risk, the week’s result on Monday; never more than one a day.',
+    remindersNote: 'An evening word when the streak is at risk, the week’s result on Monday, a word when someone passes you on the day’s board; never more than one a day.',
     remindersAsk: 'Keep the streak?',
     remindersAskText: 'The bot can write to you in the evening if your streak is about to break, and on Monday with the week’s result. Never more than one message a day; turned off in the settings.',
     remindersYes: 'Remind me',

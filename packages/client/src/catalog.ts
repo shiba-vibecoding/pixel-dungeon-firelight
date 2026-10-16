@@ -47,6 +47,10 @@ export type Earn =
   | { by: 'streak'; days: number }
   | { by: 'board'; kind: 'daily' | 'week'; place: number }
   | { by: 'badge'; badge: string }
+  /** Won in the competitions (the server's honours): a title of the boards, a season's frame, the Beacon fire. Never sold. */
+  | { by: 'honour'; id: string }
+  /** Reached a step of the weekly leagues (1 Spark ... 5 Beacon): the league's frame. */
+  | { by: 'league'; tier: number }
   | { by: 'patron' };
 
 /** Only sold between these days of the year ([month, day], inclusive, wrapping over the new year). */
@@ -331,6 +335,23 @@ const base: Item[] = [
   { id: 'frame.laurel', category: 'frame', stars: 0, name: { ru: 'Рамка: лавры', en: 'Frame: laurels' }, rarity: 'epic', earn: { by: 'streak', days: 30 }, tones: ['#6adf6a', '#2a5a2a'] },
   { id: 'frame.cup', category: 'frame', stars: 0, name: { ru: 'Рамка: кубок', en: 'Frame: cup' }, rarity: 'epic', earn: { by: 'board', kind: 'daily', place: 3 }, tones: ['#ffd84a', '#8a5a0a'] },
   { id: 'title.champion', category: 'title', stars: 0, name: { ru: 'Чемпион недели', en: 'Champion of the week' }, rarity: 'epic', earn: { by: 'board', kind: 'week', place: 3 } },
+  // Honours of the competitions (design part 7, assets/compete): won on the boards, in a season, in a circle; never sold. The server judges them
+  // (server honours.ts) and the wallet grants them from the player's record; a test holds these names to the designer's (compete.json).
+  { id: 'title.swift', category: 'title', stars: 0, name: { ru: 'Скоростной', en: 'Swift' }, rarity: 'epic', earn: { by: 'honour', id: 'swift' } },
+  { id: 'title.deep', category: 'title', stars: 0, name: { ru: 'Глубинный', en: 'Deep Delver' }, rarity: 'epic', earn: { by: 'honour', id: 'deep' } },
+  { id: 'title.circle_champion', category: 'title', stars: 0, name: { ru: 'Чемпион круга', en: 'Circle Champion' }, rarity: 'epic', earn: { by: 'honour', id: 'circle_champion' } },
+  { id: 'title.duelist', category: 'title', stars: 0, name: { ru: 'Дуэлянт', en: 'Duelist' }, rarity: 'epic', earn: { by: 'honour', id: 'duelist' } },
+  { id: 'title.season_beacon', category: 'title', stars: 0, name: { ru: 'Маяк сезона', en: 'Beacon of the Season' }, rarity: 'legendary', legendary: true, earn: { by: 'honour', id: 'season_beacon' } },
+  { id: 'fire.beacon', category: 'campfire', stars: 0, name: { ru: 'Маяк', en: 'Beacon' }, rarity: 'legendary', legendary: true, earn: { by: 'honour', id: 'fire.beacon' } },
+  { id: 'frame.league.spark', category: 'frame', stars: 0, name: { ru: 'Рамка лиги: Искра', en: 'League frame: Spark' }, rarity: 'common', earn: { by: 'league', tier: 1 }, tones: ['#7e796e', '#33302a'] },
+  { id: 'frame.league.coal', category: 'frame', stars: 0, name: { ru: 'Рамка лиги: Уголь', en: 'League frame: Coal' }, rarity: 'rare', earn: { by: 'league', tier: 2 }, tones: ['#e8441f', '#33282a'] },
+  { id: 'frame.league.flame', category: 'frame', stars: 0, name: { ru: 'Рамка лиги: Пламя', en: 'League frame: Flame' }, rarity: 'rare', earn: { by: 'league', tier: 3 }, tones: ['#ff9a3a', '#7a2a0a'] },
+  { id: 'frame.league.bonfire', category: 'frame', stars: 0, name: { ru: 'Рамка лиги: Костёр', en: 'League frame: Bonfire' }, rarity: 'epic', earn: { by: 'league', tier: 4 }, tones: ['#ffcc66', '#8a5a0a'] },
+  { id: 'frame.league.beacon', category: 'frame', stars: 0, name: { ru: 'Рамка лиги: Маяк', en: 'League frame: Beacon' }, rarity: 'epic', earn: { by: 'league', tier: 5 }, tones: ['#e8c870', '#bff4ff'] },
+  { id: 'frame.season.s1', category: 'frame', stars: 0, name: { ru: 'Рамка сезона: Угли глубин', en: 'Season frame: Embers of the Deep' }, rarity: 'epic', earn: { by: 'honour', id: 'frame.season.s1' }, tones: ['#ff9a3a', '#6e1e10'] },
+  { id: 'frame.season.s2', category: 'frame', stars: 0, name: { ru: 'Рамка сезона: Иней пещер', en: 'Season frame: Frost of the Caves' }, rarity: 'epic', earn: { by: 'honour', id: 'frame.season.s2' }, tones: ['#8ad0f0', '#1a3a6a'] },
+  { id: 'frame.season.s3', category: 'frame', stars: 0, name: { ru: 'Рамка сезона: Мох стоков', en: 'Season frame: Moss of the Sewers' }, rarity: 'epic', earn: { by: 'honour', id: 'frame.season.s3' }, tones: ['#8adc5a', '#163a1a'] },
+  { id: 'frame.season.s4', category: 'frame', stars: 0, name: { ru: 'Рамка сезона: Тень залов', en: 'Season frame: Shadow of the Halls' }, rarity: 'epic', earn: { by: 'honour', id: 'frame.season.s4' }, tones: ['#b48aff', '#2a1250'] },
   {
     id: 'name.champion', category: 'namecolor', stars: 0, name: { ru: 'Имя чемпиона', en: 'Champion’s name' }, rarity: 'legendary', legendary: true,
     earn: { by: 'board', kind: 'week', place: 1 }, tones: ['#ffd84a', '#ffffff'], shimmer: true,

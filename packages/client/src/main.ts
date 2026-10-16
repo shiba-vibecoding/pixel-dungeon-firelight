@@ -14,6 +14,7 @@ import './game.css';
 import './fl-fx.css';
 import './fl-mart.css';
 import './fl-mart-ext.css';
+import './fl-compete.css';
 import './photo.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickItem, quickRef, quickUse } from './quickslot';
@@ -44,7 +45,17 @@ import {
   askDrink, askKnownScroll, askPendingScroll, onWindow, reopenWindow, type WindowState, windowState,
   backpackOpen, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
-import { rankingBlock, showBoards, trophyText } from './rankui';
+import { rankingBlock, trophyText } from './rankui';
+import { showBoards } from './boardsui';
+import { showProfile } from './profileui';
+import { lastArmor } from './compete-ui';
+import { showSeason } from './seasonui';
+import { showLeague, showWeek } from './leagueui';
+import { showCircles, showInvite } from './circleui';
+import { showHall } from './hallui';
+import { tx } from './compete-ui';
+import { myLook } from './herocard';
+import { chatPicture, circlePicture, savePicture } from './sharecards';
 import { mart } from './mart';
 import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta';
 import { eraseDevice } from './challenge-info';
@@ -81,11 +92,11 @@ import { lookIndex, preloadSheets, regionIndex } from './worldsheets';
 import { type ShareCard, shareCard, sharePicture, storyCard } from './share';
 import { rankings, recordRun, runScore } from './rankings';
 import { type CheckOptions, forgetSolo, loadCheck, loadSolo, type Session, soloSession, staleSolo } from './session';
-import { type BoardKind, type Profile, type RunMeta, type RunSlot, runApi, type SyncAnswer } from './checked';
+import { type BoardKind, type CircleBoardView, type Profile, type RunMeta, type RunSlot, runApi, type SyncAnswer } from './checked';
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
+  backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
   shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen, invitedGift, inviteStart, launchedByInvite,
 } from './telegram';
@@ -811,11 +822,23 @@ function settings(onClose: () => void): void {
   showSettings({
     onClose, onEffects: () => resize(), onReset: resetDevice,
     ...(api && inTelegram ? { reminders: { on: stored('pd-notify') === 'on', set: (on: boolean) => void setReminders(on) } } : {}),
+    ...(api ? { hideBoards: { label: tx('hideBoards'), note: tx('hideBoardsInfo'), on: profile?.hidden === true, set: (on: boolean) => void hideOnBoards(on) } } : {}),
     onNews: () => showNews({ release: CURRENT, onClose: () => settings(onClose) }),
     ...(api ? { onReport: () => showReport({ api, run: runFacts, onClose: () => settings(onClose) }) } : {}),
     // Outside Telegram the name is not known, and the camp has no field for it.
     ...(!inTelegram ? { name: { value: playerName, set: (value: string) => { playerName = value; store('pd-name', value); } } } : {}),
   });
+}
+
+/** «Hide me from the boards» on or off: the server renames the player on the boards still open, and keeps it for the runs to come. */
+async function hideOnBoards(on: boolean): Promise<void> {
+  const kept = await api!.hide(on);
+  if (kept === null) {
+    toast(tx('shareFailed'));
+    return;
+  }
+  if (profile) profile.hidden = kept;
+  toast(tx(kept ? 'hideBoardsOn' : 'hideBoardsOff'));
 }
 
 /** The bot's reminders on or off: on asks Telegram to let the bot write first; false if it did not come about. */
@@ -874,8 +897,160 @@ const openings = ((): number => {
 let profile: Profile | null = null;
 
 /** The boards window; back to the title when closed. */
-function openBoards(tab?: 'daily' | 'week' | 'all' | 'device'): void {
-  showBoards({ api, device: rankings(), trophies: profile?.trophies, tab, onClose: toTitle });
+function openBoards(tab?: 'daily' | 'week' | 'all' | 'season' | 'device'): void {
+  const rules = dailyRulesView();
+  showBoards({
+    api, device: rankings(), trophies: profile?.trophies, profile, heroClass, tab,
+    rules: { hardship: rules.hardship.name, boon: rules.boon.name, info: rules.boon.info },
+    onClose: toTitle,
+    onProfile: openProfile,
+    onSeason: openSeason,
+    onHall: openHall,
+    onLeague: openLeague,
+    onCircles: () => openCircles(),
+  });
+}
+
+/** The circles' window: the player's circles (two at most), the week's board of one, the invite and the card for a chat; back to the boards. */
+function openCircles(code?: string): void {
+  showCircles({
+    api, ...(code ? { code } : {}), onBack: () => openBoards(), onClose: toTitle, toast, invite: openInvite,
+    cardShare: (view) => circleCardChoices(view),
+  });
+}
+
+/** The invitation to a circle: its link to copy or to send. */
+function openInvite(code: string, name: string): void {
+  showInvite({
+    code, name, onBack: () => openCircles(code), onClose: toTitle,
+    copy: (link) => {
+      void navigator.clipboard?.writeText(link).then(() => toast(tx('linkCopiedWord')), () => toast(link));
+    },
+    send: () => void shareCircle(code, tx('circleCardText', { c: name })).then((how) => {
+      if (how === 'copied') toast(tx('linkCopiedWord'));
+    }),
+  });
+}
+
+/** The ways to send a circle's card of the week: to a chat Telegram picks (the server keeps the picture and the invite's button), kept as a picture. */
+function circleCardChoices(view: CircleBoardView): ShareChoice[] {
+  const picture = async (): Promise<Blob | null> => circlePicture({ circle: view.circle.name, week: Number(view.week.split('-W')[1] ?? 0), rows: view.board.top, champion: view.circle.champion?.name ?? null });
+  const text = tx('circleCardText', { c: view.circle.name });
+  const choices: ShareChoice[] = [];
+  if (api && canShareMessage()) {
+    choices.push({
+      label: tx('sendChat'),
+      run: () => {
+        toast(tx('sharePreparing'));
+        void (async () => {
+          const blob = await picture();
+          const url = blob && (await api!.card(blob));
+          const id = blob && (await api!.challenge(text, url, view.code));
+          if (id) await shareMessage(id);
+          else toast(tx('shareFailed'));
+        })();
+      },
+    });
+  }
+  choices.push({
+    label: tx('shareSave'),
+    run: () => {
+      toast(tx('sharePreparing'));
+      void (async () => {
+        const blob = await picture();
+        if (!blob) {
+          toast(tx('shareFailed'));
+          return;
+        }
+        const url = api ? await api.card(blob) : null;
+        if (await savePicture(blob, 'pixel-dungeon-circle.png', url)) toast(tx('saved'));
+        else toast(tx('shareFailed'));
+      })();
+    },
+  });
+  return choices;
+}
+
+/**
+ * A circle's invite link opened: asks first (the circle's members will see the player's name and best run), then joins and opens it. A group
+ * chat the game was opened from asks the same for the group's circle, once for each chat.
+ */
+function offerCircles(): void {
+  if (!api || session) return;
+  const code = invitedCircle();
+  const chat = launchedFromGroup();
+  const answer = (outcome: Awaited<ReturnType<NonNullable<typeof api>['circleOp']>>): void => {
+    if ('error' in outcome) {
+      toast(tx(`circleErrors.${outcome.error}`));
+      toTitle(false);
+      return;
+    }
+    const joined = outcome.circles.find((circle) => circle.code === outcome.code) ?? outcome.circles[0];
+    if (joined) toast(tx('circleJoined', { n: joined.name }));
+    openCircles(outcome.code ?? outcome.circles[0]?.code);
+  };
+  if (code) {
+    showConfirm(tx('circleAskTitle'), tx('circleAskText'), tx('circleAskYes'), tx('notNow'), () => void api!.circleOp('join', { code }).then(answer), () => toTitle(false), undefined, { calm: true });
+  } else if (chat && !stored(`pd-circle-asked-${chat.instance}`)) {
+    store(`pd-circle-asked-${chat.instance}`, '1');
+    showConfirm(tx('groupAskTitle'), tx('groupAskText'), tx('circleAskYes'), tx('notNow'), () => void api!.circleOp('join', { group: true }).then(answer), () => toTitle(false), undefined, { calm: true });
+  }
+}
+
+/** The league's window: the step, the room of the week with its zones; back to the boards. */
+function openLeague(): void {
+  showLeague({ api, profile, onBack: () => openBoards(), onClose: toTitle });
+}
+
+/** Shown once, over the title: how the last week in a league room ended (the player closes it, and the server keeps that for every device). */
+let weekResultShown = false;
+function maybeWeekResult(answer: Profile): void {
+  const result = answer.leagueResult;
+  if (weekResultShown || !api || session || !result || answer.leagueSeen === result.week || overlayOpen()) return;
+  weekResultShown = true;
+  const seen = (): void => {
+    answer.leagueSeen = result.week;
+    void api?.leagueSeen(result.week);
+    toTitle(false);
+  };
+  const picture = (): ShareCard => ({
+    name: myHeroPicture().name, heroClass, level: 1, depth: answer.deepest, score: answer.best, place: null, won: false, cause: '', hero: { ...myHeroPicture(), place: null, tier: result.to },
+  });
+  showWeek({ result, profile: answer, heroClass, share: shareChoices(async () => picture(), tx('shareTextNoPlace')), onSeen: seen });
+}
+
+/** The season's window: its Heat, how it is earned, what it gives; back to the boards (on the Season tab). */
+function openSeason(): void {
+  showSeason({ api, profile, onBack: () => openBoards('season'), onClose: toTitle, onHall: openHall });
+}
+
+/** The hall of fame: every season's top ten, for ever. */
+function openHall(): void {
+  showHall({ api, onBack: () => openBoards('season'), onClose: toTitle });
+}
+
+/** The player's own hero as the pictures to send show him (sharecards.ts): the place on the day's board only if he has played it. */
+function myHeroPicture(): import('./sharecards').HeroPicture {
+  return {
+    name: profile?.name || (inTelegram ? telegramName() : playerName.trim()) || t.heroDefault, look: myLook(heroClass, lastArmor(profile, heroClass)), heroClass,
+    place: profile?.dailyDone ? (profile.places.daily ?? null) : null, depth: profile?.deepest ?? 1, streak: profile?.streak.count ?? 0,
+    ...(profile?.league && profile.league.best > 0 ? { tier: profile.league.tier } : {}),
+  };
+}
+
+/** The profile window: the hero card, what he has done, his shelf, and the card to send; back to the boards. */
+function openProfile(): void {
+  const picture = (): ShareCard => ({
+    name: myHeroPicture().name, heroClass, level: 1, depth: profile?.deepest ?? 1, score: profile?.best ?? 0, place: myHeroPicture().place, won: false, cause: '', hero: myHeroPicture(),
+  });
+  const place = myHeroPicture().place;
+  showProfile({
+    profile, name: myHeroPicture().name, heroClass,
+    share: shareChoices(async () => picture(), place ? tx('shareText', { n: place }) : tx('shareTextNoPlace')),
+    preview: () => chatPicture(myHeroPicture()),
+    onBack: () => openBoards(),
+    onClose: toTitle,
+  });
 }
 
 /** Today's daily dungeon as the server last told: its attempt open, under way, or played (and its place). */
@@ -920,6 +1095,7 @@ function refreshProfile(): void {
     if (!session && document.querySelector('.pd-camp')) {
       toTitle(false);
       askOnTitle();
+      maybeWeekResult(answer);
     }
   });
 }
@@ -3348,6 +3524,12 @@ function tick(now: number): void {
         name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, level: me.lvl, depth: deepestNow, score: scoreNow,
         place: reply?.places?.daily ?? reply?.places?.week ?? null, won: victory, cause: killer ? capitalize(t.killedBy(killer)) : t.soloFell(me.depth),
         title: dailyRun ? undefined : t.gameName,
+        // The pictures of the hero by his fire (sharecards.ts), with the day's place when this was the daily dungeon; never the seed.
+        hero: {
+          name: me.name || playerName || telegramName() || t.heroLabel, look: myLook(me.heroClass, armorTier(me)), heroClass: me.heroClass,
+          place: dailyRun ? (reply?.places?.daily ?? null) : null, depth: deepestNow, streak: profile?.streak.count ?? 0,
+          ...(profile?.league && profile.league.best > 0 ? { tier: profile.league.tier } : {}),
+        },
       };
     }, shareText);
     window.setTimeout(() => {
@@ -3439,6 +3621,23 @@ function shareChoices(card: () => Promise<ShareCard>, text: string): ShareChoice
       },
     });
   }
+  // Keeping the picture: Telegram's download from the server's copy, or the browser's.
+  choices.push({
+    label: tx('shareSave'),
+    run: () => {
+      toast(tx('sharePreparing'));
+      void (async () => {
+        const blob = await storyCard(await card(), t.ranked.storyCall);
+        if (!blob) {
+          toast(tx('shareFailed'));
+          return;
+        }
+        const url = api ? await api.card(blob) : null;
+        if (await savePicture(blob, 'pixel-dungeon-firelight.png', url)) toast(tx('saved'));
+        else toast(tx('shareFailed'));
+      })();
+    },
+  });
   choices.push({ label: choices.length > 0 ? t.ranked.shareLink : t.shareResult, run: link });
   return choices;
 }
@@ -3454,6 +3653,11 @@ if (launchedForDaily()) {
   toTitle();
   // Without the server there is no profile to ask: the news are judged by this device alone.
   if (!api) maybeNews(null);
+  // Opened from the bot's «you were passed on the board» message: the day's board.
+  if (api && launchedForBoards()) openBoards('daily');
+  if (api && launchedForLeague()) openLeague();
+  // A circle's invite link, or a group chat the game was opened from.
+  offerCircles();
 }
 
 
