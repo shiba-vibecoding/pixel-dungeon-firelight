@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  bloodRgb, emptyData, FLOOR, Gore, GoreStore, MAX_BODIES, MAX_SPLATS, NO_BODY, poolSplat, type SpatterMap, spatterOf, type StorageLike, WALL,
+  bloodRgb, CHUNK, CHUNK_SHAPES, chunkCount, chunkPixels, chunksOf, chunkStyle, emptyData, FLOOR, Gore, GoreStore, MAX_BODIES, MAX_SPLATS, NO_BODY, poolSplat, type SpatterMap, spatterOf, type StorageLike, WALL,
 } from '../src/gore';
 import { deadLook, seeded } from '../src/r3d/bodyart';
+import { speckle } from '../src/r3d/itemblood';
 
 class Memory implements StorageLike {
   readonly map = new Map<string, string>();
@@ -39,6 +40,10 @@ describe('the gore that stays', () => {
     a.addSplat(poolSplat(100, 120, 6, 0x7a0e0e));
     a.settleWater(55, 40);
     a.settleWater(55, 20);
+    a.addSplat({ layer: CHUNK, x: 50, y: 60, w: 4, h: 5, rgb: 0xc42020 });
+    a.stainHeap(77);
+    a.stainHeap(77);
+    a.stainDoor(90);
     a.flush();
     const water = [...a.data.water];
 
@@ -51,6 +56,9 @@ describe('the gore that stays', () => {
     expect([...b.data.water]).toEqual(water);
     // Never fainter than it was.
     expect(b.data.water.get(55)).toBe(40);
+    // The blood on the items and the doors comes back too.
+    expect([...b.data.heaps]).toEqual([[77, 2]]);
+    expect([...b.data.doors]).toEqual([[90, 1]]);
   });
 
   it('keeps each depth apart, and forgets another run (and everything at the start of a new one)', () => {
@@ -93,7 +101,7 @@ describe('the gore that stays', () => {
     expect(again.data.bodies[0]!.cell).toBe(105);
   });
 
-  it('remembers at most 1200 splats a depth, the newest, and tells the painter of each', () => {
+  it('remembers at most 2400 splats a depth, the newest, and tells the painter of each', () => {
     const g = new Gore();
     const painted: number[] = [];
     g.onSplat = (s) => void painted.push(s.x);
@@ -225,5 +233,90 @@ describe('the look of a body', () => {
     deadLook(c, 14, 15, 'rat', 42, 4);
     const specks = (d: Uint8ClampedArray): number => d.reduce((n, v, k) => n + (k % 4 === 0 && d[k + 1]! === 0 && d[k + 3]! === 255 && v > 50 ? 1 : 0), 0);
     expect(specks(c)).toBeGreaterThan(specks(a));
+  });
+});
+
+const open: SpatterMap = {
+  width: 12, height: 12,
+  ground: (c) => {
+    const x = c % 12;
+    const y = Math.trunc(c / 12);
+    return x >= 2 && x <= 9 && y >= 2 && y <= 9;
+  },
+  face: () => false,
+};
+
+describe('meat and pieces', () => {
+  it('has small pictures, 3 to 6 art pixels across, and turns and flips them without losing a pixel', () => {
+    expect(CHUNK_SHAPES.length).toBeGreaterThanOrEqual(8);
+    CHUNK_SHAPES.forEach((rows, shape) => {
+      const base = chunkPixels(shape, 0).length;
+      const w = Math.max(...rows.map((r) => r.length));
+      expect(Math.max(w, rows.length), `shape ${shape}`).toBeLessThanOrEqual(7);
+      expect(base).toBeGreaterThanOrEqual(5);
+      for (let how = 1; how < 8; how++) expect(chunkPixels(shape, how)).toHaveLength(base);
+    });
+    expect(chunkPixels(0, 0)).not.toEqual(chunkPixels(0, 1));
+    expect(chunkPixels(6, 0)).not.toEqual(chunkPixels(6, 2));
+  });
+
+  it('throws more for the big, the boss and the hard kill, and half as many on the light quality', () => {
+    expect(chunkCount(8, false, false, false)).toBe(5);
+    expect(chunkCount(8, false, false, false)).toBeGreaterThanOrEqual(4);
+    expect(chunkCount(100, false, false, false)).toBe(10);
+    expect(chunkCount(8, false, true, false)).toBeGreaterThan(chunkCount(8, false, false, false));
+    expect(chunkCount(100, true, false, false)).toBeGreaterThanOrEqual(22);
+    expect(chunkCount(8, false, false, true)).toBeLessThan(chunkCount(8, false, false, false));
+  });
+
+  it('scatters within a cell or so on ground only, never on a cell with items, the same for the same dice', () => {
+    const avoid = new Set([5 * 12 + 6]);
+    const a = chunksOf(open, 'rat', 5 * 16 + 8, 5 * 16 + 8, 8, 20, avoid, seeded(3));
+    const b = chunksOf(open, 'rat', 5 * 16 + 8, 5 * 16 + 8, 8, 20, avoid, seeded(3));
+    expect(a).toEqual(b);
+    expect(a).toHaveLength(8);
+    for (const c of a) {
+      expect(c.layer).toBe(CHUNK);
+      expect(Math.hypot(c.x - (5 * 16 + 8), (c.y - (5 * 16 + 8)) / 0.85)).toBeLessThanOrEqual(21);
+      expect(open.ground(Math.trunc(c.y / 16) * 12 + Math.trunc(c.x / 16))).toBe(true);
+      expect(avoid.has(Math.trunc(c.y / 16) * 12 + Math.trunc(c.x / 16))).toBe(false);
+      expect(c.w).toBeLessThan(CHUNK_SHAPES.length);
+      expect(c.h).toBeLessThan(8);
+    }
+  });
+
+  it("is meat in flesh tones and the creature's own blood, bone for skeletons, shards for golems, nothing for spirits", () => {
+    const meat = chunkStyle('rat')!;
+    expect(meat.colors).toContain(0xc42020);
+    expect(chunkStyle('crab')!.colors.length).toBeGreaterThan(meat.colors.length);
+    expect(chunkStyle('skeleton')!.colors.every((c) => (c >> 16) > 0xb0)).toBe(true);
+    expect(chunkStyle('skeleton')!.shapes).not.toEqual(meat.shapes);
+    expect(chunkStyle('golem')!.shapes).not.toEqual(meat.shapes);
+    expect(chunkStyle('ghost')).toBeNull();
+    expect(chunksOf(open, 'wraith', 50, 50, 6, 20, new Set(), seeded(1))).toEqual([]);
+  });
+
+  it('speckles an item only on its own pixels, more with more blood, the same every time', () => {
+    const item = (): Uint8ClampedArray => {
+      const d = new Uint8ClampedArray(16 * 16 * 4);
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = d[i + 1] = d[i + 2] = 180;
+        d[i + 3] = (i / 4) % 16 < 8 ? 255 : 0;
+      }
+      return d;
+    };
+    const a = item();
+    const b = item();
+    speckle(a, 16, 16, 1, 9);
+    speckle(b, 16, 16, 1, 9);
+    expect(a).toEqual(b);
+    const red = (d: Uint8ClampedArray): number => d.reduce((n, v, k) => n + (k % 4 === 0 && d[k + 1]! < 30 && d[k + 3]! === 255 ? 1 : 0), 0);
+    expect(red(a)).toBeGreaterThan(0);
+    const c = item();
+    speckle(c, 16, 16, 6, 9);
+    expect(red(c)).toBeGreaterThan(red(a));
+    // Clear pixels stay clear.
+    const whole = item();
+    expect(a.every((v, k) => k % 4 !== 3 || v === whole[k])).toBe(true);
   });
 });

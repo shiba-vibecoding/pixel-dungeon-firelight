@@ -447,7 +447,8 @@ function build(options: StoreOptions): void {
     (bar.firstChild as HTMLElement).style.width = pass.need > 0 ? `${Math.round((pass.into / pass.need) * 100)}%` : '100%';
     const text = el(
       'div', { className: 'grow' },
-      el('span', { textContent: `${T('season')} ${SEASON}` }),
+      // The season as players count it (catalog.json: the first of Firelight), not the world's internal SEASON (3, after the old editions).
+      el('span', { textContent: `${T('season')} ${season?.number ?? 1}` }),
       el('b', { textContent: season?.name[L] ?? S.passTitle }),
       bar,
       el('span', { textContent: `${S.passLevel(pass.level)} · ${pass.level >= PASS_LEVELS ? S.passMax : S.passXp(pass.into, pass.need || levelCost(pass.level + 1))}` }),
@@ -870,7 +871,7 @@ function build(options: StoreOptions): void {
       }
       case 'pass':
         title = `${T('pass')} · ${data?.season.name[L] ?? ''}`;
-        sub = `${T('season')} ${SEASON}`;
+        sub = `${T('season')} ${data?.season.number ?? 1}`;
         current = 'pass';
         main.append(...passScreen());
         break;

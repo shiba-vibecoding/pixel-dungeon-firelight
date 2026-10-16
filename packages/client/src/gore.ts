@@ -12,13 +12,18 @@ import { F, HEIGHT, T, terrainFlags, WIDTH } from '@pd/core';
 
 /** The most bodies lying on one depth (the oldest fades out when another falls) and the most splats remembered of it. */
 export const MAX_BODIES = 80;
-export const MAX_SPLATS = 1200;
+export const MAX_SPLATS = 2400;
 
-/** Blood on the floor (`floor`), on the face of a wall (`wall`), or a pool spread under a body (`pool`, an ellipse of radii w and h). */
-export type Layer = 0 | 1 | 2;
+/**
+ * Blood on the floor (`floor`), on the face of a wall (`wall`), a pool spread under a body (`pool`: a blob about (x, y), radii w and h),
+ * or a chunk of meat, bone or stone lying on the floor (`chunk`: w is which of the little pictures (CHUNK_SHAPES), h how it lies:
+ * bit 0 flipped, bits 1 and 2 turned by quarter turns).
+ */
+export type Layer = 0 | 1 | 2 | 3;
 export const FLOOR = 0;
 export const WALL = 1;
 export const POOL = 2;
+export const CHUNK = 3;
 
 /** A splat in the layer's own pixels: the floor's are world pixels (a cell is 16), the wall's are 16 across and 24 up a face, cell by cell. */
 export interface Splat {
@@ -49,9 +54,12 @@ export interface GoreData {
   splats: Splat[];
   /** How red the water of a cell has stayed, 0-255. */
   water: Map<number, number>;
+  /** How much blood has spattered on the heap of items in a cell, and on the door in one (counts). */
+  heaps: Map<number, number>;
+  doors: Map<number, number>;
 }
 
-export const emptyData = (): GoreData => ({ bodies: [], splats: [], water: new Map() });
+export const emptyData = (): GoreData => ({ bodies: [], splats: [], water: new Map(), heaps: new Map(), doors: new Map() });
 
 /** The blood of each creature, as its sprite gives it in the original (CharSprite.blood: dark red unless the sprite says otherwise). */
 const BLOOD: Readonly<Record<string, number>> = {
@@ -91,6 +99,8 @@ interface Saved {
   b: Array<[string, number, number, number, number]>;
   s: Array<[number, number, number, number, number, number]>;
   w: Array<[number, number]>;
+  h?: Array<[number, number]>;
+  d?: Array<[number, number]>;
 }
 
 export class GoreStore {
@@ -109,6 +119,8 @@ export class GoreStore {
       for (const [kind, cell, flip, seed, hits] of saved.b ?? []) data.bodies.push({ kind, cell, flip: flip === 1, seed, hits });
       for (const [layer, x, y, w, h, rgb] of saved.s ?? []) data.splats.push({ layer: layer as Layer, x, y, w, h, rgb });
       for (const [cell, value] of saved.w ?? []) data.water.set(cell, value);
+      for (const [cell, n] of saved.h ?? []) data.heaps.set(cell, n);
+      for (const [cell, n] of saved.d ?? []) data.doors.set(cell, n);
     } catch {
       // A damaged record is no record.
       return emptyData();
@@ -121,6 +133,8 @@ export class GoreStore {
       b: data.bodies.slice(-MAX_BODIES).map((b) => [b.kind, b.cell, b.flip ? 1 : 0, b.seed, b.hits]),
       s: data.splats.slice(-MAX_SPLATS).map((s) => [s.layer, s.x, s.y, s.w, s.h, s.rgb]),
       w: [...data.water],
+      h: [...data.heaps],
+      d: [...data.doors],
     };
     try {
       this.storage?.setItem(this.key(run, depth), JSON.stringify(saved));
@@ -216,6 +230,22 @@ export class Gore {
     this.saveSoon();
   }
 
+  /** Blood reached the items lying in a cell, or the door of one: the picture of it is stained a little more. */
+  stainHeap(cell: number): void {
+    this.data.heaps.set(cell, Math.min(8, (this.data.heaps.get(cell) ?? 0) + 1));
+    this.stains++;
+    this.saveSoon();
+  }
+
+  stainDoor(cell: number): void {
+    this.data.doors.set(cell, Math.min(8, (this.data.doors.get(cell) ?? 0) + 1));
+    this.stains++;
+    this.saveSoon();
+  }
+
+  /** Counts each time a heap or a door was stained, so the renderer knows to look again. */
+  stains = 0;
+
   /** A cloud of blood in water has settled: a faint stain stays, cell by cell (never fainter than what was there). */
   settleWater(cell: number, value: number): void {
     const was = this.data.water.get(cell) ?? 0;
@@ -266,8 +296,8 @@ const CELL = 16;
  */
 export function spatterOf(
   map: SpatterMap, blow: SpatterBlow, light: boolean, rnd: () => number,
-  near: { bodies: ReadonlyArray<{ cell: number }>; heaps: readonly number[] },
-): { splats: Splat[]; bodyHits: number[]; heapSpecks: Splat[] } {
+  near: { bodies: ReadonlyArray<{ cell: number }>; heaps: readonly number[]; doors?: readonly number[] },
+): { splats: Splat[]; bodyHits: number[]; heapSpecks: Splat[]; heapHits: number[]; doorHits: number[] } {
   const base = bloodRgb(blow.kind);
   const share = Math.min(1, blow.damage / Math.max(1, blow.ht));
   const splats: Splat[] = [];
@@ -277,7 +307,7 @@ export function spatterOf(
   const scale = light ? 0.5 : 1;
 
   // The floor: specks thrown out up to two cells, most near.
-  const floorN = Math.round((3 + share * 16 + Math.min(8, blow.damage) * 0.6) * scale);
+  const floorN = Math.round((5 + share * 22 + Math.min(10, blow.damage) * 0.8) * scale);
   for (let i = 0; i < floorN; i++) {
     const r = Math.pow(rnd(), 1.6) * 34;
     const a = rnd() * Math.PI * 2;
@@ -317,15 +347,123 @@ export function spatterOf(
     if (Math.abs((c % map.width) - cx) <= 2 && Math.abs(Math.floor(c / map.width) - cy) <= 2 && rnd() < 0.4 + share) bodyHits.push(i);
   }
   const heapSpecks: Splat[] = [];
+  const heapHits: number[] = [];
   for (const heap of near.heaps) {
     const hx = heap % map.width;
     const hy = Math.floor(heap / map.width);
     if (Math.abs(hx - cx) > 2 || Math.abs(hy - cy) > 2 || rnd() > 0.35 + share) continue;
+    heapHits.push(heap);
     for (let i = 0; i < 2 + Math.round(share * 4 * scale); i++) {
       heapSpecks.push({ layer: FLOOR, x: hx * CELL + 4 + Math.floor(rnd() * 8), y: hy * CELL + 5 + Math.floor(rnd() * 8), w: 1 + Math.floor(rnd() * 2), h: 1, rgb: colour() });
     }
   }
-  return { splats, bodyHits, heapSpecks };
+  // The leaves of doors within two cells.
+  const doorHits: number[] = [];
+  for (const door of near.doors ?? []) {
+    if (Math.abs((door % map.width) - cx) <= 2 && Math.abs(Math.floor(door / map.width) - cy) <= 2 && rnd() < 0.25 + share * 0.7) doorHits.push(door);
+  }
+  return { splats, bodyHits, heapSpecks, heapHits, doorHits };
+}
+
+// ---- meat and pieces ----------------------------------------------------------------------------------------------------------
+
+/**
+ * The little pictures of what a body bursts into, 3 to 6 art pixels: `a` the body of it, `b` its darker edge, `c` a lighter glint. Each
+ * lies flat, flipped or turned by a quarter turn as the dice say. Meat first, then bits of bone (thin), then shards of stone and metal.
+ */
+export const CHUNK_SHAPES: readonly (readonly string[])[] = [
+  ['.ab.', 'aaca', '.aab'],
+  ['.aa.', 'abca', 'baab', '.bb.'],
+  ['aab', 'acaa', '.aab'],
+  ['.ab', 'aaa', 'aab', '.b.'],
+  ['aaab.', 'acaab', '.bbb.'],
+  ['.a.', 'aca', '.ab'],
+  // Bone: a shaft with a knob at each end, a splinter, a curved rib.
+  ['ca.....', '.aaaab.'],
+  ['.ab', 'ab.', 'ab.'],
+  ['..aa', '.ac.', 'ab..'],
+  // Shards.
+  ['.a.', 'acb', 'aab'],
+  ['ab..', 'acab', '.bab'],
+  ['aab', 'cab'],
+];
+const MEAT_SHAPES = [0, 1, 2, 3, 4, 5];
+const BONE_SHAPES = [6, 7, 8, 5];
+const SHARD_SHAPES = [9, 10, 11, 5];
+
+export type ChunkKind = 'meat' | 'bone' | 'shard';
+
+/** What a kind bursts into, and the colours of the pieces (the flesh tones and the creature's own blood, as the original's sprites give it). */
+export function chunkStyle(kind: string): { shapes: readonly number[]; colors: readonly number[] } | null {
+  if (NO_BLOOD.has(kind)) return null;
+  switch (kind) {
+    case 'skeleton': case 'undead':
+      return { shapes: BONE_SHAPES, colors: [0xece6cc, 0xd6cfb4, 0xc4bea6, 0xb8b09a] };
+    case 'golem': case 'statue': case 'dm300':
+      return { shapes: SHARD_SHAPES, colors: [0x9a958a, 0xc0b8a4, 0x6e6a62, 0xc8ccd4, 0x80706c] };
+    case 'goo': case 'acidic': case 'spinner': case 'larva': case 'swarm': case 'rottingFist':
+      return { shapes: MEAT_SHAPES, colors: [0x5fcf2f, 0xa6e86a, 0x2f8f1f, 0x2f7f1f] };
+    case 'eye': case 'yog':
+      return { shapes: MEAT_SHAPES, colors: [0xb050d0, 0x6a2a9a, 0xe8a0ff] };
+    case 'bee':
+      return { shapes: [5, 9, 11], colors: [0xffd020, 0x4a3a18, 0xfff0a0] };
+    default: {
+      // Flesh: the dark red of the blood and the pinks and raw reds of what is under the skin; a creature with another blood adds its own.
+      const own = bloodRgb(kind);
+      const colors = [0xc42020, 0x8a1010, 0xe07070, 0xd83030, 0x7a0e0e];
+      if (own !== RED) colors.push(shade(own, 0.9), shade(own, 0.7));
+      return { shapes: MEAT_SHAPES, colors };
+    }
+  }
+}
+
+/** How many pieces a death throws: more for big creatures, for a boss's end, for a crit and for a blow far beyond what was left; fewer on light. */
+export function chunkCount(ht: number, boss: boolean, heavy: boolean, light: boolean): number {
+  const base = boss ? 22 + Math.min(10, Math.round(ht / 15)) : Math.max(4, Math.min(10, 4 + Math.round(ht / 7)));
+  return Math.max(2, Math.round((base + (heavy ? 3 : 0)) * (light ? 0.5 : 1)));
+}
+
+/**
+ * The pieces of a death: scattered within about a cell (a boss's within two) of where it fell, on ground only, never on a cell where
+ * items lie. Pure given its dice.
+ */
+export function chunksOf(
+  map: SpatterMap, kind: string, x: number, y: number, count: number, spread: number, avoid: ReadonlySet<number>, rnd: () => number,
+): Splat[] {
+  const style = chunkStyle(kind);
+  if (!style) return [];
+  const out: Splat[] = [];
+  for (let tries = 0; out.length < count && tries < count * 4; tries++) {
+    const r = Math.pow(rnd(), 0.75) * spread;
+    const a = rnd() * Math.PI * 2;
+    const px = Math.round(x + Math.cos(a) * r);
+    const py = Math.round(y + Math.sin(a) * r * 0.85);
+    const cell = Math.floor(py / CELL) * map.width + Math.floor(px / CELL);
+    if (px < 3 || py < 3 || px >= map.width * CELL - 3 || py >= map.height * CELL - 3 || !map.ground(cell) || avoid.has(cell)) continue;
+    const shape = style.shapes[Math.floor(rnd() * style.shapes.length)]!;
+    out.push({ layer: CHUNK, x: px, y: py, w: shape, h: Math.floor(rnd() * 8), rgb: style.colors[Math.floor(rnd() * style.colors.length)]! });
+  }
+  return out;
+}
+
+/** A chunk's pixels as (dx, dy, tone) after its flip and turns, centred about (0, 0): tone 0 body, 1 edge, 2 glint. */
+export function chunkPixels(shape: number, how: number): Array<[number, number, 0 | 1 | 2]> {
+  const rows = CHUNK_SHAPES[shape] ?? CHUNK_SHAPES[0]!;
+  const w = Math.max(...rows.map((r) => r.length));
+  const h = rows.length;
+  const out: Array<[number, number, 0 | 1 | 2]> = [];
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < rows[j]!.length; i++) {
+      const c = rows[j]![i]!;
+      if (c === '.') continue;
+      let dx = i - (w >> 1);
+      let dy = j - (h >> 1);
+      if (how & 1) dx = -dx;
+      for (let q = (how >> 1) & 3; q > 0; q--) [dx, dy] = [-dy, dx];
+      out.push([dx, dy, c === 'b' ? 1 : c === 'c' ? 2 : 0]);
+    }
+  }
+  return out;
 }
 
 /** The ellipse of a pool under a body, as one record (radii in floor pixels). */

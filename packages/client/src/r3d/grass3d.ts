@@ -257,3 +257,68 @@ export class Grass {
     this.mesh.dispose();
   }
 }
+
+/** Most tufts at once: three for each of the figures that stand in short grass. */
+export const TUFT_CAPACITY = 96;
+
+/**
+ * A few blades of short grass in front of the feet of whoever stands in it (the floor's grass is a decal, so it is under a figure's feet;
+ * these stand over them): small crossed quads cut from the short-grass tile, in the same shader as the high grass, in one draw. Written
+ * a frame at a time, into arrays made once (`begin`, `add`, `end`); nothing at all, not even the draw, when no one stands in grass.
+ */
+export class Tufts {
+  readonly mesh: InstancedMesh;
+  readonly material: MeshLambertMaterial;
+  private readonly textures: CanvasTexture[];
+  private readonly m: Float32Array;
+  private count = 0;
+
+  constructor(air: AirUniforms, color: HTMLCanvasElement, glow: HTMLCanvasElement, selfLight: number) {
+    const geometry = crossedQuads();
+    this.textures = [nearest(color), nearest(glow)];
+    this.material = new MeshLambertMaterial({ map: this.textures[0]!, emissiveMap: this.textures[1]!, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide });
+    withFog(this.material, air, 'instance');
+    withSway(this.material, selfLight);
+    const whole = new Float32Array(TUFT_CAPACITY * 4);
+    for (let i = 0; i < TUFT_CAPACITY; i++) { whole[i * 4 + 2] = 1; whole[i * 4 + 3] = 1; }
+    geometry.setAttribute('aUv', new InstancedBufferAttribute(whole, 4));
+    geometry.setAttribute('aFold', new InstancedBufferAttribute(new Float32Array(TUFT_CAPACITY), 1));
+    this.mesh = new InstancedMesh(geometry, this.material, TUFT_CAPACITY);
+    this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.m = this.mesh.instanceMatrix.array as Float32Array;
+    this.mesh.frustumCulled = false;
+    this.mesh.count = 0;
+    this.mesh.visible = false;
+  }
+
+  begin(): void {
+    this.count = 0;
+  }
+
+  /** A tuft standing at (x, z) (cells), `size` cells across. */
+  add(x: number, z: number, size: number): void {
+    if (this.count >= TUFT_CAPACITY) return;
+    const o = this.count++ * 16;
+    const m = this.m;
+    m.fill(0, o, o + 16);
+    m[o] = size; m[o + 5] = size; m[o + 10] = size; m[o + 15] = 1;
+    m[o + 12] = x; m[o + 13] = 0; m[o + 14] = z;
+  }
+
+  end(): void {
+    const mesh = this.mesh;
+    mesh.count = this.count;
+    mesh.visible = this.count > 0;
+    if (this.count === 0) return;
+    mesh.instanceMatrix.clearUpdateRanges();
+    mesh.instanceMatrix.addUpdateRange(0, this.count * 16);
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    this.material.dispose();
+    for (const t of this.textures) t.dispose();
+    this.mesh.dispose();
+  }
+}
