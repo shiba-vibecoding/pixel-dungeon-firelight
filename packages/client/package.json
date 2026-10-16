@@ -9,6 +9,10 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "@pd/core": "*"
+    "@pd/core": "*",
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.169.0"
   }
 }
