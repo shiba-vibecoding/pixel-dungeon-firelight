@@ -549,7 +549,7 @@ function pick3d(level: Level, world: World): boolean {
     canvas3d.id = 'game3d';
     canvas.before(canvas3d);
     const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(true) });
+    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reduced: quality.reducedMotion, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(true) });
     governor.hold(2500);
     frame3d = {
       now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0, myId: '',
@@ -3106,7 +3106,7 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
