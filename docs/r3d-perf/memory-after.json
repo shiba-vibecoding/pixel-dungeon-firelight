@@ -1,0 +1,123 @@
+[
+ {
+  "textures": 26,
+  "texBytes": 55076260,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 22,
+  "infoGeometries": 16,
+  "programs": 42,
+  "heap": 34177240,
+  "label": "start d1"
+ },
+ {
+  "textures": 26,
+  "texBytes": 55076260,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 22,
+  "infoGeometries": 16,
+  "programs": 42,
+  "heap": 34179234,
+  "label": "#1 d1"
+ },
+ {
+  "textures": 24,
+  "texBytes": 55074212,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 20,
+  "infoGeometries": 13,
+  "programs": 42,
+  "heap": 35593995,
+  "label": "#6 d6"
+ },
+ {
+  "textures": 25,
+  "texBytes": 55336356,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 21,
+  "infoGeometries": 13,
+  "programs": 42,
+  "heap": 35510364,
+  "label": "#11 d11"
+ },
+ {
+  "textures": 24,
+  "texBytes": 55074212,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 20,
+  "infoGeometries": 12,
+  "programs": 42,
+  "heap": 36132021,
+  "label": "#16 d16"
+ },
+ {
+  "textures": 24,
+  "texBytes": 55074212,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 20,
+  "infoGeometries": 12,
+  "programs": 42,
+  "heap": 35499910,
+  "label": "#20 d20"
+ },
+ {
+  "textures": 24,
+  "texBytes": 55074212,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 20,
+  "infoGeometries": 12,
+  "programs": 42,
+  "heap": 36316321,
+  "label": "#21 d1"
+ },
+ {
+  "textures": 24,
+  "texBytes": 55074212,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 20,
+  "infoGeometries": 13,
+  "programs": 42,
+  "heap": 37091700,
+  "label": "#26 d6"
+ },
+ {
+  "textures": 25,
+  "texBytes": 55336356,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 21,
+  "infoGeometries": 13,
+  "programs": 42,
+  "heap": 36497885,
+  "label": "#31 d11"
+ },
+ {
+  "textures": 24,
+  "texBytes": 55074212,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 20,
+  "infoGeometries": 12,
+  "programs": 42,
+  "heap": 36868027,
+  "label": "#36 d16"
+ },
+ {
+  "textures": 24,
+  "texBytes": 55074212,
+  "renderbuffers": 4,
+  "rbBytes": 22212256,
+  "infoTextures": 20,
+  "infoGeometries": 12,
+  "programs": 42,
+  "heap": 35931590,
+  "label": "#40 d20"
+ }
+]

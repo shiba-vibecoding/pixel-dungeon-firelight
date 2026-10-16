@@ -9,6 +9,9 @@ import { HEIGHT, LENGTH, WIDTH } from '@pd/core';
 import { fx } from '../fx';
 import { gore } from '../gore';
 
+/** The clouds of blood in the water are read into the texture this often at most, ms. */
+const SAMPLE_MS = 66;
+
 export class BloodWater {
   readonly texture: DataTexture;
   private readonly bytes = new Uint8Array(LENGTH);
@@ -16,6 +19,9 @@ export class BloodWater {
   /** The gore record the settled stain was last read from (its version), and whether the stain has changed since. */
   private seen = -1;
   private stained = true;
+  /** When the clouds were last sampled, and how many there were: they move slowly, so they are read 15 times a second, not every frame. */
+  private at = -1e9;
+  private held = -1;
 
   constructor() {
     this.texture = new DataTexture(this.bytes, WIDTH, HEIGHT, RedFormat, UnsignedByteType);
@@ -44,6 +50,7 @@ export class BloodWater {
       this.stained = true;
     }
     if (bleeds.length === 0) {
+      this.held = 0;
       if (this.dirty || this.stained) {
         this.base();
         this.texture.needsUpdate = true;
@@ -52,6 +59,9 @@ export class BloodWater {
       }
       return;
     }
+    if (!this.stained && bleeds.length === this.held && now >= this.at && now - this.at < SAMPLE_MS) return;
+    this.at = now;
+    this.held = bleeds.length;
     this.base();
     for (const b of bleeds) {
       const reach = b.reach + 1;

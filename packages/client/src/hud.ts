@@ -126,6 +126,8 @@ export interface QuickState {
 
 /** How long a log line stays, and how many are shown at once (three on short screens). */
 const LOG_MS = 8000;
+/** The measured free band of the screen is taken again at least this often, ms (see Hud.freeZone). */
+const ZONE_MS = 500;
 const HOLD_MS = 600;
 
 type Child = Node | string | null | undefined | false;
@@ -336,6 +338,7 @@ export class Hud {
   setLayout(wide: boolean, scale: number): void {
     if (this.laid && this.wide === wide && this.scale === (wide ? scale : 1)) return;
     this.laid = true;
+    this.zoneStale = true;
     this.wide = wide;
     this.scale = wide ? scale : 1;
     this.root.classList.toggle('pd-ui', wide);
@@ -418,10 +421,19 @@ export class Hud {
     this.root.hidden = !on;
   }
 
+  /** The measured band (freeZone), when, at what window height, and whether the HUD has changed since. */
+  private readonly zone = { top: 0, bottom: 0 };
+  private bandBottom = 0;
+  private zoneAt = -1e9;
+  private zoneHeight = -1;
+  private zoneStale = true;
+
   /** Sets a part's content only when it changed. */
   private changed(key: string, value: string): boolean {
     if (this.shown[key] === value) return false;
     this.shown[key] = value;
+    // (The log and the quick slots are not what the band is measured between: their changes do not move it.)
+    if (key !== 'log' && !key.startsWith('quick')) this.zoneStale = true;
     return true;
   }
 
@@ -578,19 +590,41 @@ export class Hud {
     );
   }
 
-  /** The band of the screen left for the map, in CSS pixels from the top: between the HUD and the log or toolbar. */
+  /**
+   * The band of the screen left for the map, in CSS pixels from the top: between the HUD and the log or toolbar. Measuring it forces the
+   * browser to lay the page out, which in a fight (the log changes every turn) it did every frame: it is measured again only when
+   * something in the HUD has changed, when the layout has, and at least twice a second (a slide, a safe area, a resize).
+   */
   freeZone(): { top: number; bottom: number } {
-    if (this.root.hidden) return { top: 0, bottom: innerHeight };
-    // Wide, the column and the islands sit at the sides: the map has the whole height.
-    if (this.wide) return { top: 0, bottom: this.islandLeft.getBoundingClientRect().top };
-    const top = this.band.getBoundingClientRect().bottom;
-    const toolbar = this.toolbar.getBoundingClientRect().top;
-    return { top, bottom: toolbar };
+    this.measure();
+    return this.zone;
   }
 
   /** The HUD's height, for toasts to appear under it (wide, they come at the top). */
   height(): number {
-    if (this.root.hidden || this.wide) return 0;
-    return this.band.getBoundingClientRect().bottom;
+    this.measure();
+    return this.bandBottom;
+  }
+
+  private measure(): void {
+    const now = performance.now();
+    if (!this.zoneStale && now - this.zoneAt < ZONE_MS && this.zoneHeight === innerHeight) return;
+    this.zoneStale = false;
+    this.zoneAt = now;
+    this.zoneHeight = innerHeight;
+    if (this.root.hidden) {
+      this.zone.top = 0;
+      this.zone.bottom = innerHeight;
+      this.bandBottom = 0;
+    } else if (this.wide) {
+      // Wide, the column and the islands sit at the sides: the map has the whole height.
+      this.zone.top = 0;
+      this.zone.bottom = this.islandLeft.getBoundingClientRect().top;
+      this.bandBottom = 0;
+    } else {
+      this.bandBottom = this.band.getBoundingClientRect().bottom;
+      this.zone.top = this.bandBottom;
+      this.zone.bottom = this.toolbar.getBoundingClientRect().top;
+    }
   }
 }

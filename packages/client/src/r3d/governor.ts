@@ -32,6 +32,13 @@ export const TIERS: readonly Tier[] = [
 /** From this tier down, a 120 Hz screen held at a playable 60 is good enough (it is not stepped further down for the 120). */
 const SETTLE = TIERS.findIndex((tier) => tier.name === 'low');
 
+/** A gap longer than this (a tab in the background, a window over the map) is not a frame; one longer than SLOW_MS counts as SLOW_MS. */
+const HIDDEN_MS = 1500;
+const SLOW_MS = 250;
+/** Frames this slow on average, over at least this long, decide at once. */
+const HOPELESS_MS = 45;
+const HOPELESS_AFTER_MS = 400;
+
 /** Refreshes a screen has; the measured one is rounded to the nearest. */
 const RATES = [30, 48, 60, 72, 90, 120, 144, 165] as const;
 
@@ -97,16 +104,21 @@ export class Governor {
   }
 
   frame(dt: number, hz: number): Verdict {
+    // A gap longer than a hidden tab's or a window's is not a frame. A long frame is one, and counts for no more than 250 ms: a phone that
+    // draws four a second must step down, not be taken for a tab in the background (these frames used to be ignored, and it never did).
+    if (dt <= 0 || dt > HIDDEN_MS) return 'ok';
+    const d = Math.min(dt, SLOW_MS);
     if (this.holding > 0) {
-      if (dt > 0 && dt <= 250) this.holding -= dt;
+      this.holding -= d;
       return 'ok';
     }
-    // Gaps that are not frames (a window over the map, a hidden tab) are not counted.
-    if (dt <= 0 || dt > 250) return 'ok';
-    this.sum += dt;
+    this.sum += d;
     this.count++;
-    this.elapsed += dt;
-    if (this.elapsed < (this.options.windowMs ?? 1500)) return 'ok';
+    this.elapsed += d;
+    const since = this.sum / this.count;
+    // Hopeless (under about 22 frames a second): no waiting out the window for the verdict.
+    const hopeless = this.elapsed >= HOPELESS_AFTER_MS && since > HOPELESS_MS && this.index < TIERS.length - 1;
+    if (!hopeless && this.elapsed < (this.options.windowMs ?? 1000)) return 'ok';
     const average = this.sum / this.count;
     this.sum = 0;
     this.count = 0;
