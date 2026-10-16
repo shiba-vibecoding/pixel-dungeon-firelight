@@ -327,7 +327,7 @@ function rimMaterial(tex, fw, fh) {
   };
   return m;
 }
-async function charSprite(name, fw, fh, frame, row, at, scale = 1, fly = false) {
+async function charSprite(name, fw, fh, frame, row, at, scale = 1, fly = false, flip = false) {
   const img = sheetCache[name] || (sheetCache[name] = await loadImg(`assets/${name}.png`));
   const cols = Math.floor(img.width / fw);
   const tex = cellTexture(img, (frame % cols) * fw, row * fh + Math.floor(frame / cols) * fh, fw, fh);
@@ -337,6 +337,7 @@ async function charSprite(name, fw, fh, frame, row, at, scale = 1, fly = false) 
   const m = new THREE.Mesh(g, mat_);
   const hover = fly ? SP.fly.hover : 0;
   m.rotation.x = RULES ? -LEAN : -pitch * 0.85; m.position.set(at[0] + 0.5, 0.02 + hover, at[1] + 0.5 + SP.feet);
+  if (flip) m.scale.x = -1;
   m.castShadow = !!SP.castShadow; m.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.5 });
   scene.add(m);
   const sw = w * SP.shadow.width * (fly ? SP.fly.shadowScale : 1);
@@ -344,17 +345,18 @@ async function charSprite(name, fw, fh, frame, row, at, scale = 1, fly = false) 
     opacity: SP.shadow.opacity * (fly ? SP.fly.shadowFade : 1), depthWrite: false }));
   s.rotation.x = -Math.PI / 2; s.scale.y = SP.shadow.squash; s.position.set(at[0] + 0.5, 0.012, at[1] + 0.5 + SP.feet + 0.02); scene.add(s);
   figures.push({ m, s, at: new THREE.Vector3(at[0] + 0.5, hover + h * 0.5, at[1] + 0.5 + SP.feet), mat: mat_ });
-  return m;
+  m.userData.shadow = s; return m;
 }
 const blobTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, 'rgba(255,255,255,.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
 const MOBDIM = { gnoll: [12, 15], skeleton: [12, 15], bat: [15, 15], monk: [15, 14], succubus: [12, 15],
   goo: [20, 14], tengu: [14, 16], dm300: [22, 20], king: [16, 16], yog: [20, 19] };
-await charSprite('warrior', 12, 15, 0, 1, hero);
-if (mob) await charSprite(MOBS[R], ...MOBDIM[MOBS[R]], 0, 0, mob, 1, MOBS[R] === 'bat');
-if (boss) await charSprite(BOSSES[R], ...MOBDIM[BOSSES[R]], 0, 0, boss, BOSSES[R] === 'yog' ? 1.6 : 1.25);
-for (const [k, x, y] of extra) { const [n, fw, fh, f] = CLOSE_MOBS[RN][k]; await charSprite(n, fw, fh, 0, 0, [x, y], 1, f === 'fly'); }
+const DIRS = Q.get('dirs');   // part 8: the facings of the heroes (see the block «facings» below)
+if (!DIRS) await charSprite('warrior', 12, 15, 0, 1, hero);
+if (mob && !DIRS) await charSprite(MOBS[R], ...MOBDIM[MOBS[R]], 0, 0, mob, 1, MOBS[R] === 'bat');
+if (boss && !DIRS) await charSprite(BOSSES[R], ...MOBDIM[BOSSES[R]], 0, 0, boss, BOSSES[R] === 'yog' ? 1.6 : 1.25);
+if (!DIRS) for (const [k, x, y] of extra) { const [n, fw, fh, f] = CLOSE_MOBS[RN][k]; await charSprite(n, fw, fh, 0, 0, [x, y], 1, f === 'fly'); }
 const rimLights = [];
 
 /* ---------- light ---------- */
@@ -479,6 +481,69 @@ if (FXS) {
   await S[FXS]?.();
 }
 
+
+/* ---------- part 8: facings. ?dirs=four (the hero four ways: left, front, back, right) | walk (round a loop; window.__frame(ms))
+   &cls=warrior|mage|rogue|ranger &tier=0..6 &look=<part 5 look> &hat=<hat> &pet=<pet> &f=<frame> ---------- */
+const FACE = { sheet: (cls, facing, look) => {
+  const leg = { forgeborn: 1, starflame: 1, smoulder: 1, wildfire: 1 }[look];
+  const base = look ? `mart/fl/${leg ? 'legendary' : 'looks'}/${cls}-${look}` : (facing === 'side' ? cls : `dirs/${cls}`);
+  return facing === 'side' ? base : (look ? `${base}-${facing}` : `${base}-${facing}`);
+}, hat: (cls, hat, facing) => `mart/fl/hats/${cls}-${hat}${facing === 'side' ? '' : '-' + facing}`,
+  pet: (pet, facing) => {
+    if (pet === 'firefly' || facing === 'side') return `mart/fl/pets/${pet}`;
+    if (facing === 'front') return pet === 'rat' ? 'mart/fl/pets/rat-front' : `mart/fl/pets/${pet}`;
+    return `mart/fl/pets/${pet}-back`;
+  } };
+const FLY = new Set(['firefly', 'bat', 'skull', 'ember']);
+window.__frame = null;
+if (DIRS) {
+  const cls = Q.get('cls') || 'warrior', tier = +(Q.get('tier') ?? 1), look = Q.get('look'), hatK = Q.get('hat'), petK = Q.get('pet'), F0 = +(Q.get('f') ?? 0);
+  const [hx_, hz_] = hero;
+  async function figure(facing, flip, frame, x, z) {
+    const m = await charSprite(FACE.sheet(cls, facing, look), 12, 15, frame, tier, [x - 0.5, z - 0.5], 1, false, flip);
+    let h = null;
+    if (hatK) h = await charSprite(FACE.hat(cls, hatK, facing), 16, 22, frame, tier, [x - 0.5, z - 0.5], 1, false, flip);
+    if (h) { scene.remove(h.userData.shadow); }
+    return { m, h };
+  }
+  async function petFig(facing, flip, frame, x, z) {
+    return charSprite(FACE.pet(petK, facing), 12, 12, frame, 0, [x - 0.5, z - 0.5], 1, FLY.has(petK), flip);
+  }
+  if (DIRS === 'four') {
+    // a row of four on a monitor, two by two on a phone: left, front / back, right
+    const tall = vw / vh < 0.8;
+    const at = tall ? [[-0.8, -0.9], [0.8, -0.9], [-0.8, 0.9], [0.8, 0.9]] : [[-2.4, 0], [-0.8, 0], [0.8, 0], [2.4, 0]];
+    const ways = [['side', true], ['front', false], ['back', false], ['side', false]];
+    for (let i = 0; i < 4; i++) {
+      const fx = hx_ + 0.5 + at[i][0], fz = hz_ + 0.5 + at[i][1] + (tall ? 0.6 : 0);
+      await figure(ways[i][0], ways[i][1], F0, fx, fz);
+      if (petK) await petFig(ways[i][0], ways[i][1], 0, fx + (ways[i][0] === 'side' ? (ways[i][1] ? 0.55 : -0.55) : 0.45), fz + (ways[i][0] === 'front' ? -0.5 : ways[i][0] === 'back' ? 0.5 : 0.05));
+    }
+  }
+  if (DIRS === 'walk') {
+    // a loop round the middle of the room: right along the far side, down, left along the near side, up; 2.6 cells a second
+    const W_ = 3, H_ = 2, path = [[1, 0, W_], [0, 1, H_], [-1, 0, W_], [0, -1, H_]], len = 2 * (W_ + H_), speed = 2.6;
+    const x0 = hx_ + 0.5 - W_ / 2, z0 = hz_ + 0.5 - H_ / 2 + 0.4;
+    const cache = {};
+    const get = async (key, mk) => cache[key] || (cache[key] = await mk());
+    let shown = [];
+    window.__frame = async (ms) => {
+      for (const o of shown) { o.visible = false; if (o.userData.shadow) o.userData.shadow.visible = false; }
+      shown = [];
+      let d = (ms / 1000 * speed) % len, i = 0; while (d > path[i][2]) { d -= path[i][2]; i++; }
+      const [dx, dz] = path[i]; let x = x0, z = z0; for (let k = 0; k < i; k++) { x += path[k][0] * path[k][2]; z += path[k][1] * path[k][2]; } x += dx * d; z += dz * d;
+      const facing = dx ? 'side' : (dz > 0 ? 'front' : 'back'); const flip = dx < 0;
+      const frame = 2 + Math.floor(ms / 50) % 6;
+      const put = async (key, mk, px, pz) => { const o = await get(key, mk); o.visible = true; o.position.x = px; o.position.z = pz; if (o.userData.shadow) { o.userData.shadow.visible = true; o.userData.shadow.position.x = px; o.userData.shadow.position.z = pz + 0.02; } shown.push(o); };
+      await put(`h${facing}${flip}${frame}`, async () => charSprite(FACE.sheet(cls, facing, look), 12, 15, frame, tier, [x - 0.5, z - 0.5], 1, false, flip), x, z + SP.feet);
+      if (hatK) await put(`hat${facing}${flip}${frame}`, async () => charSprite(FACE.hat(cls, hatK, facing), 16, 22, frame, tier, [x - 0.5, z - 0.5], 1, false, flip), x, z + SP.feet);
+      if (petK) { const pf = 4 + Math.floor(ms / 150) % 4; const bx = x - dx * 0.9, bz = z - dz * 0.9 + (dx ? 0.05 : 0);
+        await put(`p${facing}${flip}${pf}`, async () => petFig(facing, flip, pf, bx, bz), bx, bz + SP.feet); }
+      composer.render();
+    };
+  }
+}
+
 /* ---------- the rim of the strongest light on each figure ---------- */
 if (RULES && SP.rim.on && !Q.has('norim')) {
   const lights = []; scene.traverse((o) => { if (o.isPointLight || o.isSpotLight) lights.push(o); });
@@ -549,6 +614,7 @@ const bl = kit.bloom;
 composer.setPixelRatio(Math.min(devicePixelRatio, 2));
 composer.addPass(new UnrealBloomPass(new THREE.Vector2(vw, vh), bl.strength, bl.radius, bl.threshold));
 composer.addPass(new OutputPass());
+if (window.__frame) await window.__frame(+(Q.get('ms') || 0));
 composer.render();
 composer.render();
 for (const t of tints) { const d = document.createElement('div'); d.style.cssText = `position:fixed;inset:0;pointer-events:none;background:${t.color};opacity:${t.alpha * 0.6};mix-blend-mode:screen`; document.body.append(d); }

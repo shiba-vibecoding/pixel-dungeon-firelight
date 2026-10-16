@@ -23,3 +23,9 @@ Part 6 (effects): `fx=<scene>` puts effects from `assets/fx/fx.json` into the ro
 added or blended, each with its PointLight; screen tints as an overlay. Scenes: `bolts`, `rays`, `waves`, `terror`, `lullaby`,
 `psionic`, `gas`, `traps`, `hero`, `ankh`, `amulet` (see `S` in `viewer.js`). `close=1` uses the close-up rooms of the sprite rules
 (`CLOSE` in `maps.js`); a kit without the `sprites` block falls back to the same values (firelight-sprites.md).
+
+Part 8 (facings): `dirs=four` stands the hero four ways (left, front, back, right; two by two on a tall screen), `dirs=walk` walks
+him round a loop (right: side, down: front, left: the side mirrored, up: back) and `window.__frame(ms)` poses that moment.
+Parameters: `cls` = warrior | mage | rogue | ranger, `tier` 0-6, `look` (a part 5 look), `hat`, `pet`, `f` (the frame for `four`).
+`node dirs-render.cjs shot <out> "r,w,h,dpr,query,name"` takes pictures; `node dirs-render.cjs walk <prefix> "r,w,h,dpr,query" 0 3850 50`
+the frames of the walk (the viewer served on 8765, `PORT` to change it).
