@@ -1,10 +1,10 @@
 /*
- * The extra tiles of the doors' 3D dressing, drawn when a region's terrain is built (no new files): the slab of a door seen from
- * above (both ways round, plain and with a lock's straps), the frame's wood, steel, and the leaf, which is the region's own door tile
- * (the leaf itself is the region's own door tile, so every region keeps its look: the sewers' arched planks, the prison's dark door,
- * the city's gold, the halls' runes).
- * They lie in the terrain atlas under the walls' rows (tilemap.ts DOOR_FIRST), 16 x 16 pixel art each. The wood's colours are
- * read from the region's door tile.
+ * The extra tiles of the doors' 3D dressing, drawn when a region's terrain is built (no new files): the strip of a door's top seen from
+ * above (both ways round, plain and with a lock's straps), the frame's wood, steel, and the leaf's own picture: wood only (planks, hinge
+ * straps and a ring, or straps and a lock). The original's door tile has a stone or plaster frame round its planks, which on a swinging
+ * leaf looked like a piece of wall coming open, so the leaf takes only the colours of the planks from that tile (kept to brown wood, so
+ * a city's grey door or the halls' green runes still give plank colour). They lie in the terrain atlas under the walls' rows
+ * (tilemap.ts DOOR_FIRST), 16 x 16 pixel art each.
  */
 import { DOOR_FIRST } from './tilemap';
 
@@ -15,7 +15,9 @@ export const DOOR_LOCK_H = DOOR_FIRST + 2;
 export const DOOR_LOCK_V = DOOR_FIRST + 3;
 export const DOOR_FRAME = DOOR_FIRST + 4;
 export const DOOR_IRON = DOOR_FIRST + 5;
-export const DOOR_COUNT = 6;
+export const DOOR_LEAF = DOOR_FIRST + 6;
+export const DOOR_LEAF_LOCK = DOOR_FIRST + 7;
+export const DOOR_COUNT = 8;
 
 type Rgb = readonly [number, number, number];
 
@@ -35,6 +37,26 @@ export function woodOf(data: Uint8ClampedArray): { dark: Rgb; mid: Rgb; light: R
   px.sort((a, b) => luma(a) - luma(b));
   const at = (f: number): Rgb => px[Math.min(px.length - 1, Math.floor(px.length * f))]!;
   return { dark: at(0.12), mid: at(0.5), light: at(0.86) };
+}
+
+const BROWN: Rgb = [120, 76, 44];
+const isWood = (c: Rgb): boolean => c[0] >= c[1] * 1.12 && c[0] >= c[2] * 1.2 && Math.max(...c) - Math.min(...c) > 24;
+
+/**
+ * Wood from what a door tile's middle gave: where a colour is not wood (a city's grey-brown, the halls' green runes, the plaster of
+ * a frame) it is made brown at the same lightness, so every region's leaf is plank colour and nothing pale or stone.
+ */
+export function plankColours(w: { dark: Rgb; mid: Rgb; light: Rgb }): { dark: Rgb; mid: Rgb; light: Rgb } {
+  const fix = (c: Rgb): Rgb => {
+    if (isWood(c)) return c;
+    const k = Math.min(1.3, Math.max(0.5, luma(c) / luma(BROWN)));
+    return [BROWN[0] * k, BROWN[1] * k, BROWN[2] * k];
+  };
+  const dark = fix(w.dark);
+  const mid = fix(w.mid);
+  const light = fix(w.light);
+  // Dark, middle and light stay in that order whatever was replaced.
+  return luma(dark) <= luma(mid) && luma(mid) <= luma(light) ? { dark, mid, light } : { dark: mix(mid, [10, 6, 3], 0.45), mid, light: mix(mid, [255, 220, 170], 0.25) };
 }
 
 /** A cheap repeatable hash for the grain, 0 to 1. */
@@ -82,6 +104,38 @@ function locked(paint: Painter, wood: { dark: Rgb; mid: Rgb; light: Rgb }, seed:
   paint(7, 9, [12, 12, 16]);
 }
 
+/**
+ * The leaf's face: only wood. Three vertical planks with dark seams, a darker edge, grain, two iron hinge straps on the left and a ring
+ * handle on the right; locked: iron straps across and a lock plate with a keyhole instead of the handle.
+ */
+function leafFace(paint: Painter, wood: { dark: Rgb; mid: Rgb; light: Rgb }, seed: number, lockedLeaf: boolean): void {
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const plank = x < 5 ? 0 : x < 10 ? 1 : 2;
+      let c = mix(wood.mid, wood.light, 0.1 + 0.18 * plank);
+      const grain = noise(x + plank * 3, Math.floor(y / 3), seed + plank);
+      if (grain < 0.28) c = mix(c, wood.dark, 0.4);
+      else if (grain > 0.85) c = mix(c, wood.light, 0.5);
+      if (x === 0 || x === 15) c = mix(wood.dark, [10, 6, 3], 0.4);
+      else if (x === 5 || x === 10) c = mix(wood.dark, [10, 6, 3], 0.35);
+      else if (x === 4 || x === 9 || x === 14) c = mix(c, wood.dark, 0.3);
+      else if (x === 1 || x === 6 || x === 11) c = mix(c, wood.light, 0.3);
+      paint(x, y, c);
+    }
+  }
+  if (!lockedLeaf) {
+    // Hinge straps, and an iron ring.
+    for (const y of [3, 4, 11, 12]) for (let x = 0; x < 7; x++) paint(x, y, y === 3 || y === 11 ? STEEL : STEEL_DARK);
+    for (const [x, y] of [[11, 7], [12, 7], [10, 8], [13, 8], [10, 9], [13, 9], [11, 10], [12, 10]] as const) paint(x, y, y < 9 ? STEEL_LIGHT : STEEL);
+    return;
+  }
+  for (const y of [3, 4, 11, 12]) for (let x = 0; x < 16; x++) paint(x, y, y === 3 || y === 11 ? STEEL_LIGHT : x % 5 === 2 ? STEEL_DARK : STEEL);
+  for (let y = 6; y < 10; y++) for (let x = 5; x < 11; x++) paint(x, y, y === 6 || x === 5 ? STEEL_LIGHT : y === 9 || x === 10 ? STEEL_DARK : STEEL);
+  paint(7, 7, [12, 12, 16]);
+  paint(8, 7, [12, 12, 16]);
+  paint(7, 8, [12, 12, 16]);
+}
+
 /** Paints a tile (16 x 16) of colour and of glow with a function that draws into an offscreen canvas, then lays both on the sheets. */
 function lay(
   color: CanvasRenderingContext2D, glow: CanvasRenderingContext2D, tile: number, cols: number, ox: number, oy: number,
@@ -112,7 +166,7 @@ export function paintDoorTiles(color: CanvasRenderingContext2D, glow: CanvasRend
   const pg = probe.getContext('2d', { willReadFrequently: true })!;
   pg.drawImage(tiles, 5 * 16, 0, 16, 16, 0, 0, 16, 16);
   // The planks only (the middle of the tile), not the frame round them, which may be plaster or iron.
-  const wood = woodOf(pg.getImageData(4, 3, 8, 10).data);
+  const wood = plankColours(woodOf(pg.getImageData(4, 3, 8, 10).data));
   const warm: Rgb = [92, 52, 20];
   const transposed = (draw: (paint: Painter) => void) => (paint: Painter): void => draw((x, y, c) => paint(y, x, c));
   const seed = Math.round(luma(wood.mid));
@@ -120,6 +174,10 @@ export function paintDoorTiles(color: CanvasRenderingContext2D, glow: CanvasRend
   lay(color, glow, DOOR_TOP_V, cols, 0, 0, transposed((p) => slab(p, wood, seed)), warm);
   lay(color, glow, DOOR_LOCK_H, cols, 0, 0, (p) => locked(p, wood, seed), [60, 70, 90]);
   lay(color, glow, DOOR_LOCK_V, cols, 0, 0, transposed((p) => locked(p, wood, seed)), [60, 70, 90]);
+  // The leaf's own picture, wood only: the original's door tile has a plaster or stone frame round its planks, which on a leaf looks like
+  // a piece of wall swinging open.
+  lay(color, glow, DOOR_LEAF, cols, 0, 0, (p) => leafFace(p, wood, seed + 7, false), warm);
+  lay(color, glow, DOOR_LEAF_LOCK, cols, 0, 0, (p) => leafFace(p, wood, seed + 7, true), [60, 70, 90]);
   // The frame: darker, closer-grained wood, planks running up.
   lay(color, glow, DOOR_FRAME, cols, 0, 0, (paint) => {
     for (let y = 0; y < 16; y++) {

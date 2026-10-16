@@ -18,7 +18,7 @@
  * and from cell to cell.
  */
 import { F, HEIGHT, LENGTH, T, terrainFlags, WIDTH } from '@pd/core';
-import { DOOR_IRON, DOOR_TOP_H, DOOR_TOP_V } from './doorart';
+import { DOOR_IRON, DOOR_LEAF, DOOR_LEAF_LOCK, DOOR_TOP_H } from './doorart';
 import { CAP_FIRST, EDGE_LIP, EDGE_ROCK, FACE_DECO, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from './tilemap';
 
 export const K_FLOOR = 0;
@@ -316,13 +316,14 @@ export const LEAF_REACH = 1 - LEAF_THICK / 2;
 
 /**
  * A door's leaf as a mesh of its own, in its own frame: the hinge pin at the origin, the leaf reaching along +x (from just behind the pin
- * to a cell's width), 0.18 thick, as tall as the wall. Both faces carry the region's door tile (planks and handle, or the lock), its
+ * to a cell's width), 0.18 thick, as tall as the wall. Both faces carry a leaf picture of wood only (planks, hinge straps, a ring; or straps and a lock), its
  * top and ends are a strip of planks (dark iron on a locked door, which also has straps and a lock plate on both faces). The
  * renderer stands one of these at each door, turned about the pin as the door swings.
  */
 export function doorLeafBuffers(locked: boolean, cols: number, rows: number, wall = DEFAULT_GEOM.wall): Buffers {
   const b = makeBuffers(12 * 4, 12 * 6);
-  const tile = locked ? T.LOCKED_DOOR : T.DOOR;
+  // Wood only (doorart.ts): the original's door tile has a stone or plaster frame round the planks.
+  const tile = locked ? DOOR_LEAF_LOCK : DOOR_LEAF;
   const tint = locked ? LEAF_LIT_LOCKED : LEAF_LIT;
   const top = locked ? { tile: DOOR_IRON, tint: [0.55, 0.6, 0.7], band: 'z' as const } : { tile: DOOR_TOP_H, tint: WOOD_LIT, band: 'z' as const };
   const h = LEAF_THICK / 2;
