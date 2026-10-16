@@ -2048,19 +2048,20 @@ function tapCell(cell: number, quiet = false): void {
     refuse(cell, 'barricade', t.barricade, vnow);
     return;
   }
-  // A tap on a wall (or a statue, a bookshelf) walks to the cell under it, the floor in front of its face: in a corridor or along
-  // a room's wall that is where the finger meant to go. Only these: a locked door, the locked way down and the like are solid
-  // too, and a tap on them must walk into them (to unlock with the key, or to be told it is locked).
+  // A finger or a click on a wall (or a statue, a bookshelf) walks to the floor beside it that is nearest to walk to: along a room's
+  // wall or in a corridor, that is where it meant to go (the cell under it first, the face the camera sees, on a tie). Only these: a
+  // locked door, the locked way down and the like are solid too, and a tap on them walks into them (to unlock, or to be told). A key
+  // pressed toward a wall is a bump, nothing more: it never sends the hero round to the far side of it.
   if (WALL_LIKE.has(level.map[cell]!)) {
-    const below = cell + WIDTH;
-    if (below >= WIDTH * HEIGHT || !explored[below] || !hasFlag(level.map[below]!, F.PASSABLE)) {
-      // A wall with no floor in front of it: nowhere to go, and a held key stops here.
-      held.code = '';
+    held.code = '';
+    if (!byPointer) return;
+    const front = wallFront(world, me, level, cell, explored, floating);
+    if (front === null) {
       if (!quiet) feedback.refuse(cell, vnow);
       return;
     }
-    if (below === me.pos) return;
-    cell = below;
+    if (front === me.pos) return;
+    cell = front;
   }
   // The alchemy pot: what it is for, then walk up to it as usual.
   if (level.map[cell] === T.ALCHEMY) view.say(t.alchemyPot, '#ffff44');
@@ -2513,7 +2514,37 @@ function tapAt(px: number, py: number): void {
   if (hero && x + y * WIDTH === hero.pos && !aim) {
     if (cam.heroTap(performance.now())) return;
   } else cam.otherTap();
-  tapCell(x + y * WIDTH);
+  byPointer = true;
+  try {
+    tapCell(x + y * WIDTH);
+  } finally {
+    byPointer = false;
+  }
+}
+
+/** Whether the tapCell under way came from the pointer (tapAt), not a key or a walk: only a finger or a click on a wall means the floor by it. */
+let byPointer = false;
+
+/**
+ * The floor beside a wall cell a tap on it stands for: of its four sides' explored, walkable cells, the one the shortest way from the
+ * hero leads to (south first on a tie: the face the camera sees). The hero's own cell, when it is one of them; null when none can be reached.
+ */
+function wallFront(world: World, me: Hero, level: Level, wall: number, explored: readonly boolean[], floating: boolean): number | null {
+  const occupied = occupiedCells(world, me.depth);
+  let best: number | null = null;
+  let bestLength = Infinity;
+  for (const side of [WIDTH, -WIDTH, -1, 1]) {
+    const cell = wall + side;
+    if (cell < 0 || cell >= WIDTH * HEIGHT || !explored[cell] || !hasFlag(level.map[cell]!, F.PASSABLE)) continue;
+    if (Math.abs(side) === 1 && Math.floor(cell / WIDTH) !== Math.floor(wall / WIDTH)) continue;
+    if (cell === me.pos) return cell;
+    const way = findPath(level, me.pos, cell, occupied, explored, floating);
+    if (way && way.length < bestLength) {
+      bestLength = way.length;
+      best = cell;
+    }
+  }
+  return best;
 }
 
 /** The terrain a tap stands for the floor in front of (tapCell): walls and the furniture of walls, nothing one can open. */
