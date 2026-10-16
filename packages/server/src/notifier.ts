@@ -5,7 +5,8 @@ import { CORS, json, jsonBody } from './http';
 import type { Env } from './index';
 import { botApi } from './payments';
 import { speaksRussian } from './catalogue';
-import { type Job, mayWrite, overtakenJob, REMIND_HOUR, streakReminder, subKey, type Subscriber, WEEKLY_HOUR, weeklyResult } from './reminders';
+import { leagueStub, roomName } from './league';
+import { type Job, leagueJob, mayWrite, overtakenJob, REMIND_HOUR, streakReminder, subKey, type Subscriber, WEEKLY_HOUR, weeklyResult } from './reminders';
 import { verifyInitData, WEEK_SECONDS } from './telegram-auth';
 
 /*
@@ -40,6 +41,12 @@ export class Notifier extends DurableObject<Env> {
       case '/streak':
         // From the player's object when a daily dungeon begins; nothing is kept for those who did not ask.
         if (sub) await this.ctx.storage.put(key, { ...sub, streak: Number(body.streak) || 0, last: typeof body.last === 'string' ? body.last : sub.last, season: SEASON });
+        return json({ ok: true });
+      case '/league':
+        // From the player's object when they join a room: the Monday message says how the week ended in it (nothing is kept for those who did not ask).
+        if (sub && typeof body.tier === 'string' && typeof body.week === 'string' && Number.isInteger(body.room)) {
+          await this.ctx.storage.put(key, { ...sub, league: { tier: body.tier, week: body.week, room: body.room as number } });
+        }
         return json({ ok: true });
       case '/overtaken': {
         // From the player's object when a result passes someone on the day's board: one message a day at most, to those who asked.
@@ -82,11 +89,34 @@ export class Notifier extends DurableObject<Env> {
       const name = `week:${week}`;
       const response = await this.env.DAILY.get(this.env.DAILY.idFromName(boardObject(name))).fetch(`https://board/?name=${encodeURIComponent(name)}&owners=1&top=0`);
       const { owners = {}, total = 0 } = (await response.json()) as { owners?: Record<string, number>; total?: number };
+      // Those who were in a league room get the league's result (one look at each room, not at each player); the rest, the week's place.
+      const rooms = new Map<string, Record<string, number>>();
+      const roomOwners = async (sub: Subscriber): Promise<Record<string, number>> => {
+        const { tier, room } = sub.league!;
+        const name = roomName(tier, week, room);
+        if (!rooms.has(name)) {
+          try {
+            const answer = (await (await leagueStub(this.env, name).fetch('https://league/?owners=1')).json()) as { owners?: Record<string, number>; size?: number };
+            rooms.set(name, { ...(answer.owners ?? {}), size: answer.size ?? 0 });
+          } catch {
+            rooms.set(name, {});
+          }
+        }
+        return rooms.get(name)!;
+      };
       for (const [key, sub] of subs) {
-        const place = owners[`tg${sub.chat}`];
         // Not twice in a day: the bot has written to them already (a pass on the board).
-        if (!place || sub.week === week || !mayWrite(sub, now)) continue;
-        jobs.push(weeklyResult(sub, week, place, total));
+        if (sub.week === week || !mayWrite(sub, now)) continue;
+        if (sub.league?.week === week) {
+          const seen = await roomOwners(sub);
+          const place = seen[`tg${sub.chat}`];
+          if (!place || !seen.size) continue;
+          jobs.push(leagueJob(sub, week, sub.league.tier, place, seen.size));
+        } else {
+          const place = owners[`tg${sub.chat}`];
+          if (!place) continue;
+          jobs.push(weeklyResult(sub, week, place, total));
+        }
         await this.ctx.storage.put(key, { ...sub, week, sent: dayOf(now) });
       }
     }

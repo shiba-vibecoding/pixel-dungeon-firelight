@@ -15,13 +15,14 @@ import {
 } from './reports';
 import { boardObject } from './boards';
 import { CORS, json, jsonBody } from './http';
-import { boardRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRoute } from './player';
+import { boardRoute, leagueRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRoute } from './player';
 import type { AdminOps } from './admin';
 import { changeOutages, normalizeDays } from './outages';
 import { adminNotice, KEEP_PROBLEMS, newId, type Problem, type StoredProblem } from './problem';
 import { photoRoute } from './photos';
 import { Card, cardRoute, challengeRoute } from './sharing';
 import { freezeDueHall, hallRoute } from './hall';
+import { League } from './league';
 import { Notifier, notifierStub, notifyRoute } from './notifier';
 import { readBody, sameSecret } from './secret';
 import { SignalLimiter, validSignal } from './signals';
@@ -57,6 +58,8 @@ export interface Env {
   CARD: DurableObjectNamespace<Card>;
   /** The bot's reminders (notifier.ts). */
   NOTIFIER: DurableObjectNamespace<Notifier>;
+  /** The weekly leagues' desks and rooms (league.ts). */
+  LEAGUE: DurableObjectNamespace<League>;
   /** The secret Telegram sends with every webhook call (setWebhook's secret_token). */
   WEBHOOK_SECRET?: string;
   /** The Mini App's t.me link, for the bot's play button. */
@@ -838,6 +841,7 @@ export default {
     if (url.pathname === '/challenge') return challengeRoute(request, env);
     if (url.pathname === '/notify') return notifyRoute(request, env);
     if (url.pathname === '/hall') return hallRoute(request, env);
+    if (url.pathname === '/league') return leagueRoute(request, env);
     const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
     if (day) return daily(request, env, day[1]!);
 
@@ -867,4 +871,4 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-export { Card, DailyBoard, Notifier, Player };
+export { Card, DailyBoard, League, Notifier, Player };

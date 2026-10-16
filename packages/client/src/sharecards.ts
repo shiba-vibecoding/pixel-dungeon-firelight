@@ -1,5 +1,5 @@
 import type { CardLook } from './cardlook';
-import { artUrl, loadCompete } from './compete';
+import { artUrl, loadCompete, tierOf } from './compete';
 import { loadFl } from './flart';
 import { canDownloadFile, downloadFile } from './telegram';
 import { drawScene, fireColour, sceneLayout, whenWhole } from './herocard';
@@ -135,6 +135,13 @@ export async function storyPicture(d: HeroPicture): Promise<Blob | null> {
   }
   text(g, d.name, W / 2, y, place ? 80 : 110, '#ffeba4', { align: 'center', max: W - 100 });
   text(g, detailLine(d, true), W / 2, y + 80, 44, '#e8e2c8', { align: 'center', small: true, max: W - 80 });
+  // The league he plays in: its badge and name.
+  const tier = tierOf(d.tier);
+  const badge = d.tier && tier ? await image(tier.badge) : null;
+  if (tier && badge) {
+    g.drawImage(badge, W / 2 - 40, y + 120, 80, 80);
+    text(g, tx('leagueOf', { t: tier.name[lang] }), W / 2, y + 250, 40, tier.color, { align: 'center', max: W - 80 });
+  }
   text(g, tx('deeperQ'), W / 2, H - 120, 56, '#ff9a3a', { align: 'center', max: W - 80 });
   text(g, '@pixel_dungeon_gamebot', W / 2, H - 56, 36, '#b0b5a3', { align: 'center', small: true });
   return toBlob(canvas);
@@ -179,6 +186,13 @@ export async function chatPicture(d: HeroPicture): Promise<Blob | null> {
   if (d.streak > 0) {
     y += 44;
     text(g, txn('streak', d.streak), x, y, 32, '#ff9a3a', { small: true, max: W - x - 40 });
+  }
+  const tier = tierOf(d.tier);
+  const badge = d.tier && tier ? await image(tier.badge) : null;
+  if (tier && badge) {
+    y += 24;
+    g.drawImage(badge, x, y, 48, 48);
+    text(g, tier.name[lang], x + 64, y + 38, 32, tier.color);
   }
   text(g, '@pixel_dungeon_gamebot', W - 40, H - 28, 26, '#7a8173', { align: 'right', small: true, shadow: false });
   return toBlob(canvas);

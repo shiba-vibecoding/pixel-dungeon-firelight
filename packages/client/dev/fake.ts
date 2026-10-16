@@ -1,6 +1,6 @@
 import type { HeroClass } from '@pd/core';
 import { CATALOG, HEROES, type Item } from '../src/catalog';
-import type { BoardEntry, BoardSlice, BoardView, HallView, Profile } from '../src/checked';
+import type { BoardEntry, BoardSlice, BoardView, HallView, LeagueResult, LeagueView, Profile } from '../src/checked';
 
 /*
  * A made-up crowd for looking at the competitions' screens without a server (dev/compete.html): the same shape of data the server sends
@@ -83,6 +83,26 @@ export function seasonBoard(ru: boolean): BoardView {
   };
 }
 
+/** The league room of the week: 30 players of the Flame, the player 7th (or where `rank` says). */
+export function league(ru: boolean, open = true, rank = 7): LeagueView {
+  const room = Array.from({ length: 30 }, (_, i) => ({ ...person(i + 800, ru), score: 183380 - i * 5200 + (i % 4) * 90 }));
+  const me: BoardEntry = { ...board('day', undefined, ru).you!, score: room[rank - 1]!.score };
+  room.splice(rank - 1, 1, me);
+  return {
+    open, need: 60, played: open ? 214 : 41, week: '2026-W43', endsAt: Date.now() + (2 * 24 + 7) * 3_600_000 - 12 * 60_000, tier: 'flame', best: 3,
+    tiers: ['spark', 'coal', 'flame', 'bonfire', 'beacon'],
+    room: open ? { number: 3, tier: 'flame', size: 30, top: room, rank, up: 5, down: 5 } : null, seen: null,
+  };
+}
+
+export function weekResult(kind: 'up' | 'stay' | 'down'): LeagueResult {
+  return kind === 'up'
+    ? { week: '2026-W42', tier: 'flame', to: 'bonfire', result: 'up', place: 3, size: 30, points: 60, mark: false }
+    : kind === 'stay'
+      ? { week: '2026-W42', tier: 'flame', to: 'flame', result: 'stay', place: 14, size: 30, points: 20, mark: false }
+      : { week: '2026-W42', tier: 'flame', to: 'coal', result: 'down', place: 28, size: 30, points: 0, mark: false };
+}
+
 /** The hall of fame of season 1: the top ten, written. */
 export function hall(ru: boolean, season = 's1'): HallView {
   const top = Array.from({ length: 10 }, (_, i) => ({ ...person(i + 700, ru), score: 2406 - i * 74 }));
@@ -97,6 +117,6 @@ export function profile(ru: boolean): Profile {
     ],
     places: { daily: 37 }, totals: { daily: 1284 }, runs: {}, today: '2026-10-16',
     season: { id: 's1', number: 1, start: Date.parse('2026-10-19'), end: Date.parse('2026-12-14'), daysLeft: 41, started: true }, heat: 1240, heatDays: 19,
-    honour: ['circle_champion', 'deep'], seasons: [],
+    honour: ['circle_champion', 'deep'], seasons: [], league: { open: true, need: 60, played: 214, tier: 'flame', best: 3, inRoom: true },
   } as Profile;
 }

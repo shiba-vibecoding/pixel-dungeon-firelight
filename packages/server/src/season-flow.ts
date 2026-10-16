@@ -2,6 +2,7 @@ import { addDay, emptyHeat, type Heat, heatOf } from './heat';
 import { awardKeys, dayTitleEarned, grant, seasonAwards } from './honours';
 import type { Lookup, Standing } from './mail';
 import { hallOpensAt, inSeason, seasonAt, seasonNumbered, seasonNumber, type SeasonNow } from './season-clock';
+import { BEACON, weekMonday } from './league-rules';
 
 /*
  * What a player's object does about seasons, apart from storage and the other objects (player.ts hands in what it can reach as `SeasonDeps`):
@@ -70,6 +71,13 @@ function heatForDay(profile: SeasonProfile, day: string, deps: Pick<SeasonDeps, 
   return null;
 }
 
+/** The heat a league week counts in: the season the week's Monday is in (seasons begin on Mondays, so a week is never in two). */
+export function heatForWeek(profile: SeasonProfile, week: string, deps: Pick<SeasonDeps, 'now' | 'start'>): { heat: Heat; season: SeasonNow } | null {
+  const monday = weekMonday(week);
+  if (!Number.isFinite(monday)) return null;
+  return heatForDay(profile, new Date(monday).toISOString().slice(0, 10), deps);
+}
+
 /**
  * One finished board of the player's: a daily board's place counts in the season's heat, and a place high enough on its speed or depth list
  * wins the title. Returns whether anything changed.
@@ -103,14 +111,19 @@ export async function rollSeason(profile: SeasonProfile, deps: SeasonDeps): Prom
     profile.heat = emptyHeat(season.id);
     changed = true;
   }
-  const prev = profile.heatPrev;
-  if (prev) {
-    const number = seasonNumber(prev.season);
-    if (number !== null && deps.now >= hallOpensAt(seasonNumbered(number, deps.start))) {
-      if (await closeSeason(profile, prev, deps)) changed = true;
-    }
-  }
   return changed;
+}
+
+/**
+ * Closes the season that waited for its hall of fame, once the hall may be written (after the last days and league weeks were counted
+ * into it: the profile's visit does those first). Returns whether anything changed.
+ */
+export async function closeDueSeasons(profile: SeasonProfile, deps: SeasonDeps): Promise<boolean> {
+  const prev = profile.heatPrev;
+  if (!prev) return false;
+  const number = seasonNumber(prev.season);
+  if (number === null || deps.now < hallOpensAt(seasonNumbered(number, deps.start))) return false;
+  return closeSeason(profile, prev, deps);
 }
 
 /**
@@ -125,7 +138,8 @@ async function closeSeason(profile: SeasonProfile, heat: Heat, deps: SeasonDeps)
   const rank = standing ? standing.rank : 0;
   const played = standing ? (standing.played ?? standing.total ?? 0) : 0;
   // Someone who put no heat on the board before the hall was written has no place and wins nothing (the hall of fame is written once).
-  const awards = rank > 0 ? awardKeys(heat.season, seasonAwards(rank, total)) : [];
+  const awards = [...(rank > 0 ? awardKeys(heat.season, seasonAwards(rank, total)) : []), ...(heat.endTier === BEACON ? ['fire.beacon', 'season_beacon'] : [])]
+    .filter((key, i, all) => all.indexOf(key) === i);
   giveHonour(profile, awards);
   if (!(profile.seasons ?? []).some((result) => result.id === heat.season)) {
     profile.seasons = [{ id: heat.season, heat: total, rank, played, awards }, ...(profile.seasons ?? [])].slice(0, RESULTS_KEPT);

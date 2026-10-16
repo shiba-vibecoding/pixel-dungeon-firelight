@@ -49,8 +49,10 @@ import {
 } from './screens';
 import { rankingBlock, trophyText } from './rankui';
 import { showBoards } from './boardsui';
-import { lastArmor, showProfile } from './profileui';
+import { showProfile } from './profileui';
+import { lastArmor } from './compete-ui';
 import { showSeason } from './seasonui';
+import { showLeague, showWeek } from './leagueui';
 import { showHall } from './hallui';
 import { tx } from './compete-ui';
 import { myLook } from './herocard';
@@ -95,7 +97,7 @@ import { type BoardKind, type Profile, type RunMeta, type RunSlot, runApi, type 
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForBoards, launchedForDaily, onLayoutChange, platform,
+  backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForBoards, launchedForDaily, launchedForLeague, onLayoutChange, platform,
   shareArena, shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen, invitedGift,
 } from './telegram';
@@ -915,7 +917,30 @@ function openBoards(tab?: 'daily' | 'week' | 'arena' | 'all' | 'season' | 'devic
     onProfile: openProfile,
     onSeason: openSeason,
     onHall: openHall,
+    onLeague: openLeague,
   });
+}
+
+/** The league's window: the step, the room of the week with its zones; back to the boards. */
+function openLeague(): void {
+  showLeague({ api, profile, onBack: () => openBoards(), onClose: toTitle });
+}
+
+/** Shown once, over the title: how the last week in a league room ended (the player closes it, and the server keeps that for every device). */
+let weekResultShown = false;
+function maybeWeekResult(answer: Profile): void {
+  const result = answer.leagueResult;
+  if (weekResultShown || !api || session || !result || answer.leagueSeen === result.week || overlayOpen()) return;
+  weekResultShown = true;
+  const seen = (): void => {
+    answer.leagueSeen = result.week;
+    void api?.leagueSeen(result.week);
+    toTitle(false);
+  };
+  const picture = (): ShareCard => ({
+    name: myHeroPicture().name, heroClass, level: 1, depth: answer.deepest, score: answer.best, place: null, won: false, cause: '', hero: { ...myHeroPicture(), place: null, tier: result.to },
+  });
+  showWeek({ result, profile: answer, heroClass, share: shareChoices(async () => picture(), tx('shareTextNoPlace'), 'daily'), onSeen: seen });
 }
 
 /** The season's window: its Heat, how it is earned, what it gives; back to the boards (on the Season tab). */
@@ -933,6 +958,7 @@ function myHeroPicture(): import('./sharecards').HeroPicture {
   return {
     name: profile?.name || (inTelegram ? telegramName() : playerName.trim()) || t.heroDefault, look: myLook(heroClass, lastArmor(profile, heroClass)), heroClass,
     place: profile?.dailyDone ? (profile.places.daily ?? null) : null, depth: profile?.deepest ?? 1, streak: profile?.streak.count ?? 0,
+    ...(profile?.league && profile.league.best > 0 ? { tier: profile.league.tier } : {}),
   };
 }
 
@@ -993,6 +1019,7 @@ function refreshProfile(): void {
     if (!session && document.querySelector('.pd-camp')) {
       toTitle(false);
       askOnTitle();
+      maybeWeekResult(answer);
     }
   });
 }
@@ -3411,6 +3438,7 @@ function tick(now: number): void {
         hero: {
           name: me.name || playerName || telegramName() || t.heroLabel, look: myLook(me.heroClass, armorTier(me)), heroClass: me.heroClass,
           place: dailyRun ? (reply?.places?.daily ?? null) : null, depth: deepestNow, streak: profile?.streak.count ?? 0,
+          ...(profile?.league && profile.league.best > 0 ? { tier: profile.league.tier } : {}),
         },
       };
     }, shareText, 'daily');
@@ -3668,6 +3696,7 @@ if (launchedForDaily()) {
   if (!api) maybeNews(null);
   // Opened from the bot's «you were passed on the board» message: the day's board.
   if (api && launchedForBoards()) openBoards('daily');
+  if (api && launchedForLeague()) openLeague();
 }
 
 

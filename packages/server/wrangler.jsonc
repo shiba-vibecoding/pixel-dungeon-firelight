@@ -11,7 +11,8 @@
       { "name": "REPORTS", "class_name": "ReportStore" },
       { "name": "PLAYER", "class_name": "Player" },
       { "name": "CARD", "class_name": "Card" },
-      { "name": "NOTIFIER", "class_name": "Notifier" }
+      { "name": "NOTIFIER", "class_name": "Notifier" },
+      { "name": "LEAGUE", "class_name": "League" }
     ]
   },
   "migrations": [
@@ -20,7 +21,9 @@
     { "tag": "v3", "new_sqlite_classes": ["WalletStore"] },
     { "tag": "v4", "new_sqlite_classes": ["ReportStore"] },
     { "tag": "v5", "new_sqlite_classes": ["Player"] },
-    { "tag": "v6", "new_sqlite_classes": ["Card", "Notifier"] }
+    { "tag": "v6", "new_sqlite_classes": ["Card", "Notifier"] },
+    // The weekly leagues: desks and rooms of 30 (league.ts).
+    { "tag": "v7", "new_sqlite_classes": ["League"] }
   ],
   // Every hour: the bot's reminders that are due (notifier.ts).
   "triggers": { "crons": ["0 * * * *"] },

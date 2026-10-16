@@ -6,7 +6,7 @@ import { awardKeys, DAY_TITLE_MIN_PLAYERS, dayTitleEarned, grant, HONOUR_KEYS, s
 import type { Standing } from '../src/mail';
 import { artSeason, hallOpensAt, inSeason, SEASON_DAYS, seasonAt, seasonNumbered, seasonNumber, seasonStart } from '../src/season-clock';
 import { earnedBy } from '../src/shopapi';
-import { putHeat, rollSeason, type SeasonDeps, type SeasonProfile, settleBoard } from '../src/season-flow';
+import { closeDueSeasons, putHeat, rollSeason, type SeasonDeps, type SeasonProfile, settleBoard } from '../src/season-flow';
 
 const DAY = 86_400_000;
 const at = (iso: string): number => Date.parse(`${iso}T00:00:00Z`);
@@ -232,33 +232,45 @@ describe('what a player\'s object does about seasons (season-flow.ts)', () => {
     expect(profile.seasons).toBeUndefined();
     // The grace days over: closed. The final place was 2: the cup, the frame and the title.
     const later = deps(over + 3 * DAY, { boards: { 'season:s1': { rank: 2, played: 800 } } });
-    expect(await rollSeason(profile, later)).toBe(true);
+    expect(await rollSeason(profile, later)).toBe(false);
+    expect(await closeDueSeasons(profile, later)).toBe(true);
     expect(later.frozen).toEqual(['s1']);
     expect(profile.heatPrev).toBeUndefined();
     expect(profile.seasons).toEqual([{ id: 's1', heat: 120, rank: 2, played: 800, awards: ['cup.s1', 'frame.season.s1', 'season_beacon'] }]);
     expect(profile.honour).toEqual(['cup.s1', 'frame.season.s1', 'season_beacon']);
     // Closed once.
-    expect(await rollSeason(profile, later)).toBe(false);
+    expect(await closeDueSeasons(profile, later)).toBe(false);
   });
 
   it('gives nothing to a player who put no Heat on the board before the hall was written, and tries again when the board cannot be asked', async () => {
     const profile: SeasonProfile = { heatPrev: { ...emptyHeat('s1'), days: { '2026-12-10': 60 } }, heat: emptyHeat('s2') };
     const over = start + SEASON_DAYS * DAY;
-    expect(await rollSeason(profile, deps(over + 3 * DAY, { boards: { 'season:s1': 'error' } }))).toBe(false);
+    expect(await closeDueSeasons(profile, deps(over + 3 * DAY, { boards: { 'season:s1': 'error' } }))).toBe(false);
     expect(profile.heatPrev).toBeDefined();
-    expect(await rollSeason(profile, deps(over + 3 * DAY))).toBe(true);
+    expect(await closeDueSeasons(profile, deps(over + 3 * DAY))).toBe(true);
     expect(profile.seasons?.[0]).toMatchObject({ id: 's1', rank: 0, awards: [] });
     expect(profile.honour).toBeUndefined();
+  });
+
+  it('gives the Beacon fire and the title of the season to a player who played its last week in the Beacon, whatever their place by Heat', async () => {
+    const profile: SeasonProfile = { heatPrev: { ...emptyHeat('s1'), days: { '2026-11-01': 10 }, endTier: 'beacon' }, heat: emptyHeat('s2') };
+    const over = start + SEASON_DAYS * DAY;
+    await closeDueSeasons(profile, deps(over + 3 * DAY, { boards: { 'season:s1': { rank: 400, played: 900 } } }));
+    expect(profile.honour).toEqual(['fire.beacon', 'season_beacon']);
+    // A top ten place and the Beacon give the title once.
+    const both: SeasonProfile = { heatPrev: { ...emptyHeat('s1'), days: { '2026-11-01': 60 }, endTier: 'beacon' }, heat: emptyHeat('s2') };
+    await closeDueSeasons(both, deps(over + 3 * DAY, { boards: { 'season:s1': { rank: 8, played: 900 } } }));
+    expect(both.honour).toEqual(['frame.season.s1', 'season_beacon', 'fire.beacon']);
   });
 
   it('gives the frame but not the cup to the 50th, and nothing but a line in the record to the 101st', async () => {
     const make = (): SeasonProfile => ({ heatPrev: { ...emptyHeat('s1'), days: { '2026-11-01': 60 } }, heat: emptyHeat('s2') });
     const over = start + SEASON_DAYS * DAY;
     const fifty = make();
-    await rollSeason(fifty, deps(over + 3 * DAY, { boards: { 'season:s1': { rank: 50, played: 900 } } }));
+    await closeDueSeasons(fifty, deps(over + 3 * DAY, { boards: { 'season:s1': { rank: 50, played: 900 } } }));
     expect(fifty.honour).toEqual(['frame.season.s1']);
     const late = make();
-    await rollSeason(late, deps(over + 3 * DAY, { boards: { 'season:s1': { rank: 101, played: 900 } } }));
+    await closeDueSeasons(late, deps(over + 3 * DAY, { boards: { 'season:s1': { rank: 101, played: 900 } } }));
     expect(late.honour).toBeUndefined();
     expect(late.seasons?.[0]).toMatchObject({ rank: 101, awards: [] });
   });

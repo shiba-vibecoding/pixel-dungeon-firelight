@@ -1,10 +1,9 @@
 import { weekEnd } from '@pd/core';
 import { audio } from './audio';
 import type { BoardEntry, BoardKind, BoardSlice, BoardView, Profile, RunApi } from './checked';
-import { compete, loadCompete } from './compete';
-import { chooseTab, classIcon, competeShell, nameNode, number, podium, rowOf, ROW_GAP, ROW_H, type RowData, stage, tabsBar, tx, txn, wide } from './compete-ui';
+import { compete, loadCompete, tierOf } from './compete';
+import { art, chooseTab, lastArmor, classIcon, competeShell, nameNode, number, podium, rowOf, ROW_GAP, ROW_H, type RowData, stage, tabsBar, tx, txn, wide } from './compete-ui';
 import { myLook } from './herocard';
-import { lastArmor } from './profileui';
 import { lang, t } from './i18n';
 import type { RunRecord } from './rankings';
 import { boardCloses, countdown } from './rankui';
@@ -63,6 +62,8 @@ export interface BoardsOptions {
   /** The season's window and the hall of fame (their buttons are on the Season tab). */
   onSeason?(): void;
   onHall?(): void;
+  /** The league's window (its button and, on a monitor, the card at the side). */
+  onLeague?(): void;
 }
 
 /** The boards window: a tab a board, each loaded when first shown. */
@@ -158,6 +159,7 @@ function build(options: BoardsOptions, shell: ReturnType<typeof competeShell>): 
     // The way to the player's own profile and to his runs (on a monitor the profile is at the side as well).
     const links = el('div', { className: 'fl-board-links' });
     if (options.onProfile && !wide()) links.append(linkButton(tx('profileButton'), options.onProfile));
+    if (options.onLeague && !wide()) links.append(linkButton(tx('leagueButton'), options.onLeague));
     if (tab === 'season') {
       if (options.onSeason) links.append(linkButton(tx('seasonButton'), options.onSeason));
       if (options.onHall) links.append(linkButton(tx('hallButton'), options.onHall));
@@ -233,6 +235,34 @@ function build(options: BoardsOptions, shell: ReturnType<typeof competeShell>): 
         options.onProfile!();
       };
       parts.push(open);
+    }
+    // The league: the step, the place in the room and the rows round it, filled when the room has come.
+    if (options.api && options.onLeague) {
+      const card = el('div', { className: 'fl-card2' });
+      parts.push(card);
+      void options.api.league().then((view) => {
+        const tier = tierOf(view?.tier);
+        if (!view || !tier || !card.isConnected) return;
+        card.style.setProperty('--tier', tier.color);
+        const head = el('h3', {}, art(tier.badge, 2), tx('leagueOf', { t: tier.name[lang] }));
+        head.style.cursor = 'pointer';
+        head.onclick = options.onLeague!;
+        card.append(head);
+        if (!view.open || !view.room) {
+          card.append(el('p', { textContent: view.open ? tx('leagueNoRoom') : tx('leaguesClosed') }));
+          return;
+        }
+        const room = view.room;
+        card.append(el('p', { textContent: `${tx('zonePlace', { n: room.rank ?? '—', m: room.size })} · ${tx('endsIn', { t: countdown(view.endsAt - Date.now()) })}` }));
+        const at = room.rank ? room.rank - 1 : -1;
+        for (const index of at > 0 ? [at - 1, at] : at === 0 ? [0, 1] : []) {
+          const entry = room.top[index];
+          if (!entry) continue;
+          const row = rowOf({ entry, place: index + 1, value: number(entry.score), unit: tx('depthShort', { n: entry.depth }), me: index === at, compact: true, tier: room.tier, moving: index === at, ...(index < room.up ? { zone: 'up' as const } : {}) });
+          held.push(() => row.dispose?.());
+          card.append(row.node);
+        }
+      });
     }
     parts.push(el('div', { className: 'fl-honour-note', textContent: tx('honourOnly') }));
     return parts;

@@ -19,7 +19,7 @@ function rng(seed: number): () => number {
 const sellable = CATALOG.filter((entry) => entry.stars > 0 && !entry.earn && !entry.pack);
 
 /** What each field of a Worn is allowed to be, by catalogue category. */
-const CATEGORY: Record<Exclude<keyof Worn, 'a'>, string> = { l: 'look', h: 'hat', p: 'pet', f: 'campfire', fr: 'frame', tt: 'title', nc: 'namecolor' };
+const CATEGORY: Record<Exclude<keyof Worn, 'a' | 'lg'>, string> = { l: 'look', h: 'hat', p: 'pet', f: 'campfire', fr: 'frame', tt: 'title', nc: 'namecolor' };
 
 /** A wallet that bought a few things at random and put on whatever it could (the wallet refuses what is not owned). */
 function randomWallet(random: () => number): WalletRecord {
@@ -53,7 +53,7 @@ describe('the hero a board shows (worn.ts)', () => {
         const worn = wornOf(shop, heroClass);
         if (!worn) continue;
         shown++;
-        for (const [field, id] of Object.entries(worn).filter(([key]) => key !== 'a') as Array<[Exclude<keyof Worn, 'a'>, string]>) {
+        for (const [field, id] of Object.entries(worn).filter(([key]) => key !== 'a' && key !== 'lg') as Array<[Exclude<keyof Worn, 'a' | 'lg'>, string]>) {
           expect(owned.has(id), `${id} is owned`).toBe(true);
           expect(itemById(id)?.category, `${id} is a ${CATEGORY[field]}`).toBe(CATEGORY[field]);
         }

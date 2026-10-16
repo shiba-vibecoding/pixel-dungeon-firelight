@@ -9,7 +9,8 @@ import { chatPicture, storyPicture } from '../src/sharecards';
 import { myLook } from '../src/herocard';
 import type { RunApi } from '../src/checked';
 import { lang } from '../src/i18n';
-import { board, hall, MY_NAME, profile, seasonBoard } from './fake';
+import { board, hall, league, MY_NAME, profile, seasonBoard, weekResult } from './fake';
+import { showLeague, showWeek } from '../src/leagueui';
 import { showHall } from '../src/hallui';
 import { showSeason } from '../src/seasonui';
 
@@ -26,6 +27,7 @@ const api = {
     return kind === 'season' ? seasonBoard(ru) : board(kind, slice, ru, kind === 'week' ? 5732 : kind === 'all' ? 11406 : 1284);
   },
   hall: async (season?: string) => hall(ru, season),
+  league: async () => league(ru, q.get('closed') === null, Number(q.get('rank') ?? 7)),
 } as unknown as RunApi;
 
 declare global {
@@ -46,12 +48,14 @@ if (screen === 'boards' || screen === 'runs') {
   showBoards({
     api, device: runs, trophies: profile(ru).trophies, profile: profile(ru), heroClass: 'mage', tab: screen === 'runs' ? 'device' : (q.get('tab') ?? 'day'),
     ...(metric || cls ? { slice: { metric: metric ?? 'score', cls } } : {}),
-    onProfile: () => undefined, onSeason: () => undefined, onHall: () => undefined,
+    onProfile: () => undefined, onSeason: () => undefined, onHall: () => undefined, onLeague: () => undefined,
     rules: { hardship: ru ? 'Без лечения' : 'No healing', boon: ru ? 'Кошелёк' : 'Purse', info: ru ? '+150 золота на траты' : '+150 gold to spend' },
     onClose: () => undefined,
   });
 }
 if (screen === 'season') showSeason({ api, profile: profile(ru), onBack: () => undefined, onClose: () => undefined, onHall: () => undefined });
+if (screen === 'league') showLeague({ api, profile: profile(ru), onBack: () => undefined, onClose: () => undefined });
+if (screen === 'week') showWeek({ result: weekResult((q.get('res') ?? 'up') as 'up' | 'stay' | 'down'), profile: profile(ru), heroClass: 'mage', onSeen: () => undefined, share: [{ label: 'x', run: () => undefined }] });
 if (screen === 'hall') showHall({ api, onBack: () => undefined, onClose: () => undefined });
 const me = (): Parameters<typeof storyPicture>[0] => ({
   name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'mage', place: q.get('place') === 'none' ? null : 4, depth: 17, streak: 12,

@@ -1,6 +1,8 @@
 import type { Profile } from './checked';
-import { compete, loadCompete } from './compete';
-import { competeShell, nameNode, number, stage, titleBadge, tx, txn, wide } from './compete-ui';
+import { compete, loadCompete, tierOf } from './compete';
+import { art, competeShell, lastArmor, nameNode, number, stage, titleBadge, tx, txn, wide } from './compete-ui';
+import { lang } from './i18n';
+import { ladder } from './leagueui';
 import { cosmetics } from './cosmetics';
 import { myLook } from './herocard';
 import { t } from './i18n';
@@ -26,12 +28,6 @@ export interface ProfileOptions {
   onClose(): void;
 }
 
-/** The armour of the player's last run (of this class, else of the last at all): he is shown in what he died or finished in. */
-export function lastArmor(profile: Profile | null, heroClass: string): number | undefined {
-  const runs = profile?.history ?? [];
-  return (runs.find((run) => run.heroClass === heroClass && run.armor !== undefined) ?? runs.find((run) => run.armor !== undefined))?.armor;
-}
-
 export function showProfile(options: ProfileOptions): void {
   const shell = competeShell(options.onClose);
   show(shell.win, options.onClose);
@@ -48,6 +44,14 @@ function build(options: ProfileOptions, shell: ReturnType<typeof competeShell>):
   const who = el('div', { className: 'who' }, nameNode(options.name, cosmetics.nameColor?.id));
   const title = titleBadge(cosmetics.title?.id, false);
   if (title) who.append(title);
+  // The league he plays in, under the title.
+  const league = profile?.league;
+  const tier = league ? tierOf(league.tier) : undefined;
+  if (tier) {
+    const mark = el('span', { className: 'fl-tier' }, art(tier.badge, 2), tier.name[lang]);
+    mark.style.setProperty('--tier', tier.color);
+    who.append(mark);
+  }
   const facts = el('div', { className: 'fl-facts' });
   if (profile?.best) facts.append(el('span', {}, `${tx('best')} `, el('b', { textContent: number(profile.best) })));
   if (profile?.heat) facts.append(el('span', {}, `${tx('heatNow')} `, el('b', { textContent: number(profile.heat) })));
@@ -60,6 +64,8 @@ function build(options: ProfileOptions, shell: ReturnType<typeof competeShell>):
 
   const main = el('div', { className: 'fl-mart-main' }, hero);
 
+  // The ladder of the five steps.
+  if (league && tier) main.append(section(tx('league'), tx('leagueOf', { t: tier.name[lang] }), ladder(league.tier, league.best)));
   // The honour titles: the ones won are lit, the others are shown dark with how they are won (never sold).
   const won = new Set(profile?.honour ?? []);
   const titles = el('div', { className: 'fl-titles' });

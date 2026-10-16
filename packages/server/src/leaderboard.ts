@@ -27,6 +27,8 @@ export interface Worn {
   nc?: string;
   /** The tier of the armour worn at the end of the run (the row of the hero's sheet: 1 cloth ... 6 the class armour), from the verified final world. Absent: cloth. */
   a?: number;
+  /** The step of the weekly league the player stood on (league-rules.ts): the hero card's frame when no other is worn. Absent: the first league's. */
+  lg?: string;
 }
 
 export interface DailyEntry extends DailyResult {

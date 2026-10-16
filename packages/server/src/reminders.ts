@@ -1,6 +1,7 @@
 import { dayOf } from '@pd/core';
 import compete from '../../client/public/assets/compete/compete.json';
 import { SEASON } from './boards';
+import { outcomeOf } from './league-rules';
 
 /* What the bot's reminders say and when (notifier.ts sends them). Pure logic. */
 
@@ -15,6 +16,8 @@ export interface Subscriber {
   week?: string;
   /** The season that streak belongs to (boards.ts); a streak of an earlier season was wiped with the world and is not reminded of. */
   season?: number;
+  /** The league room the player is in this week (told by their object when they join one): the Monday message says how the week ended there. */
+  league?: { tier: string; week: string; room: number };
 }
 
 export type Job = { chat: number; text: string; button: string; start: string };
@@ -53,6 +56,24 @@ export function overtakenJob(sub: Subscriber, who: string, place: number, now: n
     text: `🔥 ${words.title}\n${fill(words.text, { who: who.slice(0, 32), n: place, t: dayLeft(now, sub.ru) })}`,
     button: words.button,
     start: 'boards',
+  };
+}
+
+/**
+ * The league's result on Monday morning (replacing the plain weekly place for those who were in a room): the place in the room, and
+ * whether it takes them up, keeps them or sends them down. `place` and `size` are the room's last standing.
+ */
+export function leagueJob(sub: Subscriber, week: string, tier: string, place: number, size: number): Job {
+  const lang = sub.ru ? 'ru' : 'en';
+  const words = compete.strings[lang].n_league;
+  const name = (key: string): string => compete.leagues.tiers.find((entry) => entry.key === key)?.name[lang] ?? key;
+  const outcome = outcomeOf(tier, place, size);
+  const res = fill(words[outcome.result], { t2: name(outcome.to) });
+  return {
+    chat: sub.chat,
+    text: `🔥 ${words.title}\n${fill(words.text, { w: week.split('-W')[1] ?? week, n: place, m: size, t: name(tier), res })}`,
+    button: words.button,
+    start: 'league',
   };
 }
 

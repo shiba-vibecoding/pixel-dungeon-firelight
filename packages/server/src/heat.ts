@@ -28,6 +28,8 @@ export interface Heat {
   circle: Record<string, number>;
   /** The rating last put on the season's board (so that it is put again only when it has changed). */
   sent?: number;
+  /** The step of the league the season's last week was played in (the Beacon at the end gives its fire and title). */
+  endTier?: string;
 }
 
 export const emptyHeat = (season: string): Heat => ({ season, days: {}, league: {}, circle: {} });

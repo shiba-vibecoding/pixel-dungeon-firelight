@@ -112,6 +112,11 @@ export interface Profile {
   season?: SeasonInfo;
   heat?: number;
   heatDays?: number;
+  /** The weekly leagues: open or waiting for players, the step, the best step reached, and whether there is a room this week. */
+  league?: { open: boolean; need: number; played: number; tier: string; best: number; inRoom: boolean };
+  /** How the last week in a room ended (shown to the player once: `leagueSeen` is the week they have seen). */
+  leagueResult?: LeagueResult;
+  leagueSeen?: string | null;
   seasons?: SeasonResult[];
   honour?: string[];
   places: Partial<Record<BoardKind, number | null>>;
@@ -129,6 +134,33 @@ export interface SeasonInfo {
   end: number;
   daysLeft: number;
   started: boolean;
+}
+
+/** What a week in a room came to: the step of the room and the one after it, the place among the room, the Heat it gave. */
+export interface LeagueResult {
+  week: string;
+  tier: string;
+  to: string;
+  result: 'up' | 'stay' | 'down';
+  place: number;
+  size: number;
+  points: number;
+  mark: boolean;
+}
+
+/** The league screen: the step, the room of the week and where the player stands in it. */
+export interface LeagueView {
+  open: boolean;
+  need: number;
+  played: number;
+  week: string;
+  endsAt: number;
+  tier: string;
+  best: number;
+  tiers: string[];
+  room: { number: number; tier: string; size: number; top: BoardEntry[]; rank: number | null; up: number; down: number } | null;
+  result?: LeagueResult;
+  seen: string | null;
 }
 
 /** A season closed for the player: the final place by Heat and what it won (honour keys: cup.s1, frame.season.s1, season_beacon). */
@@ -234,6 +266,10 @@ export interface RunApi {
   /** «Report a problem»: true once the server has it; false when it could not be sent (or five went today). */
   problem(report: ProblemReport): Promise<boolean>;
   board(kind: BoardKind | 'season', slice?: BoardSlice): Promise<BoardView | null>;
+  /** The player's league: their step and room (the server settles last week and joins a room first). */
+  league(): Promise<LeagueView | null>;
+  /** The week's result has been seen (kept with the profile, for every device). */
+  leagueSeen(week: string): Promise<boolean>;
   /** The hall of fame of a season (the latest over by default). */
   hall(season?: string): Promise<HallView | null>;
   /** «Hide me from the boards» on or off: the setting as the server kept it, or null if it could not be told. */
@@ -306,6 +342,8 @@ export function runApi(server: string, identity: () => Identity, development: bo
     notify: async (on) => (await quiet<{ on: boolean }>('/notify', { on })) !== null,
     board: (kind, slice) => quiet('/board', { kind, ...(slice && slice.metric !== 'score' ? { metric: slice.metric } : {}), ...(slice?.cls ? { cls: slice.cls } : {}) }),
     hall: (season) => quiet('/hall', season ? { season } : {}),
+    league: () => quiet('/league', {}),
+    leagueSeen: async (week) => (await quiet<{ seen: string }>('/league', { seen: week })) !== null,
     hide: async (on) => (await quiet<{ hidden: boolean }>('/me', { hidden: on }))?.hidden ?? null,
   };
 }

@@ -113,6 +113,7 @@ const EN: Words = {
     if (e.by === 'badge') return 'A badge won in the dungeon';
     if (e.by === 'patron') return 'Patrons get it';
     if (e.by === 'honour') return 'An honour of the competitions: won, never sold';
+    if (e.by === 'league') return `Reach league step ${e.tier} of 5`;
     return `Top ${e.place} of the ${e.kind === 'daily' ? 'day' : 'week'}`;
   },
   earnOnly: 'Earned, not sold',
@@ -199,6 +200,7 @@ const RU: Words = {
     if (e.by === 'badge') return 'Значок, добытый в подземелье';
     if (e.by === 'patron') return 'Дарят Покровителям';
     if (e.by === 'honour') return 'Честь соревнований: добывается, не продаётся';
+    if (e.by === 'league') return `Дойти до ${e.tier}-й ступени лиги из 5`;
     return `Топ-${e.place} ${e.kind === 'daily' ? 'дня' : 'недели'}`;
   },
   earnOnly: 'Только за заслуги',

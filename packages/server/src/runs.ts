@@ -7,6 +7,7 @@ import { SEASON } from './boards';
 import type { Heat } from './heat';
 import { armorTierOf } from './worn';
 import type { Letter } from './mail';
+import type { LeagueResult, LeagueState } from './league-flow';
 import type { SeasonResult } from './season-flow';
 
 /*
@@ -117,6 +118,10 @@ export interface Profile {
   heatPrev?: Heat;
   seasons?: SeasonResult[];
   honour?: string[];
+  /** The weekly leagues (league-flow.ts): the step and the room of the week, the result of the last week, and the week whose result the player has seen. */
+  league?: LeagueState;
+  leagueResult?: LeagueResult;
+  leagueSeen?: string;
   /** The problem reports sent today, for the daily limit (problem.ts). */
   problems?: { day: string; count: number };
   /** The season pass's XP, from this season's checked runs only (pass.ts); a new season starts it afresh with the rest of the profile. */

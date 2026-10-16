@@ -223,6 +223,11 @@ export function launchedForBoards(): boolean {
   return webApp?.initDataUnsafe.start_param === 'boards' || new URLSearchParams(location.search).has('boards');
 }
 
+/** True when the app was opened from the bot's league message: the league's window comes up (`startapp=league`). */
+export function launchedForLeague(): boolean {
+  return webApp?.initDataUnsafe.start_param === 'league' || new URLSearchParams(location.search).has('league');
+}
+
 /** Shares an invitation to a room; resolves to 'copied' when it went to the clipboard instead. */
 export function shareInvite(room: string, text: string): Promise<'shared' | 'copied' | 'failed'> {
   return share(`room_${room}`, { room }, text);
