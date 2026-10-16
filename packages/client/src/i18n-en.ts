@@ -218,7 +218,7 @@ export const en = {
   noticed: (mob: string) => `A ${mob} notices you!`,
   killed: (mob: string) => `The ${mob} dies.`,
   heroDied: (name: string) => `${name} has fallen!`,
-  levelUp: (name: string, lvl: number) => `${name} reaches level ${lvl}!`,
+  levelUp: (name: string, lvl: number) => `${name} reaches level ${lvl}! +5 health, better accuracy and evasion.`,
   myLevelUp: (lvl: number) => `Level up! You are now level ${lvl}.`,
   found: 'You found something hidden!',
   nothingFound: 'You search but find nothing.',

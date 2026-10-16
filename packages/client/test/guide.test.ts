@@ -66,8 +66,8 @@ describe('the guide texts', () => {
   it('have unique entry ids, the planned ones in the planned order', () => {
     const ids = GUIDE_EN.entries.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.slice(0, 10)).toEqual(['hunger', 'ankh', 'curses', 'uncurse', 'haggler', 'mimics', 'well', 'seeds', 'score', 'challenges']);
-    expect(ids.length).toBeLessThanOrEqual(13);
+    expect(ids.slice(0, 11)).toEqual(['growth', 'hunger', 'ankh', 'curses', 'uncurse', 'haggler', 'mimics', 'well', 'seeds', 'score', 'challenges']);
+    expect(ids.length).toBeLessThanOrEqual(14);
     for (const [, guide] of both) for (const entry of guide.entries) expect(entry.text.split(/[.!?]\s/).length, entry.id).toBeLessThanOrEqual(9);
   });
 });
