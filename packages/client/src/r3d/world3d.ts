@@ -297,6 +297,8 @@ export class World3D {
     // the water and the blood, in an order we choose (renderOrder), not the opaque queue's: the dead (3), then the living (3.5), then
     // the glow of the effects (4).
     spriteMaterial.transparent = true;
+    // (A double-sided transparent material is otherwise drawn twice, back faces and front: one pass is all a flat sprite needs.)
+    spriteMaterial.forceSinglePass = true;
     this.sprites = new InstancedMesh(quad, spriteMaterial, MAX_SPRITES);
     this.sprites.instanceMatrix.setUsage(DynamicDrawUsage);
     this.sprites.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 3).fill(1), 3);
@@ -316,6 +318,7 @@ export class World3D {
     const deadMaterial = makeMaterial();
     deadMaterial.depthWrite = false;
     deadMaterial.transparent = true;
+    deadMaterial.forceSinglePass = true;
     const deadQuad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
     this.deadMesh = new InstancedMesh(deadQuad, deadMaterial, MAX_DEAD);
     this.deadMesh.instanceMatrix.setUsage(DynamicDrawUsage);
