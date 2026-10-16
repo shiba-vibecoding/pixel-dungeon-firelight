@@ -1,13 +1,13 @@
 /*
  * The new renderer's keeper of frame time, with no DOM and no clock of its own (frames come in with their lengths, so tests run
  * under a virtual one): it measures the display's real refresh from the gaps between animation frames, picks the highest quality
- * tier that still holds that refresh while the player is moving, and, when even the lowest does not hold a playable pace, says
- * the game must go back to the 2D renderer.
+ * tier that still holds that refresh while the player is moving. There is no going back to 2D: the lowest tier is kept, whatever
+ * the pace.
  */
 
 /** Settings of each tier: the 3D renderer reads them, and nothing else decides them. */
 export interface Tier {
-  name: 'high' | 'mid' | 'low';
+  name: 'high' | 'mid' | 'low' | 'min';
   /** Shadow-casting torches (0 to 2) and the size of their maps (phones: 512). */
   shadowLights: number;
   /** The most device pixels per CSS pixel the canvas has. */
@@ -20,7 +20,11 @@ export const TIERS: readonly Tier[] = [
   { name: 'high', shadowLights: 2, dpr: 2, particles: true },
   { name: 'mid', shadowLights: 1, dpr: 2, particles: true },
   { name: 'low', shadowLights: 0, dpr: 1.5, particles: false },
+  { name: 'min', shadowLights: 0, dpr: 1, particles: false },
 ];
+
+/** From this tier down, a 120 Hz screen held at a playable 60 is good enough (it is not stepped further down for the 120). */
+const SETTLE = TIERS.findIndex((tier) => tier.name === 'low');
 
 /** Refreshes a screen has; the measured one is rounded to the nearest. */
 const RATES = [30, 48, 60, 72, 90, 120, 144, 165] as const;
@@ -59,20 +63,15 @@ export interface GovernorOptions {
   windowMs?: number;
   /** A tier holds while its average frame is within this many times the display's period. */
   slack?: number;
-  /** The average frame (ms) past which even the lowest tier is given up on. */
-  giveUpMs?: number;
 }
 
-export type Verdict = 'ok' | 'demote' | 'fallback';
+export type Verdict = 'ok' | 'demote';
 
 export class Governor {
   private index = 0;
   private sum = 0;
   private count = 0;
   private elapsed = 0;
-  private lowFor = 0;
-  /** The renderer is to go; set once. */
-  fellBack = false;
   private holding = 0;
 
   constructor(private readonly options: GovernorOptions = {}) {}
@@ -92,7 +91,6 @@ export class Governor {
   }
 
   frame(dt: number, hz: number): Verdict {
-    if (this.fellBack) return 'fallback';
     if (this.holding > 0) {
       if (dt > 0 && dt <= 250) this.holding -= dt;
       return 'ok';
@@ -112,20 +110,12 @@ export class Governor {
     const slack = this.options.slack ?? 1.3;
     const holds = average <= period * slack;
     const playable = average <= 1000 / 55;
-    if (holds || (hz > 70 && playable && this.index === TIERS.length - 1)) {
-      this.lowFor = 0;
-      return 'ok';
-    }
+    if (holds || (hz > 70 && playable && this.index >= SETTLE)) return 'ok';
     if (this.index < TIERS.length - 1) {
       this.index++;
       return 'demote';
     }
-    // The lowest tier, still short of a playable pace: twice in a row is the end of it.
-    this.lowFor++;
-    if (average > (this.options.giveUpMs ?? 1000 / 35) && this.lowFor >= 2) {
-      this.fellBack = true;
-      return 'fallback';
-    }
+    // The lowest tier, however slow: it stays (Firelight has no 2D view to go back to).
     return 'ok';
   }
 }
