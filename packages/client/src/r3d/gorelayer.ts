@@ -6,11 +6,12 @@
  * wall cell (768 x 1152): about 6 MB of memory for the two (`bytes`), however much blood falls.
  */
 import {
-  Box2, BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, MeshLambertMaterial, Mesh, NearestFilter, type Scene, SRGBColorSpace, Texture,
-  Vector2, type WebGLRenderer,
+  BufferAttribute, BufferGeometry, CanvasTexture, DataTexture, DoubleSide, MeshLambertMaterial, Mesh, NearestFilter, RGBAFormat, type Scene,
+  SRGBColorSpace, UnsignedByteType, Vector2, type WebGLRenderer,
 } from 'three';
 import { HEIGHT, WIDTH } from '@pd/core';
-import { faceShows, type GoreData, groundCell, POOL, type Splat, WALL } from '../gore';
+import { CHUNK, chunkPixels, faceShows, type GoreData, groundCell, POOL, shade, type Splat, WALL } from '../gore';
+import { seeded } from './bodyart';
 import { type AirUniforms, withFog } from './fogofwar';
 
 const CELL = 16;
@@ -43,9 +44,12 @@ class Sheet {
   private y0 = 1e9;
   private x1 = -1;
   private y1 = -1;
-  /** What a copy reads from (the canvas itself) and where the box goes, kept to be reused. */
-  private readonly source: Texture;
-  private readonly region = new Box2();
+  /**
+   * What a copy reads from: the pixels of the box, read out of the canvas into a data texture (a canvas is not read by region: the
+   * browser ignores the skip of rows and pixels for a picture source). The array is kept and grown, not made again.
+   */
+  private readonly source = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType);
+  private staging = new Uint8Array(64 * 64 * 4);
   private readonly at = new Vector2();
   /** Bytes sent to the card since the start (tests, the perf overlay). */
   uploaded = 0;
@@ -55,14 +59,13 @@ class Sheet {
     this.canvas = document.createElement('canvas');
     this.canvas.width = w;
     this.canvas.height = h;
-    this.ctx = this.canvas.getContext('2d')!;
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
     this.texture = new CanvasTexture(this.canvas);
     this.texture.colorSpace = SRGBColorSpace;
     this.texture.magFilter = this.texture.minFilter = NearestFilter;
     this.texture.generateMipmaps = false;
     // (The texture is not sent until it is first drawn: this first send is the whole of it, empty.)
     this.texture.needsUpdate = true;
-    this.source = new Texture(this.canvas);
   }
 
   /** Notes a painted rectangle (canvas pixels). */
@@ -109,10 +112,19 @@ class Sheet {
     this.y1 = -1;
     if (x1 <= x0 || y1 <= y0) return;
     // (The texture is stored flipped, as a canvas texture is: the box that lies y0..y1 down the canvas lies h - y1 up from the bottom.)
-    this.region.min.set(x0, y0);
-    this.region.max.set(x1, y1);
+    const bw = x1 - x0;
+    const bh = y1 - y0;
+    const pixels = this.ctx.getImageData(x0, y0, bw, bh).data;
+    if (this.staging.length < pixels.length) this.staging = new Uint8Array(pixels.length);
+    this.staging.set(pixels);
+    const image = this.source.image as { data: Uint8Array; width: number; height: number };
+    image.data = this.staging;
+    image.width = bw;
+    image.height = bh;
+    this.source.unpackAlignment = 1;
+    // (The texture is stored flipped, as a canvas texture is: the box that lies y0..y1 down the canvas lies h - y1 up from the bottom.)
     this.at.set(x0, h - y1);
-    renderer.copyTextureToTexture(this.source, this.texture, this.region, this.at);
+    renderer.copyTextureToTexture(this.source, this.texture, null, this.at);
     this.uploaded += (x1 - x0) * (y1 - y0) * 4;
   }
 }
@@ -188,17 +200,37 @@ export class GoreLayer {
       this.wall.ctx.fillRect(s.x, s.y, s.w, s.h);
       this.wall.mark(s.x, s.y, s.w, s.h);
     } else if (s.layer === POOL) {
-      // An ellipse of rows, whole pixels, the edge a shade darker.
+      // A blob: three or four ellipses of rows about the point, each a little off the last and of its own size (the same every replay,
+      // from the place), so a pool is irregular and fills out as hits add to it. Whole pixels; overlaps darken.
       const g = this.floor.ctx;
-      const rows = Math.max(0, s.h);
-      for (let j = -rows; j <= rows; j++) {
-        const k = j / (rows + 0.5);
-        const half = Math.round(s.w * Math.sqrt(1 - k * k));
-        if (half <= 0) continue;
-        g.fillStyle = css(s.rgb, ALPHA);
-        g.fillRect(s.x - half, s.y + j, half * 2, 1);
+      const rnd = seeded(((s.x * 73856093) ^ (s.y * 19349663) ^ (s.w * 83492791)) >>> 0);
+      const lobes = 3 + Math.floor(rnd() * 2);
+      g.fillStyle = css(s.rgb, 0.7);
+      for (let n = 0; n < lobes; n++) {
+        const a = rnd() * Math.PI * 2;
+        const off = n === 0 ? 0 : s.w * (0.25 + rnd() * 0.4);
+        const cx = Math.round(s.x + Math.cos(a) * off);
+        const cy = Math.round(s.y + Math.sin(a) * off * 0.6);
+        const rx = Math.max(2, Math.round(s.w * (n === 0 ? 0.85 : 0.5 + rnd() * 0.4)));
+        const ry = Math.max(1, Math.round(s.h * (n === 0 ? 0.85 : 0.5 + rnd() * 0.4)));
+        for (let j = -ry; j <= ry; j++) {
+          const k = j / (ry + 0.5);
+          const half = Math.round(rx * Math.sqrt(1 - k * k));
+          if (half > 0) g.fillRect(cx - half, cy + j, half * 2, 1);
+        }
       }
-      this.floor.mark(s.x - s.w, s.y - s.h, s.w * 2, s.h * 2 + 1);
+      this.floor.mark(s.x - s.w * 2, s.y - s.h * 2, s.w * 4, s.h * 4 + 1);
+    } else if (s.layer === CHUNK) {
+      // A piece of meat, bone or stone: its body, a darker edge, a glint, flat on the floor.
+      const g = this.floor.ctx;
+      const dark = css(shade(s.rgb, 0.5), 1);
+      const light = css(shade(s.rgb, 1.75), 1);
+      const body = css(shade(s.rgb, 1.15), 1);
+      for (const [dx, dy, tone] of chunkPixels(s.w, s.h)) {
+        g.fillStyle = tone === 1 ? dark : tone === 2 ? light : body;
+        g.fillRect(s.x + dx, s.y + dy, 1, 1);
+      }
+      this.floor.mark(s.x - 4, s.y - 4, 9, 9);
     } else {
       this.floor.ctx.fillStyle = css(s.rgb, ALPHA);
       this.floor.ctx.fillRect(s.x, s.y, s.w, s.h);

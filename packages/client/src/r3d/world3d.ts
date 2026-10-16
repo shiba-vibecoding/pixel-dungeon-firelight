@@ -44,6 +44,7 @@ import { canPost, Post } from './post';
 import { blankMirror, makeMirrorUniforms, Mirror, reflects, withMirror } from './mirror';
 import { BloodWater, withBlood } from './bloodwater';
 import { bakeBody } from './bodyart';
+import { bakeItem } from './itemblood';
 import { GoreLayer } from './gorelayer';
 import { gore } from '../gore';
 import { Grass } from './grass3d';
@@ -266,6 +267,8 @@ export class World3D {
   /** The blood that stays, on the floor and the faces of the walls (gorelayer.ts), and the baked pictures of the bodies lying about. */
   private readonly goreLayer: GoreLayer;
   private readonly bodyPictures = new Map<string, HTMLCanvasElement>();
+  /** Which state of the blood on the doors their tint shows. */
+  private doorStained = -1;
   private waterScroll: [number, number] = [0, 0.006];
   /** The cells of the level that carry a signpost, and the cut-out of it; the high grass and fungi stand in their own batch (grass3d.ts). */
   private props: number[] = [];
@@ -839,6 +842,7 @@ export class World3D {
       else this.leafMesh = mesh;
     }
     this.writeLeaves();
+    this.doorStained = -1;
   }
 
   /** The leaves' matrices, from their angles. */
@@ -1214,6 +1218,7 @@ export class World3D {
     if (this.goreLayer.version !== gore.version) this.goreLayer.replay(gore.data, gore.version);
     this.goreLayer.update(this.renderer);
     gore.sweep(f.now, CORPSE_FADE_MS);
+    if (this.doorStained !== gore.version * 100000 + gore.stains) this.tintDoors();
     this.effects.begin();
     f.view.puppets.forEach(this.puppetPass);
     this.addWear(f);
@@ -1373,7 +1378,9 @@ export class World3D {
       const x = (heap.pos % WIDTH) + 0.5;
       const z = Math.trunc(heap.pos / WIDTH) + 0.6;
       const bob = visible[heap.pos] && !f.seeAll ? Math.sin(f.now / 520 + heap.pos) * 0.012 : 0;
-      this.sprite(items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, false, x, 0.02 + bob, z, 0.7, 0.7, 1, LEANED, 0, this.shared.itemsEmissive);
+      const blood = gore.data.heaps.get(heap.pos);
+      if (blood) this.sprite(this.itemPicture(heap.sprite, heap.pos, blood), 0, 0, 16, 16, false, x, 0.02 + bob, z, 0.7, 0.7, 1, LEANED, 0);
+      else this.sprite(items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, false, x, 0.02 + bob, z, 0.7, 0.7, 1, LEANED, 0, this.shared.itemsEmissive);
       if (visible[heap.pos]) this.effects.shadowBlob(x, z, 0.6, this.kit.sprites.shadow.opacity, this.kit.sprites.shadow.squash);
     }
     const plants = f.plants;
@@ -1383,6 +1390,35 @@ export class World3D {
         if (!heapDrawn(visible, plant.pos)) continue;
         this.sprite(this.assets.plants, plant.index * 16, 0, 16, 16, false, (plant.pos % WIDTH) + 0.5, 0, Math.trunc(plant.pos / WIDTH) + 0.7, 0.85, 0.85, 1);
       }
+    }
+  }
+
+  /** An item's picture with the blood that has spattered on it (cached by item, cell and how much). */
+  private itemPicture(sprite: number, cell: number, hits: number): HTMLCanvasElement {
+    const key = `${sprite}|${cell}|${hits}`;
+    let picture = this.bodyPictures.get(key);
+    if (!picture) {
+      picture = bakeItem(this.assets.items, (sprite % 8) * 16, Math.floor(sprite / 8) * 16, hits, cell * 31 + sprite);
+      this.bodyPictures.set(key, picture);
+    }
+    return picture;
+  }
+
+  /** The leaves of the doors that blood has reached are stained, redder the more (the tint of each instance). */
+  private tintDoors(): void {
+    this.doorStained = gore.version * 100000 + gore.stains;
+    const leaves = this.swing.leaves;
+    for (const mesh of [this.leafMesh, this.lockMesh]) {
+      if (!mesh) continue;
+      if (!mesh.instanceColor) mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(leaves.length * 3).fill(1), 3).setUsage(DynamicDrawUsage);
+      const c = mesh.instanceColor.array as Float32Array;
+      for (let i = 0; i < leaves.length; i++) {
+        const k = Math.min(1, (gore.data.doors.get(leaves[i]!.cell) ?? 0) / 5);
+        c[i * 3] = 1 - 0.2 * k;
+        c[i * 3 + 1] = 1 - 0.6 * k;
+        c[i * 3 + 2] = 1 - 0.65 * k;
+      }
+      mesh.instanceColor.needsUpdate = true;
     }
   }
 

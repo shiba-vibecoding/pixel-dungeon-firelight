@@ -1,4 +1,4 @@
-import { type Effect, F, HEIGHT, type ItemKind, terrainFlags, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
+import { cellX, cellY, type Effect, F, HEIGHT, type ItemKind, terrainFlags, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
 import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
@@ -10,7 +10,8 @@ import { showBossCard } from './bosscard';
 import { addFxLights } from './fxdraw2d';
 import { regionIndex } from './worldsheets';
 import {
-  bloodRgb, FLOOR as FLOOR_LAYER, gore as record, groundCell, levelSpatterMap, NO_BLOOD, NO_BODY, poolSplat, shade as shadeOf, spatterOf, type SpatterMap,
+  bloodRgb, chunkCount, chunksOf, FLOOR as FLOOR_LAYER, gore as record, levelSpatterMap, NO_BLOOD, NO_BODY, poolSplat, shade as shadeOf, spatterOf,
+  type SpatterMap,
 } from './gore';
 
 /*
@@ -188,7 +189,7 @@ fxp.locate = (id, now, out) => {
 };
 
 /** The way the last blow on each creature went, so its death can throw it apart that way. */
-const blows = new Map<string, { angle: number; at: number }>();
+const blows = new Map<string, { angle: number; at: number; damage: number }>();
 /** A blow this recent still counts as the one that killed. */
 const BLOW_MS = 1500;
 
@@ -223,7 +224,7 @@ function layBody(view: View, puppet: Puppet, gore: Gore, boss: boolean, now: num
     record.addBody({ kind: puppet.kind, cell: puppet.to, flip: puppet.flip, seed: Math.floor(Math.random() * 0x7fffffff), hits: 0, at: end }, now);
     if (gore.pool) {
       const radius = Math.max(4, Math.min(10, Math.round(sheet.w * 0.35))) + (boss ? 3 : 0);
-      record.addSplat(poolSplat(at.x + TILE / 2, at.y + TILE - 2, radius, cssRgb(gore.pool.color)));
+      record.addSplat(poolSplat(at.x + TILE / 2, at.y + TILE - 2, radius + (boss ? 9 : 2), cssRgb(gore.pool.color)));
     }
   }
   fx.corpse({
@@ -241,6 +242,37 @@ const cssRgb = (css: string): number => parseInt(css.slice(1, 7), 16);
 /** The level's map as spatter sees it, made once for each map the effects module is given. */
 let spatterMapFor: ArrayLike<number> | null = null;
 let spatterMap: SpatterMap | null = null;
+/** The doors of that map, and how many blows have wounded in each cell (a pool grows with them). */
+let spatterDoors: number[] = [];
+const poolHits = new Map<number, number>();
+
+function mapFor(map: ArrayLike<number>): SpatterMap {
+  if (spatterMapFor !== map) {
+    spatterMapFor = map;
+    spatterMap = levelSpatterMap(map);
+    spatterDoors = [];
+    poolHits.clear();
+    for (let cell = 0; cell < map.length; cell++) if (map[cell] === T.DOOR || map[cell] === T.OPEN_DOOR || map[cell] === T.LOCKED_DOOR) spatterDoors.push(cell);
+  }
+  return spatterMap!;
+}
+
+/**
+ * A pool under a wounded creature, which each blow that lands there adds to: it spreads and darkens (the splats overlap) over a fight,
+ * a blob and never a square. A big creature's grows larger. `gentle` is the attacker's cell, which only takes a little.
+ */
+function pool(feet: { x: number; y: number }, kind: string, ht: number, gentle: boolean): void {
+  const map = fx.floor;
+  if (!map || NO_BLOOD.has(kind)) return;
+  const sm = mapFor(map);
+  const cell = Math.floor(feet.y / TILE) * WIDTH + Math.floor(feet.x / TILE);
+  if (!sm.ground(cell)) return;
+  const n = (poolHits.get(cell) ?? 0) + 1;
+  poolHits.set(cell, n);
+  const cap = gentle ? 5 : ht > 40 ? 20 : 11;
+  const radius = Math.min(cap, (gentle ? 1.5 : 3) + n * (gentle ? 0.7 : 1.5));
+  record.addSplat(poolSplat(feet.x, feet.y - 1, radius, shadeOf(bloodRgb(kind), 0.55)));
+}
 
 /**
  * The blood of a blow, flung about the room (gore.ts): on the floor round the victim, on the faces of the walls within two cells north of
@@ -250,14 +282,14 @@ let spatterMap: SpatterMap | null = null;
 function spatter(view: View, world: World, feet: { x: number; y: number }, kind: string, damage: number, ht: number): void {
   const map = fx.floor;
   if (!map || NO_BLOOD.has(kind)) return;
-  if (spatterMapFor !== map) {
-    spatterMapFor = map;
-    spatterMap = levelSpatterMap(map);
-  }
+  const sm = mapFor(map);
   const heaps = (world.floors[view.depth]?.heaps ?? []).map((h) => h.pos);
-  const out = spatterOf(spatterMap!, { x: feet.x, y: feet.y, kind, damage, ht }, quality.light, Math.random, { bodies: record.bodies, heaps });
+  const out = spatterOf(sm, { x: feet.x, y: feet.y, kind, damage, ht }, quality.light, Math.random, { bodies: record.bodies, heaps, doors: spatterDoors });
   for (const s of out.splats) record.addSplat(s);
   for (const s of out.heapSpecks) record.addSplat(s);
+  // The items lying in it and the doors take a stain on their own pictures (world3d.ts bakes them).
+  for (const cell of out.heapHits) record.stainHeap(cell);
+  for (const cell of out.doorHits) record.stainDoor(cell);
   for (const i of out.bodyHits) {
     const body = record.bodies[i];
     if (body && body.hits < 6) body.hits++;
@@ -324,7 +356,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       const gore = goreOf(target.kind);
       if (angle !== undefined) {
         if (blows.size > 200) blows.clear();
-        blows.set(effect.target, { angle, at: now });
+        blows.set(effect.target, { angle, at: now, damage: effect.damage });
         // The struck reels back along the blow, a few whole pixels, and springs back.
         const reach = heavy ? 3 : 2;
         target.knockStart = now;
@@ -350,6 +382,9 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
         }
       }
       spatter(view, world, feetOf(view, target, now), target.kind, effect.damage, target.ht);
+      // The pool under the wounded grows with each blow; the attacker's own cell takes a little of it.
+      pool(feetOf(view, target, now), target.kind, target.ht, false);
+      if (attacker && !quality.light) pool(feetOf(view, attacker, now), target.kind, target.ht, true);
       // A very heavy blow that does not kill still tears a chunk or two off.
       if (!killing && share >= 0.3) throwGibs(feetOf(view, target, now), gore, share >= 0.5 ? 2 : 1, angle, 0.8, now);
       const mine = effect.attacker === myId || effect.target === myId;
@@ -408,6 +443,15 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       if (puppet) layBody(view, puppet, gore, boss, now);
       // The last blow's worth of blood flung about, and the death's: as if the whole of its health were struck.
       spatter(view, world, feet, kind, boss ? 40 : 14, boss ? 40 : 14);
+      // The body bursts into a heap of meat and pieces round the cell (gore.ts): more for a boss, for a big creature, for a crit.
+      if (fx.floor && !NO_BLOOD.has(kind)) {
+        const ht = puppet?.ht ?? 8;
+        const heavy = !!blow && now - blow.at < BLOW_MS && blow.damage >= 0.45 * ht;
+        const heaps = new Set((world.floors[view.depth]?.heaps ?? []).map((h) => h.pos));
+        // The pool under it as it falls is laid first, the pieces over it.
+        for (let n = 0; n < (boss ? 6 : 2); n++) pool(feet, kind, boss ? 80 : ht, false);
+        for (const s of chunksOf(mapFor(fx.floor), kind, feet.x, feet.y, chunkCount(ht, boss, heavy, quality.light), boss ? 38 : 20, heaps, Math.random)) record.addSplat(s);
+      }
       // What was alive leaves as a faint wisp (a ghost as nothing else).
       burst(at, now, {
         count: (boss ? 30 : 6) * (gore.wisp ? 3 : 1), colors: gore.wisp ? [...ECTO, '#ffffff'] : ['#ffffff', '#d8e8ff'], glow: true,
@@ -837,10 +881,14 @@ export function ambientFx(view: View, now: number, dt: number): void {
     if (puppet.burning && chance(14)) {
       fx.burst(x + 3 + Math.random() * 10, y + 6 + Math.random() * 8, now, { count: 1, colors: FIRE, glow: true, speed: [2, 8], life: [400, 800], rise: 22, drag: 0.5, size: [1, 1], spread: 0 });
     }
-    // Badly wounded, a walker leaves drops behind it.
-    if (puppet.hp < puppet.ht * 0.4 && now - puppet.moveStart < STEP_MS && chance(3.5)) {
+    // Badly wounded, a walker leaves drops behind it, and as it goes a smear along the floor, in the line of its walk: a trail.
+    if (puppet.hp < puppet.ht * 0.5 && now - puppet.moveStart < STEP_MS && chance(8)) {
       const smear = goreOf(puppet.kind).smear;
       if (smear) fx.splat(x + TILE / 2, y + TILE - 7, now, [smear], 1, 2.5);
+      if (fx.floor && !NO_BLOOD.has(puppet.kind)) {
+        const across = Math.abs(cellX(puppet.to) - cellX(puppet.from)) >= Math.abs(cellY(puppet.to) - cellY(puppet.from));
+        record.addSplat({ layer: FLOOR_LAYER, x: Math.round(x + TILE / 2) - (across ? 2 : 0), y: Math.round(y + TILE - 5) - (across ? 0 : 2), w: across ? 4 + Math.floor(Math.random() * 3) : 1, h: across ? 1 : 4 + Math.floor(Math.random() * 3), rgb: shadeOf(bloodRgb(puppet.kind), 0.7) });
+      }
     }
     if (puppet.poisoned && chance(3)) {
       fx.burst(x + 4 + Math.random() * 8, y + 6, now, { count: 1, colors: ICHOR, speed: [1, 4], life: [500, 900], rise: 10, drag: 0.5, size: [1, 1], spread: 0 });
