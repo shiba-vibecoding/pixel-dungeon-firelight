@@ -290,6 +290,7 @@ const mapControlsActions = {
     cam.toggleOverview(world && me ? boxOf(exploredCells(world, me.depth), WIDTH, TILE) : null);
   },
   home: () => cam.recentre(),
+  photo: () => openPhoto(),
   attack: () => {
     const world = session?.world;
     const me = world && heroById(world, session!.myId);
