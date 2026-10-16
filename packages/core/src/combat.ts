@@ -22,7 +22,6 @@ import { F, hasFlag, T } from './level/terrain';
 import { mobPress } from './traps';
 import { isBossDepth } from './level/builder';
 import { underChallenges } from './challenges';
-import { arenaKill } from './arena';
 
 /*
  * Melee combat as in Char.attack: an accuracy roll against an evasion roll,
@@ -366,7 +365,6 @@ function mobDied(ctx: Ctx, mob: Mob, by?: string): void {
     return;
   }
   sacrifice(ctx, mob);
-  arenaKill(ctx, mob);
 
   // Everyone fighting on the depth learns from the kill, not just the killer.
   const stats = mobStats(mob);
@@ -415,8 +413,7 @@ function mobDied(ctx: Ctx, mob: Mob, by?: string): void {
     // Goo, Tengu, DM-300 and the King drop a skeleton key for the locked way down; Yog's fall opens it.
     if (mob.kind === 'yog') {
       if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
-    } else if (!ctx.world.arena) {
-      // (The arena has no locked way down for it to open.)
+    } else {
       dropItem(ctx.floor, mob.pos, { ...createItem('key.skeleton'), depth: ctx.depth });
     }
     ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'death' });

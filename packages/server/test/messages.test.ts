@@ -25,11 +25,9 @@ describe('client messages', () => {
     expect(sanitizeAction({ type: 'beacon', item: 5, mode: 'return' })).toEqual({ type: 'beacon', item: 5, mode: 'return' });
     expect(sanitizeAction({ type: 'reward', choice: 'weapon' })).toEqual({ type: 'reward', choice: 'weapon' });
     expect(sanitizeAction({ type: 'wandReward', choice: 'utility' })).toEqual({ type: 'wandReward', choice: 'utility' });
-    // The arena of waves: ready for the next wave, and one of three rewards.
-    expect(sanitizeAction({ type: 'arenaReady', wave: 99 })).toEqual({ type: 'arenaReady' });
-    expect(sanitizeAction({ type: 'arenaReady', cancel: true })).toEqual({ type: 'arenaReady', cancel: true });
-    expect(sanitizeAction({ type: 'arenaReady', cancel: 'yes' })).toEqual({ type: 'arenaReady' });
-    expect(sanitizeAction({ type: 'arenaPick', choice: 2, item: { kind: 'scroll.upgrade' } })).toEqual({ type: 'arenaPick', choice: 2 });
+    // The arena of waves is gone: its two actions are not actions of the rules any more.
+    expect(sanitizeAction({ type: 'arenaReady' })).toBeNull();
+    expect(sanitizeAction({ type: 'arenaPick', choice: 1 })).toBeNull();
     // The two steps of reading a scroll the party did not know.
     expect(sanitizeAction({ type: 'scrollTarget', on: 4, junk: 1 })).toEqual({ type: 'scrollTarget', on: 4 });
     expect(sanitizeAction({ type: 'scrollTarget', on: 'ring1' })).toEqual({ type: 'scrollTarget', on: 'ring1' });
@@ -46,7 +44,6 @@ describe('client messages', () => {
       { type: 'reforge', first: 'helmet', second: 1 }, { type: 'master', item: 1, subclass: 'pirate' },
       { type: 'balance', item: 1, imbue: 'luck' }, { type: 'special', target: null }, { type: 'beacon', item: 1, mode: 'go' },
       { type: 'scrollTarget' }, { type: 'scrollTarget', on: 'boots' }, { type: 'scrollTarget', on: 1000 }, { type: 'scrollTarget', on: -1 },
-      { type: 'arenaPick' }, { type: 'arenaPick', choice: 3 }, { type: 'arenaPick', choice: -1 }, { type: 'arenaPick', choice: '1' },
     ]) {
       expect(sanitizeAction(bad), JSON.stringify(bad)).toBeNull();
     }

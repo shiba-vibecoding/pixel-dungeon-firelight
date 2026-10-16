@@ -52,6 +52,26 @@ export function startSeason(storage: Keep): boolean {
   }
 }
 
+/**
+ * What the arena of waves kept on a device: its run (a save of a mode the game no longer has), its best wave and its setting.
+ * Forgotten on every launch, quietly; nothing reads them any more.
+ */
+const ARENA_KEYS = ['pd-arena', 'pd-arena-best', 'pd-live-arena'];
+
+export function forgetArena(storage: Pick<Keep, 'removeItem'>): void {
+  try {
+    for (const key of ARENA_KEYS) storage.removeItem(key);
+  } catch {
+    // Storage blocked: nothing was kept either.
+  }
+}
+
+try {
+  if (typeof localStorage !== 'undefined') forgetArena(localStorage);
+} catch {
+  // Merely looking at the storage was refused.
+}
+
 /** The device was cleared at this launch (the news window may say so). */
 export const seasonStarted: boolean = (() => {
   try {

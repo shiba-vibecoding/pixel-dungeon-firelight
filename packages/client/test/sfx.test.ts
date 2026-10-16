@@ -92,7 +92,7 @@ describe('the sounds', () => {
   });
 
   it('come out the same every time, on every device', () => {
-    for (const name of ['roar', 'crowd', 'crackle', 'hit', 'shatter'] as const) {
+    for (const name of ['roar', 'crackle', 'hit', 'shatter'] as const) {
       const a = renderSfx(SFX[name], 44100, seedOf(name));
       const b = renderSfx(SFX[name], 44100, seedOf(name));
       expect(Array.from(a)).toEqual(Array.from(b));

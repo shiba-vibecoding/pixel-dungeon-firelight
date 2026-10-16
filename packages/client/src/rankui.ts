@@ -14,16 +14,15 @@ import { type RankIcon, rankIcon, trophyKind } from './trophyicons';
 
 /*
  * The boards of checked runs (the server's player.ts): the day's daily dungeon, the week's
- * best, the arena's week, the best ever, and the player's own runs and trophies; the player's
+ * best, the best ever, and the player's own runs and trophies; the player's
  * card on the title (the streak, the best, the trophies); and the end of a run's places as
  * the server scored it. Markup after the design system's Ranked cards (v16, migration.md).
  */
 
-type Tab = 'daily' | 'week' | 'arena' | 'all' | 'device';
-/** The arena of waves is no longer offered: its boards are not shown. */
+type Tab = 'daily' | 'week' | 'all' | 'device';
 const TABS: readonly Tab[] = ['daily', 'week', 'all', 'device'];
 /** The icon of each board's note and of its places 1–3. */
-const BOARD_ICON: Partial<Record<string, RankIcon>> = { daily: 'gold', week: 'week', arena: 'arena' };
+const BOARD_ICON: Partial<Record<string, RankIcon>> = { daily: 'gold', week: 'week' };
 
 const number = (n: number): string => n.toLocaleString(locale);
 
@@ -87,9 +86,8 @@ function row(place: number | null, entry: RowEntry, detail: Array<string | Node>
   return { node, dispose: () => card.dispose() };
 }
 
-/** «Warrior · lv.22 · ⛶24», the depth as its icon; in the arena «Warrior · wave 23». */
-function detail(heroClass: BoardEntry['heroClass'], level: number, depth: number, arena: boolean, won = false): Array<string | Node> {
-  if (arena) return [`${t.classes[heroClass]} · ${t.arena.waveWord(depth)}`];
+/** «Warrior · lv.22 · ⛶24», the depth as its icon. */
+function detail(heroClass: BoardEntry['heroClass'], level: number, depth: number, won = false): Array<string | Node> {
   return [`${t.classes[heroClass]} · ${t.ranked.lv}${level} · `, el('i', { className: 'pd-rank-depth' }), `${depth}${won ? ' · ★' : ''}`];
 }
 
@@ -100,11 +98,11 @@ const EAGER_ROWS = 12;
  * A board as rows, then (stuck to the bottom) my row if it is further down, and my place. Given the element that scrolls it, a long
  * board mounts only the rows on screen; `onList` gets the list, so that it can be stopped when the board is left.
  */
-export function boardRows(board: BoardView | null, arena: boolean, scroller?: HTMLElement, onList?: (list: VirtualList) => void): HTMLElement[] {
+export function boardRows(board: BoardView | null, scroller?: HTMLElement, onList?: (list: VirtualList) => void): HTMLElement[] {
   if (!board) return [info(t.boardOffline, 'pd-note center')];
   const make = (i: number): RowNode => {
     const entry = board.top[i]!;
-    return row(i + 1, entry, detail(entry.heroClass, entry.level, entry.depth, arena, entry.won), i + 1 === board.rank, i < 3);
+    return row(i + 1, entry, detail(entry.heroClass, entry.level, entry.depth, entry.won), i + 1 === board.rank, i < 3);
   };
   let list: HTMLElement;
   if (scroller && board.top.length > EAGER_ROWS) {
@@ -122,7 +120,7 @@ export function boardRows(board: BoardView | null, arena: boolean, scroller?: HT
         'div',
         { className: 'pd-ranks-me' },
         below ? el('div', { className: 'pd-ranks-gap', textContent: '· · ·' }) : null,
-        below ? row(board.rank, board.you!, detail(board.you!.heroClass, board.you!.level, board.you!.depth, arena, board.you!.won), true).node : null,
+        below ? row(board.rank, board.you!, detail(board.you!.heroClass, board.you!.level, board.you!.depth, board.you!.won), true).node : null,
         el('div', { className: 'pd-board-place', textContent: t.ranked.placeOf(board.rank, board.total ?? board.rank) }),
       ),
     );
@@ -155,14 +153,13 @@ function mineRows(records: readonly RunRecord[], trophies: Profile['trophies']):
   }
   const list = el('div', { className: 'pd-ranks mine' });
   for (const record of records) {
-    const arena = record.mode === 'arena';
     const what = record.won ? '' : record.cause ? ` · ${record.cause}` : '';
     // A run the server did not check (played before checked runs, or without the server) is on no board: it says so.
     const unranked = record.checked ? '' : ` · ${t.ranked.offBoard}`;
     // The device's own runs are this player's: their hero as they wear it now.
     const mine = myLook(record.heroClass);
     const w: BoardWorn = { ...(record.armor !== undefined ? { a: record.armor } : {}), ...(mine.l ? { l: mine.l } : {}), ...(mine.h ? { h: mine.h } : {}), ...(mine.p ? { p: mine.p } : {}), ...(mine.f ? { f: mine.f } : {}), ...(mine.fr ? { fr: mine.fr } : {}) };
-    const mineRow = row(null, { ...record, w: { ...w, ...(cosmetics.nameColor ? { nc: cosmetics.nameColor.id } : {}), ...(cosmetics.title ? { tt: cosmetics.title.id } : {}) } }, [`${shortDate(record.date)} · `, ...detail(record.heroClass, record.lvl, record.depth, arena, record.won), unranked, what], false);
+    const mineRow = row(null, { ...record, w: { ...w, ...(cosmetics.nameColor ? { nc: cosmetics.nameColor.id } : {}), ...(cosmetics.title ? { tt: cosmetics.title.id } : {}) } }, [`${shortDate(record.date)} · `, ...detail(record.heroClass, record.lvl, record.depth, record.won), unranked, what], false);
     list.append(mineRow.node);
   }
   nodes.push(list);
@@ -197,7 +194,7 @@ export function showBoards(options: BoardsOptions): void {
     const icon = BOARD_ICON[tab];
     note.replaceChildren(...(icon ? [rankIcon(icon)] : []), options.api ? t.ranked.tabInfo[tab] ?? '' : t.ranked.telegramOnly);
     if (tab === 'device' || !options.api) {
-      body.replaceChildren(...mineRows(options.device.filter((record) => record.mode !== 'arena'), (options.trophies ?? []).filter((trophy) => !trophy.board.startsWith('arena:'))));
+      body.replaceChildren(...mineRows(options.device, options.trophies ?? []));
       sprites(body);
       return;
     }
@@ -205,7 +202,7 @@ export function showBoards(options: BoardsOptions): void {
     if (!cache.has(tab)) cache.set(tab, options.api.board(tab as BoardKind));
     void cache.get(tab)!.then((board) => {
       if (current !== tab) return;
-      body.replaceChildren(...boardRows(board, tab === 'arena', body, (list) => { listing = list; }));
+      body.replaceChildren(...boardRows(board, body, (list) => { listing = list; }));
       sprites(body);
     });
   };

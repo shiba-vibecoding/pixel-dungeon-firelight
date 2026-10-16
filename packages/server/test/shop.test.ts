@@ -509,17 +509,16 @@ describe('the season pass', () => {
   });
 
   it('gives XP for depth, kills, a win and the daily dungeon; none for a run that does not rank; never more than the cap', () => {
-    const run = { mode: 'dungeon' as const, daily: false, ranked: true, depth: 5, kills: 30, won: false };
+    const run = { daily: false, ranked: true, depth: 5, kills: 30, won: false };
     expect(runXp(run)).toBe(15 + 30 + 15);
     expect(runXp({ ...run, daily: true })).toBe(60 + 60);
     expect(runXp({ ...run, daily: true, won: true, depth: 26, kills: 500 })).toBe(RUN_XP_CAP);
     expect(runXp({ ...run, ranked: false })).toBe(0);
-    expect(runXp({ ...run, mode: 'arena', depth: 10, kills: 30 })).toBe(10 + 80 + 10);
     expect(runXp({ ...run, depth: -3, kills: -5 })).toBe(15);
   });
 
   it('counts a run once, whoever tells it, and stops at the day’s cap', () => {
-    const run = { id: 'r1', mode: 'dungeon' as const, daily: false, ranked: true, depth: 5, kills: 30, won: false };
+    const run = { id: 'r1', daily: false, ranked: true, depth: 5, kills: 30, won: false };
     const first = awardRun(undefined, 3, run, '2026-10-16');
     expect(first.added).toBe(60);
     const again = awardRun(first.progress, 3, run, '2026-10-16');

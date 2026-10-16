@@ -73,7 +73,7 @@ export const GUIDE_EN = {
     {
       id: 'score',
       title: 'The score',
-      text: 'Your score is the gold you collected, spent or not, plus your level × the deepest depth you reached × 100; gold from selling items does not count. A win doubles it: take the Amulet of Yendor from depth 26, then end the run or carry it out of the dungeon. Each challenge on adds a quarter on top: ×1.25 for one, up to ×2.75 for all seven. Only runs the server has checked reach the boards. The Wave arena scores 100 per wave cleared, 5 per monster slain and 10 per level.',
+      text: 'Your score is the gold you collected, spent or not, plus your level × the deepest depth you reached × 100; gold from selling items does not count. A win doubles it: take the Amulet of Yendor from depth 26, then end the run or carry it out of the dungeon. Each challenge on adds a quarter on top: ×1.25 for one, up to ×2.75 for all seven. Only runs the server has checked reach the boards.',
     },
     {
       id: 'challenges',

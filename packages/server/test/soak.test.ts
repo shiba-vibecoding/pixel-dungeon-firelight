@@ -3,8 +3,7 @@ import { makeSpec, soakRun, softTotal, type Failure, type RunStats } from './soa
 
 /*
  * The stability and replay soak: SOAK=1 npx vitest run soak (SOAK_FROM, SOAK_RUNS pick the specs, SOAK_OUT a file for the
- * failures as JSON). Skipped otherwise; it plays hundreds of whole runs (a spec in ten is the arena of waves; the others
- * are the dungeon, the daily dungeon, with or without challenges and bones). Several processes can share the specs: each takes its own range.
+ * failures as JSON). Skipped otherwise; it plays hundreds of whole runs (the dungeon, the daily dungeon, with or without challenges and bones). Several processes can share the specs: each takes its own range.
  */
 const on = Boolean(process.env.SOAK);
 const from = Number(process.env.SOAK_FROM ?? 0);
