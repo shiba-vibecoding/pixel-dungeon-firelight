@@ -220,6 +220,8 @@ class Fx {
   corpses: Corpse[] = [];
   slashes: Slash[] = [];
   waves: Wave[] = [];
+  /** Bursts of light at a place (a blast, a bolt striking): the 3D view lights the room with them. Position in world pixels, colour as `r, g, b`. */
+  pulses: Array<{ x: number; y: number; color: string; power: number; born: number; life: number }> = [];
   /** The level's map, for where chunks may land. */
   floor: readonly number[] | null = null;
   private shakeUntil = 0;
@@ -468,7 +470,7 @@ class Fx {
     }
   }
 
-  private corpseFade(c: Corpse, now: number): number {
+  corpseFade(c: Corpse, now: number): number {
     const left = c.at + c.life - now;
     return left >= CORPSE_FADE_MS ? 1 : Math.max(0, left / CORPSE_FADE_MS);
   }
@@ -501,6 +503,9 @@ class Fx {
     n = 0;
     for (const w of this.waves) if (now - w.born < w.duration + (w.rings - 1) * w.stagger) this.waves[n++] = w;
     this.waves.length = n;
+    n = 0;
+    for (const p of this.pulses) if (now - p.born < p.life) this.pulses[n++] = p;
+    this.pulses.length = n;
     n = 0;
     for (const s of this.slashes) if (now - s.born < SLASH_MS) this.slashes[n++] = s;
     this.slashes.length = n;
@@ -653,7 +658,14 @@ class Fx {
   }
 
   /** A new depth (or a new world): nothing of the last one stays. */
+  /** A flash of light at (x, y): `power` is how bright (a blast 9), `life` how long it lasts, ms. */
+  pulse(x: number, y: number, now: number, color: string, power: number, life: number): void {
+    this.pulses.push({ x, y, color, power, born: now, life });
+    if (this.pulses.length > 8) this.pulses.shift();
+  }
+
   reset(): void {
+    this.pulses = [];
     this.particles = [];
     this.gibs = [];
     this.decals = [];

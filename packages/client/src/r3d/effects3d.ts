@@ -1,0 +1,624 @@
+/*
+ * Everything that glows, drifts, flashes or lies on the floor in the 3D view, in two batches (one added on, one blended): the kit's
+ * particles of the region and of a boss's arena, the ripples on water, torch halos and the soft blobs under characters, clouds of
+ * gas, and what the 2D game's effects module makes (sparks, smoke, chunks, splats and pools of blood, bodies' pools, blows, the rings
+ * of a scroll's wave, flashes of a blast), which are drawn here in place of its flat canvas: in their place on the floor, hidden by
+ * walls, dark in the dark. Bolts in flight are glow, with a light moving with them (the kit's colours). All of it reads the arrays
+ * the effects module and the view already keep, and writes into arrays made once: nothing is made in the frame.
+ */
+import { CanvasTexture, Color, NearestFilter, SRGBColorSpace, type Scene } from 'three';
+import { HEIGHT, WIDTH } from '@pd/core';
+import { fx } from '../fx';
+import type { View } from '../view';
+import { type Atmosphere, type BoltKit, GLOWING, type Kit, type MistKit, PARTICLE_FRAME, type ParticleType, boltOf, hex } from './kit';
+import { type AirUniforms } from './fogofwar';
+import { K_FLOOR, K_WATER, type LevelGeom } from './levelgeom';
+import { QuadBatch } from './quadbatch';
+import type { SharedImages } from './assets3d';
+
+const TILE = 16;
+const SIZE = 256;
+
+/** Where each picture is in the effects atlas (256 x 256, pixels). */
+const PARTICLES_AT = [0, 0, 96, 8] as const;
+const RIPPLE_AT = [0, 8, 96, 16] as const;
+const SOLID_AT = [0, 24, 8, 8] as const;
+const DOT_AT = [16, 24, 32, 32] as const;
+const RING_AT = [0, 64, 64, 64] as const;
+const MIST_AT = [128, 0, 128, 128] as const;
+
+/** A rectangle of the atlas as (u, v, du, dv) (flipped texture: v runs up). */
+const rect = (at: readonly [number, number, number, number], i = 0, frames = 1): [number, number, number, number] => {
+  const w = at[2] / frames;
+  return [(at[0] + i * w) / SIZE, 1 - (at[1] + at[3]) / SIZE, w / SIZE, at[3] / SIZE];
+};
+
+const UV_SOLID = rect(SOLID_AT);
+const UV_DOT = rect(DOT_AT);
+const UV_RING = rect(RING_AT);
+const UV_MIST = rect(MIST_AT);
+
+/** The effects atlas: the kit's particles and ripples, and a few soft shapes drawn here. */
+export function fxTexture(images: SharedImages): CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = SIZE;
+  const g = canvas.getContext('2d')!;
+  g.drawImage(images.particles, PARTICLES_AT[0], PARTICLES_AT[1]);
+  g.drawImage(images.ripple, RIPPLE_AT[0], RIPPLE_AT[1]);
+  g.fillStyle = '#fff';
+  g.fillRect(SOLID_AT[0], SOLID_AT[1], SOLID_AT[2], SOLID_AT[3]);
+  const radial = (at: readonly [number, number, number, number], stops: ReadonlyArray<readonly [number, string]>): void => {
+    const r = at[2] / 2;
+    const grad = g.createRadialGradient(at[0] + r, at[1] + r, 0, at[0] + r, at[1] + r, r);
+    for (const [k, c] of stops) grad.addColorStop(k, c);
+    g.fillStyle = grad;
+    g.fillRect(at[0], at[1], at[2], at[3]);
+  };
+  radial(DOT_AT, [[0, 'rgba(255,255,255,1)'], [0.3, 'rgba(255,255,255,0.55)'], [1, 'rgba(255,255,255,0)']]);
+  radial(MIST_AT, [[0, 'rgba(255,255,255,0.9)'], [0.5, 'rgba(255,255,255,0.35)'], [1, 'rgba(255,255,255,0)']]);
+  // The ring of a wave: thin, a little soft on both sides.
+  const rc = RING_AT[2] / 2;
+  const ring = g.createRadialGradient(RING_AT[0] + rc, RING_AT[1] + rc, rc * 0.7, RING_AT[0] + rc, RING_AT[1] + rc, rc);
+  ring.addColorStop(0, 'rgba(255,255,255,0)');
+  ring.addColorStop(0.55, 'rgba(255,255,255,1)');
+  ring.addColorStop(0.8, 'rgba(255,255,255,0.6)');
+  ring.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = ring;
+  g.fillRect(RING_AT[0], RING_AT[1], RING_AT[2], RING_AT[3]);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  texture.magFilter = texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+const lin = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+
+/** A colour as the game writes it ('#rrggbb', 'rgb(...)', 'rgba(...)' or 'r, g, b') as linear red, green, blue and alpha. */
+const parsed = new Map<string, Float32Array>();
+export function parseCss(css: string): Float32Array {
+  let c = parsed.get(css);
+  if (c) return c;
+  c = new Float32Array([1, 1, 1, 1]);
+  let r = 255, g = 255, b = 255, a = 1;
+  if (css.startsWith('#')) {
+    const v = css.length === 4 ? css.slice(1).split('').map((d) => parseInt(d + d, 16)) : [1, 3, 5].map((i) => parseInt(css.slice(i, i + 2), 16));
+    [r, g, b] = [v[0]!, v[1]!, v[2]!];
+  } else {
+    const nums = css.replace(/rgba?\(/, '').replace(')', '').split(',').map((n) => parseFloat(n));
+    if (nums.length >= 3 && nums.every((n) => Number.isFinite(n))) [r, g, b, a] = [nums[0]!, nums[1]!, nums[2]!, nums[3] ?? 1];
+  }
+  c[0] = lin(r / 255); c[1] = lin(g / 255); c[2] = lin(b / 255); c[3] = a;
+  parsed.set(css, c);
+  return c;
+}
+
+/** What the effects know of the frame. */
+export interface FxContext {
+  now: number;
+  dt: number;
+  /** The hero's cell, in cells (x, z) and the cell it is in. */
+  hx: number;
+  hz: number;
+  visible: readonly boolean[];
+  explored: readonly boolean[];
+  view: View;
+  /** Clouds of gas on the floor: the cell, how much there is, and the colour as 'r, g, b'. */
+  gas: ReadonlyArray<{ pos: number; volume: number; color: string }> | undefined;
+  /** A boss in sight and where (cells), or none. */
+  bossFound: boolean;
+  bossX: number;
+  bossZ: number;
+}
+
+/** The light that moves with a bolt or a blast this frame, for the scene's one dynamic light. */
+export interface Dynamic {
+  on: boolean;
+  x: number;
+  y: number;
+  z: number;
+  color: number;
+  intensity: number;
+  distance: number;
+}
+
+/** How each kind of the kit's particle lives: its life (s), where it starts (height), its rise and drift (cells a second), size and look. */
+interface Behaviour {
+  life: [number, number];
+  y: [number, number];
+  rise: number;
+  fall: number;
+  drift: number;
+  size: [number, number];
+  alpha: number;
+  /** Grows by this share over its life. */
+  grow: number;
+}
+
+const BEHAVE: Record<Exclude<ParticleType, 'haze'>, Behaviour> = {
+  drip: { life: [0.9, 1.3], y: [1.3, 1.45], rise: 0, fall: 0, drift: 0, size: [0.16, 0.2], alpha: 0.85, grow: 0 },
+  mist: { life: [4, 7], y: [0.15, 0.4], rise: 0.01, fall: 0, drift: 0.14, size: [1.3, 2.0], alpha: 0.16, grow: 0.4 },
+  dust: { life: [4, 8], y: [0.3, 1.6], rise: 0.02, fall: 0, drift: 0.09, size: [0.11, 0.16], alpha: 0.6, grow: 0 },
+  ember: { life: [1.6, 3], y: [0.1, 0.4], rise: 0.6, fall: 0, drift: 0.16, size: [0.13, 0.19], alpha: 1, grow: -0.3 },
+  ash: { life: [3, 5], y: [1.8, 2.4], rise: 0, fall: 0.35, drift: 0.1, size: [0.13, 0.19], alpha: 0.75, grow: 0 },
+  spore: { life: [3, 5], y: [0.2, 0.5], rise: 0.28, fall: 0, drift: 0.1, size: [0.15, 0.21], alpha: 1, grow: 0 },
+  steam: { life: [1.4, 2.2], y: [0.3, 0.6], rise: 0.55, fall: 0, drift: 0.12, size: [0.3, 0.45], alpha: 0.35, grow: 1.2 },
+  spark: { life: [0.5, 0.9], y: [0.3, 0.8], rise: 0.2, fall: 1.6, drift: 1.4, size: [0.1, 0.14], alpha: 1, grow: -0.5 },
+  bubble: { life: [1.2, 2], y: [0.02, 0.05], rise: 0.14, fall: 0, drift: 0.04, size: [0.2, 0.28], alpha: 0.75, grow: 0.2 },
+  magic: { life: [1.5, 2.5], y: [0.2, 0.6], rise: 0.3, fall: 0, drift: 0.0, size: [0.16, 0.22], alpha: 1, grow: 0 },
+  fly: { life: [5, 9], y: [0.4, 1.0], rise: 0, fall: 0, drift: 0.0, size: [0.09, 0.12], alpha: 0.95, grow: 0 },
+  smoke: { life: [2, 3.5], y: [0.25, 0.5], rise: 0.35, fall: 0, drift: 0.1, size: [0.3, 0.4], alpha: 0.3, grow: 1.1 },
+};
+
+/** The types in the order their numbers go. */
+const TYPES = Object.keys(PARTICLE_FRAME) as Array<Exclude<ParticleType, 'haze'>>;
+const CAP = 160;
+const RIPPLES = 10;
+const RIPPLE_MS = 1100;
+/** Where a gas cloud's puffs are at most drawn: more would only be fill. */
+const GAS_PUFFS = 48;
+/** The most chunks and splats left on the floor that are drawn. */
+const STAINS = 260;
+
+/** Per type, the mean life, so the spawn rate keeps the room as full as the kit says. */
+const MEAN_LIFE = (b: Behaviour): number => (b.life[0] + b.life[1]) / 2;
+
+export class Effects3D {
+  /** Blended (smoke, shade, blood, gas) and added (light, sparks, flames): one draw each. */
+  readonly soft: QuadBatch;
+  readonly glow: QuadBatch;
+  readonly texture: CanvasTexture;
+  private geom: LevelGeom | null = null;
+  private region = 0;
+  /** The region's and the arena's particles, with their colours and the rate each is made at. */
+  private kinds: Array<{ type: number; rgb: Float32Array; rate: number; glow: boolean; accrued: number }> = [];
+  private readonly lamp = new Color();
+  private particlesOn = true;
+
+  // The kit's particles, one record each in these arrays.
+  private readonly pType = new Uint8Array(CAP);
+  private readonly pAlive = new Uint8Array(CAP);
+  private readonly px = new Float32Array(CAP);
+  private readonly py = new Float32Array(CAP);
+  private readonly pz = new Float32Array(CAP);
+  private readonly pvx = new Float32Array(CAP);
+  private readonly pvz = new Float32Array(CAP);
+  private readonly pAge = new Float32Array(CAP);
+  private readonly pLife = new Float32Array(CAP);
+  private readonly pSize = new Float32Array(CAP);
+  private readonly pKind = new Uint8Array(CAP);
+  /** An orbiting particle's centre. */
+  private readonly pcx = new Float32Array(CAP);
+  private readonly pcz = new Float32Array(CAP);
+
+  // Ripples on the water.
+  private readonly rx = new Float32Array(RIPPLES);
+  private readonly rz = new Float32Array(RIPPLES);
+  private readonly rBorn = new Float64Array(RIPPLES).fill(-1e9);
+  private rippleAccrued = 0;
+  private waterRipple: Float32Array = new Float32Array([1, 1, 1]);
+  private hasWater = false;
+
+  private bolt: BoltKit | null = null;
+  private kitRef: Kit | null = null;
+  /** The light moving with a bolt or a blast. */
+  readonly dynamic: Dynamic = { on: false, x: 0, y: 0, z: 0, color: 0xffffff, intensity: 0, distance: 4 };
+
+  constructor(scene: Scene, air: AirUniforms, images: SharedImages) {
+    this.texture = fxTexture(images);
+    this.soft = new QuadBatch({ capacity: 640, texture: this.texture, additive: false, fog: air.tFog, renderOrder: 2 });
+    this.glow = new QuadBatch({ capacity: 420, texture: this.texture, additive: true, fog: air.tFog, renderOrder: 4 });
+    scene.add(this.soft.mesh, this.glow.mesh);
+  }
+
+  /** A level's air: the particles of its region (and of a boss's arena), its water's ripple colour. */
+  configure(kit: Kit, a: Atmosphere, geom: LevelGeom, region: number, quality: { particles: boolean }): void {
+    this.geom = geom;
+    this.region = region;
+    this.kitRef = kit;
+    this.particlesOn = quality.particles;
+    this.kinds = [];
+    for (const p of a.particles) {
+      if (p.type === 'haze') continue;
+      const type = TYPES.indexOf(p.type);
+      if (type < 0) continue;
+      // `rate` is how many the kit has about the room at once; the spawn rate keeps that many alive.
+      const b = BEHAVE[p.type];
+      this.kinds.push({ type, rgb: parseCss(p.color), rate: (p.rate * 16) / MEAN_LIFE(b), glow: GLOWING.has(p.type), accrued: 0 });
+    }
+    this.pAlive.fill(0);
+    this.rBorn.fill(-1e9);
+    this.waterRipple = parseCss(a.region.water.ripple);
+    this.hasWater = false;
+    for (let i = 0; i < geom.kinds.length && !this.hasWater; i++) this.hasWater = geom.kinds[i] === K_WATER;
+  }
+
+  setParticles(on: boolean): void {
+    this.particlesOn = on;
+  }
+
+  private mist: { rgb: Float32Array; density: number; height: number } | null = null;
+
+  /** The region's mist: a few big soft wisps over the floor near the hero (the kit's low layer of noise, kept off the whole screen). */
+  setMist(mist: MistKit | null): void {
+    this.mist = mist ? { rgb: parseCss(mist.color), density: mist.density, height: mist.height } : null;
+  }
+
+  private wisps(c: FxContext): void {
+    const mist = this.mist;
+    if (!mist) return;
+    const t = c.now / 1000;
+    for (let i = 0; i < 6; i++) {
+      const size = 3.6 + (i % 3) * 1.0;
+      const x = c.hx + Math.sin(t * 0.07 + i * 1.9) * 3.8;
+      const z = c.hz + Math.cos(t * 0.06 + i * 2.3) * 3.4;
+      this.soft.flat(x, mist.height * (0.5 + 0.12 * i), z, size, size * 0.8, t * 0.01 + i, UV_MIST[0], UV_MIST[1], UV_MIST[2], UV_MIST[3], mist.rgb[0]!, mist.rgb[1]!, mist.rgb[2]!, mist.density * 0.7);
+    }
+  }
+
+  /** A blob of shade under a character or an item, `size` cells wide. */
+  shadowBlob(x: number, z: number, size: number): void {
+    this.soft.flat(x, 0.02, z, size, size * 0.7, 0, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], 0.01, 0.012, 0.03, 0.5);
+  }
+
+  /** The halo round a torch's flame. */
+  halo(x: number, y: number, z: number, color: Float32Array, size: number, strength: number): void {
+    this.glow.billboard(x, y, z, size, size, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], color[0]! * strength, color[1]! * strength, color[2]! * strength, 0.9);
+  }
+
+  private open(cell: number): boolean {
+    const k = this.geom!.kinds[cell];
+    return k === K_FLOOR || k === K_WATER;
+  }
+
+  /** Picks a place for a new particle of a kind near the hero (or the boss), or none; tries a few cells, never searches. */
+  private place(type: Exclude<ParticleType, 'haze'>, c: FxContext, out: Float32Array): boolean {
+    const geom = this.geom!;
+    const boss = c.bossFound && (type === 'steam' || type === 'spark' || type === 'magic' || (type === 'smoke' && c.bossFound));
+    for (let tries = 0; tries < 8; tries++) {
+      const cx = Math.floor((boss ? c.bossX : c.hx) + (Math.random() * 2 - 1) * (boss ? 2.2 : 7));
+      const cz = Math.floor((boss ? c.bossZ : c.hz) + (Math.random() * 2 - 1) * (boss ? 2.2 : 7));
+      if (cx < 1 || cz < 1 || cx >= WIDTH - 1 || cz >= HEIGHT - 1) continue;
+      const cell = cx + cz * WIDTH;
+      if (!c.visible[cell] || !this.open(cell)) continue;
+      const kind = geom.kinds[cell]!;
+      if (type === 'drip' && geom.kinds[cell - WIDTH] !== 1) continue;
+      if (type === 'bubble' && kind !== K_WATER) continue;
+      if (type === 'mist' && tries < 5 && kind !== K_WATER) continue;
+      if (type === 'spore' && tries < 6 && geom.terrain[cell] !== 15) continue;
+      if (type === 'ember' && tries < 5 && geom.terrain[cell] !== 9 && geom.terrain[cell] !== 2 && kind !== K_WATER) continue;
+      if (type === 'fly' && tries < 6 && geom.terrain[cell] !== 2 && geom.terrain[cell] !== 15) continue;
+      out[0] = cx + Math.random();
+      out[1] = cz + (type === 'drip' ? 0.15 : Math.random());
+      return true;
+    }
+    return false;
+  }
+
+  private readonly spot = new Float32Array(2);
+
+  private spawn(kindIndex: number, c: FxContext): void {
+    const kind = this.kinds[kindIndex]!;
+    const name = TYPES[kind.type]!;
+    if (!this.place(name, c, this.spot)) return;
+    let i = -1;
+    for (let k = 0; k < CAP; k++) if (!this.pAlive[k]) { i = k; break; }
+    if (i < 0) return;
+    const b = BEHAVE[name];
+    const x = this.spot[0]!;
+    const z = this.spot[1]!;
+    this.pAlive[i] = 1;
+    this.pType[i] = kind.type;
+    this.pKind[i] = kindIndex;
+    this.px[i] = x;
+    this.pz[i] = z;
+    this.py[i] = b.y[0] + Math.random() * (b.y[1] - b.y[0]);
+    this.pAge[i] = 0;
+    this.pLife[i] = b.life[0] + Math.random() * (b.life[1] - b.life[0]);
+    this.pSize[i] = b.size[0] + Math.random() * (b.size[1] - b.size[0]);
+    const a = Math.random() * 6.2832;
+    this.pvx[i] = Math.cos(a) * b.drift * (0.4 + Math.random() * 0.6);
+    this.pvz[i] = Math.sin(a) * b.drift * (0.4 + Math.random() * 0.6);
+    this.pcx[i] = x;
+    this.pcz[i] = z;
+  }
+
+  /** Moves the particles on and draws them. */
+  private particles(c: FxContext): void {
+    const dt = Math.min(0.1, c.dt / 1000);
+    for (let k = 0; k < this.kinds.length; k++) {
+      const kind = this.kinds[k]!;
+      kind.accrued += kind.rate * dt;
+      while (kind.accrued >= 1) {
+        kind.accrued -= 1;
+        this.spawn(k, c);
+      }
+    }
+    const t = c.now / 1000;
+    for (let i = 0; i < CAP; i++) {
+      if (!this.pAlive[i]) continue;
+      const name = TYPES[this.pType[i]!]!;
+      const b = BEHAVE[name];
+      const age = (this.pAge[i]! += dt);
+      const life = this.pLife[i]!;
+      if (age >= life) {
+        this.pAlive[i] = 0;
+        continue;
+      }
+      const k = age / life;
+      if (name === 'drip') {
+        // Falls from the ceiling and breaks on the floor: a ring on water.
+        const fall = 6 * age * age * 0.5;
+        const y = (b.y[0] + 0.1) - fall;
+        this.py[i] = y;
+        if (y <= 0.03) {
+          if (this.geom!.kinds[Math.floor(this.px[i]!) + Math.floor(this.pz[i]!) * WIDTH] === K_WATER) this.ripple(this.px[i]!, this.pz[i]!, c.now);
+          this.pAlive[i] = 0;
+          continue;
+        }
+      } else if (name === 'magic' && c.bossFound) {
+        const a = t * 2.2 + i * 1.7;
+        this.px[i] = c.bossX + Math.cos(a) * 0.9;
+        this.pz[i] = c.bossZ + Math.sin(a) * 0.9;
+        this.py[i]! += b.rise * dt;
+      } else if (name === 'fly') {
+        const a = t * 2.4 + i * 2.3;
+        this.px[i] = this.pcx[i]! + Math.cos(a) * 0.45 + Math.sin(a * 0.37) * 0.2;
+        this.pz[i] = this.pcz[i]! + Math.sin(a * 1.3) * 0.35;
+        this.py[i] = 0.55 + Math.sin(a * 0.7) * 0.18;
+      } else {
+        this.px[i]! += this.pvx[i]! * dt;
+        this.pz[i]! += this.pvz[i]! * dt;
+        this.py[i]! += (b.rise - b.fall * (name === 'spark' ? k * 2 : 1)) * dt;
+        if (name === 'bubble' && this.py[i]! > 0.06) this.py[i] = 0.06;
+        if (name === 'dust' || name === 'mist' || name === 'ash') {
+          this.pvx[i]! += (Math.random() - 0.5) * 0.05 * dt * 10;
+          this.pvz[i]! += (Math.random() - 0.5) * 0.05 * dt * 10;
+        }
+      }
+      const x = this.px[i]!;
+      const z = this.pz[i]!;
+      const cell = Math.floor(x) + Math.floor(z) * WIDTH;
+      if (!c.visible[cell]) continue;
+      const fade = k < 0.15 ? k / 0.15 : k > 0.65 ? (1 - k) / 0.35 : 1;
+      const grow = 1 + b.grow * k;
+      const size = this.pSize[i]! * grow;
+      const kind = this.kinds[this.pKind[i]!]!;
+      const rgb = kind.rgb;
+      const flick = kind.glow ? 0.75 + 0.25 * Math.sin(t * 17 + i * 3.1) : 1;
+      if (name === 'mist') {
+        this.soft.flat(x, this.py[i]!, z, size, size * 0.8, 0, UV_MIST[0], UV_MIST[1], UV_MIST[2], UV_MIST[3], rgb[0]!, rgb[1]!, rgb[2]!, b.alpha * fade);
+        continue;
+      }
+      const uv = PARTICLE_UV[this.pType[i]!]!;
+      const batch = kind.glow ? this.glow : this.soft;
+      batch.billboard(x, this.py[i]!, z, size, size, uv[0]!, uv[1]!, uv[2]!, uv[3]!, rgb[0]! * (kind.glow ? 1.6 : 1) * flick, rgb[1]! * (kind.glow ? 1.6 : 1) * flick, rgb[2]! * (kind.glow ? 1.6 : 1) * flick, b.alpha * fade);
+    }
+  }
+
+  private ripple(x: number, z: number, now: number): void {
+    let slot = 0;
+    let oldest = Infinity;
+    for (let i = 0; i < RIPPLES; i++) {
+      if (this.rBorn[i]! < oldest) { oldest = this.rBorn[i]!; slot = i; }
+    }
+    this.rx[slot] = x;
+    this.rz[slot] = z;
+    this.rBorn[slot] = now;
+  }
+
+  private ripples(c: FxContext): void {
+    if (this.hasWater && this.particlesOn) {
+      this.rippleAccrued += 1.4 * (c.dt / 1000);
+      while (this.rippleAccrued >= 1) {
+        this.rippleAccrued -= 1;
+        for (let tries = 0; tries < 8; tries++) {
+          const cx = Math.floor(c.hx + (Math.random() * 2 - 1) * 6);
+          const cz = Math.floor(c.hz + (Math.random() * 2 - 1) * 6);
+          const cell = cx + cz * WIDTH;
+          if (cx < 0 || cz < 0 || cx >= WIDTH || cz >= HEIGHT || !c.visible[cell] || this.geom!.kinds[cell] !== K_WATER) continue;
+          this.ripple(cx + 0.5, cz + 0.5, c.now);
+          break;
+        }
+      }
+    }
+    const rc = this.waterRipple;
+    for (let i = 0; i < RIPPLES; i++) {
+      const age = c.now - this.rBorn[i]!;
+      if (age < 0 || age >= RIPPLE_MS) continue;
+      const k = age / RIPPLE_MS;
+      const uv = rect(RIPPLE_AT, Math.min(5, Math.floor(k * 6)), 6);
+      this.glow.flat(this.rx[i]!, 0.005, this.rz[i]!, 1, 1, 0, uv[0], uv[1], uv[2], uv[3], rc[0]!, rc[1]!, rc[2]!, 0.7 * (1 - k));
+    }
+  }
+
+  /** The bolts in flight: glow with a trail, the nearest one's light moving with it. */
+  private bolts(c: FxContext, kit: Kit): void {
+    const dyn = this.dynamic;
+    let best = 0;
+    for (const p of c.view.projectiles) {
+      if (p.sprite !== null) continue;
+      const k = Math.min(1, (c.now - p.start) / p.duration);
+      const name = p.bolt ?? 'magic';
+      const bolt = boltOf(kit, name);
+      this.bolt = bolt;
+      const fromX = (p.from % WIDTH) + 0.5;
+      const fromZ = Math.trunc(p.from / WIDTH) + 0.5;
+      const toX = (p.to % WIDTH) + 0.5;
+      const toZ = Math.trunc(p.to / WIDTH) + 0.5;
+      const x = fromX + (toX - fromX) * k;
+      const z = fromZ + (toZ - fromZ) * k;
+      const rgb = parseCss(bolt.color);
+      const aura = parseCss(bolt.light ?? bolt.color);
+      // The head, a wider halo, and a short trail behind it (the beam of a disintegration lies along the whole way).
+      const beam = name === 'beam';
+      const length = Math.hypot(toX - fromX, toZ - fromZ);
+      const steps = beam ? Math.max(2, Math.round(length * k * 2.4)) : 5;
+      for (let s = 0; s < steps; s++) {
+        const back = beam ? (s / steps) * k : (s * 0.045);
+        const kk = Math.max(0, k - back);
+        const fade = beam ? 0.9 - 0.4 * (s / steps) : 1 - s / steps;
+        const bx = fromX + (toX - fromX) * kk;
+        const bz = fromZ + (toZ - fromZ) * kk;
+        const size = (s === 0 ? 0.5 : 0.34) * (beam ? 0.8 : 1);
+        this.glow.billboard(bx, 0.55, bz, size, size, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], rgb[0]! * 2.2, rgb[1]! * 2.2, rgb[2]! * 2.2, fade);
+      }
+      this.glow.billboard(x, 0.55, z, 1.3, 1.3, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], aura[0]!, aura[1]!, aura[2]!, 0.55);
+      // A flash of lightning lights the whole room for the length of its flight.
+      const strength = bolt.light ? bolt.intensity : 0;
+      if (strength > best) {
+        best = strength;
+        dyn.on = true;
+        dyn.x = x; dyn.y = 0.7; dyn.z = z;
+        dyn.color = hex(bolt.light!);
+        dyn.intensity = strength;
+        dyn.distance = bolt.distance;
+      }
+    }
+    // The flash of a blast, a bolt that struck: from the effects module's pulses.
+    for (const p of fx.pulses) {
+      const k = (c.now - p.born) / p.life;
+      if (k < 0 || k >= 1) continue;
+      const rgb = parseCss(p.color);
+      const px = p.x / TILE;
+      const pz = p.y / TILE;
+      const cell = Math.floor(px) + Math.floor(pz) * WIDTH;
+      if (!c.visible[cell]) continue;
+      const power = p.power * (1 - k) * (1 - k);
+      const size = 1 + p.power * 0.28 * Math.sqrt(k);
+      this.glow.billboard(px, 0.5, pz, size, size, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], rgb[0]! * 2.4, rgb[1]! * 2.4, rgb[2]! * 2.4, 1 - k);
+      if (power > best) {
+        best = power;
+        dyn.on = true;
+        dyn.x = px; dyn.y = 0.8; dyn.z = pz;
+        this.lamp.setRGB(rgb[0]!, rgb[1]!, rgb[2]!);
+        dyn.color = this.lamp.getHex();
+        dyn.intensity = power * 1.2;
+        dyn.distance = 6 + p.power * 0.4;
+      }
+    }
+  }
+
+  /** What the effects module keeps: sparks, smoke, chunks, splats, pools, blows, the rings of a wave. */
+  private legacy(c: FxContext): void {
+    const now = c.now;
+    const visible = c.visible;
+    const seen = (x: number, y: number): boolean => visible[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true;
+    // Particles of a burst: little squares of light or smoke, rising a little as they live.
+    for (const p of fx.particles) {
+      if (!seen(p.x, p.y)) continue;
+      const k = (now - p.born) / p.life;
+      if (k < 0 || k >= 1) continue;
+      const rgb = parseCss(p.color);
+      const size = Math.max(0.09, (p.size / TILE) * 1.5);
+      const a = rgb[3]! * (1 - k);
+      if (p.glow) this.glow.billboard(p.x / TILE, 0.3 + 0.5 * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, a);
+      else this.soft.billboard(p.x / TILE, 0.3 + 0.35 * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
+    }
+    // Chunks in the air and on the floor.
+    for (const g of fx.gibs) {
+      if (!seen(g.x, g.y)) continue;
+      const rgb = parseCss(g.color);
+      const size = Math.max(0.1, (Math.max(g.w, g.h) / TILE) * 1.4);
+      const k = Number.isFinite(g.life) ? (now - g.born) / g.life : 0;
+      const height = g.z / TILE;
+      if (g.glow) this.glow.billboard(g.x / TILE, 0.05 + height, g.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, 1 - k);
+      else this.soft.billboard(g.x / TILE, 0.04 + height, g.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, 1);
+    }
+    // Splats and pools of blood, flat on the floor (the newest, up to a few hundred).
+    const decals = fx.decals;
+    for (let i = Math.max(0, decals.length - STAINS); i < decals.length; i++) {
+      const d = decals[i]!;
+      if (!seen(d.x, d.y)) continue;
+      const rgb = parseCss(d.color);
+      const age = now - d.born;
+      const a = age < 14000 ? d.alpha : d.alpha * Math.max(0, 1 - (age - 14000) / 3000);
+      this.soft.flat((d.x + d.w / 2) / TILE, 0.016, (d.y + d.h / 2) / TILE, Math.max(0.07, d.w / TILE), Math.max(0.07, d.h / TILE), 0, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
+    }
+    // The pool that spreads under a body.
+    for (const corpse of fx.corpses) {
+      const pool = corpse.pool;
+      if (!pool || now < pool.start || !seen(pool.cx, pool.cy)) continue;
+      const k = Math.min(1, (now - pool.start) / 1200);
+      const rgb = parseCss(pool.color);
+      const r = (pool.radius / TILE) * (0.3 + 0.7 * k);
+      this.soft.flat(pool.cx / TILE, 0.014, pool.cy / TILE, r * 2, r * 1.6, 0, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], rgb[0]!, rgb[1]!, rgb[2]!, 0.8);
+    }
+    // A blow: a streak of white across the floor.
+    for (const s of fx.slashes) {
+      if (!seen(s.x, s.y)) continue;
+      const k = Math.min(1, (now - s.born) / 130);
+      this.glow.flat(s.x / TILE, 0.5, s.y / TILE, 0.9 * (0.6 + 0.4 * k), 0.12, -Math.atan2(s.sin, s.cos), UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], 1.4, 1.4, 1.4, 1 - k);
+    }
+    // The rings of a scroll's wave: out along the floor, thinning as they go.
+    for (const w of fx.waves) {
+      if (!seen(w.x, w.y)) continue;
+      for (let ring = 0; ring < w.rings; ring++) {
+        const k = (now - w.born - ring * w.stagger) / w.duration;
+        if (k < 0 || k >= 1) continue;
+        const rgb = parseCss(w.colors[ring % w.colors.length]!);
+        const r = (w.radius / TILE) * k;
+        this.glow.flat(w.x / TILE, 0.03, w.y / TILE, r * 2, r * 2, 0, UV_RING[0], UV_RING[1], UV_RING[2], UV_RING[3], rgb[0]! * 1.6, rgb[1]! * 1.6, rgb[2]! * 1.6, 0.85 * (1 - k));
+      }
+    }
+  }
+
+  /** Clouds of gas as soft puffs, tinted by the gas, a little thicker where there is more. */
+  private gas(c: FxContext): void {
+    if (!c.gas) return;
+    let drawn = 0;
+    const t = c.now / 1000;
+    for (const cloud of c.gas) {
+      if (!c.visible[cloud.pos] || drawn >= GAS_PUFFS) continue;
+      const rgb = parseCss(cloud.color);
+      const thick = Math.min(1, 0.25 + cloud.volume / 60);
+      const x = (cloud.pos % WIDTH) + 0.5 + Math.sin(t * 0.7 + cloud.pos) * 0.12;
+      const z = Math.trunc(cloud.pos / WIDTH) + 0.5 + Math.cos(t * 0.6 + cloud.pos * 1.3) * 0.1;
+      this.soft.billboard(x, 0.45 + Math.sin(t * 0.9 + cloud.pos * 0.7) * 0.05, z, 1.8, 1.4, UV_MIST[0], UV_MIST[1], UV_MIST[2], UV_MIST[3], rgb[0]!, rgb[1]!, rgb[2]!, Math.min(0.5, 0.12 + 0.34 * thick));
+      drawn++;
+    }
+  }
+
+  /**
+   * Draws the frame's effects into the two batches, and says what the dynamic light does. The caller has already put the shadows
+   * and halos in (shadowBlob, halo) and calls end().
+   */
+  frame(c: FxContext): void {
+    const kit = this.kitRef;
+    if (!kit || !this.geom) return;
+    this.dynamic.on = false;
+    this.dynamic.intensity = 0;
+    if (this.particlesOn) {
+      this.particles(c);
+      this.wisps(c);
+    }
+    this.ripples(c);
+    this.bolts(c, kit);
+    this.legacy(c);
+    this.gas(c);
+  }
+
+  begin(): void {
+    this.soft.begin();
+    this.glow.begin();
+  }
+
+  end(): void {
+    this.soft.end();
+    this.glow.end();
+  }
+
+  get region3(): number {
+    return this.region;
+  }
+
+  dispose(scene: Scene): void {
+    scene.remove(this.soft.mesh, this.glow.mesh);
+    this.soft.dispose();
+    this.glow.dispose();
+    this.texture.dispose();
+  }
+}
+
+/** The rectangle of each particle's frame in the atlas, by the number of its kind. */
+const PARTICLE_UV: Array<[number, number, number, number]> = TYPES.map((name) => rect(PARTICLES_AT, PARTICLE_FRAME[name], 12));

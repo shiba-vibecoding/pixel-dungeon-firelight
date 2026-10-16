@@ -1,31 +1,39 @@
 /*
- * The new renderer («Новая графика (бета)»): the level as a Three.js diorama under the 2D game's own camera, HD-2D style.
- * A chunk of its own, fetched only when the switch is on (main.ts). Built to a frame budget (4 ms CPU / 8 ms GPU at 60 Hz, half
- * of that at 120), so:
+ * The new renderer («Новая графика (бета)»): the level as a Three.js diorama under the 2D game's own camera, HD-2D style, lit and
+ * dressed from Claude Design's world kit (kit.ts). A chunk of its own, fetched only when the switch is on (main.ts). Built to a
+ * frame budget (2.5 ms CPU, 5 ms GPU at 120 Hz), so:
  *
- *   - the static level is three merged meshes (floor, boxes, water) sharing one tile sheet; changes patch their buffers in place;
- *   - every character, item and flame is one InstancedMesh over one texture atlas, alpha-tested, leaned toward the camera;
- *     their shadows are blobs (one more instanced draw); nothing else casts a shadow but the walls, so shadow maps are drawn
- *     only when a wall or a torch changes (autoUpdate off);
- *   - the fog of war is a 48 x 48 texture read by the vertex shaders: one fetch a vertex, no pass of its own;
+ *   - the static level is a few merged meshes (floor, boxes, water, contact shadows) sharing one atlas of the region's tiles, its
+ *     glow and roughness maps and the wall kit; changes patch their buffers in place;
+ *   - every character, item, flame and prop is one InstancedMesh over one sprite atlas, alpha-tested, leaned toward the camera;
+ *     everything soft (shade, smoke, blood, gas) and everything bright (sparks, halos, ripples, bolts) is one more draw each;
+ *   - nothing but the walls casts a shadow, so shadow maps are drawn only when a wall or a torch changes (autoUpdate off);
+ *   - the fog of war is a 48 x 48 texture read by the vertex shaders, the region's haze is a line in the same shaders: no pass;
  *   - nothing is made in the frame loop: vectors, matrices and records are made once and written in place.
- * What does not come over yet: bolts, gas, explosions and the other canvas effects are drawn flat onto the 2D layer over the scene.
+ * What does not come over: the kit's mirror under water (a second render of the scene; the water is a bright surface that shines
+ * under the lights instead), its bloom, and the haze pass of the demon halls.
  */
 import {
-  AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DataTexture, DoubleSide,
-  DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, LinearFilter, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, NearestFilter, OrthographicCamera, PCFShadowMap, PlaneGeometry, PointLight, Points, PointsMaterial,
-  NeutralToneMapping, RedFormat, RepeatWrapping, Scene, SRGBColorSpace, Texture, UnsignedByteType, WebGLRenderer,
+  AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
+  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
+  PlaneGeometry, RepeatWrapping, Scene, SRGBColorSpace, Texture, WebGLRenderer,
 } from 'three';
-import { HEIGHT, LENGTH, type Level, WIDTH } from '@pd/core';
+import { LENGTH, type Level, WIDTH } from '@pd/core';
 import { type Assets, frameAt, levelRegion } from '../sprites';
 import { sheet as worldSheet } from '../worldsheets';
+import { fx } from '../fx';
 import { knockback, LUNGE_MS } from '../render';
 import { FALL_MS, type Puppet, TILE, type View } from '../view';
-import { CAP_TILE, LevelGeom, type Buffers } from './levelgeom';
-import { FEET_PX, LEAN, LEAN_STRETCH, PITCH, WALL_H, YS } from './project';
+import { ATLAS_H, ATLAS_W, Atlas } from './atlas';
+import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrain, loadKit, loadRegion, propCutout } from './assets3d';
+import { Effects3D, type FxContext, parseCss } from './effects3d';
+import { Fog, makeAir, withFog } from './fogofwar';
+import { type Kit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
+import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
+import { LightRig, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
+import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
 
 /** What a frame draws from: the 2D loop's own data, read in place. */
 export interface Frame3D {
@@ -40,6 +48,7 @@ export interface Frame3D {
   explored: readonly boolean[];
   heaps: ReadonlyArray<{ pos: number; sprite: number }>;
   plants: ReadonlyArray<{ pos: number; index: number }> | undefined;
+  gas: ReadonlyArray<{ pos: number; volume: number; color: string }> | undefined;
   view: View;
   seeAll: boolean;
   /** The hero's middle, world pixels. */
@@ -54,251 +63,51 @@ export interface Shown {
   y: number;
 }
 
-/** The wall's tile in the sheet (T.WALL). */
-const T_WALL = 4;
-const ATLAS_W = 2048;
-const ATLAS_H = 1024;
-const MAX_SPRITES = 160;
-const MAX_BLOBS = 64;
-const SIN_PITCH = Math.sin(PITCH);
-const COS_PITCH = Math.cos(PITCH);
-const SIN_LEAN = Math.sin(LEAN);
-const COS_LEAN = Math.cos(LEAN);
-/** The soft hero light, and the torches: warm. */
-const TORCH_COLOR = 0xff8a3a;
-/** The hero's light is firelight, warm and wide, never white: the warm light the camp fire throws. */
-const HERO_COLOR = 0xffa65a;
-/** A torch light hangs this high and this far out from the wall: its pool lies on the floor in front, not along the foot of the wall. */
-const TORCH_HEIGHT = 1.45;
-const TORCH_OUT = 1.7;
-/** The size a wall sconce is drawn, in tiles (the art is 16 pixels with a little torch in it), and the halo round its flame. */
-const FLAME_SIZE = 1.15;
-const HALO_SIZE = 2.6;
-const MAX_HALOS = 6;
-/** The sky and the ground of the ambient light: cool and dark, so that the warm lights read as warm. */
-const SKY_COLOR = 0xa0aad2;
-const GROUND_COLOR = 0x5e5c7c;
+const MAX_SPRITES = 360;
+const BOSS_KINDS: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
+/** The tile props of the region that stand over the floor (high grass, fungi; a signpost) are cut out of. */
+const HIGH_GRASS = 15;
+const SIGN = 29;
+/** A prop is drawn only this near the hero, cells. */
+const PROP_REACH = 11;
 
-/** Fog of war: how dark each state is (the 2D renderer's own numbers, render.ts). */
-const FOG_REMEMBERED = 0.55;
-const FOG_REVEAL_MS = 70;
-const FOG_FORGET_MS = 260;
+/** How the sprite batch stands a picture up: leaned toward the camera (characters, items) or straight up (a sconce on a wall). */
+const LEANED = 0;
+const UPRIGHT = 1;
 
-/** Shelf-packed sheets: every sprite sheet is copied once onto one canvas, and the whole thing is one texture. */
-class Atlas {
-  readonly canvas: HTMLCanvasElement;
-  readonly texture: CanvasTexture;
-  private readonly g: CanvasRenderingContext2D;
-  private readonly spots = new Map<CanvasImageSource, { x: number; y: number }>();
-  private shelfX = 0;
-  private shelfY = 0;
-  private shelfH = 0;
-  /** The atlas has something new to upload before the next frame. */
-  dirty = false;
+/** The kit's loaded files, once they have come (prepare). */
+let kitState: { kit: Kit; images: SharedImages } | null = null;
+let kitFailed = false;
+let kitLoading = false;
+const regionState = new Map<number, RegionImages>();
+const regionLoading = new Set<number>();
 
-  constructor() {
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = ATLAS_W;
-    this.canvas.height = ATLAS_H;
-    this.g = this.canvas.getContext('2d')!;
-    this.texture = new CanvasTexture(this.canvas);
-    this.texture.colorSpace = SRGBColorSpace;
-    this.texture.magFilter = this.texture.minFilter = NearestFilter;
-    this.texture.generateMipmaps = false;
+/**
+ * Starts fetching the kit and a region's maps; 'ready' when both have come (the renderer can be made, and a level of that region
+ * built), 'failed' if they cannot (the game stays in 2D). Called every frame until ready: it only starts each fetch once.
+ */
+export function prepare(base: string, assets: Assets, region: number): 'ready' | 'loading' | 'failed' {
+  if (kitFailed) return 'failed';
+  if (!kitState && !kitLoading) {
+    kitLoading = true;
+    loadKit(base).then((v) => (kitState = v), () => (kitFailed = true));
   }
-
-  /** Where an image lies on the atlas (copied there the first time), or null if the atlas is full. */
-  place(image: HTMLImageElement | HTMLCanvasElement): { x: number; y: number } | null {
-    const known = this.spots.get(image);
-    if (known) return known;
-    const w = image.width;
-    const h = image.height;
-    if (this.shelfX + w > ATLAS_W) {
-      this.shelfX = 0;
-      this.shelfY += this.shelfH;
-      this.shelfH = 0;
-    }
-    if (this.shelfY + h > ATLAS_H) return null;
-    const spot = { x: this.shelfX, y: this.shelfY };
-    this.g.drawImage(image, spot.x, spot.y);
-    this.shelfX += w;
-    this.shelfH = Math.max(this.shelfH, h);
-    this.spots.set(image, spot);
-    this.dirty = true;
-    return spot;
+  if (!regionState.has(region) && !regionLoading.has(region)) {
+    regionLoading.add(region);
+    loadRegion(base, region, assets.tiles[region]!).then((v) => regionState.set(region, v), () => (kitFailed = true));
   }
-
-  flush(): void {
-    if (!this.dirty) return;
-    this.dirty = false;
-    this.texture.needsUpdate = true;
-  }
-
-  dispose(): void {
-    this.texture.dispose();
-    this.spots.clear();
-  }
+  return kitState && regionState.has(region) ? 'ready' : 'loading';
 }
 
-/** The fog of war as a texture: one byte a cell, easing toward where each cell should be (0 in sight, 0.55 remembered, 1 unknown). */
-class Fog {
-  readonly texture: DataTexture;
-  private readonly dark = new Float32Array(LENGTH).fill(1);
-  private readonly target = new Float32Array(LENGTH).fill(1);
-  private readonly bytes = new Uint8Array(LENGTH).fill(255);
-  private easing = false;
-
-  constructor() {
-    this.texture = new DataTexture(this.bytes, WIDTH, HEIGHT, RedFormat, UnsignedByteType);
-    this.texture.magFilter = this.texture.minFilter = LinearFilter;
-    this.texture.generateMipmaps = false;
-    this.texture.unpackAlignment = 1;
-    this.texture.needsUpdate = true;
-  }
-
-  /** A new turn's sight: where each cell is headed. `snap`: a new floor, no easing. */
-  set(visible: readonly boolean[], explored: readonly boolean[], snap: boolean): void {
-    for (let i = 0; i < LENGTH; i++) this.target[i] = visible[i] ? 0 : explored[i] ? FOG_REMEMBERED : 1;
-    if (snap) {
-      this.dark.set(this.target);
-      this.write();
-    } else this.easing = true;
-  }
-
-  private write(): void {
-    for (let i = 0; i < LENGTH; i++) this.bytes[i] = Math.round(this.dark[i]! * 255);
-    this.texture.needsUpdate = true;
-  }
-
-  /** Eases the cells; true while something is still moving (so the frame must be drawn). */
-  step(dt: number): boolean {
-    if (!this.easing) return false;
-    const d = Math.min(100, Math.max(0, dt));
-    const reveal = 1 - Math.exp(-d / FOG_REVEAL_MS);
-    const forget = 1 - Math.exp(-d / FOG_FORGET_MS);
-    let moving = false;
-    for (let i = 0; i < LENGTH; i++) {
-      const goal = this.target[i]!;
-      const now = this.dark[i]!;
-      if (now === goal) continue;
-      const next = now + (goal - now) * (goal < now ? reveal : forget);
-      this.dark[i] = Math.abs(next - goal) < 0.004 ? goal : next;
-      if (this.dark[i] !== goal) moving = true;
-    }
-    if (!moving) this.easing = false;
-    this.write();
-    return moving;
-  }
-
-  dispose(): void {
-    this.texture.dispose();
-  }
-}
-
-/** Gives a Lambert material the fog of war: it reads the darkness of a vertex from the fog texture and dims and drains the colour. */
-function withFog(material: MeshLambertMaterial | MeshBasicMaterial, fog: { value: Texture }, mode: 'attribute' | 'instance'): void {
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.tFog = fog;
-    const fetch =
-      mode === 'attribute'
-        ? 'vFog = texture2D(tFog, aFog).r;'
-        : `vec4 fogAt = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0); vFog = texture2D(tFog, vec2(fogAt.x / ${WIDTH}.0, fogAt.z / ${HEIGHT}.0)).r;`;
-    let vertex = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nuniform sampler2D tFog;\nvarying float vFog;\n${mode === 'attribute' ? 'attribute vec2 aFog;' : 'attribute vec4 aUv;'}`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${fetch}`);
-    if (mode === 'instance') vertex = vertex.replace('#include <uv_vertex>', '#ifdef USE_MAP\nvMapUv = aUv.xy + uv * aUv.zw;\n#endif');
-    shader.vertexShader = vertex;
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vFog;')
-      .replace(
-        '#include <opaque_fragment>',
-        `#include <opaque_fragment>
-        {
-          float lum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
-          float rem = clamp(vFog / ${FOG_REMEMBERED.toFixed(2)}, 0.0, 1.0);
-          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(lum) * vec3(0.44, 0.49, 0.62), rem * 0.8);
-          gl_FragColor.rgb *= 1.0 - smoothstep(0.52, 1.0, vFog);
-        }`,
-      );
-  };
-  material.customProgramCacheKey = () => `pdfog-${mode}`;
-}
-
-function attrs(geometry: BufferGeometry, b: Buffers, dynamic: boolean): void {
-  const make = (array: Float32Array, size: number): BufferAttribute => {
-    const attribute = new BufferAttribute(array, size);
-    if (dynamic) attribute.setUsage(DynamicDrawUsage);
-    return attribute;
-  };
+function attrs(geometry: BufferGeometry, b: Buffers): void {
+  const make = (array: Float32Array, size: number): BufferAttribute => new BufferAttribute(array, size).setUsage(DynamicDrawUsage);
   geometry.setAttribute('position', make(b.pos, 3));
   geometry.setAttribute('normal', make(b.normal, 3));
   geometry.setAttribute('uv', make(b.uv, 2));
   geometry.setAttribute('color', make(b.color, 3));
   geometry.setAttribute('aFog', make(b.fog, 2));
-  const index = new BufferAttribute(b.index, 1);
-  if (dynamic) index.setUsage(DynamicDrawUsage);
-  geometry.setIndex(index);
+  geometry.setIndex(new BufferAttribute(b.index, 1).setUsage(DynamicDrawUsage));
   geometry.setDrawRange(0, b.indices);
-}
-
-/** A soft round spot, white in the middle and black at the rim: the alpha of a character's shadow (its colour is a plain dark). */
-function blobTexture(): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, 32, 32);
-  const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-  grad.addColorStop(0, '#fff');
-  grad.addColorStop(0.5, '#a0a0a0');
-  grad.addColorStop(1, '#000');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 32, 32);
-  return new CanvasTexture(c);
-}
-
-/** A warm halo, white-hot in the middle: round the flame of a torch. */
-function haloTexture(): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.25, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
-  const texture = new CanvasTexture(c);
-  texture.colorSpace = SRGBColorSpace;
-  return texture;
-}
-
-/** A very soft white cloud, for the mist. */
-function mistTexture(): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
-  grad.addColorStop(0.5, 'rgba(255,255,255,0.35)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
-  const texture = new CanvasTexture(c);
-  texture.colorSpace = SRGBColorSpace;
-  return texture;
-}
-
-function dotTexture(): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 16;
-  const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(8, 8, 0, 8, 8, 8);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 16, 16);
-  return new CanvasTexture(c);
 }
 
 /** Time the frame took, for the perf overlay and the governor. */
@@ -321,6 +130,10 @@ export interface World3DOptions {
   phone: boolean;
   /** Time the GPU too (the ?perf=1 overlay). */
   perf: boolean;
+  /** The kit's own camera (50 degrees, fov 30, in perspective) in place of the owner's (70 degrees, orthographic): `?cam=50`. */
+  persp: boolean;
+  /** Dev only (`?reveal=1`): the whole level is lit and seen, to look at a level the way the kit's frames show a room. */
+  reveal?: boolean;
   /** The context was lost: the game goes back to 2D. */
   onLost: () => void;
 }
@@ -329,60 +142,58 @@ export class World3D {
   readonly canvas: HTMLCanvasElement;
   readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
-  private readonly camera = new OrthographicCamera(-1, 1, 1, -1, 1, 100);
+  private readonly camera: OrthographicCamera | PerspectiveCamera;
+  private readonly ortho: OrthographicCamera | null;
+  private readonly persp: PerspectiveCamera | null;
   private tier: Tier;
   private readonly options: World3DOptions;
+  private readonly kit: Kit;
+  private readonly shared: SharedImages;
   private readonly atlas = new Atlas();
   private readonly fog = new Fog();
-  private readonly fogUniform = { value: this.fog.texture as Texture };
-  private readonly blob = blobTexture();
-  private readonly blobMist = mistTexture();
-  private readonly halo = haloTexture();
-  private readonly halos: InstancedMesh;
-  private haloCount = 0;
-  private readonly dot = dotTexture();
+  private readonly air = makeAir(this.fog.texture);
+  private readonly effects: Effects3D;
+  private readonly rig: LightRig;
+  private readonly ambient = new AmbientLight(0xffffff, 1);
+  private readonly hemi = new HemisphereLight(0xffffff, 0x222222, 1);
 
   // Terrain.
   private geom: LevelGeom | null = null;
   private levelKey = '';
   private region = -1;
-  private tiles: Texture | null = null;
-  private tileCols = 16;
-  private tileRows = 16;
+  private depth = 0;
+  private images: RegionImages | null = null;
+  private terrain: TerrainTextures | null = null;
   private waterTex: Texture | null = null;
   private floorMesh: Mesh | null = null;
   private boxMesh: Mesh | null = null;
   private waterMesh: Mesh | null = null;
+  private decalMesh: Mesh | null = null;
   private seenFloor = -1;
   private seenBox = -1;
-  private terrainMaterial: MeshLambertMaterial | null = null;
-  private waterMaterial: MeshLambertMaterial | null = null;
+  private terrainMaterial: MeshStandardMaterial | null = null;
+  private decalMaterial: MeshBasicMaterial | null = null;
+  private waterMaterial: MeshStandardMaterial | null = null;
+  private waterScroll: [number, number] = [0, 0.006];
+  /** The cells of the level that carry a prop that stands over the floor (high grass, fungi, a signpost), and their cut-outs. */
+  private props: number[] = [];
+  private grassCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
+  private signCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
 
   // Characters.
   private readonly sprites: InstancedMesh;
   private readonly spriteUv: InstancedBufferAttribute;
-  private readonly blobs: InstancedMesh;
   private spriteCount = 0;
-  private blobCount = 0;
   /** Drawn this frame, for the marks the 2D layer puts over them. */
   readonly shown: Shown[] = [];
   shownCount = 0;
   private readonly at = { x: 0, y: 0 };
-
-  // Lights.
-  private readonly hemi = new HemisphereLight(SKY_COLOR, GROUND_COLOR, 3.7);
-  private readonly heroLight = new PointLight(HERO_COLOR, 4.6, 7.5, 1.2);
-  private readonly torchLights: PointLight[] = [];
-  /** The torch (a cell of the level) each light stands at, or -1. */
-  private readonly assigned = [-1, -1, -1];
-  private shadowDirty = true;
-  private shadowsOn: boolean;
-
-  // Particles: dust, a few drifting wisps of mist, and shafts of light through the ceiling (all off in the low tier).
-  private readonly shaftMesh: Mesh[] = [];
-  private mist: InstancedMesh | null = null;
-  private dust: Points | null = null;
-  private dustPhase = new Float32Array(48 * 3);
+  private bossFound = false;
+  private bossX = 0;
+  private bossZ = 0;
+  private bossSeen = false;
+  private heroCell = -1;
+  private sinceAssign = 0;
 
   // Instruments.
   private readonly perf: PerfSample = { cpuMs: 0, renderMs: 0, gpuMs: 0, calls: 0, maxCalls: 0, triangles: 0, textures: 0, geometries: 0 };
@@ -396,19 +207,22 @@ export class World3D {
   private overlay: PerfOverlay | null = null;
   /** The display's refresh rate, as the 2D loop measured it (shown by the overlay). */
   hz = 60;
+  private readonly fxContext: FxContext;
+  private readonly everything: boolean[] = new Array<boolean>(LENGTH).fill(true);
 
   constructor(canvas: HTMLCanvasElement, private readonly assets: Assets, options: World3DOptions) {
+    if (!kitState) throw new Error('the world kit is not loaded');
+    this.kit = kitState.kit;
+    this.shared = kitState.images;
     this.canvas = canvas;
     this.options = options;
     this.tier = options.tier;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance', stencil: false });
     this.renderer.setPixelRatio(1);
-    this.renderer.setClearColor(0x000000, 1);
-    // Nothing blows out to white: light is compressed above 0.8, as the demo does, and the pixel art keeps its colours below.
+    // Nothing blows out to white: light is compressed above 0.8, as the kit's frames are, and the pixel art keeps its colours below.
     this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.info.autoReset = false;
-    this.shadowsOn = options.tier.shadowLights > 0;
-    this.renderer.shadowMap.enabled = this.shadowsOn;
+    this.renderer.shadowMap.enabled = options.tier.shadowLights > 0;
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.type = PCFShadowMap;
     this.lostHandler = (event) => {
@@ -418,23 +232,26 @@ export class World3D {
     };
     canvas.addEventListener('webglcontextlost', this.lostHandler);
 
-    // The camera: orthographic, looking down at the fixed pitch, no yaw; the frame sets where and how wide.
-    this.camera.rotation.x = -PITCH;
-    this.camera.near = 1;
-    this.camera.far = 120;
-
-    this.scene.add(this.hemi, this.heroLight);
-    for (let i = 0; i < 3; i++) {
-      const light = new PointLight(TORCH_COLOR, 0, 10.5, 1.2);
-      this.torchLights.push(light);
-      this.scene.add(light);
+    // The camera: fixed pitch, no yaw; the frame sets where and how wide. Orthographic by default (the owner's), or the kit's.
+    if (options.persp) {
+      this.persp = new PerspectiveCamera(this.kit.camera.fov, 1, 1, 200);
+      this.ortho = null;
+      this.camera = this.persp;
+    } else {
+      this.ortho = new OrthographicCamera(-1, 1, 1, -1, 1, 120);
+      this.persp = null;
+      this.camera = this.ortho;
     }
-    this.configureShadows();
+    this.camera.rotation.x = -PITCH;
 
-    // The sprite batch: one quad, many instances, one atlas.
+    this.scene.add(this.ambient, this.hemi);
+    this.rig = new LightRig(this.scene, options.phone);
+    this.effects = new Effects3D(this.scene, this.air, this.shared);
+
+    // The sprite batch: one quad, many instances, one atlas (and the atlas of what glows).
     const quad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
-    const spriteMaterial = new MeshLambertMaterial({ map: this.atlas.texture, alphaTest: 0.5, side: DoubleSide });
-    withFog(spriteMaterial, this.fogUniform, 'instance');
+    const spriteMaterial = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide });
+    withFog(spriteMaterial, this.air, 'instance');
     this.sprites = new InstancedMesh(quad, spriteMaterial, MAX_SPRITES);
     this.sprites.instanceMatrix.setUsage(DynamicDrawUsage);
     this.sprites.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 3).fill(1), 3);
@@ -446,31 +263,11 @@ export class World3D {
     this.sprites.count = 0;
     this.scene.add(this.sprites);
 
-    const flat = new PlaneGeometry(1, 1);
-    this.blobs = new InstancedMesh(
-      flat, new MeshBasicMaterial({ color: 0x05060c, alphaMap: this.blob, transparent: true, opacity: 0.62, depthWrite: false }), MAX_BLOBS,
-    );
-    this.blobs.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.blobs.frustumCulled = false;
-    this.blobs.renderOrder = 2;
-    this.blobs.count = 0;
-    this.scene.add(this.blobs);
-
-    // The halos round the flames of the torches in sight: soft, added on, a few small quads.
-    const haloQuad = new PlaneGeometry(1, 1);
-    this.halos = new InstancedMesh(
-      haloQuad, new MeshBasicMaterial({ map: this.halo, color: 0xff9a4a, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }), MAX_HALOS,
-    );
-    this.halos.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.halos.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_HALOS * 3).fill(1), 3);
-    this.halos.instanceColor.setUsage(DynamicDrawUsage);
-    this.halos.frustumCulled = false;
-    this.halos.renderOrder = 4;
-    this.halos.count = 0;
-    this.scene.add(this.halos);
-
     for (let i = 0; i < MAX_SPRITES; i++) this.shown.push({ puppet: undefined as unknown as Puppet, x: 0, y: 0 });
     this.puppetPass = (puppet) => this.addPuppet(puppet);
+    this.fxContext = {
+      now: 0, dt: 0, hx: 0, hz: 0, visible: [], explored: [], view: undefined as unknown as View, gas: undefined, bossFound: false, bossX: 0, bossZ: 0,
+    };
 
     if (options.perf) {
       this.overlay = new PerfOverlay();
@@ -481,70 +278,27 @@ export class World3D {
     this.applyTier(options.tier);
   }
 
-  /** Torches 0 and 1 cast shadows (the tier says how many are on); their maps are 512 on phones. */
-  private configureShadows(): void {
-    const size = this.options.phone ? 512 : 1024;
-    for (let i = 0; i < this.torchLights.length; i++) {
-      const light = this.torchLights[i]!;
-      light.castShadow = i < this.tier.shadowLights;
-      light.shadow.mapSize.set(size, size);
-      light.shadow.camera.near = 0.2;
-      light.shadow.camera.far = 14;
-      light.shadow.bias = -0.0008;
-      light.shadow.normalBias = 0.03;
-    }
-  }
-
-  /** Brings the renderer to a quality tier: shadows, the dust, and the canvas density (the caller resizes). */
+  /** Brings the renderer to a quality tier: shadows, particles, and the canvas density (the caller resizes). */
   applyTier(tier: Tier): void {
     this.tier = tier;
     const on = tier.shadowLights > 0;
-    if (on !== this.shadowsOn) {
-      this.shadowsOn = on;
+    if (on !== this.renderer.shadowMap.enabled) {
       this.renderer.shadowMap.enabled = on;
       if (this.terrainMaterial) this.terrainMaterial.needsUpdate = true;
       if (this.waterMaterial) this.waterMaterial.needsUpdate = true;
     }
-    this.configureShadows();
-    this.shadowDirty = true;
-    if (this.dust) this.dust.visible = tier.particles;
-    if (this.mist) this.mist.visible = tier.particles;
-    for (const shaft of this.shaftMesh) shaft.visible = shaft.visible && tier.particles;
+    this.rig.setShadowLights(tier.shadowLights);
+    this.effects.setParticles(tier.particles);
   }
 
   resize(width: number, height: number): void {
     this.renderer.setSize(width, height, false);
   }
 
-  /**
-   * The region's tile sheet on a canvas twice as tall (a power of two), with one more tile made from it: the wall's brick turned into
-   * a dark, cool cap for the tops of walls, so a wall can never be taken for floor (the tile CAP_TILE).
-   */
-  private tileTexture(region: number): { texture: Texture; cols: number; rows: number } {
-    const image = this.assets.tiles[region]!;
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width;
-    canvas.height = image.height * 2;
-    const g = canvas.getContext('2d', { willReadFrequently: true })!;
-    g.drawImage(image, 0, 0);
-    const cols = image.width / TILE;
-    const wall = g.getImageData((T_WALL % cols) * TILE, Math.trunc(T_WALL / cols) * TILE, TILE, TILE);
-    const px = wall.data;
-    for (let i = 0; i < px.length; i += 4) {
-      const lum = (px[i]! * 0.3 + px[i + 1]! * 0.59 + px[i + 2]! * 0.11) / 255;
-      // A dark slate with the brick's outline still faintly in it.
-      const v = 0.2 + (lum - 0.5) * 0.36;
-      px[i] = Math.max(0, Math.min(255, (v * 0.9 + 0.04) * 255));
-      px[i + 1] = Math.max(0, Math.min(255, (v * 0.97 + 0.045) * 255));
-      px[i + 2] = Math.max(0, Math.min(255, (v * 1.12 + 0.07) * 255));
-      px[i + 3] = 255;
-    }
-    g.putImageData(wall, (CAP_TILE % cols) * TILE, Math.trunc(CAP_TILE / cols) * TILE);
-    const texture = new CanvasTexture(canvas);
-    texture.colorSpace = SRGBColorSpace;
-    texture.magFilter = texture.minFilter = NearestFilter;
-    texture.generateMipmaps = false;
-    return { texture, cols, rows: canvas.height / TILE };
+  /** The kit's heights, in the form the geometry takes them. */
+  private geomKit(region: number): GeomKit {
+    const m = (key: string): number => materialOf(this.kit, region, key).height;
+    return { wall: m('wall_face'), door: m('door'), statue: m('statue'), bookshelf: m('bookshelf'), barricade: m('barricade'), well: m('well'), chasm: m('chasm'), water: m('water') };
   }
 
   /** A new floor (or run): the geometry of its map, torches, a fresh fog. `key` tells one floor from another. */
@@ -552,13 +306,17 @@ export class World3D {
     if (key === this.levelKey && this.geom) return;
     this.levelKey = key;
     const region = levelRegion(level);
-    if (region !== this.region || !this.tiles) {
-      this.tiles?.dispose();
+    const images = regionState.get(region);
+    if (!images) throw new Error(`the maps of region ${region} are not loaded`);
+    this.depth = level.depth;
+    if (region !== this.region || !this.terrain) {
+      this.terrain?.dispose();
       this.waterTex?.dispose();
-      const made = this.tileTexture(region);
-      this.tiles = made.texture;
-      this.tileCols = made.cols;
-      this.tileRows = made.rows;
+      this.terrainMaterial?.dispose();
+      this.decalMaterial?.dispose();
+      this.waterMaterial?.dispose();
+      this.images = images;
+      this.terrain = buildTerrain(images, this.kit, region);
       const water = new Texture(this.assets.water[region]!);
       water.colorSpace = SRGBColorSpace;
       water.magFilter = water.minFilter = NearestFilter;
@@ -567,19 +325,77 @@ export class World3D {
       water.needsUpdate = true;
       this.waterTex = water;
       this.region = region;
-      this.terrainMaterial?.dispose();
-      this.waterMaterial?.dispose();
-      this.terrainMaterial = new MeshLambertMaterial({ map: this.tiles, vertexColors: true, alphaTest: 0.5 });
-      withFog(this.terrainMaterial, this.fogUniform, 'attribute');
-      this.waterMaterial = new MeshLambertMaterial({ map: water, vertexColors: true });
-      withFog(this.waterMaterial, this.fogUniform, 'attribute');
+      this.makeMaterials(region);
+      this.cutProps(images, region);
       this.dropMeshes();
     }
-    this.geom = new LevelGeom(level.map, this.tileCols, this.tileRows);
+    const a = atmosphere(this.kit, region, level.depth);
+    // Under high grass and a sign, the plain floor of the region: the prop itself is a card standing over it.
+    const under = new Map<number, number>([[HIGH_GRASS, region >= 2 ? 1 : 2], [SIGN, 1]]);
+    this.geom = new LevelGeom(level.map, 16, 16, this.geomKit(region), under);
     this.makeMeshes();
-    this.assigned.fill(-1);
-    this.shadowDirty = true;
+    this.scanProps();
+
+    // The air: the kit's light, haze and particles of the region, or of the boss's arena.
+    const L = lights(this.kit, a);
+    this.ambient.color.setHex(L.ambient.color);
+    this.ambient.intensity = L.ambient.intensity;
+    this.hemi.color.setHex(L.hemi.sky);
+    this.hemi.groundColor.setHex(L.hemi.ground);
+    this.hemi.intensity = L.hemi.intensity;
+    this.air.uHaze.value.set(a.fog.near, a.fog.far);
+    this.air.uFogColor.value.setHex(hex(a.fog.color));
+    this.air.uBg.value.setHex(hex(a.fog.color)).multiplyScalar(0.28);
+    this.renderer.setClearColor(this.air.uBg.value, 1);
+    this.rig.configure(L, sourcesOf(this.kit, a.region, this.geom, true), this.tier.shadowLights);
+    if (a.accent) this.rig.setAccent(hex(a.accent.color), a.accent.intensity * 2.2);
+    else this.rig.setAccent(0xffffff, 0);
+    this.accentBase = a.accent ? a.accent.intensity * 2.2 : 0;
+    this.bossName = a.boss;
+    this.effects.configure(this.kit, a, this.geom, region, this.tier);
+    this.effects.setMist(a.fog.mist);
+    this.bossSeen = false;
+    this.heroCell = -1;
+    this.waterScroll = a.region.water.scroll;
     worldSheet('ambient1');
+  }
+
+  private accentBase = 0;
+  private bossName: string | null = null;
+
+  /** The terrain, water and decal materials of a region, from the kit's materials and maps. */
+  private makeMaterials(region: number): void {
+    const t = this.terrain!;
+    this.terrainMaterial = new MeshStandardMaterial({
+      map: t.color, emissiveMap: t.emissive, emissive: 0xffffff, emissiveIntensity: 1, roughnessMap: t.rough, roughness: 1, metalness: 0,
+      vertexColors: true, alphaTest: 0.5,
+    });
+    withFog(this.terrainMaterial, this.air, 'attribute');
+    this.decalMaterial = new MeshBasicMaterial({ map: t.color, vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 });
+    withFog(this.decalMaterial, this.air, 'attribute');
+    const w = materialOf(this.kit, region, 'water');
+    const a = atmosphere(this.kit, region, 1).region.water;
+    const lava = a.emissive !== undefined;
+    // The water shines by itself: its texture tinted with the region's water colour, bright, and glossy to the lights. Lava glows.
+    this.waterMaterial = new MeshStandardMaterial({
+      map: this.waterTex, color: lava ? 0xffffff : hex(a.surface), roughness: w.roughness, metalness: w.metalness,
+      emissive: lava ? hex(a.emissive!) : hex(a.surface), emissiveMap: this.waterTex, emissiveIntensity: lava ? a.emissiveIntensity ?? 0.8 : 1.1, vertexColors: true,
+    });
+    if (!lava) this.waterMaterial.color.multiplyScalar(1.6);
+    withFog(this.waterMaterial, this.air, 'attribute');
+  }
+
+  /** Cuts the region's props (high grass or fungi, the signpost) out of its tiles, and puts them on the sprite atlas. */
+  private cutProps(images: RegionImages, region: number): void {
+    this.grassCut = propCutout(images, HIGH_GRASS, region >= 2 ? 1 : 2);
+    this.signCut = propCutout(images, SIGN, 1);
+  }
+
+  /** Which cells of the level carry a prop that stands over the floor. */
+  private scanProps(): void {
+    this.props = [];
+    const g = this.geom!;
+    for (let i = 0; i < LENGTH; i++) if (g.terrain[i] === HIGH_GRASS || g.terrain[i] === SIGN) this.props.push(i);
   }
 
   /** A door opened, grass was trampled: the geometry follows the map. */
@@ -592,16 +408,17 @@ export class World3D {
       this.dropMeshes();
       this.makeMeshes();
     }
-    if (change !== 'patched') this.shadowDirty = true;
+    this.scanProps();
+    if (change !== 'patched') this.rig.shadowsStale = true;
   }
 
   private dropMeshes(): void {
-    for (const mesh of [this.floorMesh, this.boxMesh, this.waterMesh]) {
+    for (const mesh of [this.floorMesh, this.boxMesh, this.waterMesh, this.decalMesh]) {
       if (!mesh) continue;
       this.scene.remove(mesh);
       mesh.geometry.dispose();
     }
-    this.floorMesh = this.boxMesh = this.waterMesh = null;
+    this.floorMesh = this.boxMesh = this.waterMesh = this.decalMesh = null;
     this.seenFloor = this.seenBox = -1;
   }
 
@@ -609,46 +426,49 @@ export class World3D {
     const geom = this.geom!;
     this.dropMeshes();
     const floor = new BufferGeometry();
-    attrs(floor, geom.floor, true);
+    attrs(floor, geom.floor);
     this.floorMesh = new Mesh(floor, this.terrainMaterial!);
     this.floorMesh.receiveShadow = true;
-    this.floorMesh.frustumCulled = false;
     const boxes = new BufferGeometry();
-    attrs(boxes, geom.boxes, true);
+    attrs(boxes, geom.boxes);
     this.boxMesh = new Mesh(boxes, this.terrainMaterial!);
     this.boxMesh.castShadow = true;
     this.boxMesh.receiveShadow = true;
-    this.boxMesh.frustumCulled = false;
     const water = new BufferGeometry();
-    attrs(water, geom.water, true);
+    attrs(water, geom.water);
     this.waterMesh = new Mesh(water, this.waterMaterial!);
     this.waterMesh.receiveShadow = true;
-    this.waterMesh.frustumCulled = false;
-    this.scene.add(this.floorMesh, this.boxMesh, this.waterMesh);
+    const decals = new BufferGeometry();
+    attrs(decals, geom.decals);
+    this.decalMesh = new Mesh(decals, this.decalMaterial!);
+    this.decalMesh.renderOrder = 1;
+    for (const mesh of [this.floorMesh, this.boxMesh, this.waterMesh, this.decalMesh]) {
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+    }
     geom.grew = false;
     this.seenFloor = geom.floorVersion;
     this.seenBox = geom.boxVersion;
-    // The boxes' shadows are cast on the side facing the light; the floor and walls take them.
-    (this.boxMesh.material as MeshLambertMaterial).shadowSide = FrontSide;
+    // The walls' shadows are cast on the side facing the light; the floor and the walls take them.
+    this.terrainMaterial!.shadowSide = FrontSide;
+    this.rig.shadowsStale = true;
   }
 
   /** Uploads what the geometry has changed since the last frame. */
   private syncGeometry(): void {
     const geom = this.geom!;
     if (geom.grew) {
-      // A box or water buffer was made bigger: new geometry for them.
       this.dropMeshes();
       this.makeMeshes();
       return;
     }
     if (geom.floorVersion !== this.seenFloor) {
       this.seenFloor = geom.floorVersion;
-      const g = this.floorMesh!.geometry;
-      (g.getAttribute('uv') as BufferAttribute).needsUpdate = true;
+      for (const name of ['uv', 'color'] as const) (this.floorMesh!.geometry.getAttribute(name) as BufferAttribute).needsUpdate = true;
     }
     if (geom.boxVersion !== this.seenBox) {
       this.seenBox = geom.boxVersion;
-      for (const [mesh, b] of [[this.boxMesh!, geom.boxes], [this.waterMesh!, geom.water]] as const) {
+      for (const [mesh, b] of [[this.boxMesh!, geom.boxes], [this.waterMesh!, geom.water], [this.decalMesh!, geom.decals]] as const) {
         const g = mesh.geometry;
         for (const name of ['position', 'normal', 'uv', 'color', 'aFog'] as const) (g.getAttribute(name) as BufferAttribute).needsUpdate = true;
         g.getIndex()!.needsUpdate = true;
@@ -659,27 +479,42 @@ export class World3D {
 
   /** The new turn's sight. */
   setSight(visible: readonly boolean[], explored: readonly boolean[], snap: boolean): void {
+    if (this.options.reveal) {
+      this.fog.set(this.everything, this.everything, snap);
+      this.fogMoving = true;
+      return;
+    }
     this.fog.set(visible, explored, snap);
     this.fogMoving = true;
   }
 
   // ---- sprites -------------------------------------------------------------------------------------------------------------
 
-  /** Writes one leaned sprite into the batch: its frame (a rectangle of an image), where its feet are (tiles) and how big (tiles). */
+  /**
+   * Writes one sprite into the batch: its frame (a rectangle of an image, which goes on the atlas the first time, with its glow if
+   * it has one), where its feet are (cells) and how big. `mode`: leaned toward the camera, or straight up; `shear` sways its top.
+   */
   private sprite(
     image: HTMLImageElement | HTMLCanvasElement, sx: number, sy: number, w: number, h: number, flip: boolean,
-    x: number, y: number, z: number, width: number, height: number, tint: number,
+    x: number, y: number, z: number, width: number, height: number, tint: number, mode = LEANED, shear = 0, glow?: CanvasImageSource,
   ): void {
     if (this.spriteCount >= MAX_SPRITES) return;
-    const spot = this.atlas.place(image);
+    const spot = this.atlas.place(image, glow);
     if (!spot) return;
     const i = this.spriteCount++;
     const m = this.sprites.instanceMatrix.array as Float32Array;
     const o = i * 16;
-    const sh = height * LEAN_STRETCH;
     m[o] = width; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
-    m[o + 4] = 0; m[o + 5] = sh * COS_LEAN; m[o + 6] = -sh * SIN_LEAN; m[o + 7] = 0;
-    m[o + 8] = 0; m[o + 9] = SIN_LEAN; m[o + 10] = COS_LEAN; m[o + 11] = 0;
+    if (mode === LEANED) {
+      const sh = height * LEAN_STRETCH;
+      const sinL = Math.sin(LEAN);
+      const cosL = Math.cos(LEAN);
+      m[o + 4] = shear * sh; m[o + 5] = sh * cosL; m[o + 6] = -sh * sinL; m[o + 7] = 0;
+      m[o + 8] = 0; m[o + 9] = sinL; m[o + 10] = cosL; m[o + 11] = 0;
+    } else {
+      m[o + 4] = shear * height; m[o + 5] = height; m[o + 6] = 0; m[o + 7] = 0;
+      m[o + 8] = 0; m[o + 9] = 0; m[o + 10] = 1; m[o + 11] = 0;
+    }
     m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
     const uv = this.spriteUv.array as Float32Array;
     const u0 = (spot.x + sx) / ATLAS_W;
@@ -691,17 +526,6 @@ export class World3D {
     uv[q + 3] = h / ATLAS_H;
     const c = this.sprites.instanceColor!.array as Float32Array;
     c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = tint;
-  }
-
-  private shadow(x: number, z: number, size: number): void {
-    if (this.blobCount >= MAX_BLOBS) return;
-    const m = this.blobs.instanceMatrix.array as Float32Array;
-    const o = this.blobCount++ * 16;
-    // Lying on the floor: its up (local y) runs north, its face looks up.
-    m[o] = size; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
-    m[o + 4] = 0; m[o + 5] = 0; m[o + 6] = -size * 0.7; m[o + 7] = 0;
-    m[o + 8] = 0; m[o + 9] = 1; m[o + 10] = 0; m[o + 11] = 0;
-    m[o + 12] = x; m[o + 13] = 0.015; m[o + 14] = z; m[o + 15] = 1;
   }
 
   private addPuppet(puppet: Puppet): void {
@@ -717,7 +541,7 @@ export class World3D {
     const sy = (Math.floor(frame / sheet.cols) + puppet.row) * sheet.h;
     const lunge = puppet.lungeStart !== undefined && now - puppet.lungeStart < LUNGE_MS ? Math.sin((Math.PI * (now - puppet.lungeStart)) / LUNGE_MS) : 0;
     const knock = knockback(puppet, now);
-    // The 2D renderer's cell corner is the walker's own: the feet stand a little south of the cell's middle.
+    // The 2D renderer's cell corner is the walker's own: the feet stand a little north of the cell's middle.
     const px = pos.x + TILE / 2 + lunge * (puppet.lungeX ?? 0) + knock * (puppet.knockX ?? 0);
     const py = pos.y + FEET_PX + lunge * (puppet.lungeY ?? 0) + knock * (puppet.knockY ?? 0);
     const hover = puppet.levitating && puppet.alive ? 4 + Math.round(Math.sin(now / 320)) : 0;
@@ -738,104 +562,86 @@ export class World3D {
     const tx = px / TILE;
     const tz = py / TILE;
     this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, hover / TILE, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint);
-    if (puppet.alive || !puppet.laid) this.shadow(tx, tz, (hover ? 0.75 : 1.1) * Math.max(0.45, sheet.w / 14));
+    if (puppet.alive || !puppet.laid) this.effects.shadowBlob(tx, tz, (hover ? 0.75 : 1.1) * Math.max(0.45, sheet.w / 14));
+    if (BOSS_KINDS.has(puppet.kind) && puppet.alive) {
+      this.bossFound = true;
+      this.bossX = tx;
+      this.bossZ = tz;
+    }
     const mark = this.shown[this.shownCount++]!;
     mark.puppet = puppet;
     mark.x = pos.x;
     mark.y = pos.y;
   }
 
-  // ---- lights --------------------------------------------------------------------------------------------------------------
-
-  /** Chooses the three torches nearest the hero for the three torch lights, keeping those already lit, and says if shadows must be redrawn. */
-  private assignTorches(hx: number, hz: number, explored: readonly boolean[]): void {
-    const torches = this.geom!.torches;
-    // The nearest three (squared distance), by a small insertion: no arrays made.
-    let a = -1, b = -1, c = -1;
-    let da = Infinity, db = Infinity, dc = Infinity;
-    for (let i = 0; i < torches.length; i++) {
-      const cell = torches[i]!;
-      if (!explored[cell]) continue;
-      const dx = (cell % WIDTH) + 0.5 - hx;
-      const dz = Math.trunc(cell / WIDTH) + 1 - hz;
-      const d = dx * dx + dz * dz;
-      if (d > 20 * 20) continue;
-      if (d < da) { c = b; dc = db; b = a; db = da; a = cell; da = d; }
-      else if (d < db) { c = b; dc = db; b = cell; db = d; }
-      else if (d < dc) { c = cell; dc = d; }
-    }
-    const wanted0 = a, wanted1 = b, wanted2 = c;
-    const keep = (cell: number): boolean => cell === wanted0 || cell === wanted1 || cell === wanted2;
-    const slots = this.assigned;
-    for (let i = 0; i < 3; i++) if (slots[i]! >= 0 && !keep(slots[i]!)) slots[i] = -1;
-    this.take(wanted0);
-    this.take(wanted1);
-    this.take(wanted2);
-  }
-
-  /** Gives a torch a free light, if it has none. */
-  private take(cell: number): void {
-    const slots = this.assigned;
-    if (cell < 0 || cell === slots[0] || cell === slots[1] || cell === slots[2]) return;
-    const free = slots[0]! < 0 ? 0 : slots[1]! < 0 ? 1 : slots[2]! < 0 ? 2 : -1;
-    if (free < 0) return;
-    slots[free] = cell;
-    const light = this.torchLights[free]!;
-    light.position.set((cell % WIDTH) + 0.5, TORCH_HEIGHT, Math.trunc(cell / WIDTH) + TORCH_OUT);
-    if (free < this.tier.shadowLights) this.shadowDirty = true;
-  }
-
   // ---- the frame -----------------------------------------------------------------------------------------------------------
 
   /** Draws the scene. Returns false if the context is gone. */
-  frame(f: Frame3D, dt: number): boolean {
+  frame(given: Frame3D, dt: number): boolean {
     if (this.lost || !this.geom) return false;
+    const f = this.options.reveal ? { ...given, visible: this.everything, explored: this.everything } : given;
     const t0 = performance.now();
     this.current = f;
     this.renderer.info.reset();
     this.syncGeometry();
 
-    // The camera, from the 2D game's own: the centre of the screen on the ground, snapped to whole device pixels so the
-    // pixel art holds still.
+    // The camera, from the 2D game's own: the centre of the screen on the ground, snapped to whole device pixels so the pixel art
+    // holds still.
     const unit = TILE * f.zoom;
     const camX = Math.round(f.camX * f.zoom) / f.zoom;
-    const camYs = Math.round(f.camY * f.zoom * YS) / (f.zoom * YS);
+    const ys = Math.sin(PITCH);
+    const camYs = Math.round(f.camY * f.zoom * ys) / (f.zoom * ys);
     const halfW = f.width / (2 * unit);
     const halfH = f.height / (2 * unit);
     const cx = camX / TILE + halfW;
-    const cz = camYs / TILE + (f.height / YS) / (2 * unit);
+    const cz = camYs / TILE + f.height / ys / (2 * unit);
     const cam = this.camera;
-    cam.left = -halfW; cam.right = halfW; cam.top = halfH; cam.bottom = -halfH;
-    cam.position.set(cx, 40 * Math.sin(PITCH), cz + 40 * Math.cos(PITCH));
-    cam.updateProjectionMatrix();
+    if (this.ortho) {
+      this.ortho.left = -halfW; this.ortho.right = halfW; this.ortho.top = halfH; this.ortho.bottom = -halfH;
+      cam.position.set(cx, 40 * ys, cz + 40 * Math.cos(PITCH));
+      this.ortho.updateProjectionMatrix();
+    } else if (this.persp) {
+      // The kit's camera: the distance that shows the same width of the ground at the screen's middle.
+      const aspect = f.width / f.height;
+      const dist = halfW / (Math.tan(MathUtils.degToRad(this.persp.fov / 2)) * aspect);
+      this.persp.aspect = aspect;
+      this.persp.near = Math.max(1, dist - 40);
+      this.persp.far = dist + 80;
+      cam.position.set(cx, dist * ys, cz + dist * Math.cos(PITCH));
+      this.persp.updateProjectionMatrix();
+    }
 
     this.fogMoving = this.fog.step(dt);
     const hx = f.focusX / TILE;
     const hz = f.focusY / TILE;
-    this.assignTorches(hx, hz, f.explored);
-
-    // Lights: the hero's, and the torches' flicker (intensity only: the shadow maps are not redrawn for it).
-    this.heroLight.position.set(hx, 1.9, hz + 0.35);
-    const now = f.now;
-    for (let i = 0; i < 3; i++) {
-      const cell = this.assigned[i]!;
-      const light = this.torchLights[i]!;
-      if (cell < 0) {
-        light.intensity = 0;
-        continue;
-      }
-      light.intensity = 15 * (0.84 + 0.16 * Math.sin(now / 70 + cell) * Math.sin(now / 23 + cell * 3));
+    this.air.uHero.value.set(hx, hz);
+    // The nearest sources of light are chosen when the hero has moved on a cell, and every few frames besides.
+    const cell = Math.floor(hx) + Math.floor(hz) * WIDTH;
+    if (cell !== this.heroCell || ++this.sinceAssign > 24) {
+      this.heroCell = cell;
+      this.sinceAssign = 0;
+      this.rig.assign(hx, hz, f.explored, this.tier.name === 'high' ? 2 : this.tier.name === 'mid' ? 1 : 0);
     }
+    this.rig.frame(f.now, hx, hz);
 
-    // Sprites: characters, then what lies about, then flames.
+    // Sprites: characters, then what lies about, props, bodies, things in the air, sconces. The effects' batches fill alongside.
     this.spriteCount = 0;
-    this.blobCount = 0;
     this.shownCount = 0;
+    this.bossFound = false;
+    this.effects.begin();
     f.view.puppets.forEach(this.puppetPass);
     this.addItems(f);
-    this.addFlames(f);
+    this.addProps(f, hx, hz);
+    this.addCorpses(f);
+    this.addThrown(f);
+    this.addSconces(f);
+    const c = this.fxContext;
+    c.now = f.now; c.dt = dt; c.hx = hx; c.hz = hz; c.visible = f.visible; c.explored = f.explored; c.view = f.view; c.gas = f.gas;
+    c.bossFound = this.bossFound; c.bossX = this.bossX; c.bossZ = this.bossZ;
+    this.effects.frame(c);
+    this.effects.end();
+    this.lightMoving();
     this.sprites.count = this.spriteCount;
-    this.blobs.count = this.blobCount;
     this.sprites.instanceMatrix.clearUpdateRanges();
     this.sprites.instanceMatrix.addUpdateRange(0, this.spriteCount * 16);
     this.sprites.instanceMatrix.needsUpdate = true;
@@ -845,31 +651,15 @@ export class World3D {
     this.spriteUv.clearUpdateRanges();
     this.spriteUv.addUpdateRange(0, this.spriteCount * 4);
     this.spriteUv.needsUpdate = true;
-    this.halos.count = this.haloCount;
-    this.halos.instanceMatrix.clearUpdateRanges();
-    this.halos.instanceMatrix.addUpdateRange(0, this.haloCount * 16);
-    this.halos.instanceMatrix.needsUpdate = true;
-    this.halos.instanceColor!.clearUpdateRanges();
-    this.halos.instanceColor!.addUpdateRange(0, this.haloCount * 3);
-    this.halos.instanceColor!.needsUpdate = true;
-    this.blobs.instanceMatrix.clearUpdateRanges();
-    this.blobs.instanceMatrix.addUpdateRange(0, this.blobCount * 16);
-    this.blobs.instanceMatrix.needsUpdate = true;
     this.atlas.flush();
 
-    // Water drifts as it does in 2D: the texture slides.
-    const drift = ((now / 120) % 32) / 32;
-    this.waterTex!.offset.set(drift, drift * 0.5);
+    // Water drifts as the kit says: its texture slides.
+    const w = this.waterTex!;
+    w.offset.set(this.waterScroll[0] * 60 * (f.now / 1000), this.waterScroll[1] * 60 * (f.now / 1000));
 
-    if (this.dust && this.tier.particles) {
-      this.moveDust(now, hx, hz);
-      this.moveMist(now, hx, hz);
-      this.placeShafts(f);
-    }
-
-    if (this.shadowDirty && this.shadowsOn) {
+    if (this.rig.shadowsStale && this.renderer.shadowMap.enabled) {
       this.renderer.shadowMap.needsUpdate = true;
-      this.shadowDirty = false;
+      this.rig.shadowsStale = false;
     }
     this.measureBegin();
     const r0 = performance.now();
@@ -884,8 +674,27 @@ export class World3D {
     p.triangles = info.render.triangles;
     p.textures = info.memory.textures;
     p.geometries = info.memory.geometries;
-    this.overlay?.note(now, p, this.hz, this.tier.name);
+    this.overlay?.note(f.now, p, this.hz, this.tier.name);
     return true;
+  }
+
+  /** The light that moves (a bolt, a blast) and the boss arena's accent follow what they belong to. */
+  private lightMoving(): void {
+    const d = this.effects.dynamic;
+    const light = this.rig.dynamic;
+    if (d.on) {
+      light.position.set(d.x, d.y, d.z);
+      light.color.setHex(d.color);
+      light.intensity = d.intensity;
+      light.distance = d.distance;
+    } else light.intensity = 0;
+    const accent = this.rig.accent;
+    if (this.accentBase > 0 && this.bossFound) {
+      this.bossSeen = true;
+      const pulse = this.bossName === 'yog' ? 1 + 0.4 * Math.sin((this.current!.now / 1000) * Math.PI) : 1;
+      accent.position.set(this.bossX, 2.2, this.bossZ + 1.2);
+      accent.intensity = this.accentBase * pulse;
+    } else if (!this.bossSeen) accent.intensity = 0;
   }
 
   private addItems(f: Frame3D): void {
@@ -897,8 +706,8 @@ export class World3D {
       const x = (heap.pos % WIDTH) + 0.5;
       const z = Math.trunc(heap.pos / WIDTH) + 0.6;
       const bob = visible[heap.pos] && !f.seeAll ? Math.sin(f.now / 520 + heap.pos) * 0.012 : 0;
-      this.sprite(items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, false, x, 0.02 + bob, z, 0.7, 0.7, 1);
-      if (visible[heap.pos]) this.shadow(x, z, 0.6);
+      this.sprite(items, (heap.sprite % 8) * 16, Math.floor(heap.sprite / 8) * 16, 16, 16, false, x, 0.02 + bob, z, 0.7, 0.7, 1, LEANED, 0, this.shared.itemsEmissive);
+      if (visible[heap.pos]) this.effects.shadowBlob(x, z, 0.6);
     }
     const plants = f.plants;
     if (plants) {
@@ -910,140 +719,77 @@ export class World3D {
     }
   }
 
-  /** The wall sconces: a torch standing on the lip of each wall the party has seen, and a halo round the flames in sight. */
-  private addFlames(f: Frame3D): void {
-    this.haloCount = 0;
+  /** High grass, fungi and signposts: cards standing over their cells (the grass sways), cut out of the region's tiles. */
+  private addProps(f: Frame3D, hx: number, hz: number): void {
+    const geom = this.geom!;
+    const props = this.props;
+    const t = f.now / 1000;
+    for (let i = 0; i < props.length; i++) {
+      const cell = props[i]!;
+      if (!f.explored[cell]) continue;
+      const x = cell % WIDTH;
+      const z = Math.trunc(cell / WIDTH);
+      if (Math.abs(x + 0.5 - hx) > PROP_REACH || Math.abs(z + 0.5 - hz) > PROP_REACH) continue;
+      const terrain = geom.terrain[cell];
+      if (terrain === HIGH_GRASS) {
+        const sway = Math.sin(t * 3.77 + cell * 0.9) * 0.05;
+        this.sprite(this.grassCut!.color, 0, 0, 16, 16, cell % 2 === 0, x + 0.5, 0, z + 0.62, 1, 1.05, 1, LEANED, sway, this.grassCut!.glow);
+      } else if (terrain === SIGN) {
+        this.sprite(this.signCut!.color, 0, 0, 16, 16, false, x + 0.5, 0, z + 0.62, 1, 1, 1, LEANED, 0, this.signCut!.glow);
+      }
+    }
+  }
+
+  /** Bodies left where monsters fell: the last frame of their death, lying, fading out. */
+  private addCorpses(f: Frame3D): void {
+    for (const c of fx.corpses) {
+      if (f.now < c.at) continue;
+      const cell = Math.trunc((c.y + c.image.height - 2) / TILE) * WIDTH + Math.trunc((c.x + c.image.width / 2) / TILE);
+      if (!f.visible[cell]) continue;
+      const fade = fx.corpseFade(c, f.now);
+      if (fade <= 0) continue;
+      this.sprite(c.image, 0, 0, c.image.width, c.image.height, false, (c.x + c.image.width / 2) / TILE, 0.01, (c.y + c.image.height - (TILE - FEET_PX)) / TILE, c.image.width / TILE, c.image.height / TILE, 0.7 * fade);
+    }
+  }
+
+  /** What is thrown flies in an arc, higher the farther it goes, its shade running along the floor. */
+  private addThrown(f: Frame3D): void {
+    const projectiles = f.view.projectiles;
+    for (let i = 0; i < projectiles.length; i++) {
+      const p = projectiles[i]!;
+      if (p.sprite === null) continue;
+      const k = Math.min(1, (f.now - p.start) / p.duration);
+      const fromX = (p.from % WIDTH) + 0.5;
+      const fromZ = Math.trunc(p.from / WIDTH) + 0.5;
+      const x = fromX + ((p.to % WIDTH) + 0.5 - fromX) * k;
+      const z = fromZ + (Math.trunc(p.to / WIDTH) + 0.5 - fromZ) * k;
+      const cells = Math.max(Math.abs((p.to % WIDTH) - (p.from % WIDTH)), Math.abs(Math.trunc(p.to / WIDTH) - Math.trunc(p.from / WIDTH)));
+      const height = Math.sin(k * Math.PI) * Math.min(0.9, 0.15 + cells * 0.15);
+      this.sprite(this.assets.items, (p.sprite % 8) * 16, Math.floor(p.sprite / 8) * 16, 16, 16, false, x, 0.25 + height, z, 0.6, 0.6, 1, LEANED, 0, this.shared.itemsEmissive);
+      this.effects.shadowBlob(x, z, 0.5 - height * 0.2);
+    }
+  }
+
+  /** The wall sconces: a torch on the face of each wall the party has seen, and a halo round the flames in sight. */
+  private addSconces(f: Frame3D): void {
     const sheet = worldSheet('ambient1');
     const frames = sheet?.anims.torch;
     if (!sheet || !frames || frames.length === 0) return;
     const torches = this.geom!.torches;
     const cycle = f.now * 0.01;
-    const m = this.halos.instanceMatrix.array as Float32Array;
-    const c = this.halos.instanceColor!.array as Float32Array;
+    const rgb = parseCss(regionKit(this.kit, this.region).torch.color);
     for (let i = 0; i < torches.length; i++) {
       const cell = torches[i]!;
       if (!f.explored[cell]) continue;
       const frame = frames[Math.floor(cycle + cell) % frames.length]!;
       const x = (cell % WIDTH) + 0.5;
-      const z = Math.trunc(cell / WIDTH) + 0.94;
-      this.sprite(sheet.image, frame.x, frame.y, frame.w, frame.h, false, x, WALL_H - 0.02, z, FLAME_SIZE, FLAME_SIZE, 1.3);
-      if (!f.visible[cell] || this.haloCount >= MAX_HALOS) continue;
-      // A halo faces the camera: its up runs along the view's up, its face looks at the lens.
-      const flicker = 0.5 + 0.24 * Math.sin(f.now / 70 + cell) * Math.sin(f.now / 23 + cell * 3);
-      const o = this.haloCount * 16;
-      m[o] = HALO_SIZE; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
-      m[o + 4] = 0; m[o + 5] = HALO_SIZE * COS_PITCH; m[o + 6] = -HALO_SIZE * SIN_PITCH; m[o + 7] = 0;
-      m[o + 8] = 0; m[o + 9] = SIN_PITCH; m[o + 10] = COS_PITCH; m[o + 11] = 0;
-      m[o + 12] = x; m[o + 13] = WALL_H + 0.42; m[o + 14] = z - 0.14; m[o + 15] = 1;
-      const k = this.haloCount * 3;
-      c[k] = flicker;
-      c[k + 1] = flicker * 0.9;
-      c[k + 2] = flicker * 0.8;
-      this.haloCount++;
-    }
-  }
-
-  // ---- dust ----------------------------------------------------------------------------------------------------------------
-
-  /** Called once after construction when the tier has particles. */
-  enableParticles(): void {
-    if (this.dust) return;
-    const count = 48;
-    const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(new Float32Array(count * 3), 3).setUsage(DynamicDrawUsage));
-    for (let i = 0; i < count * 3; i++) this.dustPhase[i] = Math.random() * 6.28;
-    const material = new PointsMaterial({
-      map: this.dot, size: 2.5, sizeAttenuation: false, color: new Color(0xffe6b8), transparent: true, opacity: 0.55,
-      depthWrite: false, blending: AdditiveBlending,
-    });
-    // Dust shows only where the party has been: its alpha follows the fog of war at the speck.
-    material.onBeforeCompile = (shader) => {
-      shader.uniforms.tFog = this.fogUniform;
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', ['#include <common>', 'uniform sampler2D tFog;', 'varying float vFog;'].join(String.fromCharCode(10)))
-        .replace(
-          '#include <begin_vertex>',
-          ['#include <begin_vertex>', `vFog = texture2D(tFog, vec2(position.x / ${WIDTH}.0, position.z / ${HEIGHT}.0)).r;`].join(String.fromCharCode(10)),
-        );
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', ['#include <common>', 'varying float vFog;'].join(String.fromCharCode(10)))
-        .replace('#include <opaque_fragment>', ['#include <opaque_fragment>', 'gl_FragColor.a *= 1.0 - smoothstep(0.1, 0.5, vFog);'].join(String.fromCharCode(10)));
-    };
-    material.customProgramCacheKey = () => 'pddust';
-    this.dust = new Points(geometry, material);
-    this.dust.frustumCulled = false;
-    this.dust.visible = this.tier.particles;
-    this.scene.add(this.dust);
-
-    // Shafts: open cones of pale light, added onto what is behind, one draw each.
-    const cone = new CylinderGeometry(0.42, 0.85, 2.3, 14, 1, true).translate(0, 1.15, 0);
-    const shaftMaterial = new MeshBasicMaterial({
-      color: 0xbcd6ff, transparent: true, opacity: 0.085, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
-    });
-    for (let i = 0; i < 2; i++) {
-      const shaft = new Mesh(cone, shaftMaterial);
-      shaft.visible = false;
-      shaft.rotation.z = -0.22;
-      shaft.frustumCulled = false;
-      shaft.renderOrder = 3;
-      this.shaftMesh.push(shaft);
-      this.scene.add(shaft);
-    }
-
-    // Mist: a few big soft flat wisps near the hero.
-    const wisp = new PlaneGeometry(1, 1);
-    const wispMaterial = new MeshBasicMaterial({ map: this.blobMist, transparent: true, depthWrite: false, opacity: 0.16, color: 0x9fb0cf });
-    withFog(wispMaterial, this.fogUniform, 'instance');
-    const whole = new InstancedBufferAttribute(new Float32Array(6 * 4), 4);
-    for (let i = 0; i < 6; i++) whole.setXYZW(i, 0, 0, 1, 1);
-    wisp.setAttribute('aUv', whole);
-    this.mist = new InstancedMesh(wisp, wispMaterial, 6);
-    this.mist.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.mist.frustumCulled = false;
-    this.mist.renderOrder = 1;
-    this.mist.visible = this.tier.particles;
-    this.scene.add(this.mist);
-  }
-
-  private moveDust(now: number, hx: number, hz: number): void {
-    const position = this.dust!.geometry.getAttribute('position') as BufferAttribute;
-    const a = position.array as Float32Array;
-    const t = now / 1000;
-    for (let i = 0; i < 48; i++) {
-      const p = this.dustPhase;
-      a[i * 3] = hx + Math.sin(t * 0.21 + p[i * 3]!) * 4.5 + Math.sin(t * 0.5 + p[i * 3 + 1]!) * 0.4;
-      a[i * 3 + 1] = 0.25 + ((t * 0.05 + p[i * 3 + 1]! * 0.16) % 1) * 1.1;
-      a[i * 3 + 2] = hz + Math.cos(t * 0.17 + p[i * 3 + 2]!) * 4.5;
-    }
-    position.needsUpdate = true;
-  }
-
-  private moveMist(now: number, hx: number, hz: number): void {
-    const mist = this.mist!;
-    const m = mist.instanceMatrix.array as Float32Array;
-    const t = now / 1000;
-    for (let i = 0; i < 6; i++) {
-      const size = 3.4 + (i % 3) * 0.9;
-      const o = i * 16;
-      const x = hx + Math.sin(t * 0.07 + i * 1.9) * 3.6;
-      const z = hz + Math.cos(t * 0.06 + i * 2.3) * 3.2;
-      m[o] = size; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
-      m[o + 4] = 0; m[o + 5] = 0; m[o + 6] = -size * 0.8; m[o + 7] = 0;
-      m[o + 8] = 0; m[o + 9] = 1; m[o + 10] = 0; m[o + 11] = 0;
-      m[o + 12] = x; m[o + 13] = 0.1 + i * 0.012; m[o + 14] = z; m[o + 15] = 1;
-    }
-    mist.instanceMatrix.needsUpdate = true;
-  }
-
-  /** The shafts stand in the cells chosen for the level, and show only while the party sees the cell. */
-  private placeShafts(f: Frame3D): void {
-    const cells = this.geom!.shafts;
-    for (let i = 0; i < this.shaftMesh.length; i++) {
-      const shaft = this.shaftMesh[i]!;
-      const cell = cells[i];
-      const on = cell !== undefined && f.visible[cell] === true;
-      shaft.visible = on;
-      if (on) shaft.position.set((cell % WIDTH) + 0.5, 0, Math.trunc(cell / WIDTH) + 0.5);
+      const z = Math.trunc(cell / WIDTH) + 1;
+      // On the face of the wall, a little over half its height, standing straight up.
+      this.sprite(sheet.image, frame.x, frame.y, frame.w, frame.h, false, x, 0.5, z + 0.02, 1.0, 1.0, 1.15, UPRIGHT, 0, sheet.image);
+      if (f.visible[cell]) {
+        const flicker = 0.55 + 0.25 * Math.sin(f.now / 70 + cell) * Math.sin(f.now / 23 + cell * 3);
+        this.effects.halo(x, 1.05, z + 0.25, rgb, 2.2, flicker);
+      }
     }
   }
 
@@ -1080,7 +826,7 @@ export class World3D {
   }
 
   /** Counts of the level's buffers (tests, the overlay). */
-  get quads(): { floor: number; boxes: number; water: number } | null {
+  get quads(): { floor: number; boxes: number; water: number; decals: number } | null {
     return this.geom?.quads ?? null;
   }
 
@@ -1094,39 +840,20 @@ export class World3D {
     this.overlay?.remove();
     this.dropMeshes();
     this.terrainMaterial?.dispose();
+    this.decalMaterial?.dispose();
     this.waterMaterial?.dispose();
-    this.tiles?.dispose();
+    this.terrain?.dispose();
     this.waterTex?.dispose();
     this.atlas.dispose();
     this.fog.dispose();
-    this.blob.dispose();
-    this.dot.dispose();
-    for (const mesh of [this.sprites, this.blobs] as const) {
-      mesh.geometry.dispose();
-      (mesh.material as MeshLambertMaterial).dispose();
-      mesh.dispose();
-    }
-    if (this.dust) {
-      this.dust.geometry.dispose();
-      (this.dust.material as PointsMaterial).dispose();
-    }
-    if (this.mist) {
-      this.mist.geometry.dispose();
-      (this.mist.material as MeshBasicMaterial).dispose();
-      this.mist.dispose();
-    }
-    if (this.shaftMesh[0]) {
-      this.shaftMesh[0].geometry.dispose();
-      (this.shaftMesh[0].material as MeshBasicMaterial).dispose();
-    }
-    this.blobMist.dispose();
-    this.halo.dispose();
-    this.halos.geometry.dispose();
-    (this.halos.material as MeshBasicMaterial).dispose();
-    this.halos.dispose();
-    for (const light of this.torchLights) light.shadow.dispose();
+    this.effects.dispose(this.scene);
+    this.rig.dispose(this.scene);
+    this.sprites.geometry.dispose();
+    (this.sprites.material as MeshLambertMaterial).dispose();
+    this.sprites.dispose();
     this.renderer.dispose();
     if (!this.lost) this.renderer.forceContextLoss();
     this.geom = null;
   }
 }
+

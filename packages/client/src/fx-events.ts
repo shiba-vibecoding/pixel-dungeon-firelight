@@ -399,6 +399,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
           fx.burst(x * TILE + TILE / 2, y * TILE + TILE / 2, now, look);
         }
       }
+      if (effect.kind === 'fire') fx.pulse(cellCentre(effect.pos).x, cellCentre(effect.pos).y, now, '255, 130, 50', 4 + r, 520);
       if (effect.kind === 'fire' && r >= 1) fx.shake(2, 220, now);
       if (effect.kind === 'frost') fx.flash('170, 220, 255', 0.15, 300, now);
       return;
@@ -410,6 +411,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       fx.burst(at.x, at.y, now, { count: 30, colors: SMOKE, speed: [10, 50], life: [900, 1700], rise: 22, drag: 0.4, size: [2, 4], spread: 10 });
       fx.burst(at.x, at.y, now, { count: 18, colors: DUST, speed: [60, 140], life: [300, 700], gravity: 320, size: [1, 2] });
       fx.splat(at.x, at.y - 4, now, ['#1c1612', '#2a2019', '#3a2c20'], 34, 13);
+      fx.pulse(at.x, at.y, now, '255, 190, 100', 9, 460);
       fx.flash('255, 200, 120', 0.4, 220, now);
       fx.shake(7, 450, now);
       fx.hitStop(90);
@@ -421,10 +423,14 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       const colors = BOLT_GLOW[effect.bolt ?? 'magic'] ?? BOLT_GLOW.magic!;
       fx.burst(at.x, at.y, now, { count: 16, colors, glow: true, speed: [20, 80], life: [250, 600], drag: 0.2, size: [1, 2] });
       if (effect.bolt === 'lightning') {
+        fx.pulse(at.x, at.y, now, '190, 225, 255', 8, 160);
         fx.flash('230, 240, 255', 0.35, 160, now);
         fx.shake(3, 220, now);
       }
-      if (effect.bolt === 'fire') fx.shake(1.5, 150, now);
+      if (effect.bolt === 'fire') {
+        fx.pulse(at.x, at.y, now, '255, 140, 60', 5, 300);
+        fx.shake(1.5, 150, now);
+      }
       return;
     }
     case 'trap':

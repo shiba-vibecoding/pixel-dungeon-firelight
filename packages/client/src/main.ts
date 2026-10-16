@@ -31,7 +31,7 @@ import { chargesOf, itemInfo, itemName, wearOf } from './itemtext';
 import { bakeLevel, type Camera, patchLevel, render, renderOverlay3D } from './render';
 import type { Frame3D, World3D } from './r3d/world3d';
 import { Governor, RefreshMeter } from './r3d/governor';
-import { FEET_PX, YS } from './r3d/project';
+import { FEET_PX, setPitchDeg, YS } from './r3d/project';
 import { beta3d, covers3D } from './r3d/setting';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
@@ -448,6 +448,9 @@ let lastDraw3d = 0;
 /** The last frame drawn was one with something moving (a gap after a calm one says nothing of speed). */
 let movedBefore = false;
 const perfOn = new URLSearchParams(location.search).get('perf') === '1';
+/** `?cam=50`, for the owner to compare with the designer's frames: the kit's camera (50 degrees, in perspective) in place of 70 degrees orthographic. */
+const cam50 = new URLSearchParams(location.search).get('cam') === '50';
+if (cam50) setPitchDeg(50);
 
 /** How much the map's up-and-down is squeezed on the screen: 1 in 2D, sin(pitch) in the new view. */
 const ground = (): number => (mode3d ? YS : 1);
@@ -488,23 +491,33 @@ function pick3d(level: Level, world: World): boolean {
     return false;
   }
   if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena))) return false;
-  if (r3) return true;
   const mod = lazy3d.ready();
   if (!mod) {
     load(lazy3d, () => drawPace.force(), () => stop3d(t.render3dFailed));
     return false;
   }
+  // The world kit and the floor's region maps come first (a second or so, the first time): till then the floor is 2D.
+  const base = `${import.meta.env.BASE_URL}assets/`;
+  const region = levelRegion(level);
+  const state = mod.prepare(base, assets, region);
+  if (state === 'failed') {
+    stop3d(t.render3dFailed);
+    return false;
+  }
+  if (state === 'loading') return false;
+  // The next region's maps are fetched in the background, so that going down into it does not wait.
+  if (region < 4) mod.prepare(base, assets, region + 1);
+  if (r3) return true;
   try {
     // A canvas that has had a lost context cannot be given a new one: each start has its own.
     canvas3d = document.createElement('canvas');
     canvas3d.id = 'game3d';
     canvas.before(canvas3d);
     const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, onLost: () => stop3d(t.render3dFailed) });
-    r3.enableParticles();
+    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(t.render3dFailed) });
     governor.hold(2500);
     frame3d = {
-      now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, view, seeAll: false, focusX: 0, focusY: 0,
+      now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0,
     };
     r3.resize(canvas.width, canvas.height);
   } catch {
@@ -2968,6 +2981,7 @@ function tick(now: number): void {
       f.explored = explored;
       f.heaps = heaps;
       f.plants = plants;
+      f.gas = gas;
       f.seeAll = scene.seeAll;
       f.focusX = scene.focus.x;
       f.focusY = scene.focus.y;

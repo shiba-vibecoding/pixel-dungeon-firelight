@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { OrthographicCamera, Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { HEIGHT, LENGTH, T, WIDTH, createWorld, levelAt } from '@pd/core';
 import { CELLS, LEAN_STRETCH, LEAN, PITCH, TILE_PX, WALL_H, YS, groundToScreen, pickCell, screenToGround, toVirtualY } from '../src/r3d/project';
-import { CAP_TILE, K_FLOOR, K_WALL, LevelGeom, SHAPES, TORCH_SPACING, pickShafts, pickTorches, tileRect } from '../src/r3d/levelgeom';
+import { K_FLOOR, K_WALL, LevelGeom, SHAPES, TORCH_SPACING, pickShafts, pickTorches, tileRect } from '../src/r3d/levelgeom';
+import { CAP_FIRST, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from '../src/r3d/tilemap';
 import { Governor, RefreshMeter, TIERS } from '../src/r3d/governor';
 import { Beta3D, covers3D } from '../src/r3d/setting';
 
@@ -96,11 +97,13 @@ describe('the lean of a figure', () => {
 });
 
 describe('a level as geometry', () => {
-  it('makes a lone floor cell: one quad, eight walls, twelve faces', () => {
+  it('makes a lone floor cell: one quad, eight walls, sixteen faces, four contact shadows', () => {
     const geom = new LevelGeom(mapOf([[20, 20, T.EMPTY]]), COLS, ROWS);
     expect(geom.quads.floor).toBe(1);
-    // Eight walls around the cell, each with a top; the four that touch the cell show a side to it.
-    expect(geom.quads.boxes).toBe(8 + 4);
+    // Eight walls around the cell, each with a top; the four that touch the cell show a side to it, in two parts (the face and the upper half cell).
+    expect(geom.quads.boxes).toBe(8 + 4 * 2);
+    // And the kit's contact shadow on the floor under each of the four.
+    expect(geom.quads.decals).toBe(4);
     expect(geom.quads.water).toBe(0);
     expect(geom.floor.verts).toBe(4);
     expect(geom.floor.indices).toBe(6);
@@ -125,8 +128,9 @@ describe('a level as geometry', () => {
     for (let y = 10; y <= 14; y++) for (let x = 10; x <= 14; x++) carve.push([x, y, T.EMPTY]);
     const geom = new LevelGeom(mapOf(carve), COLS, ROWS);
     expect(geom.quads.floor).toBe(25);
-    // The rim: a ring of walls around a 5 x 5 room is 7 x 7 - 25 = 24 cells, each with a top; its 20 orthogonal neighbours show a side.
-    expect(geom.quads.boxes).toBe(24 + 20);
+    // The rim: a ring of walls around a 5 x 5 room is 7 x 7 - 25 = 24 cells, each with a top; its 20 orthogonal neighbours show a side (two quads).
+    expect(geom.quads.boxes).toBe(24 + 20 * 2);
+    expect(geom.quads.decals).toBe(20);
     expect(geom.boxes.indices).toBe(geom.quads.boxes * 6);
     // Every index points at a vertex that is there.
     for (let i = 0; i < geom.boxes.indices; i++) expect(geom.boxes.index[i]!).toBeLessThan(geom.boxes.verts);
@@ -236,15 +240,33 @@ describe('how a level reads: walls against floor', () => {
     return geom.floor.color[v * 3 + 1]!;
   };
 
-  it('is a whole tile high, and its top is a cap tile of its own, not the brick', () => {
-    expect(WALL_H).toBe(1);
-    expect(SHAPES[T.WALL]!.top).toBe(CAP_TILE);
-    expect(SHAPES[T.DOOR]!.top).toBe(CAP_TILE);
-    expect(SHAPES[T.WALL]!.side).toBe(T.WALL);
-    // The cap lies in the sheet's second half (the renderer makes it there), beyond every tile of the original.
+  it('is 1.5 cells high as the kit says, with a cap chosen by the sides that have floor', () => {
+    expect(WALL_H).toBe(1.5);
+    expect(SHAPES[T.WALL]!.h).toBe(1.5);
+    expect(SHAPES[T.WALL]!.top).toBe(-1);
+    expect(SHAPES[T.DOOR]!.lowerH).toBe(1.25);
+    expect(SHAPES[T.WALL]!.side).toBe(FACE_WALL);
+    expect(SHAPES[T.WALL]!.upper).toBe(FACE_UPPER);
+    // The wall north of a lone floor cell has floor to its south (bit 4): its cap is the kit's cap with mask 4, in the sheet's second part.
+    const geom = new LevelGeom(mapOf([[20, 20, T.EMPTY]]), COLS, ROWS);
+    expect(geom.capMask(20, 19)).toBe(4);
+    expect(geom.capMask(21, 20)).toBe(8);
+    expect(geom.capMask(19, 20)).toBe(2);
+    expect(geom.capMask(20, 21)).toBe(1);
+    expect(geom.capMask(19, 19)).toBe(0);
     const cap = new Float32Array(4);
-    tileRect(CAP_TILE, 16, 16, cap);
-    expect(cap[3]!).toBeLessThanOrEqual(0.5);
+    tileRect(CAP_FIRST + 4, 16, 16, cap);
+    const b = geom.boxes;
+    let found = false;
+    for (let v = 0; v < b.verts; v += 4) {
+      if (b.normal[v * 3 + 1] === 1 && b.pos[v * 3 + 1] === WALL_H && b.pos[v * 3] === 20 && b.pos[v * 3 + 2] === 20) {
+        // The cap quad of cell (20, 19) lies on z 19..20; its first uv corner is the mask-4 cap's.
+        found = found || Math.abs(b.uv[v * 2]! - cap[0]!) < 1e-6;
+      }
+    }
+    expect(found).toBe(true);
+    // A wall with no floor beside it is the same cap, darker.
+    expect(geom.capMask(19, 19)).toBe(0);
   });
 
   it('darkens the floor at the foot of a wall: corners by how many walls touch them', () => {
@@ -260,25 +282,42 @@ describe('how a level reads: walls against floor', () => {
     expect(cornerColor(geom, 10, 10, 3)).toBeLessThan(cornerColor(geom, 10, 12, 3));
   });
 
-  it('darkens a wall face toward its foot, and keeps the fog read at each vertex', () => {
+  it('darkens a wall face toward its foot, in two parts up to the height of the wall, and keeps the fog read at each vertex', () => {
     const geom = new LevelGeom(mapOf([[20, 20, T.EMPTY]]), COLS, ROWS);
     const b = geom.boxes;
-    let faces = 0;
-    for (let v = 0; v < b.verts; v += 4) {
-      if (b.normal[v * 3 + 2] !== 1) continue;
-      faces++;
-      // Corners 0, 1 are the foot (y = 0), 2, 3 the head.
-      expect(b.pos[v * 3 + 1]).toBe(0);
-      expect(b.pos[(v + 2) * 3 + 1]).toBe(WALL_H);
-      expect(b.color[v * 3]!).toBeLessThan(b.color[(v + 2) * 3]!);
+    const south: number[] = [];
+    for (let v = 0; v < b.verts; v += 4) if (b.normal[v * 3 + 2] === 1) south.push(v);
+    // The wall north of the cell shows its south face to it: the lower cell, then the upper half cell.
+    expect(south).toHaveLength(2);
+    const [lower, upper] = south as [number, number];
+    expect(b.pos[lower * 3 + 1]).toBe(0);
+    expect(b.pos[(lower + 2) * 3 + 1]).toBe(1);
+    expect(b.pos[upper * 3 + 1]).toBe(1);
+    expect(b.pos[(upper + 2) * 3 + 1]).toBe(WALL_H);
+    expect(b.color[lower * 3]!).toBeLessThan(b.color[(lower + 2) * 3]!);
+    for (const v of south) {
       // The fog is looked up where the vertex stands on the map: x / 48 and z / 48.
       for (let k = 0; k < 4; k++) {
         expect(b.fog[(v + k) * 2]).toBeCloseTo(b.pos[(v + k) * 3]! / WIDTH, 6);
         expect(b.fog[(v + k) * 2 + 1]).toBeCloseTo(b.pos[(v + k) * 3 + 2]! / HEIGHT, 6);
       }
     }
-    // The wall north of the cell shows its south face to it.
-    expect(faces).toBe(1);
+  });
+
+  it('lays the contact shadows of the kit on the floor, one for each side a wall stands on', () => {
+    const geom = new LevelGeom(mapOf([[20, 20, T.EMPTY]]), COLS, ROWS);
+    const d = geom.decals;
+    const seen = new Set<number>();
+    const tile = new Float32Array(4);
+    for (let v = 0; v < d.verts; v += 4) {
+      for (let side = 0; side < 4; side++) {
+        tileRect(SHADOW_FIRST + side, 16, 16, tile);
+        if (Math.abs(d.uv[v * 2]! - tile[0]!) < 1e-6 && Math.abs(d.uv[v * 2 + 1]! - tile[1]!) < 1e-6) seen.add(side);
+      }
+      expect(d.pos[v * 3 + 1]).toBeGreaterThan(0);
+      expect(d.pos[v * 3 + 1]).toBeLessThan(0.05);
+    }
+    expect([...seen].sort()).toEqual([0, 1, 2, 3]);
   });
 
   it('places up to two shafts of light, in the middle of rooms', () => {
@@ -372,12 +411,9 @@ describe('the quality tier and the fall back to 2D', () => {
 });
 
 describe('where the 3D view is used', () => {
-  it('covers the sewers only, and never the arena', () => {
-    expect(covers3D(1, 0, false)).toBe(true);
-    expect(covers3D(4, 0, false)).toBe(true);
-    expect(covers3D(5, 0, false)).toBe(true);
-    expect(covers3D(6, 1, false)).toBe(false);
+  it('covers every depth in the look of its region, and never the arena of waves', () => {
+    for (let depth = 1; depth <= 26; depth++) expect(covers3D(depth, Math.min(4, Math.floor((depth - 1) / 5)), false)).toBe(true);
     expect(covers3D(2, 0, true)).toBe(false);
-    expect(covers3D(2, 1, false)).toBe(false);
+    expect(covers3D(12, 2, true)).toBe(false);
   });
 });

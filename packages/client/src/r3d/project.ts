@@ -10,23 +10,39 @@
 import { HEIGHT, LENGTH, WIDTH } from '@pd/core';
 
 export const TILE_PX = 16;
-/** The camera's pitch above the horizon, degrees: fixed. */
-export const PITCH_DEG = 70;
-export const PITCH = (PITCH_DEG * Math.PI) / 180;
+/** The pitch the game is drawn at: the owner's choice, 70 degrees orthographic. */
+export const DEFAULT_PITCH_DEG = 70;
+/** The camera's pitch above the horizon, degrees: fixed for a run of the game, 70 (the kit's frames were made at 50: `?cam=50`). */
+export let PITCH_DEG = DEFAULT_PITCH_DEG;
+export let PITCH = (PITCH_DEG * Math.PI) / 180;
 /** How much the ground is squeezed up and down on the screen. */
-export const YS = Math.sin(PITCH);
+export let YS = Math.sin(PITCH);
 /** How far a figure standing up is leaned back toward the camera, degrees: the sprite faces the viewer without lying down. */
-export const LEAN_DEG = 20;
-export const LEAN = (LEAN_DEG * Math.PI) / 180;
+export let LEAN_DEG = 20;
+export let LEAN = (LEAN_DEG * Math.PI) / 180;
 /**
  * A leaned sprite is shortened on screen by cos(pitch - lean); drawn this much taller it keeps the proportions of its art
  * (a rat is as wide and tall on screen as it is in 2D).
  */
-export const LEAN_STRETCH = 1 / Math.cos(PITCH - LEAN);
-/** A wall's height, in tiles: a whole one, so its south face reads as a wall at 70 degrees (the far edge of its top reaches 0.36 of a tile; the feet stand clear of that). */
-export const WALL_H = 1.0;
-/** Where a walker's feet are in its cell, art pixels from the cell's top: a little south of the middle, so a wall to its south never buries them. */
-export const FEET_PX = 8;
+export let LEAN_STRETCH = 1 / Math.cos(PITCH - LEAN);
+
+/**
+ * Sets the pitch, before anything is drawn: the lean follows it (20 degrees at 70, 34 at 50: the lower the camera looks, the more a
+ * figure may stand up), and everything derived is made again. Imports of these see the new values (they are live bindings).
+ */
+export function setPitchDeg(deg: number): void {
+  PITCH_DEG = deg;
+  PITCH = (deg * Math.PI) / 180;
+  YS = Math.sin(PITCH);
+  LEAN_DEG = Math.round(20 + (70 - deg) * 0.7);
+  LEAN = (LEAN_DEG * Math.PI) / 180;
+  LEAN_STRETCH = 1 / Math.cos(PITCH - LEAN);
+}
+
+/** A wall's height, in cells: the kit's (hd2d-kit.json materials.wall_face.height) at either camera. */
+export const WALL_H = 1.5;
+/** Where a walker's feet are in its cell, art pixels from the cell's top: a little north of the middle, so the wall to its south never buries them. */
+export const FEET_PX = 7;
 
 export interface View2 {
   /** The world pixel at the virtual screen's top-left corner, and device pixels per art pixel. */

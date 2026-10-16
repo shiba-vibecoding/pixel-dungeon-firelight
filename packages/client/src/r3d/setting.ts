@@ -1,12 +1,9 @@
 /*
- * The switch «Новая графика (бета)»: the 3D renderer of the sewers, off by default, kept on this device. When the 3D renderer
+ * The switch «Новая графика (бета)»: the 3D renderer, off by default, kept on this device. When the 3D renderer
  * cannot keep up (governor.ts) or cannot start, the game turns the switch off by itself and says so.
  */
 
 const KEY = 'pd-3d';
-
-/** The depths the 3D view covers in this milestone: the sewers (the boss's floor, Goo's, is of them). */
-export const LAST_3D_DEPTH = 5;
 
 export interface Storage3D {
   getItem(key: string): string | null;
@@ -45,7 +42,10 @@ export class Beta3D {
 
 export const beta3d = new Beta3D();
 
-/** Whether a floor is drawn in 3D when the switch is on: the sewers' own look, not the arena of waves. */
-export function covers3D(depth: number, region: number, arena: boolean): boolean {
-  return !arena && region === 0 && depth >= 1 && depth <= LAST_3D_DEPTH;
+/**
+ * Whether a floor is drawn in 3D when the switch is on: every depth, in the look of its region (the world kit has all five and the
+ * five boss arenas); the arena of waves, which dresses its own sand and stands, stays in 2D.
+ */
+export function covers3D(_depth: number, _region: number, arena: boolean): boolean {
+  return !arena;
 }
