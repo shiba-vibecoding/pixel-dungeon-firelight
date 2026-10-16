@@ -1,0 +1,174 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Firelight lighting sheet</title>
+<style>
+@font-face { font-family: G11; src: url(fonts/Galmuri11.woff2); }
+@font-face { font-family: G9; src: url(fonts/Galmuri9.woff2); }
+:root { --void:#0b0b09; --s9:#1f211c; --s8:#282a24; --s7:#3b3e36; --s3:#7a8173; --ink:#e8e2c8; --mut:#b0b5a3; --light:#ffeba4; --gold:#ffcc66; --flame:#ff9a3a; --ember:#e8641f; --litdark:#4a3424; --litlo:#74583c; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--void); color: var(--ink); font: 11px/1.45 G11, monospace; -webkit-font-smoothing: none; }
+img, canvas, .px { image-rendering: pixelated; }
+.page { padding: 16px; display: grid; gap: 12px; }
+h1 { font: 22px/1 G11; color: var(--light); margin: 0; text-shadow: 2px 2px 0 #1a0a06; }
+h2 { font: 11px/1 G11; color: var(--gold); margin: 0 0 6px; text-transform: none; letter-spacing: .5px; }
+.sub { color: var(--mut); }
+.top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-bottom: 2px solid var(--litdark); padding-bottom: 8px; }
+.top .mood { color: var(--ink); flex: 1 1 300px; }
+.frame { display: block; width: 100%; border: 2px solid var(--litdark); background: #000; }
+.cap { color: var(--mut); font: 9px/1.3 G9; margin-top: 3px; }
+.panel { background: var(--s9); border: 2px solid var(--s8); border-bottom-color: var(--litdark); padding: 8px 10px; }
+.row { display: flex; align-items: center; gap: 8px; min-height: 18px; flex-wrap: wrap; }
+.v { min-width: 0; }
+.page > * { min-width: 0; }
+.row + .row { margin-top: 3px; }
+.sw { width: 14px; height: 14px; border: 1px solid #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); flex: none; }
+.k { color: var(--mut); width: 92px; flex: none; }
+.v { color: var(--ink); }
+.hex { color: var(--s3); font: 9px G9; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: flex; align-items: center; gap: 5px; background: var(--s8); padding: 2px 6px 2px 2px; border-bottom: 1px solid var(--litdark); }
+.chip canvas { width: 24px; height: 24px; background: #0e0f0c; }
+.mats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.mat { display: grid; grid-template-columns: 32px 1fr; column-gap: 5px; align-items: center; }
+.mat .t { grid-row: span 3; }
+.mat { background: var(--s8); padding: 4px; text-align: left; border-bottom: 1px solid var(--litdark); }
+.mat .t { width: 32px; height: 32px; display: block; background: #000; }
+.mat b { display: block; color: var(--light); font-weight: normal; line-height: 1.15; }
+.mat span { display: block; color: var(--mut); font: 9px/1.25 G9; }
+.boss { border-left: 3px solid var(--ember); padding-left: 8px; }
+.desk .boss .k { width: 80px; }
+.desk .boss .row .v { flex: 1; }
+/* desktop */
+.desk .grid1 { display: grid; grid-template-columns: 768px 1fr; gap: 12px; }
+.desk .grid2 { display: grid; grid-template-columns: 300px 87px 87px 290px 1fr; gap: 10px; align-items: start; }
+.desk .side { display: grid; gap: 8px; align-content: start; }
+/* phone */
+.phone .page { padding: 16px; }
+.phone h1 { font-size: 22px; }
+.phone .mats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.phone .duo { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; }
+.phone .k { width: 84px; }
+</style></head>
+<body><div id="app"></div>
+<script type="module">
+const Q = new URLSearchParams(location.search);
+const R = +(Q.get('r') || 0), L = Q.get('lang') || 'en', PHONE = innerWidth < 600;
+document.body.className = PHONE ? 'phone' : 'desk';
+const N = ['sewers', 'prison', 'caves', 'city', 'halls'], RN = N[R];
+const kit = await (await fetch('hd2d/hd2d-kit.json')).json();
+const reg = kit.regions[RN];
+const T = {
+  en: { names: ['Sewers', 'Prison', 'Caves', 'Dwarven City', 'Demon Halls'], bosses: ['Goo', 'Tengu', 'DM-300', 'King of Dwarves', 'Yog-Dzewa'],
+    sheet: 'Lighting sheet', depth: 'depths', boss: 'boss', light: 'Light', ambient: 'Ambient', hemi: 'Sky / ground', torch: 'Torch', hero: 'Hero light',
+    fog: 'Fog', mist: 'Mist', none: 'none', particles: 'Particles', water: 'Water', lava: 'Lava', glow: 'Glow', mats: 'Materials',
+    surface: 'surface', reflect: 'reflection', ripple: 'ripple', cells: 'cells', flicker: 'flicker', shadows: 'shadows', at: 'at', depthL: 'depth',
+    accent: 'accent', hz: 'Hz', level: 'A level', arena: 'The boss arena', phone: 'phone', rough: 'R', height: 'H', tiles: 'tiles', perRate: '/s',
+    caption: 'Rendered with the kit viewer (Three.js r169, bloom, fog, mirror water). Camera 50°, fov 30.',
+    moods: kit && null },
+  ru: { names: ['Канализация', 'Тюрьма', 'Пещеры', 'Город гномов', 'Демонические залы'], bosses: ['Жижа', 'Тенгу', 'DM-300', 'Король гномов', 'Йог-Дзева'],
+    sheet: 'Лист света', depth: 'глубины', boss: 'босс', light: 'Свет', ambient: 'Окружающий', hemi: 'Небо / земля', torch: 'Факел', hero: 'Свет героя',
+    fog: 'Туман', mist: 'Дымка', none: 'нет', particles: 'Частицы', water: 'Вода', lava: 'Лава', glow: 'Свечение', mats: 'Материалы',
+    surface: 'гладь', reflect: 'отражение', ripple: 'рябь', cells: 'кл.', flicker: 'мерцание', shadows: 'тени', at: 'на', depthL: 'глубина',
+    accent: 'акцент', hz: 'Гц', level: 'Уровень', arena: 'Арена босса', phone: 'телефон', rough: 'R', height: 'H', tiles: 'тайлы', perRate: '/с',
+    caption: 'Отрисовано просмотрщиком кита (Three.js r169, bloom, туман, зеркальная вода). Камера 50°, fov 30.' },
+}[L];
+const MOOD = {
+  en: ['Damp, cold green; a lit room in the dark: the water shines, the stone does not.',
+    'Dry dust in still air, old lamps, moonlight through the bars.',
+    'The dark eats the walls; fungi and crystals glow, ore glints, few torches.',
+    'Cold blue dwarven stone, polished; warm forge light from the doors and braziers.',
+    'Red heat: lava for water, runes and cracks glow, the air shimmers.'],
+  ru: ['Сырость и холодная зелень; освещённая комната во тьме: вода блестит, камень — нет.',
+    'Сухая пыль в неподвижном воздухе, старые лампы, лунный свет сквозь решётки.',
+    'Тьма съедает стены; светятся грибы и кристаллы, блестит руда, факелов мало.',
+    'Холодный синий полированный камень гномов; тёплый свет кузниц из дверей и жаровен.',
+    'Красный жар: вместо воды лава, светятся руны и трещины, воздух дрожит.'],
+}[L];
+const BOSSNOTE = {
+  en: ['Goo glows a sick green; pumping up it turns red (#ff4a3a, ×2). Its pools seethe with bubbles.',
+    'A hard white light over the arena; Tengu blinks away in a puff of grey smoke.',
+    'Red alarm lights; DM-300 vents toxic green gas (the mist), sparks fly from its steps.',
+    'The throne room in gold; the King’s summons rise in violet (#b060ff).',
+    'Yog’s eye pulses (0.5 Hz, ×0.6–1.4); the fists burn (#ff7a2a) and rot (#7a9a3a).'],
+  ru: ['Жижа светится болезненно-зелёным, надуваясь — красным (#ff4a3a, ×2). Её лужи кипят пузырями.',
+    'Жёсткий белый свет над ареной; Тенгу исчезает в клубе серого дыма.',
+    'Красные аварийные огни; DM-300 выпускает зелёный ядовитый газ (дымка), из-под шагов летят искры.',
+    'Тронный зал в золоте; призванные Королём поднимаются в фиолетовом (#b060ff).',
+    'Глаз Йога пульсирует (0,5 Гц, ×0,6–1,4); кулаки горят (#ff7a2a) и гниют (#7a9a3a).'],
+}[L];
+const PN = { en: { drip: 'drips', mist: 'mist', dust: 'dust', ember: 'embers', ash: 'ash', spore: 'spores', steam: 'steam', spark: 'sparks', bubble: 'bubbles', magic: 'magic', fly: 'flies', smoke: 'smoke', haze: 'heat haze' },
+  ru: { drip: 'капли', mist: 'дымка', dust: 'пыль', ember: 'угольки', ash: 'пепел', spore: 'споры', steam: 'пар', spark: 'искры', bubble: 'пузыри', magic: 'магия', fly: 'мухи', smoke: 'дым', haze: 'марево' } }[L];
+const GLOWN = { en: { 9: 'embers', 12: R === 1 ? 'barred window' : 'gold ore', 15: R === 2 ? 'fungi' : 'mushrooms', 5: R === 3 ? 'door windows' : 'rune door', 2: 'cracks', 24: 'runes', 29: 'sign', 63: 'lava', traps: 'trap glyphs' },
+  ru: { 9: 'угли', 12: R === 1 ? 'окно с решёткой' : 'золотая руда', 15: R === 2 ? 'грибы' : 'грибы', 5: R === 3 ? 'окна дверей' : 'рунная дверь', 2: 'трещины', 24: 'руны', 29: 'знак', 63: 'лава', traps: 'знаки ловушек' } }[L];
+const MATN = {
+  en: { floor: 'floor', wall_face: 'wall face', wall_top: 'wall top', door: 'door', water: R === 4 ? 'lava' : 'water', grass: 'grass', chasm: 'chasm', stairs_down: 'stairs' },
+  ru: { floor: 'пол', wall_face: 'стена', wall_top: 'верх стены', door: 'дверь', water: R === 4 ? 'лава' : 'вода', grass: 'трава', chasm: 'пропасть', stairs_down: 'лестница' } }[L];
+const PF = { drip: 0, mist: 1, dust: 2, ember: 3, ash: 4, spore: 5, steam: 6, spark: 7, bubble: 8, magic: 9, fly: 10, smoke: 11, haze: 1 };
+const num = (v) => L === 'ru' ? String(v).replace('.', ',') : String(v);
+const sw = (c) => c ? `<i class="sw" style="background:${c}"></i>` : '<i class="sw" style="background:repeating-linear-gradient(45deg,#222 0 3px,#111 3px 6px)"></i>';
+const row = (k, c, v, hex = c) => `<div class="row">${sw(c)}<span class="k">${k}</span><span class="v">${v}</span>${hex ? `<span class="hex">${hex}</span>` : ''}</div>`;
+const img = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = src; });
+const [tiles, walls, water, parts] = await Promise.all([`assets/tiles${R}.png`, `hd2d/walls${R}.png`, `assets/water${R}.png`, 'hd2d/particles.png'].map(img));
+function cell(src, sx, sy, sw_ = 16, sh = 16, scale = 3, tint = null) {
+  const c = document.createElement('canvas'); c.width = sw_ * scale; c.height = sh * scale; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.drawImage(src, sx, sy, sw_, sh, 0, 0, sw_ * scale, sh * scale);
+  if (tint) { g.globalCompositeOperation = 'source-in'; g.fillStyle = tint; g.fillRect(0, 0, c.width, c.height); }
+  return c.toDataURL();
+}
+const mat = (k) => ({ ...kit.materials[k], ...(reg.override?.[k] || {}) });
+const tk = reg.torch, fg = reg.fog, wk = reg.water, hl = kit.hero_light, B = reg.boss;
+const light = `<div class="panel"><h2>${T.light}</h2>
+  ${row(T.ambient, reg.ambient.color, num(reg.ambient.intensity))}
+  ${row(T.hemi, reg.hemi.sky, `<i class="sw" style="background:${reg.hemi.ground};display:inline-block;vertical-align:-3px"></i> ${num(reg.hemi.intensity)}`, `${reg.hemi.sky} · ${reg.hemi.ground}`)}
+  ${row(T.torch, tk.color, `${num(tk.intensity)} · ${num(tk.distance)} ${T.cells} · ${T.flicker} ${num(tk.flicker.hz)} ${T.hz} ±${Math.round(tk.flicker.amp * 100)}%${tk.shadows ? ' · ' + T.shadows : ''}`)}
+  ${row(T.hero, hl.color, `${num(hl.intensity)} · ${num(hl.distance)} ${T.cells}`)}
+  ${row(T.fog, fg.color, `${num(fg.near)}–${num(fg.far)} ${T.cells}`)}
+  ${row(T.mist, fg.mist?.color, fg.mist ? `${Math.round(fg.mist.density * 100)}% ${T.at} ${num(fg.mist.height)}` : T.none, fg.mist?.color || '')}
+</div>`;
+const chips = (list) => `<div class="chips">${list.map((p) => `<span class="chip"><img class="px" style="width:24px;height:24px;background:#0e0f0c" src="${cell(parts, PF[p.type] * 8, 0, 8, 8, 3, p.color)}"><span>${PN[p.type] || p.type}</span><span class="hex">${p.color}${p.rate ? ' · ' + num(p.rate) + T.perRate : ''}</span></span>`).join('')}</div>`;
+const partsP = `<div class="panel"><h2>${T.particles}</h2>${chips(reg.particles.filter((p) => p.type !== 'haze' || true))}</div>`;
+const rip = await img('hd2d/ripple.png');
+const waterP = `<div class="panel"><h2>${R === 4 ? T.lava : T.water}</h2>
+  <div class="row" style="gap:10px;align-items:flex-start">
+   <img class="px" style="width:48px;height:48px" src="${cell(water, 0, 0, 32, 32, 2)}">
+   <div style="flex:1">${row(T.surface, wk.surface, '')}${wk.reflect ? row(T.reflect, wk.reflect, Math.round(wk.reflectStrength * 100) + '%') : row(T.glow, wk.emissive, '×' + num(wk.emissiveIntensity))}${row(T.ripple, wk.ripple, '')}</div>
+   <div style="display:flex;gap:3px">${[0, 2, 4].map((f) => `<img class="px" style="width:32px;height:32px;background:${wk.surface}" src="${cell(rip, f * 16, 0, 16, 16, 2, wk.ripple)}">`).join('')}</div>
+  </div></div>`;
+const emis = Object.entries(reg.emissive).map(([k, c]) => k === 'traps'
+  ? `<span class="chip"><img class="px" style="width:24px;height:24px" src="${cell(tiles, (17 % 16) * 16, 16, 16, 16, 1.5)}"><span>${GLOWN.traps}</span></span>`
+  : `<span class="chip"><img class="px" style="width:24px;height:24px" src="${cell(tiles, (+k % 16) * 16, Math.floor(+k / 16) * 16, 16, 16, 1.5)}"><span>${GLOWN[k] || k}</span>${sw(c)}<span class="hex">${c}</span></span>`).join('');
+const glowP = `<div class="panel"><h2>${T.glow}</h2><div class="chips">${emis}</div></div>`;
+const MATS = [['floor', () => cell(tiles, 16, 0)], ['wall_face', () => cell(walls, 0, 16)], ['wall_top', () => cell(walls, 4 * 16, 0)], ['door', () => cell(tiles, 5 * 16, 0)],
+  ['water', () => cell(water, 0, 0, 16, 16)], ['grass', () => cell(tiles, 2 * 16, 0)], ['chasm', () => cell(walls, 4 * 16, 16)], ['stairs_down', () => cell(tiles, 8 * 16, 0)]];
+const matsP = `<div class="panel"><h2>${T.mats}</h2><div class="mats">${MATS.map(([k, f]) => { const m = mat(k);
+  return `<div class="mat"><img class="t px" src="${f()}"><b>${MATN[k]}</b><span>R ${num(m.roughness)}${m.metalness ? ' · M ' + num(m.metalness) : ''}</span><span>H ${num(m.height)}</span></div>`; }).join('')}</div></div>`;
+const bossP = `<div class="panel boss"><h2>${T.boss} · ${T.bosses[R]} · ${T.depthL} ${B.depth}</h2>
+  ${row(T.ambient, B.ambient.color, num(B.ambient.intensity))}
+  ${row(T.fog, B.fog.color, `${num(B.fog.near)}–${num(B.fog.far)} ${T.cells}`)}
+  ${row(T.mist, B.fog.mist?.color, B.fog.mist ? `${Math.round(B.fog.mist.density * 100)}% ${T.at} ${num(B.fog.mist.height)}` : T.none, B.fog.mist?.color || '')}
+  ${row(T.accent, B.accent.color, '×' + num(B.accent.intensity))}
+  <div style="margin-top:6px">${chips(B.particles)}</div>
+  <div class="cap" style="font-size:9px;margin-top:6px;color:var(--ink)">${BOSSNOTE[R]}</div></div>`;
+const head = `<div class="top"><h1>${T.names[R]}</h1><span class="sub">${T.sheet} · ${T.depth} ${reg.depths[0]}–${reg.depths[reg.depths.length - 1]} · ${T.boss} ${B.depth}</span><span class="mood">${MOOD[R]}</span></div>`;
+const f = (n) => `frames/${RN}${n}`;
+const app = document.getElementById('app');
+if (!PHONE) {
+  app.innerHTML = `<div class="page">${head}
+   <div class="grid1"><div><img class="frame" src="${f('-1280x800.png')}" style="height:480px;object-fit:cover"></div>
+     <div class="side">${light}${partsP}${waterP}${glowP}</div></div>
+   <div class="grid2"><div><img class="frame" src="${f('-boss-1280x800.png')}" style="height:188px;object-fit:cover"><div class="cap">${T.arena} · ${T.bosses[R]}</div></div>
+     <div><img class="frame" src="${f('-375x812.png')}" style="height:188px;object-fit:cover"><div class="cap">${T.phone}</div></div>
+     <div><img class="frame" src="${f('-boss-375x812.png')}" style="height:188px;object-fit:cover"><div class="cap">${T.phone} · ${T.boss}</div></div>
+     ${bossP}${matsP}</div>
+  </div>`;
+} else {
+  app.innerHTML = `<div class="page">${head}
+   <div><img class="frame" src="${f('-1280x800.png')}"><div class="cap">${T.level}</div></div>
+   <div class="duo"><div><img class="frame" src="${f('-375x812.png')}"><div class="cap">${T.phone}</div></div><div><img class="frame" src="${f('-boss-375x812.png')}"><div class="cap">${T.phone} · ${T.boss}</div></div></div>
+   ${light}${partsP}${waterP}${glowP}
+   <div><img class="frame" src="${f('-boss-1280x800.png')}"><div class="cap">${T.arena} · ${T.bosses[R]}</div></div>
+   ${bossP}${matsP}<div class="cap">${T.caption}</div></div>`;
+}
+await document.fonts.ready; await Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((ok) => (i.onload = i.onerror = ok))));
+window.__ready = true;
+</script></body></html>

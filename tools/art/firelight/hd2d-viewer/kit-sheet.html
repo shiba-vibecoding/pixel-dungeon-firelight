@@ -1,0 +1,150 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Firelight world kit</title>
+<style>
+@font-face { font-family: G11; src: url(fonts/Galmuri11.woff2); }
+@font-face { font-family: G9; src: url(fonts/Galmuri9.woff2); }
+:root { --void:#0b0b09; --s9:#1f211c; --s8:#282a24; --s3:#7a8173; --ink:#e8e2c8; --mut:#b0b5a3; --light:#ffeba4; --gold:#ffcc66; --ember:#e8641f; --litdark:#4a3424; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--void); color: var(--ink); font: 11px/1.45 G11, monospace; -webkit-font-smoothing: none; }
+img, canvas { image-rendering: pixelated; }
+.page { padding: 16px; display: grid; gap: 10px; }
+.page > * { min-width: 0; }
+h1 { font: 22px/1 G11; color: var(--light); margin: 0; text-shadow: 2px 2px 0 #1a0a06; }
+h2 { font: 11px/1 G11; color: var(--gold); margin: 0 0 6px; }
+.top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-bottom: 2px solid var(--litdark); padding-bottom: 8px; }
+.sub { color: var(--mut); }
+.panel { background: var(--s9); border: 2px solid var(--s8); border-bottom-color: var(--litdark); padding: 8px 10px; min-width: 0; }
+.cap, .hex { color: var(--s3); font: 9px/1.3 G9; }
+.mut { color: var(--mut); }
+.strip { display: flex; align-items: center; gap: 8px; }
+.strip + .strip { margin-top: 4px; }
+.strip .lbl { width: 92px; flex: none; color: var(--mut); }
+.legend { display: flex; gap: 0; margin-left: 100px; }
+.legend span { width: 32px; text-align: center; font: 9px G9; color: var(--s3); }
+.legend .g { color: var(--gold); }
+table { border-collapse: collapse; width: 100%; }
+td, th { text-align: left; padding: 2px 6px 2px 0; vertical-align: top; }
+th { color: var(--gold); font-weight: normal; }
+td.n { color: var(--light); white-space: nowrap; }
+td.v { white-space: nowrap; color: var(--ink); }
+td.note { color: var(--mut); font: 9px/1.3 G9; }
+.close { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.close img { width: 100%; display: block; border: 2px solid var(--litdark); aspect-ratio: 2.15 / 1; object-fit: cover; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { display: flex; align-items: center; gap: 5px; background: var(--s8); padding: 2px 6px 2px 2px; border-bottom: 1px solid var(--litdark); }
+.sw { width: 14px; height: 14px; border: 1px solid #000; flex: none; display: inline-block; }
+.pair { display: grid; grid-template-columns: 70px auto auto auto; gap: 6px 8px; align-items: center; }
+.pair img { display: block; }
+.desk .g2 { display: grid; grid-template-columns: 640px 1fr; gap: 10px; }
+.phone .g2 { display: grid; gap: 10px; }
+.phone .close { grid-template-columns: 1fr 1fr; }
+.phone .pair { grid-template-columns: 1fr; }
+.phone .scroll { overflow-x: auto; }
+.phone .strip { flex-wrap: wrap; gap: 4px; }
+.phone .strip .lbl { width: 100%; }
+.phone .legend { margin-left: 0; }
+.phone .faces-cap { margin-left: 0 !important; }
+</style></head>
+<body><div id="app"></div>
+<script type="module">
+const Q = new URLSearchParams(location.search);
+const L = Q.get('lang') || 'en', P = Q.get('page') || 'walls', PHONE = innerWidth < 600;
+document.body.className = PHONE ? 'phone' : 'desk';
+const kit = await (await fetch('hd2d/hd2d-kit.json')).json();
+const num = (v) => L === 'ru' ? String(v).replace('.', ',') : String(v);
+const img = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = src; });
+function cell(src, sx, sy, w, h, scale, tint = null, bg = null) {
+  const c = document.createElement('canvas'); c.width = w * scale; c.height = h * scale; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height); }
+  const t = document.createElement('canvas'); t.width = w * scale; t.height = h * scale; const tg = t.getContext('2d'); tg.imageSmoothingEnabled = false;
+  tg.drawImage(src, sx, sy, w, h, 0, 0, w * scale, h * scale);
+  if (tint) { tg.globalCompositeOperation = 'source-in'; tg.fillStyle = tint; tg.fillRect(0, 0, t.width, t.height); }
+  g.drawImage(t, 0, 0); return c.toDataURL();
+}
+const RN = { en: ['Sewers', 'Prison', 'Caves', 'Dwarven City', 'Demon Halls'], ru: ['Канализация', 'Тюрьма', 'Пещеры', 'Город гномов', 'Демонические залы'] }[L];
+const N = ['sewers', 'prison', 'caves', 'city', 'halls'];
+const T = {
+  en: { kit: 'World kit', walls: 'walls, edges and materials', glow: 'glow, water and particles', caps: 'Wall tops by neighbour mask (bit 1 N, 2 E, 4 S, 8 W: open to floor)',
+    faces: 'Faces · chasm edges · contact shadows', mats: 'Materials', name: 'tile', r: 'R', m: 'M', h: 'H', note: 'note',
+    close: 'From the 50° camera', cl: ['sewers: caps lit toward the camera, a door recess', 'caves: chasm edges into the fog, ore glints', 'city: door windows glow, polished floor', 'halls: lava with its own light'],
+    em: 'Glow and roughness maps', emc: 'tiles · emissive (glow colour, alpha = strength) · roughness (white = matte)', items: 'Magic items', bolts: 'Wand bolts',
+    water: 'Water', surface: 'surface', reflect: 'reflection', ripple: 'ripple', parts: 'Particles (8×8, tinted per region)', light: 'light', noLight: 'no light',
+    rip: 'Ripple, 6 frames 16×16, tinted by water.ripple' },
+  ru: { kit: 'Кит мира', walls: 'стены, края и материалы', glow: 'свечение, вода и частицы', caps: 'Верх стены по маске соседей (бит 1 С, 2 В, 4 Ю, 8 З: открыто на пол)',
+    faces: 'Грани · края пропасти · контактные тени', mats: 'Материалы', name: 'тайл', r: 'R', m: 'M', h: 'H', note: 'заметка',
+    close: 'С камеры 50°', cl: ['канализация: кромки к камере светлее, ниша двери', 'пещеры: края пропасти уходят в туман, блестит руда', 'город: светятся окна дверей, полированный пол', 'залы: лава со своим светом'],
+    em: 'Карты свечения и шероховатости', emc: 'тайлы · emissive (цвет свечения, альфа = сила) · roughness (белое = матовое)', items: 'Магические предметы', bolts: 'Заряды палочек',
+    water: 'Вода', surface: 'гладь', reflect: 'отражение', ripple: 'рябь', parts: 'Частицы (8×8, окрашиваются по региону)', light: 'свет', noLight: 'без света',
+    rip: 'Рябь, 6 кадров 16×16, цвет из water.ripple' },
+}[L];
+const MN = { en: { floor: 'floor', wall_face: 'wall face', wall_top: 'wall top', door: 'door', barricade: 'barricade', water: 'water', grass: 'grass', high_grass: 'high grass',
+    chasm: 'chasm', stairs_down: 'stairs down', stairs_up: 'stairs up', embers: 'embers', pedestal: 'pedestal', statue: 'statue', bookshelf: 'bookshelf', alchemy: 'alchemy pot', well: 'well', sign: 'sign', trap: 'trap' },
+  ru: { floor: 'пол', wall_face: 'грань стены', wall_top: 'верх стены', door: 'дверь', barricade: 'баррикада', water: 'вода', grass: 'трава', high_grass: 'высокая трава',
+    chasm: 'пропасть', stairs_down: 'лестница вниз', stairs_up: 'лестница вверх', embers: 'угли', pedestal: 'пьедестал', statue: 'статуя', bookshelf: 'книжная полка', alchemy: 'котёл', well: 'колодец', sign: 'знак', trap: 'ловушка' } }[L];
+const NOTE_RU = {
+  floor: 'сухой камень; матовый, факел ложится мягким пятном',
+  wall_face: 'видимая сторона; тайл стены PD на 1 × 1,5, нижние 2 px темнее (цоколь), на полу перед ней полоса AO',
+  wall_top: 'крышка, walls*.png ряд 0 по маске соседей; кромка к полу светлая, к камере — светлее всего',
+  door: 'дерево; коробка — стена высотой 1,5, полотно 1,25; открытая — повёрнута на 90° к косяку',
+  barricade: 'доски; горит (свет огня на 0,8 клетки вверх, пока горит)',
+  water: 'зеркало под бегущей текстурой воды (water*.png), края — тайлы 48–62 как альфа-кромка',
+  grass: 'наклейка на полу',
+  high_grass: '3 скрещённых билборда на клетку, колышется 0,6 Гц; прячет героя ниже колен и низко загораживает свет факела (отбрасывает тени)',
+  chasm: 'пол кончается гранью края (walls*.png ряд 1, колонки 4–5) и уходит на 3 клетки в туман; внизу ничего не освещено',
+  stairs_down: 'выход: три ступени по 1/6 клетки вглубь пола, последняя тёмная',
+  stairs_up: 'вход: три ступени вверх к стене, сверху холодный свет сквозняка (заливка 0,3)',
+  embers: 'светящиеся угли, маленький мерцающий свет на 0,3 выше',
+  pedestal: 'полированный камень',
+  statue: 'блок шириной 0,8, тайл на передней грани, отбрасывает тень',
+  bookshelf: 'у стены, тайл на передней грани',
+  alchemy: 'котёл: железо, варево светится (пузыри), зелёно-золотой свет',
+  well: 'кольцо высотой 0,4, вода внутри на −0,2 (как вода)',
+  sign: 'столб и доска, повёрнуты к камере',
+  trap: 'плита; её знак светится (маска свечения), когда ловушка найдена; неактивная (23) не светится',
+};
+const BN = { en: { magicMissile: 'Magic Missile', firebolt: 'Firebolt', lightning: 'Lightning', poison: 'Poison', slowness: 'Slowness', disintegration: 'Disintegration', regrowth: 'Regrowth', teleportation: 'Teleportation', blink: 'Blink', amok: 'Amok', avalanche: 'Avalanche', flock: 'Flock', reach: 'Reach' },
+  ru: { magicMissile: 'Волшебные заряды', firebolt: 'Огненная стрела', lightning: 'Молния', poison: 'Яд', slowness: 'Замедление', disintegration: 'Распад', regrowth: 'Рост', teleportation: 'Телепортация', blink: 'Скачок', amok: 'Бешенство', avalanche: 'Камнепад', flock: 'Стадо', reach: 'Досягаемость' } }[L];
+const PNm = { en: ['drip', 'mist', 'dust', 'ember', 'ash', 'spore', 'steam', 'spark', 'bubble', 'magic', 'fly', 'smoke'], ru: ['капля', 'дымка', 'пыль', 'уголёк', 'пепел', 'спора', 'пар', 'искра', 'пузырь', 'магия', 'муха', 'дым'] }[L];
+const app = document.getElementById('app');
+const S = PHONE ? 1 : 2;
+if (P === 'walls') {
+  const walls = await Promise.all(N.map((n, i) => img(`hd2d/walls${i}.png`)));
+  const capRows = walls.map((w, i) => `<div class="strip"><span class="lbl">${RN[i]}</span><img src="${cell(w, 0, 0, 256, 16, S)}" style="width:${256 * S}px"></div>`).join('');
+  const legend = `<div class="legend">${[...Array(16).keys()].map((m) => `<span style="width:${16 * S}px" class="${m === 4 ? 'g' : ''}">${m}</span>`).join('')}</div>`;
+  const faceRows = walls.map((w, i) => `<div class="strip"><span class="lbl">${RN[i]}</span><img src="${cell(w, 0, 16, 96, 16, S)}" style="width:${96 * S}px"><img src="${cell(w, 128, 16, 80, 16, S, null, '#8a8a80')}" style="width:${80 * S}px"></div>`).join('');
+  const mats = Object.entries(kit.materials).map(([k, m]) => `<tr><td class="n">${MN[k]}</td><td class="v">${num(m.roughness)}</td><td class="v">${m.metalness ? num(m.metalness) : '–'}</td><td class="v">${num(m.height)}</td><td class="note">${L === 'ru' ? NOTE_RU[k] : m.note}</td></tr>`).join('');
+  const closes = ['sewers', 'caves', 'city', 'halls'].map((n, i) => `<div><img src="close/${n}-600x375.png"><div class="cap">${T.cl[i]}</div></div>`).join('');
+  app.innerHTML = `<div class="page"><div class="top"><h1>${T.kit}</h1><span class="sub">${T.walls} · hd2d/walls{r}.png · hd2d-kit.json</span></div>
+   <div class="g2"><div style="display:grid;gap:10px;align-content:start">
+     <div class="panel"><h2>${T.caps}</h2><div class="scroll">${capRows}${legend}</div></div>
+     <div class="panel"><h2>${T.faces}</h2><div class="scroll">${faceRows}<div class="cap faces-cap" style="margin-top:4px;margin-left:100px">0 ${L === 'ru' ? 'грань' : 'face'} · 1 ${L === 'ru' ? 'декор' : 'deco'} · 2 ${L === 'ru' ? 'верхняя половина' : 'upper half'} · 3 ${L === 'ru' ? 'в тени' : 'in shadow'} · 4–5 ${L === 'ru' ? 'край пропасти' : 'chasm edge'} │ AO ${L === 'ru' ? 'С В Ю З угол' : 'N E S W corner'}</div></div></div>
+     </div>
+    <div class="panel"><h2>${T.mats}</h2><table><tr><th>${T.name}</th><th>R</th><th>M</th><th>H</th><th>${T.note}</th></tr>${mats}</table>
+     <div class="cap" style="margin-top:6px">${L === 'ru' ? 'R — шероховатость, M — металличность, H — высота в клетках (1 клетка = 16 px тайла). Регионы переопределяют R в regions.*.override.' : 'R roughness, M metalness, H height in cells (1 cell = a 16 px tile). Regions override R in regions.*.override.'}</div></div></div>
+   <div class="panel"><h2>${T.close}</h2><div class="close">${closes}</div></div></div>`;
+} else {
+  const tiles = await Promise.all(N.map((n, i) => img(`assets/tiles${i}.png`)));
+  const ems = await Promise.all(N.map((n, i) => img(`hd2d/tiles${i}-emissive.png`)));
+  const rgs = await Promise.all(N.map((n, i) => img(`hd2d/tiles${i}-rough.png`)));
+  const [items, iem, parts, rip] = await Promise.all(['assets/items.png', 'hd2d/items-emissive.png', 'hd2d/particles.png', 'hd2d/ripple.png'].map(img));
+  const waters = await Promise.all(N.map((n, i) => img(`assets/water${i}.png`)));
+  const sc = PHONE ? 1 : 1;
+  const emRows = N.map((n, i) => `<div class="strip"><span class="lbl">${RN[i]}</span><img src="${cell(tiles[i], 0, 0, 256, 64, sc)}"><img src="${cell(ems[i], 0, 0, 256, 64, sc, null, '#000')}"><img src="${cell(rgs[i], 0, 0, 256, 64, sc)}"></div>`).join('');
+  // items with magic glow: rows 4-9 hold rings, wands, potions
+  const itemsP = `<div class="strip" style="gap:6px"><img src="${cell(items, 0, 64, 128, 96, 1)}" style="width:128px"><img src="${cell(iem, 0, 64, 128, 96, 1, null, '#000')}" style="width:128px"></div>`;
+  const bolts = Object.entries(kit.bolts).map(([k, b]) => `<span class="chip"><i class="sw" style="background:${b.color}"></i><span>${BN[k]}</span>${b.light ? `<i class="sw" style="background:${b.light}"></i><span class="hex">${T.light} ×${num(b.intensity)} · ${num(b.distance)}</span>` : `<span class="hex">${T.noLight}</span>`}</span>`).join('');
+  const water = N.map((n, i) => { const w = kit.regions[n].water;
+    return `<span class="mut">${RN[i]}</span><img src="${cell(waters[i], 0, 0, 32, 32, 1)}" style="width:32px">
+      <span class="chip"><i class="sw" style="background:${w.surface}"></i><span class="hex">${w.surface}</span>${w.reflect ? `<i class="sw" style="background:${w.reflect}"></i><span class="hex">${T.reflect} ${Math.round(w.reflectStrength * 100)}%</span>` : `<i class="sw" style="background:${w.emissive}"></i><span class="hex">emissive ×${num(w.emissiveIntensity)}</span>`}</span>
+      <span style="display:flex;gap:2px">${[0, 1, 2, 3, 4, 5].map((f) => `<img src="${cell(rip, f * 16, 0, 16, 16, 1, w.ripple, w.surface)}" style="width:24px">`).join('')}</span>`; }).join('');
+  const pr = `<div class="chips">${PNm.map((nm, f) => `<span class="chip"><img src="${cell(parts, f * 8, 0, 8, 8, 4, null, '#0e0f0c')}" style="width:24px"><span>${f} ${nm}</span></span>`).join('')}</div>`;
+  app.innerHTML = `<div class="page"><div class="top"><h1>${T.kit}</h1><span class="sub">${T.glow} · hd2d/*.png · hd2d-kit.json</span></div>
+   <div class="g2" style="grid-template-columns:${PHONE ? '1fr' : '890px 1fr'}"><div class="panel"><h2>${T.em}</h2><div class="cap" style="margin:-2px 0 6px">${T.emc}</div><div class="scroll">${emRows}</div></div>
+    <div style="display:grid;gap:10px;align-content:start"><div class="panel"><h2>${T.items}</h2>${itemsP}</div></div></div>
+   <div class="g2" style="grid-template-columns:${PHONE ? '1fr' : '1fr 1fr'}"><div class="panel"><h2>${T.water}</h2><div class="pair">${water}</div><div class="cap" style="margin-top:6px">${T.rip}</div></div>
+    <div style="display:grid;gap:10px;align-content:start"><div class="panel"><h2>${T.bolts}</h2><div class="chips">${bolts}</div></div><div class="panel"><h2>${T.parts}</h2>${pr}</div></div></div></div>`;
+}
+await document.fonts.ready; await Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((ok) => (i.onload = i.onerror = ok))));
+window.__ready = true;
+</script></body></html>

@@ -1,0 +1,906 @@
+{
+ "version": 1,
+ "units": "cells (1 cell = 16 art px); heights in cells; colours sRGB; intensities for three.js r169 physically-correct lights",
+ "camera": {
+  "pitch": 50,
+  "fov": 30,
+  "note": "fixed, no sway; the distance fits about 12 cells across on a monitor and 9 on a phone; orthographic is fine at the same pitch"
+ },
+ "three": {
+  "ambientScale": 2.0,
+  "hemiScale": 2.4,
+  "torchDecayAdd": 0.5,
+  "toneMapping": "Neutral",
+  "note": "Three.js r169 (physical lights): multiply the ambient and hemisphere intensities, add to the torch decay; the frames were rendered so"
+ },
+ "fog_note": "fog near/far are cells from the camera focus (the hero): the renderer adds its camera distance; mist is a low noise layer at mist.height, density = its opacity",
+ "bloom": {
+  "threshold": 0.82,
+  "strength": 0.55,
+  "radius": 0.35
+ },
+ "hero_light": {
+  "color": "#ffe0b0",
+  "intensity": 4,
+  "distance": 6,
+  "decay": 1.6,
+  "note": "a small warm light carried with the hero, 0.9 up; no shadows"
+ },
+ "materials": {
+  "floor": {
+   "tiles": [
+    1,
+    14,
+    24
+   ],
+   "roughness": 0.88,
+   "metalness": 0.0,
+   "height": 0.0,
+   "note": "dry stone; matte, takes the torch in a soft pool"
+  },
+  "wall_face": {
+   "tiles": [
+    4,
+    12
+   ],
+   "roughness": 0.92,
+   "metalness": 0.0,
+   "height": 1.5,
+   "note": "the side you see; the PD wall tile tiled 1 x 1.5, its lowest 2 px darker (skirting) and an AO strip on the floor in front"
+  },
+  "wall_top": {
+   "tiles": [
+    4,
+    12
+   ],
+   "roughness": 0.95,
+   "metalness": 0.0,
+   "height": 1.5,
+   "note": "the cap, hd2d/walls*.png row 0 by neighbour mask; its lip toward open floor is lit, toward the camera brightest"
+  },
+  "door": {
+   "tiles": [
+    5,
+    6,
+    10
+   ],
+   "roughness": 0.8,
+   "metalness": 0.0,
+   "height": 1.25,
+   "note": "wood; the frame is wall at 1.5, the leaf 1.25 high, open = turned 90 deg against the jamb"
+  },
+  "barricade": {
+   "tiles": [
+    13
+   ],
+   "roughness": 0.9,
+   "metalness": 0.0,
+   "height": 1.0,
+   "note": "planks; burns (fire light 0.8 cells up while burning)"
+  },
+  "water": {
+   "tiles": [
+    63,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62
+   ],
+   "roughness": 0.06,
+   "metalness": 0.1,
+   "height": -0.06,
+   "note": "a mirror under a scrolling water texture (water*.png), edges from tiles 48-62 as an alpha rim"
+  },
+  "grass": {
+   "tiles": [
+    2
+   ],
+   "roughness": 0.9,
+   "metalness": 0.0,
+   "height": 0.02,
+   "note": "a decal on the floor"
+  },
+  "high_grass": {
+   "tiles": [
+    15
+   ],
+   "roughness": 0.85,
+   "metalness": 0.0,
+   "height": 0.45,
+   "note": "3 crossed billboards per cell, sway 0.6 Hz; it hides the hero below the knees and blocks the torch light low (shadow casters)"
+  },
+  "chasm": {
+   "tiles": [
+    0,
+    43,
+    44,
+    45,
+    46
+   ],
+   "roughness": 0.9,
+   "metalness": 0.0,
+   "height": -3.0,
+   "note": "the floor ends in an edge face (hd2d/walls*.png row 1, cols 4-5) dropping 3 cells into fog; nothing below is lit"
+  },
+  "stairs_down": {
+   "tiles": [
+    8,
+    25,
+    26
+   ],
+   "roughness": 0.85,
+   "metalness": 0.0,
+   "height": -0.5,
+   "note": "exit: three 1/6-cell steps sunk into the floor, the last dark"
+  },
+  "stairs_up": {
+   "tiles": [
+    7
+   ],
+   "roughness": 0.85,
+   "metalness": 0.0,
+   "height": 0.5,
+   "note": "entrance: three steps rising to the wall, a cool draught light from above (fill 0.3)"
+  },
+  "embers": {
+   "tiles": [
+    9
+   ],
+   "roughness": 0.9,
+   "metalness": 0.0,
+   "height": 0.02,
+   "note": "emissive coals, a small flickering light 0.3 above"
+  },
+  "pedestal": {
+   "tiles": [
+    11
+   ],
+   "roughness": 0.6,
+   "metalness": 0.0,
+   "height": 0.3,
+   "note": "polished stone"
+  },
+  "statue": {
+   "tiles": [
+    35,
+    36
+   ],
+   "roughness": 0.65,
+   "metalness": 0.0,
+   "height": 1.2,
+   "note": "a block 0.8 wide, the tile on its front, casts a shadow"
+  },
+  "bookshelf": {
+   "tiles": [
+    41
+   ],
+   "roughness": 0.85,
+   "metalness": 0.0,
+   "height": 1.4,
+   "note": "against a wall, the tile on its front"
+  },
+  "alchemy": {
+   "tiles": [
+    42
+   ],
+   "roughness": 0.4,
+   "metalness": 0.5,
+   "height": 0.5,
+   "note": "the pot: iron, its brew emissive (bubbles), a green-gold light"
+  },
+  "well": {
+   "tiles": [
+    34,
+    3
+   ],
+   "roughness": 0.6,
+   "metalness": 0.0,
+   "height": 0.4,
+   "note": "a ring 0.4 high, water inside at -0.2 (same as water)"
+  },
+  "sign": {
+   "tiles": [
+    29
+   ],
+   "roughness": 0.85,
+   "metalness": 0.0,
+   "height": 0.7,
+   "note": "a post and board, billboarded to the camera"
+  },
+  "trap": {
+   "tiles": [
+    17,
+    19,
+    21,
+    27,
+    30,
+    32,
+    37,
+    39,
+    23
+   ],
+   "roughness": 0.5,
+   "metalness": 0.3,
+   "height": 0.01,
+   "note": "a plate; its glyph glows (emissive mask) once found; inactive (23) does not"
+  }
+ },
+ "regions": {
+  "sewers": {
+   "depths": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "mood": "damp, cold green, a lit room in the dark: water shines, stone does not",
+   "override": {
+    "floor": {
+     "roughness": 0.62,
+     "note": "wet: a dull sheen near water"
+    },
+    "wall_face": {
+     "roughness": 0.7,
+     "note": "wet streaks under the pipes (12)"
+    }
+   },
+   "ambient": {
+    "color": "#5b7c78",
+    "intensity": 0.55
+   },
+   "hemi": {
+    "sky": "#6f8f8a",
+    "ground": "#1e2b26",
+    "intensity": 0.35
+   },
+   "torch": {
+    "color": "#ff9448",
+    "intensity": 13,
+    "distance": 9,
+    "decay": 1.2,
+    "flicker": {
+     "hz": 6,
+     "amp": 0.18
+    },
+    "shadows": true
+   },
+   "fog": {
+    "color": "#0e1a17",
+    "near": 9,
+    "far": 24,
+    "mist": {
+     "color": "#6f9c8f",
+     "density": 0.22,
+     "height": 0.35
+    }
+   },
+   "particles": [
+    {
+     "type": "drip",
+     "color": "#a8d8c8",
+     "rate": 0.6,
+     "note": "from the ceiling over water and pipes, a ring on landing"
+    },
+    {
+     "type": "mist",
+     "color": "#6f9c8f",
+     "rate": 0.4,
+     "note": "low wisps over water, lit by the torch"
+    },
+    {
+     "type": "fly",
+     "color": "#2a2a22",
+     "rate": 0.1,
+     "note": "a few flies over the grass"
+    }
+   ],
+   "water": {
+    "surface": "#2f5a4e",
+    "reflect": "#6fa898",
+    "reflectStrength": 0.55,
+    "scroll": [
+     0,
+     0.006
+    ],
+    "ripple": "#a8d8c8"
+   },
+   "emissive": {
+    "9": "#ff6a2a",
+    "traps": true
+   },
+   "boss": {
+    "depth": 5,
+    "name": "goo",
+    "ambient": {
+     "color": "#4e5a4a",
+     "intensity": 0.45
+    },
+    "fog": {
+     "color": "#0a140c",
+     "near": 7,
+     "far": 20,
+     "mist": {
+      "color": "#4a7a3a",
+      "density": 0.35,
+      "height": 0.5
+     }
+    },
+    "accent": {
+     "color": "#7fdc4a",
+     "intensity": 4,
+     "note": "Goo glows a sick green; its pump-up turns it red (#ff4a3a, x2)"
+    },
+    "particles": [
+     {
+      "type": "bubble",
+      "color": "#7fdc4a",
+      "rate": 1.2,
+      "note": "the goo pools seethe"
+     }
+    ]
+   }
+  },
+  "prison": {
+   "depths": [
+    6,
+    7,
+    8,
+    9
+   ],
+   "mood": "dry dust in still air, old lamps, moonlight through the bars",
+   "override": {},
+   "ambient": {
+    "color": "#6a6458",
+    "intensity": 0.5
+   },
+   "hemi": {
+    "sky": "#8a8070",
+    "ground": "#221d17",
+    "intensity": 0.3
+   },
+   "torch": {
+    "color": "#ffb050",
+    "intensity": 11,
+    "distance": 8,
+    "decay": 1.3,
+    "flicker": {
+     "hz": 3,
+     "amp": 0.1
+    },
+    "shadows": true
+   },
+   "window": {
+    "tile": 12,
+    "color": "#9ab0d8",
+    "intensity": 2.5,
+    "note": "a cold shaft from each barred window (12), dust visible in it"
+   },
+   "fog": {
+    "color": "#15120e",
+    "near": 10,
+    "far": 26,
+    "mist": null
+   },
+   "particles": [
+    {
+     "type": "dust",
+     "color": "#d8c8a0",
+     "rate": 0.8,
+     "note": "motes drifting, bright only inside the lamp and window light"
+    },
+    {
+     "type": "ash",
+     "color": "#5a5048",
+     "rate": 0.15,
+     "note": "flakes falling from the lamps"
+    }
+   ],
+   "water": {
+    "surface": "#3a4a52",
+    "reflect": "#8aa0a8",
+    "reflectStrength": 0.4,
+    "scroll": [
+     0,
+     0.004
+    ],
+    "ripple": "#b8c8d0"
+   },
+   "emissive": {
+    "9": "#ff6a2a",
+    "12": "#9ab0d8",
+    "traps": true
+   },
+   "boss": {
+    "depth": 10,
+    "name": "tengu",
+    "ambient": {
+     "color": "#5a6a8a",
+     "intensity": 0.55
+    },
+    "fog": {
+     "color": "#0c0f16",
+     "near": 12,
+     "far": 30,
+     "mist": null
+    },
+    "accent": {
+     "color": "#d8e4ff",
+     "intensity": 3,
+     "note": "a hard white light over the arena; Tengu blinks in a puff of grey smoke"
+    },
+    "particles": [
+     {
+      "type": "smoke",
+      "color": "#8a8a90",
+      "rate": 0.3
+     }
+    ]
+   }
+  },
+  "caves": {
+   "depths": [
+    11,
+    12,
+    13,
+    14
+   ],
+   "mood": "the dark eats the walls; crystals and fungi glow, ore glints, few torches",
+   "override": {
+    "wall_face": {
+     "roughness": 0.8,
+     "note": "raw rock; the gold ore (12) is metal: roughness 0.3, metalness 0.9, glints in light"
+    }
+   },
+   "ambient": {
+    "color": "#6a5844",
+    "intensity": 0.55
+   },
+   "hemi": {
+    "sky": "#5a4a3a",
+    "ground": "#120c08",
+    "intensity": 0.25
+   },
+   "torch": {
+    "color": "#ff8a3a",
+    "intensity": 12,
+    "distance": 8,
+    "decay": 1.3,
+    "flicker": {
+     "hz": 5,
+     "amp": 0.2
+    },
+    "shadows": true
+   },
+   "fog": {
+    "color": "#120d09",
+    "near": 6,
+    "far": 18,
+    "mist": {
+     "color": "#3a2e22",
+     "density": 0.15,
+     "height": 0.3
+    }
+   },
+   "particles": [
+    {
+     "type": "drip",
+     "color": "#c8b8a0",
+     "rate": 0.4
+    },
+    {
+     "type": "spore",
+     "color": "#9be36a",
+     "rate": 0.5,
+     "note": "rising from the fungi (15), glowing, drifting"
+    },
+    {
+     "type": "dust",
+     "color": "#a08060",
+     "rate": 0.3,
+     "note": "falling grit near walls"
+    }
+   ],
+   "water": {
+    "surface": "#263a3a",
+    "reflect": "#4f7f7a",
+    "reflectStrength": 0.5,
+    "scroll": [
+     0,
+     0.003
+    ],
+    "ripple": "#9fc8c0"
+   },
+   "emissive": {
+    "9": "#ff6a2a",
+    "15": "#9be36a",
+    "12": "#ffd75a",
+    "traps": true
+   },
+   "lights": [
+    {
+     "tile": 15,
+     "color": "#9be36a",
+     "intensity": 1.6,
+     "distance": 3.5,
+     "note": "every 3rd fungus patch carries a small light"
+    }
+   ],
+   "boss": {
+    "depth": 15,
+    "name": "dm300",
+    "ambient": {
+     "color": "#3a3a30",
+     "intensity": 0.35
+    },
+    "fog": {
+     "color": "#0e100a",
+     "near": 6,
+     "far": 18,
+     "mist": {
+      "color": "#6a8a3a",
+      "density": 0.3,
+      "height": 0.6
+     }
+    },
+    "accent": {
+     "color": "#ff3a2a",
+     "intensity": 5,
+     "note": "red alarm lights; DM-300 vents toxic green gas (mist), sparks fly from its steps"
+    },
+    "particles": [
+     {
+      "type": "steam",
+      "color": "#c8d0c0",
+      "rate": 0.8
+     },
+     {
+      "type": "spark",
+      "color": "#ffcc66",
+      "rate": 0.6
+     }
+    ]
+   }
+  },
+  "city": {
+   "depths": [
+    16,
+    17,
+    18,
+    19
+   ],
+   "mood": "cold blue dwarven stone, polished; warm forge light from doors and braziers",
+   "override": {
+    "floor": {
+     "roughness": 0.55,
+     "note": "polished flags: a clear sheen of the braziers"
+    },
+    "wall_face": {
+     "roughness": 0.7
+    }
+   },
+   "ambient": {
+    "color": "#4a5a7a",
+    "intensity": 0.5
+   },
+   "hemi": {
+    "sky": "#6a7aa0",
+    "ground": "#141824",
+    "intensity": 0.3
+   },
+   "torch": {
+    "color": "#ffa040",
+    "intensity": 14,
+    "distance": 10,
+    "decay": 1.2,
+    "flicker": {
+     "hz": 4,
+     "amp": 0.12
+    },
+    "shadows": true
+   },
+   "fog": {
+    "color": "#0c0f18",
+    "near": 12,
+    "far": 30,
+    "mist": null
+   },
+   "particles": [
+    {
+     "type": "ember",
+     "color": "#ffb050",
+     "rate": 0.7,
+     "note": "rising from braziers and forge doors"
+    },
+    {
+     "type": "smoke",
+     "color": "#3a3e48",
+     "rate": 0.2
+    }
+   ],
+   "water": {
+    "surface": "#3a5a8e",
+    "reflect": "#6a86b8",
+    "reflectStrength": 0.6,
+    "scroll": [
+     0,
+     0.002
+    ],
+    "ripple": "#b8c8e8"
+   },
+   "emissive": {
+    "9": "#ff6a2a",
+    "5": "#ffcc66",
+    "traps": true
+   },
+   "lights": [
+    {
+     "tile": 5,
+     "color": "#ffb050",
+     "intensity": 2.2,
+     "distance": 3,
+     "note": "the forge glow in the door windows"
+    }
+   ],
+   "boss": {
+    "depth": 20,
+    "name": "king",
+    "ambient": {
+     "color": "#5a4a3a",
+     "intensity": 0.5
+    },
+    "fog": {
+     "color": "#120c08",
+     "near": 12,
+     "far": 30,
+     "mist": null
+    },
+    "accent": {
+     "color": "#ffcc66",
+     "intensity": 4,
+     "note": "the throne room in gold; the King's summons rise in violet (#b060ff)"
+    },
+    "particles": [
+     {
+      "type": "magic",
+      "color": "#b060ff",
+      "rate": 0.5
+     }
+    ]
+   }
+  },
+  "halls": {
+   "depths": [
+    21,
+    22,
+    23,
+    24
+   ],
+   "mood": "red heat: lava for water, runes and cracks glow, the air shimmers",
+   "override": {
+    "water": {
+     "roughness": 0.5,
+     "metalness": 0.0,
+     "note": "LAVA (water4.png): emissive, no mirror, its own light every few cells"
+    }
+   },
+   "ambient": {
+    "color": "#5a2420",
+    "intensity": 0.45
+   },
+   "hemi": {
+    "sky": "#6a2a20",
+    "ground": "#1a0806",
+    "intensity": 0.3
+   },
+   "torch": {
+    "color": "#ff4a20",
+    "intensity": 12,
+    "distance": 8,
+    "decay": 1.3,
+    "flicker": {
+     "hz": 9,
+     "amp": 0.25
+    },
+    "shadows": true
+   },
+   "fog": {
+    "color": "#1a0806",
+    "near": 8,
+    "far": 22,
+    "mist": {
+     "color": "#5a1a10",
+     "density": 0.18,
+     "height": 0.4
+    }
+   },
+   "particles": [
+    {
+     "type": "ember",
+     "color": "#ff7a2a",
+     "rate": 1.0,
+     "note": "from lava and cracks"
+    },
+    {
+     "type": "ash",
+     "color": "#2a1410",
+     "rate": 0.5
+    },
+    {
+     "type": "haze",
+     "color": "#ff5a1a",
+     "rate": 0.0,
+     "note": "a heat-haze distortion over lava (screen pass, 0.5 px)"
+    }
+   ],
+   "water": {
+    "surface": "#c83a10",
+    "reflect": null,
+    "reflectStrength": 0.0,
+    "scroll": [
+     0,
+     0.002
+    ],
+    "ripple": "#ffcc66",
+    "emissive": "#ff5a1a",
+    "emissiveIntensity": 0.8
+   },
+   "emissive": {
+    "9": "#ff6a2a",
+    "2": "#ff3a1a",
+    "5": "#5aff5a",
+    "15": "#ff8a2a",
+    "24": "#ff2a1a",
+    "29": "#5aff5a",
+    "traps": true
+   },
+   "lights": [
+    {
+     "tile": 63,
+     "color": "#ff5a1a",
+     "intensity": 2.5,
+     "distance": 4,
+     "note": "lava: one light every ~6 cells"
+    },
+    {
+     "tile": 24,
+     "color": "#ff2a1a",
+     "intensity": 0.8,
+     "distance": 2
+    }
+   ],
+   "boss": {
+    "depth": 25,
+    "name": "yog",
+    "ambient": {
+     "color": "#3a0a10",
+     "intensity": 0.4
+    },
+    "fog": {
+     "color": "#100204",
+     "near": 8,
+     "far": 22,
+     "mist": {
+      "color": "#3a0812",
+      "density": 0.3,
+      "height": 0.6
+     }
+    },
+    "accent": {
+     "color": "#ff2a4a",
+     "intensity": 5,
+     "note": "Yog's eye pulses (0.5 Hz, x0.6..1.4); the fists burn (#ff7a2a) and rot (#7a9a3a)"
+    },
+    "particles": [
+     {
+      "type": "ember",
+      "color": "#ff2a4a",
+      "rate": 1.2
+     }
+    ]
+   }
+  }
+ },
+ "bolts": {
+  "magicMissile": {
+   "color": "#e8e2ff",
+   "light": "#b8a8ff",
+   "intensity": 3,
+   "distance": 3
+  },
+  "firebolt": {
+   "color": "#ffcc66",
+   "light": "#ff7a2a",
+   "intensity": 5,
+   "distance": 4
+  },
+  "lightning": {
+   "color": "#ffffff",
+   "light": "#9fd8ff",
+   "intensity": 8,
+   "distance": 6,
+   "note": "a flash of 0.08 s, the whole room lit"
+  },
+  "poison": {
+   "color": "#9be36a",
+   "light": "#5aff3a",
+   "intensity": 2,
+   "distance": 3
+  },
+  "slowness": {
+   "color": "#c8a8ff",
+   "light": "#8a6aff",
+   "intensity": 2,
+   "distance": 3
+  },
+  "disintegration": {
+   "color": "#ff5aff",
+   "light": "#c83aff",
+   "intensity": 4,
+   "distance": 4,
+   "note": "a beam, its light along it"
+  },
+  "regrowth": {
+   "color": "#7fdc4a",
+   "light": "#5ac83a",
+   "intensity": 2,
+   "distance": 3
+  },
+  "teleportation": {
+   "color": "#7fd6ff",
+   "light": "#4ab8ff",
+   "intensity": 2,
+   "distance": 3
+  },
+  "blink": {
+   "color": "#ffffff",
+   "light": "#d8e4ff",
+   "intensity": 2,
+   "distance": 3
+  },
+  "amok": {
+   "color": "#ff4a4a",
+   "light": "#ff2a2a",
+   "intensity": 2,
+   "distance": 3
+  },
+  "avalanche": {
+   "color": "#c8b8a0",
+   "light": null,
+   "intensity": 0,
+   "distance": 0
+  },
+  "flock": {
+   "color": "#ffffff",
+   "light": null,
+   "intensity": 0,
+   "distance": 0
+  },
+  "reach": {
+   "color": "#b8d8ff",
+   "light": "#8ab8ff",
+   "intensity": 1.5,
+   "distance": 3,
+   "note": "PD 1.9 wand of reach (telekinesis)"
+  }
+ },
+ "sheets": {
+  "tiles": "tiles{r}.png (PD 1.9, 16 x 8 cells; tile = terrain id)",
+  "emissive": "hd2d/tiles{r}-emissive.png: the glow colour where a tile glows, alpha = strength; the same layout as tiles{r}.png",
+  "roughness": "hd2d/tiles{r}-rough.png: grey, white = matte, black = mirror; the same layout",
+  "walls": "hd2d/walls{r}.png: row 0 the wall-top caps by neighbour mask (bit 1 N, 2 E, 4 S, 8 W open to floor); row 1: faces (0 wall, 1 deco, 2-3 skirting), chasm edge faces (4, 5), floor AO decals (8 N, 9 E, 10 S, 11 W, 12 inner corner)",
+  "ripple": "hd2d/ripple.png: 6 frames 16x16, white, tinted by region water.ripple",
+  "particles": "hd2d/particles.png: 8 x 8 px frames — 0 drip, 1 mist, 2 dust, 3 ember, 4 ash, 5 spore, 6 steam, 7 spark, 8 bubble, 9 magic, 10 fly, 11 smoke",
+  "items_emissive": "hd2d/items-emissive.png: glow of wands, rings and magic items, the layout of items.png"
+ }
+}
