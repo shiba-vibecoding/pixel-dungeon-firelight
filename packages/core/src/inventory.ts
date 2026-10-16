@@ -9,7 +9,7 @@ import { attack, charArmor, CRIPPLE_TURNS, earnExp, hurt } from './combat';
 import { fearless, TERROR_TURNS } from './enchant';
 import { conjureImages } from './allies';
 import {
-  canEnter, charAt, type Ctx, dropItem, enterCell, exploredCells, heroView, isHero, isPassable, isWater, landItem, leaveCell,
+  canEnter, charAt, type Ctx, dispelInvisibility, dropItem, enterCell, exploredCells, heroView, isHero, isPassable, isWater, landItem, leaveCell,
 } from './floor';
 import {
   buyPrice, createItem, type Heap, isStackable, type Item, itemDef, ItemGenerator, type ItemKind, itemPrice,
@@ -31,7 +31,7 @@ import type { World } from './world';
 import { scaleMob } from './party';
 import { underChallenges } from './challenges';
 import {
-  canTarget, defaultTarget, enchantItem, isItemRef, isTargetedScroll, itemAt, type ItemRef, TARGET_PROBLEMS, type TargetedScroll, upgradeItem,
+  canTarget, enchantItem, isBalanceTarget, isItemRef, isKitTarget, isTargetedScroll, itemAt, type ItemRef, TARGET_PROBLEMS, type TargetedScroll, upgradeItem,
 } from './scrolls';
 
 /*
@@ -52,6 +52,13 @@ export type InventoryAction =
    * clients chose between the weapon and the armour worn.
    */
   | { type: 'use'; item: number; on?: ItemRef; target?: 'weapon' | 'armor' }
+  /**
+   * The second step of reading a scroll of upgrade, enchantment or identify the party did not know (Hero.pendingScroll):
+   * the item it is read on, chosen once the scroll is known (InventoryScroll's selector).
+   */
+  | { type: 'scrollTarget'; on: ItemRef }
+  /** The same, given up: «Are you sure? The scroll will be wasted» answered with a yes. The scroll is lost and the reading takes its time. */
+  | { type: 'scrollCancel' }
   | { type: 'equip'; item: number }
   | { type: 'drop'; item: number }
   /** Throw a dart, the boomerang or a potion at a cell; it flies until it hits someone or something. */
@@ -76,7 +83,7 @@ export type InventoryAction =
   | { type: 'balance'; item: number; weapon?: number; imbue: 'speed' | 'accuracy' };
 
 const INVENTORY_ACTIONS: ReadonlySet<string> = new Set([
-  'pickup', 'open', 'use', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'unequip', 'master', 'mine', 'special', 'balance',
+  'pickup', 'open', 'use', 'scrollTarget', 'scrollCancel', 'equip', 'drop', 'throw', 'zap', 'buy', 'sell', 'remove', 'unequip', 'master', 'mine', 'special', 'balance',
 ]);
 
 export function isInventoryAction(action: { type: string }): action is InventoryAction {
@@ -133,6 +140,15 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     if ((heap.kind === 'lockedChest' || heap.kind === 'crystalChest') && goldenKeyFor(hero) < 0) return 'the chest is locked';
     return null;
   }
+  if (action.type === 'scrollTarget' || action.type === 'scrollCancel') {
+    const pending = hero.pendingScroll;
+    if (!pending) return 'you are not reading a scroll';
+    if (action.type === 'scrollCancel') return null;
+    if (!isItemRef(action.on)) return 'bad target';
+    const chosen = itemAt(hero, action.on);
+    if (!chosen) return 'no such item';
+    return canTarget(world, pending.kind, chosen) ? null : TARGET_PROBLEMS[pending.kind];
+  }
   if (action.type === 'mine') return mineProblem(world, hero);
   if (action.type === 'special') return specialProblem(world, hero, action.target);
   if (action.type === 'unequip') {
@@ -160,11 +176,11 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial', 'wipeout'].includes(category) && item.kind !== 'quest.fish') {
         return 'that cannot be used';
       }
-      if (category === 'kit' && CLASS_ARMOR.includes(hero.armor.kind)) return 'your armour is already a class armour';
       if (category === 'vial' && !item.volume) return 'your dew vial is empty';
       if (category === 'wipeout' && (hero.blind ?? 0) > 0) return 'you cannot read while blinded';
       if (action.target !== undefined && action.target !== 'weapon' && action.target !== 'armor') return 'bad target';
       if (action.on !== undefined && !isItemRef(action.on)) return 'bad target';
+      if (category === 'kit') return kitProblem(hero, action);
       return isTargetedScroll(item.kind) ? scrollTargetProblem(world, hero, item.kind, action) : null;
     case 'equip': {
       if (category !== 'weapon' && category !== 'armor' && category !== 'ring') return 'that cannot be equipped';
@@ -180,7 +196,7 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if (category !== 'weightstone') return 'that is no weightstone';
       if (action.imbue !== 'speed' && action.imbue !== 'accuracy') return 'bad choice';
       const weapon = action.weapon === undefined ? hero.weapon : Number.isInteger(action.weapon) ? hero.items[action.weapon] : undefined;
-      if (!weapon || itemDef(weapon.kind).category !== 'weapon') return 'choose a melee weapon';
+      if (!weapon || !isBalanceTarget(weapon)) return 'choose a melee weapon';
       return weapon.imbue === action.imbue ? 'it is balanced that way already' : null;
     }
     case 'master':
@@ -229,7 +245,27 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       ctx.effects.push({ type: 'balanced', hero: hero.id, item: weapon });
       return TIME_TO_BALANCE;
     }
+    case 'scrollTarget': {
+      // InventoryScroll's selector answered: the scroll, known and out of the pack since it was read, acts on the item chosen.
+      const pending = hero.pendingScroll!;
+      const target = itemAt(hero, action.on)!;
+      delete hero.pendingScroll;
+      readOn(ctx, hero, pending.kind, target);
+      return TIME_TO_USE;
+    }
+    case 'scrollCancel': {
+      // InventoryScroll.confirmCancelation answered with a yes: the scroll is wasted, its reading all the same.
+      const { kind } = hero.pendingScroll!;
+      delete hero.pendingScroll;
+      ctx.effects.push({ type: 'scrollWasted', hero: hero.id, kind });
+      return TIME_TO_USE;
+    }
     case 'use':
+      if (readsInTwoSteps(ctx.world, hero.items[action.item]!.kind)) {
+        // Only a live plan gets here (act() begins a reading itself): the same, without the clock.
+        beginScrollRead(ctx, hero, action.item);
+        return 0;
+      }
       if (itemDef(hero.items[action.item]!.kind).category === 'food') {
         eat(ctx, hero, action.item);
         return TIME_TO_EAT;
@@ -259,7 +295,7 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         return TIME_TO_THROW;
       }
       if (itemDef(hero.items[action.item]!.kind).category === 'kit') {
-        applyArmorKit(ctx, hero, action.item);
+        applyArmorKit(ctx, hero, action.item, itemAt(hero, (action.on ?? action.target)!)!);
         return TIME_TO_APPLY_KIT;
       }
       if (itemDef(hero.items[action.item]!.kind).category === 'torch') {
@@ -598,7 +634,8 @@ function zap(ctx: Ctx, hero: Hero, index: number, target: number): void {
     return;
   }
   wand.charges = (wand.charges ?? 1) - 1;
-  hero.invisible = 0;
+  // Wand.zapper: a zap that fires gives an invisible hero away when an enemy is in sight.
+  dispelInvisibility(ctx.world, hero);
   zapWand(ctx, hero, wand, target);
   // Wand.wandUsed: zapped often enough, a wand is known through and through.
   if (!isIdentified(ctx.world, wand) && (wand.familiarity = (wand.familiarity ?? 0) + 1) >= WAND_USAGES_TO_KNOW) {
@@ -864,34 +901,83 @@ function drinkDew(ctx: Ctx, hero: Hero, dew: Item): void {
   ctx.effects.push({ type: 'dew', hero: hero.id, amount });
 }
 
+/** What an item chosen from the pack is asked for, when nothing was. */
+const CHOOSE = 'choose an item first';
+
+/** ArmorKit's selector answered: only armour that is not class armour is made into one. */
+function kitProblem(hero: Hero, action: { on?: ItemRef; target?: 'weapon' | 'armor' }): string | null {
+  const ref = action.on ?? action.target;
+  if (ref === undefined) return CHOOSE;
+  const chosen = itemAt(hero, ref);
+  if (!chosen) return 'no such item';
+  return isKitTarget(chosen) ? null : 'a class armour cannot be made of that';
+}
+
 /**
- * InventoryScroll: the item a scroll of upgrade, enchantment or identify was
- * read on, found before the scroll leaves the pack (which moves the slots
- * after it). A choice the scroll cannot act on counts as none: that only
- * happens with a scroll the party did not know (see scrollTargetProblem).
+ * Whether reading a scroll of this kind is done in two steps (InventoryScroll.doRead): it is a scroll of upgrade, enchantment
+ * or identify that the party does not know yet. It is read at once and made known, and the item it is read on is asked about
+ * after (Hero.pendingScroll); a known one is asked about first, the client sending the choice with the read.
+ */
+export const readsInTwoSteps = (world: World, kind: ItemKind): boolean => isTargetedScroll(kind) && !world.known.includes(kind);
+
+/**
+ * Scroll.execute and InventoryScroll.doRead for a scroll the party did not know: it leaves the pack, its kind becomes known
+ * (identifiedByUse), and the hero is left choosing what to read it on. No time passes until that is answered.
+ */
+export function beginScrollRead(ctx: Ctx, hero: Hero, index: number): void {
+  const scroll = hero.items[index]!;
+  const kind = scroll.kind as TargetedScroll;
+  hero.pendingScroll = { kind, item: { ...scroll, qty: 1 } };
+  if (--scroll.qty <= 0) hero.items.splice(index, 1);
+  ctx.effects.push({ type: 'used', hero: hero.id, kind, identified: learn(ctx.world, kind) });
+}
+
+/**
+ * InventoryScroll: the item a scroll of upgrade, enchantment or identify
+ * was read on, found before the scroll leaves the pack (which moves the
+ * slots after it). Only a known scroll gets here (see readsInTwoSteps).
+ * A choice the scroll cannot act on counts as none (an old client's).
  */
 function scrollTarget(world: World, hero: Hero, kind: ItemKind, action: { on?: ItemRef; target?: 'weapon' | 'armor' }): Item | undefined {
   if (!isTargetedScroll(kind)) return undefined;
   const ref = action.on ?? action.target;
-  const chosen = ref === undefined ? undefined : itemAt(hero, ref);
-  return chosen && canTarget(world, kind, chosen) ? chosen : defaultTarget(world, hero, kind);
+  return ref === undefined ? undefined : itemAt(hero, ref);
 }
 
 /**
- * Why a known scroll cannot be read on what was chosen, or on anything at
- * all; checked before the scroll is used up. An unknown scroll is read
- * whatever was chosen (the reader could not know what it would want).
+ * Why a known scroll cannot be read on what was chosen; checked before the scroll is used up. The item is always chosen (the
+ * selector opens first, and giving it up leaves the scroll in the pack): none is no choice, there is no default. An unknown
+ * scroll is read whatever was chosen: the choice comes after (scrollTarget).
  */
 function scrollTargetProblem(world: World, hero: Hero, kind: TargetedScroll, action: { on?: ItemRef; target?: 'weapon' | 'armor' }): string | null {
-  if (!world.known.includes(kind)) return null;
+  if (readsInTwoSteps(world, kind)) return null;
   const ref = action.on ?? action.target;
-  if (ref === undefined) {
-    // Identify with nothing to learn is simply read in vain, as an unknown one would be.
-    return kind === 'scroll.identify' || defaultTarget(world, hero, kind) ? null : TARGET_PROBLEMS[kind];
-  }
+  if (ref === undefined) return CHOOSE;
   const chosen = itemAt(hero, ref);
   if (!chosen) return 'no such item';
   return canTarget(world, kind, chosen) ? null : TARGET_PROBLEMS[kind];
+}
+
+/** The scrolls read on a chosen item (InventoryScroll.onItemSelected), once it is chosen. */
+function readOn(ctx: Ctx, hero: Hero, kind: TargetedScroll, target: Item | undefined): void {
+  const { world } = ctx;
+  // InventoryScroll's selector answered: Invisibility.dispel().
+  dispelInvisibility(world, hero);
+  switch (kind) {
+    case 'scroll.identify':
+      // ScrollOfIdentify.onItemSelected: all the secrets of the chosen item revealed.
+      if (target) {
+        identify(world, target);
+        ctx.effects.push({ type: 'revealed', hero: hero.id, item: target });
+      }
+      break;
+    case 'scroll.upgrade':
+      if (target) upgradeItem(ctx, hero, target);
+      break;
+    case 'scroll.enchantment':
+      if (target) enchantItem(ctx, hero, target);
+      break;
+  }
 }
 
 function use(ctx: Ctx, hero: Hero, index: number, target: Item | undefined): void {
@@ -900,6 +986,8 @@ function use(ctx: Ctx, hero: Hero, index: number, target: Item | undefined): voi
   const kind = item.kind;
   if (--item.qty <= 0) hero.items.splice(index, 1);
   ctx.effects.push({ type: 'used', hero: hero.id, kind, identified: learn(world, kind) });
+  // Every other scroll's doRead starts with Invisibility.dispel() (the three read on an item do it when the item is chosen: readOn).
+  if (itemDef(kind).category === 'scroll' && !isTargetedScroll(kind)) dispelInvisibility(world, hero);
 
   switch (kind) {
     case 'potion.healing': {
@@ -951,14 +1039,11 @@ function use(ctx: Ctx, hero: Hero, index: number, target: Item | undefined): voi
       break;
     }
 
-    case 'scroll.identify': {
-      // ScrollOfIdentify.onItemSelected: all the secrets of the chosen item (or of the first unknown one, see defaultTarget) revealed.
-      if (target) {
-        identify(world, target);
-        ctx.effects.push({ type: 'revealed', hero: hero.id, item: target });
-      }
+    case 'scroll.identify':
+    case 'scroll.upgrade':
+    case 'scroll.enchantment':
+      readOn(ctx, hero, kind, target);
       break;
-    }
     case 'scroll.teleportation': {
       const fov = heroView(world, hero);
       const pos = randomRespawnCell(ctx.rng, world, ctx.level, (cell) => !fov[cell]);
@@ -1014,12 +1099,6 @@ function use(ctx: Ctx, hero: Hero, index: number, target: Item | undefined): voi
       ctx.effects.push({ type: 'scroll', hero: hero.id, kind: 'recharging', count });
       break;
     }
-    case 'scroll.upgrade':
-      if (target) upgradeItem(ctx, hero, target);
-      break;
-    case 'scroll.enchantment':
-      if (target) enchantItem(ctx, hero, target);
-      break;
 
     case 'scroll.removeCurse': {
       // ScrollOfRemoveCurse: every curse on what the reader wears or carries is lifted, and weakness with them.

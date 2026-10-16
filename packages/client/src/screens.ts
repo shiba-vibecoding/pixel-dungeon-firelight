@@ -1,5 +1,5 @@
 import {
-  type Action, BACKPACK_SIZE, scrollTargets, isBroken, isIdentified, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
+  type Action, BACKPACK_SIZE, balanceTargets, kitTargets, scrollTargets, isBroken, isIdentified, type Hero, inBag, type HeroClass, type Item, itemDef, itemPrice, type ItemRef,
   itemAt, itemSprite, type ItemKind, levelKnown, maxExp, type MobKind, SUBCLASSES, visiblyCursed, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
@@ -10,6 +10,7 @@ import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
 import { ARENA_BADGES, BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
+import { P } from './i18n-photo';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import { mart } from './mart';
 import { labelWords } from './labels';
@@ -367,6 +368,8 @@ export interface MenuOptions {
   onSettings(): void;
   onMart(): void;
   onTreat(): void;
+  /** The camera (photo mode); absent where there is no map to photograph. */
+  onPhoto?: () => void;
   /** How this run counts (labels.ts) as a chip, and the rest of the subtitle («Daily dungeon · d7»); absent in co-op. */
   run?: { label: ReturnType<typeof labelWords>; sub: string };
   /** Sends the co-op session's log with a word from the player; absent alone. */
@@ -397,7 +400,9 @@ export function showMenu(options: MenuOptions): void {
       button(t.resume, options.onResume, 'primary'),
       el('div', { className: 'pd-row' }, button(t.meta.journal, options.onJournal), button(t.help, options.onHelp)),
       el('div', { className: 'pd-row' }, button(t.badges, options.onBadges), button(t.mart, options.onMart)),
-      button(t.meta.settings, options.onSettings),
+      options.onPhoto
+        ? el('div', { className: 'pd-row' }, button(t.meta.settings, options.onSettings), button(P.camera, options.onPhoto))
+        : button(t.meta.settings, options.onSettings),
       options.onReport && button(t.reportProblem, options.onReport, 'quiet'),
       button(t.treat, options.onTreat, 'quiet'),
       button(t.toMenu, options.onExit, 'quiet'),
@@ -1104,7 +1109,7 @@ export interface BackpackOptions {
    * WndBag's selector: the backpack with only what a scroll can be read on to tap (worn
    * things too); the rest dimmed. A tap reads the scroll on it.
    */
-  pick?: { title: string; targets: readonly ItemRef[]; onPick(ref: ItemRef): void; onCancel(): void };
+  pick?: { title: string; targets: readonly ItemRef[]; onPick(ref: ItemRef): void; onCancel(): void; /** What the panel says: what to tap (the scroll's by default). */ hint?: string };
 }
 
 /** What is chosen in the backpack: an item in the pack (by slot) or one worn. */
@@ -1228,12 +1233,14 @@ function keepOpen(options: BackpackOptions, action: Action, follow?: Item | null
   const qty = used?.qty ?? 0;
   const sprite = used ? itemSprite(used, world.run.labels) : undefined;
   const pos = used && action.type === 'use' ? loosePosition(hero, action.item) : undefined;
-  const target = action.type === 'use' && action.on !== undefined ? itemAt(hero, action.on) : undefined;
+  // A scroll read before (its kind learned by reading) and now used on what was chosen: the scroll is spoken of by the hero's pending one.
+  const pending = action.type === 'scrollTarget' ? hero.pendingScroll : undefined;
+  const target = action.type === 'use' && action.on !== undefined ? itemAt(hero, action.on) : action.type === 'scrollTarget' ? itemAt(hero, action.on) : undefined;
   options.onAction(action);
   // A use the core refused changed nothing: nothing to celebrate.
   const spent = used !== undefined && (!hero.items.includes(used) || used.qty < qty);
   if (used && spent) addFx({ kind: 'used', item: used, sprite, pos });
-  const text = kind && spent ? flourish(kind) : undefined;
+  const text = kind && spent ? flourish(kind) : pending && !hero.pendingScroll ? flourish(pending.kind) : undefined;
   if (target && text) addFx({ kind: 'plus', item: target, text });
   for (const one of fx) addFx(one);
   const chosen = follow ?? target ?? (used && hero.items.includes(used) ? used : undefined);
@@ -1243,6 +1250,50 @@ function keepOpen(options: BackpackOptions, action: Action, follow?: Item | null
   // Drawn anew: from the open backpack, or (after a question, a pick) from the options in hand.
   if (frozen) refreshBackpack(world, hero);
   else showBackpack(options, choice);
+}
+
+/**
+ * InventoryScroll.doRead for a scroll the party did not know: it was read and learned already (Hero.pendingScroll), and what to read
+ * it on is asked now, in the selector a known scroll uses (the backpack with only what the scroll can act on to tap). A choice is
+ * the scroll read on it (and the backpack stays open, as after a known scroll); backing out asks «Are you sure? The scroll will be
+ * wasted» (confirmCancelation): yes gives the scroll up, no asks again. The pending scroll is part of the run, not of this window:
+ * main.ts asks again whenever it is pending and no window is open (a reload, a window that went away).
+ */
+export function askPendingScroll(options: BackpackOptions): void {
+  const { world, hero } = options;
+  const pending = hero.pendingScroll;
+  if (!pending) return;
+  const targets = scrollTargets(world, hero, pending.kind);
+  // Nothing to put back with the window memo: the run itself remembers.
+  pickOrigin = null;
+  const again = (): void => askPendingScroll(options);
+  showBackpack({
+    ...options,
+    pick: {
+      title: t.pickTitle[pending.kind],
+      targets,
+      onPick: (on) => askTarget(options, pending.kind, on, () => keepOpen(options, { type: 'scrollTarget', on }), again),
+      onCancel: () => askWaste(options, again),
+    },
+  });
+}
+
+/** InventoryScroll.confirmCancelation. */
+function askWaste(options: BackpackOptions, again: () => void): void {
+  const F = t.scrollWaste;
+  let given = false;
+  pauseBag();
+  // (The question closes itself before its yes is answered: the pick comes back only if it was a no.)
+  showConfirm(F.title, F.text, F.yes, F.no, () => {
+    given = true;
+    closeBag();
+    options.onAction({ type: 'scrollCancel' });
+    options.onClose();
+  }, () => {
+    setTimeout(() => {
+      if (!given) again();
+    }, 0);
+  });
 }
 
 /**
@@ -1417,7 +1468,7 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   );
   const item = chosenItem(hero, choice);
   const panel = pick
-    ? el('div', { className: 'pd-pick empty' }, info(t.pickTarget))
+    ? el('div', { className: 'pd-pick empty' }, info(pick.hint ?? t.pickTarget))
     : item && choice
       ? itemDetail({ ...options, item, ...where(choice) })
       : el(
@@ -1913,6 +1964,74 @@ function askTarget(options: BackpackOptions, kind: ItemKind, on: ItemRef, go: ()
   );
 }
 
+/**
+ * WndBag's selector for an item's own action (the armour kit, the weightstone): the backpack with only what the item can act on
+ * to tap; a tap does `done` with it, «cancel» goes back to the item. Returns what the item's button does.
+ */
+function chooseFrom(options: ItemOptions, index: number, title: string, hint: string, targets: readonly ItemRef[], done: (on: ItemRef) => void): () => void {
+  const pick = (): void => {
+    // The button of the item's panel that asked, for the window to come back after a reload (windowState).
+    pickOrigin = lastUse;
+    showBackpack({ ...options, pick: { title, hint, targets, onPick: done, onCancel: () => showBackpack(options, { index }) } });
+  };
+  return pick;
+}
+
+/** Weightstone.WndBalance: how the weapon chosen is to be balanced, the way it is not yet; «never mind» goes back to the pack. */
+function showBalance(options: ItemOptions, index: number, on: ItemRef): void {
+  const { world, hero } = options;
+  const weapon = itemAt(hero, on);
+  if (!weapon) return;
+  const back = (): void => showBackpack(options, { index });
+  // The bag steps aside for the question, so that a choice draws it again (kept open, as after an upgrade) over this window.
+  pauseBag();
+  const balance = (imbue: 'speed' | 'accuracy'): void => {
+    // A weapon in hand is the stone's default; one in the pack is named.
+    keepOpen(options, { type: 'balance', item: index, imbue, ...(typeof on === 'number' ? { weapon: on } : {}) }, weapon);
+  };
+  show(
+    windowOf(
+      { title: capitalize(itemName(world, weapon)), icon: el('div', { className: 'pd-slot' }, itemIcon(world, weapon)) },
+      info(t.balanceAsk(itemName(world, weapon)), 'pd-info'),
+      ...(['speed', 'accuracy'] as const).filter((imbue) => weapon.imbue !== imbue).map((imbue) => button(t.balanceImbue[imbue], () => balance(imbue), 'primary')),
+      button(t.balanceNever, back, 'quiet'),
+    ),
+    back,
+  );
+}
+
+/**
+ * A known scroll of upgrade, enchantment or identify asked for from outside the backpack (a quick slot): the same selector of items
+ * the backpack opens, and the scroll read on the one chosen; «cancel» leaves the scroll where it is. False if the item is no such scroll.
+ */
+export function askKnownScroll(options: BackpackOptions, index: number): boolean {
+  const { world, hero } = options;
+  const item = hero.items[index];
+  if (!item || !isKnown(world, item) || !(TARGETED_SCROLLS as readonly string[]).includes(item.kind)) return false;
+  const kind = item.kind as (typeof TARGETED_SCROLLS)[number];
+  pickOrigin = null;
+  const again = (): void => {
+    askKnownScroll(options, index);
+  };
+  showBackpack({
+    ...options,
+    pick: {
+      title: t.pickTitle[kind],
+      targets: scrollTargets(world, hero, kind),
+      onPick: (on) => askTarget(options, kind, on, () => {
+        closeBag();
+        options.onAction({ type: 'use', item: index, on });
+        options.onClose();
+      }, again),
+      onCancel: () => {
+        closeBag();
+        options.onClose();
+      },
+    },
+  });
+  return true;
+}
+
 /** The old item window, kept for what still opens an item on its own: now the backpack with it chosen. */
 function showItem(options: ItemOptions): void {
   const choice: BagChoice = options.index !== null ? { index: options.index } : options.ring !== undefined ? { ring: options.ring } : { worn: options.item === options.hero.armor ? 'armor' : 'weapon' };
@@ -1972,7 +2091,10 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
         showAmulet(world, hero, false, () => options.onAction({ type: 'endGame' }), options.onClose);
       });
     }
-    if (category === 'kit') use(t.applyKit, () => act({ type: 'use', item: index, target: 'armor' }));
+    // ArmorKit: WndBag's selector of armours, worn and in the pack; the kit goes on the one chosen.
+    if (category === 'kit') {
+      use(t.applyKit, chooseFrom(options, index, t.pickKit, t.pickKitHint, kitTargets(hero), (on) => act({ type: 'use', item: index, on })));
+    }
     if (category === 'seed') use(t.plantSeed, () => aimWith('throw', index));
     if (category === 'scroll') {
       // A known scroll that acts on one thing asks which, from the whole pack and what is worn (WndBag's selector).
@@ -2006,11 +2128,9 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
       if (item.returnTo) use(t.beaconReturn, () => act({ type: 'beacon', item: index, mode: 'return' }));
       use(t.beaconSet, () => act({ type: 'beacon', item: index, mode: 'set' }));
     }
-    if (category === 'weightstone' && hero.weapon) {
-      // Weightstone.WndBalance: the weapon in hand, balanced the way it is not yet.
-      for (const imbue of ['speed', 'accuracy'] as const) {
-        if (hero.weapon.imbue !== imbue) use(t.balanceFor[imbue], () => keepOpen(options, { type: 'balance', item: index, imbue }, hero.weapon));
-      }
+    if (category === 'weightstone') {
+      // Weightstone: WndBag's selector of weapons, the one in hand and those in the pack, then WndBalance for the one chosen.
+      use(t.balance, chooseFrom(options, index, t.pickWeapon, t.pickWeaponHint, balanceTargets(hero), (on) => showBalance(options, index, on)));
     }
     if (category === 'wipeout') use(t.read, () => act({ type: 'use', item: index }));
     if (category === 'vial' && item.volume) use(t.drink, () => act({ type: 'use', item: index }));

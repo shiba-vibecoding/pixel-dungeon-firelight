@@ -12,6 +12,7 @@ import { verifyInitData, WEEK_SECONDS } from './telegram-auth';
  *                           a few days at a public address, which a story (WebApp.shareToStory) and a
  *                           challenge's photo need
  *   GET  /card/<id>.png     the picture
+ *   POST /photo             the photo mode's picture, the same way (photos.ts), kept a day
  *   POST /challenge         { initData, text, card?, mode }: a message the player may send to any chat
  *                           (Bot API savePreparedInlineMessage), its id for WebApp.shareMessage
  *
@@ -45,8 +46,11 @@ export class Card extends DurableObject<Env> {
   override async fetch(request: Request): Promise<Response> {
     if (request.method === 'PUT') {
       const bytes = new Uint8Array(await request.arrayBuffer());
+      // A photo (photos.ts) asks for a shorter life than a result's card, never a longer one.
+      const asked = Number(new URL(request.url).searchParams.get('ttl'));
+      const ttl = Number.isFinite(asked) && asked >= 60_000 ? Math.min(asked, CARD_TTL_MS) : CARD_TTL_MS;
       await this.ctx.storage.put('png', bytes);
-      await this.ctx.storage.setAlarm(Date.now() + CARD_TTL_MS);
+      await this.ctx.storage.setAlarm(Date.now() + ttl);
       return new Response(null, { status: 204 });
     }
     const bytes = await this.ctx.storage.get<Uint8Array>('png');

@@ -5,7 +5,7 @@ import { CELLS, LEAN_STRETCH, LEAN, PITCH, TILE_PX, WALL_H, YS, groundToScreen, 
 import { K_FLOOR, K_WALL, LevelGeom, SHAPES, TORCH_SPACING, pickShafts, pickTorches, tileRect } from '../src/r3d/levelgeom';
 import { CAP_FIRST, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from '../src/r3d/tilemap';
 import { Governor, RefreshMeter, TIERS } from '../src/r3d/governor';
-import { Beta3D, covers3D } from '../src/r3d/setting';
+import { covers3D, forgetOld3dChoice } from '../src/r3d/setting';
 
 const COLS = 16;
 /** The sheet as the renderer lays it out: the tiles' own eight rows and eight more for the tiles made from them. */
@@ -346,7 +346,7 @@ describe('the display refresh', () => {
   });
 });
 
-describe('the quality tier and the fall back to 2D', () => {
+describe('the quality tier (3D only, no fall back to 2D)', () => {
   const run = (governor: Governor, dt: number, hz: number, seconds: number): string[] => {
     const verdicts: string[] = [];
     for (let t = 0; t < seconds * 1000; t += dt) {
@@ -370,16 +370,14 @@ describe('the quality tier and the fall back to 2D', () => {
     expect(g.tier.name).toBe('low');
     expect(g.tier.shadowLights).toBe(0);
     expect(g.tier.dpr).toBe(1.5);
-    expect(g.fellBack).toBe(false);
   });
 
-  it('asks for the 2D renderer when even the lowest tier cannot play', () => {
+  it('steps down to the lowest tier when even it cannot play, and stays in 3D', () => {
     const g = new Governor();
     const verdicts = run(g, 1000 / 20, 60, 30);
-    expect(verdicts).toContain('fallback');
-    expect(verdicts.filter((v) => v === 'demote')).toHaveLength(2);
-    expect(g.fellBack).toBe(true);
-    expect(g.frame(16, 60)).toBe('fallback');
+    expect(verdicts).toEqual(['demote', 'demote', 'demote']);
+    expect(g.tier.name).toBe('min');
+    expect(g.tier.dpr).toBe(1);
   });
 
   it('does not judge frames while a shader compiles or a floor is built', () => {
@@ -394,35 +392,10 @@ describe('the quality tier and the fall back to 2D', () => {
     for (let i = 0; i < 100; i++) expect(g.frame(5000, 60)).toBe('ok');
   });
 
-  it('is on by default, and an old stored off (never a choice) does not turn it off', () => {
-    const kept = new Map<string, string>();
-    const storage = { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => void kept.set(k, v), removeItem: (k: string) => void kept.delete(k) };
-    expect(new Beta3D(storage).on).toBe(true);
-    // Before version 2 the default and an automatic fallback both left 'off' behind.
-    kept.set('pd-3d', 'off');
-    const old = new Beta3D(storage);
-    expect(old.on).toBe(true);
-    expect(old.chosen).toBe(false);
-  });
-
-  it('keeps a manual choice, and a fallback of its own until the player turns 3D on again', () => {
-    const kept = new Map<string, string>();
-    const storage = { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => void kept.set(k, v), removeItem: (k: string) => void kept.delete(k) };
-    const beta = new Beta3D(storage);
-    beta.set(false);
-    expect(new Beta3D(storage).on).toBe(false);
-    expect(new Beta3D(storage).chosen).toBe(true);
-    beta.set(true);
-    expect(new Beta3D(storage).on).toBe(true);
-    const g = new Governor();
-    // The game's own reaction (main.ts): on 'fallback' the 3D view is put away.
-    for (let t = 0; t < 30_000; t += 50) if (g.frame(50, 60) === 'fallback') beta.fallBack();
-    expect(beta.on).toBe(false);
-    const next = new Beta3D(storage);
-    expect(next.on).toBe(false);
-    expect(next.chosen).toBe(false);
-    next.set(true);
-    expect(new Beta3D(storage).on).toBe(true);
+  it('forgets what earlier builds stored about the 2D view', () => {
+    const kept = new Map<string, string>([['pd-3d', 'off'], ['pd-3d-v', '2'], ['pd-3d-fell', '1'], ['pd-brightness', '1.3']]);
+    forgetOld3dChoice({ getItem: (k) => kept.get(k) ?? null, removeItem: (k) => void kept.delete(k) });
+    expect([...kept.keys()]).toEqual(['pd-brightness']);
   });
 });
 

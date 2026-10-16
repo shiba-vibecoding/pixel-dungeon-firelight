@@ -1,3 +1,4 @@
+import { drawVignette } from './vignette';
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
@@ -337,6 +338,8 @@ export interface Scene {
   focus?: { x: number; y: number };
   /** Pools of light: torches and whatever burns. */
   lights?: ReadonlyArray<{ x: number; y: number; radius: number; color: string; strength: number }>;
+  /** The hero's light: the view's edges sink into the dark (off on the light effects). */
+  vignette?: boolean;
   /** The hero has fallen: how far the world has drained of colour, 0 to 1. */
   mourning?: number;
   /** The middle of the band the HUD and toolbar leave free, in device pixels. */
@@ -718,6 +721,7 @@ function screenLayer(
     ctx.fillStyle = `rgba(0, 0, 0, ${scene.mourning * 0.3})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
+  drawVignette(ctx, scene, camera);
   // Device pixels per CSS pixel: the cards' sizes are in CSS pixels, as in the design system.
   const px = canvas.width / (canvas.clientWidth || canvas.width);
   // Companions' names above their heads, in the colour co-op wears everywhere.
@@ -745,7 +749,6 @@ function screenLayer(
   }
   ctx.globalAlpha = 1;
 
-  // The hero's light, the view's edges sinking into the dark, is a layer over the canvas (#vignette, main.ts).
   fx.drawScreen(ctx, canvas.width, canvas.height, now);
 
   const middle = scene.cardY ?? scene.middle ?? canvas.height / 2;

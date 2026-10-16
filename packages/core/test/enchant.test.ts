@@ -120,6 +120,8 @@ describe('enchantments and glyphs', () => {
     const hero = heroById(world, 'p')!;
     const plain = armorStats(hero.armor).dr;
     hero.items = [createItem('scroll.enchantment', 2)];
+    // (A scroll the party knows: an unknown one is read first and its item chosen after, see scroll-read.test.ts.)
+    world.known.push('scroll.enchantment');
     act(world, 'p', { type: 'use', item: 0, target: 'armor' });
     expect(hero.armor.glyph).toBeDefined();
     expect(armorStats(hero.armor).dr).toBeGreaterThan(plain);
@@ -152,6 +154,7 @@ describe('curses', () => {
     const world = solo();
     const hero = heroById(world, 'p')!;
     hero.items = [{ ...createItem('ring.haste', 1, -1), cursed: true }, createItem('scroll.upgrade')];
+    world.known.push('scroll.upgrade');
     act(world, 'p', { type: 'equip', item: 0 });
     const ring = hero.rings.findIndex((r) => r.kind === 'ring.haste');
     expect(act(world, 'p', { type: 'remove', ring })).toEqual({ ok: false, reason: 'it is cursed: you cannot take it off' });

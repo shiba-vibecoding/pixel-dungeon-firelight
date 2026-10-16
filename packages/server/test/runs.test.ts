@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act, type Action, fingerprint, heroById, type World } from '@pd/core';
+import { act, type Action, createItem, fingerprint, heroById, type ItemKind, type World } from '@pd/core';
 import { step } from '../../core/test/runner';
 import { boardsFor } from '../src/boards';
 import { fromEntries, toEntries } from '../src/run-store';
@@ -144,5 +144,68 @@ describe('checked runs', () => {
     const back = fromEntries(entries);
     expect(fingerprint(back.runs.dungeon!.world)).toBe(fingerprint(device));
     expect(back.profile).toEqual(logic.profile);
+  });
+
+  // An unknown scroll of upgrade, enchantment or identify is read in two steps (Hero.pendingScroll): the read, then the item or the scroll given up.
+  describe.each<[ItemKind, Action]>([
+    ['scroll.upgrade', { type: 'scrollTarget', on: 'armor' }],
+    ['scroll.enchantment', { type: 'scrollTarget', on: 'weapon' }],
+    ['scroll.identify', { type: 'scrollTarget', on: 'armor' }],
+    ['scroll.upgrade', { type: 'scrollCancel' }],
+  ])('an unknown %s, read on a checked run, then %j', (kind, second) => {
+    /** The run with the scroll in the pack of both copies. */
+    function withScroll() {
+      const logic = player();
+      const run = start(logic);
+      for (const world of [run.world]) {
+        const hero = heroById(world, ME)!;
+        hero.items.unshift(createItem(kind, 2));
+        world.known = world.known.filter((known) => known !== kind);
+        // (The armour is not known, for identify to have something to tell.)
+        Object.assign(hero.armor, { levelUnknown: true, curseUnknown: true });
+      }
+      return { logic, device: structuredClone(run.world) };
+    }
+
+    it('is played by the server alike, with the batch ending where the choice is waited for', () => {
+      const { logic, device } = withScroll();
+      const first: Action = { type: 'use', item: 0 };
+      expect(act(device, ME, first).ok).toBe(true);
+      expect(heroById(device, ME)!.pendingScroll).toBeDefined();
+      let { reply } = logic.sync('dungeon', 'r1', 0, [first], fingerprint(device), 1);
+      expect(reply.world).toBeUndefined();
+      expect(reply.seq).toBe(1);
+      expect(heroById(logic.runs.dungeon!.world, ME)!.pendingScroll).toMatchObject({ kind });
+
+      // The player is kept in storage in the middle of the choice, and comes back to it.
+      const back = fromEntries(new Map(Object.entries(toEntries(logic.profile, logic.runs))));
+      expect(heroById(back.runs.dungeon!.world, ME)!.pendingScroll).toMatchObject({ kind });
+      expect(fingerprint(back.runs.dungeon!.world)).toBe(fingerprint(device));
+      const restored = new PlayerLogic(back.profile, back.runs);
+
+      expect(act(device, ME, second).ok).toBe(true);
+      expect(act(device, ME, { type: 'wait' }).ok).toBe(true);
+      ({ reply } = restored.sync('dungeon', 'r1', 1, [second, { type: 'wait' }], fingerprint(device), 2));
+      expect(reply.world).toBeUndefined();
+      expect(reply.seq).toBe(3);
+      expect(heroById(restored.runs.dungeon!.world, ME)!.pendingScroll).toBeUndefined();
+      expect(fingerprint(restored.runs.dungeon!.world)).toBe(fingerprint(device));
+    });
+
+    it('is played in a single batch, too, and the server refuses an action that part the choice from its answer', () => {
+      const { logic, device } = withScroll();
+      const moves: Action[] = [{ type: 'use', item: 0 }, second, { type: 'wait' }];
+      for (const move of moves) expect(act(device, ME, move).ok).toBe(true);
+      const { reply } = logic.sync('dungeon', 'r1', 0, moves, fingerprint(device), 1);
+      expect(reply.world).toBeUndefined();
+      expect(reply.seq).toBe(3);
+
+      // A device that moved on without answering (it cannot, but a tampered one would) is sent the server's copy.
+      const cheat = withScroll();
+      const answer = cheat.logic.sync('dungeon', 'r1', 0, [{ type: 'use', item: 0 }, { type: 'wait' }], null, 1).reply;
+      expect(answer.reason).toMatch(/^refused: choose what to read the scroll on/);
+      expect(answer.seq).toBe(1);
+      expect(heroById(answer.world!, ME)!.pendingScroll).toBeDefined();
+    });
   });
 });

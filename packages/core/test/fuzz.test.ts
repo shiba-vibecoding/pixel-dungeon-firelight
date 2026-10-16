@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   act, type Action, addHero, canEnter, charAt, createItem, createWorld, floorAt, heroById, isAlive, ITEMS, type ItemKind, itemDef, levelAt,
-  NEIGHBOURS8, Rng, visibleCells, type World,
+  NEIGHBOURS8, Rng, scrollTargets, visibleCells, type World,
 } from '../src/index';
 import { checkInvariants, unblock } from './helpers';
 
@@ -33,6 +33,10 @@ function randomAction(world: World, id: string, rng: Rng): Action {
   const mobs = floorAt(world, hero.depth).mobs.filter((m) => NEIGHBOURS8.some((n) => m.pos === hero.pos + n));
   const item = rng.int(Math.max(1, hero.items.length));
   const target = rng.element(cells) ?? hero.pos + 1;
+  // A scroll read and waiting for its item: only its two answers are taken (the rest are refused, and the run would never go on).
+  if (hero.pendingScroll && rng.int(4) !== 0) {
+    return rng.int(3) === 0 ? { type: 'scrollCancel' } : { type: 'scrollTarget', on: rng.element(scrollTargets(world, hero, hero.pendingScroll.kind)) ?? 'armor' };
+  }
   switch (rng.int(16)) {
     case 0: return { type: 'move', to: hero.pos + rng.element(NEIGHBOURS8)! };
     case 1: return mobs.length > 0 ? { type: 'attack', target: rng.element(mobs)!.id } : { type: 'search' };

@@ -42,11 +42,10 @@ describe('the baked pools of the fixed fires', () => {
 });
 
 describe('the brightness setting', () => {
-  it('runs from 0.5 to 2.5, defaults a little above 1, and clamps', () => {
+  it('runs from 0.5 to 2.5, defaults to 1 (100 %), and clamps', () => {
     expect(BRIGHTNESS_MIN).toBe(0.5);
     expect(BRIGHTNESS_MAX).toBe(2.5);
-    expect(BRIGHTNESS_DEFAULT).toBeGreaterThan(1);
-    expect(BRIGHTNESS_DEFAULT).toBeLessThan(1.6);
+    expect(BRIGHTNESS_DEFAULT).toBe(1);
     expect(clampBrightness(9)).toBe(2.5);
     expect(clampBrightness(0)).toBe(0.5);
     expect(clampBrightness(Number.NaN)).toBe(BRIGHTNESS_DEFAULT);

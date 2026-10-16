@@ -92,6 +92,14 @@ export function sanitizeAction(raw: unknown): Action | null {
       const target = oneOf(a.target, ['weapon', 'armor'] as const);
       return target ? { type: 'use', item, target } : null;
     }
+    case 'scrollTarget': {
+      // The second step of reading a scroll the party did not know: the item it is read on.
+      const on = itemRef(a.on);
+      return on === null ? null : { type: 'scrollTarget', on };
+    }
+    // ...or the scroll given up.
+    case 'scrollCancel':
+      return { type: 'scrollCancel' };
     case 'equip':
     case 'drop':
     case 'sell': {

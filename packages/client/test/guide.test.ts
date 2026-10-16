@@ -270,6 +270,7 @@ describe('curses', () => {
     // The one item a scroll is read on.
     for (const [scroll, level] of [['scroll.upgrade', 0], ['scroll.enchantment', -1]] as const) {
       hero.items = [curse('armor.mail'), curse('armor.leather'), createItem(scroll)];
+      if (!world.known.includes(scroll)) world.known.push(scroll);
       expect(act(world, 'p', { type: 'use', item: 2, on: 0 }).ok, scroll).toBe(true);
       expect(hero.items[0]!.cursed, scroll).toBeFalsy();
       expect(hero.items[0]!.level, scroll).toBe(level);

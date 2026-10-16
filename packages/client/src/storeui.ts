@@ -10,6 +10,8 @@ import {
 } from './flart';
 import { lang } from './i18n';
 import { L, S } from './i18n-shop';
+import { P } from './i18n-photo';
+import { flash, sceneShot, showPhoto } from './photoui';
 import { levelCost, PASS_LEVELS, REWARDS, type Track } from './pass';
 import { packLines } from './quip-packs';
 import { SEASON } from './season';
@@ -32,6 +34,8 @@ export interface StoreOptions {
   heroClass: HeroClass;
   /** Opens on this screen's category (a designer's category id: looks, fires, ...), or the pass. */
   tab?: string;
+  /** Opens on the photo screen (coming back from the photo mode). */
+  screen?: 'photo';
   onClose(): void;
   /** The first shop (martui.ts): recolours, effects, the patronage. */
   classic?: () => void;
@@ -201,6 +205,8 @@ function plateOf(heroClass: HeroClass, things: Dressing['plate']): HTMLElement {
 /** A live stage: the camp by the fire with the hero in what he would wear; stopped when the screen goes. */
 interface Stage {
   root: HTMLElement;
+  /** The scene's own canvas, for a snapshot. */
+  canvas: HTMLCanvasElement;
   apply(candidates: readonly Item[]): Dressing;
   stop(): void;
 }
@@ -228,6 +234,7 @@ function makeStage(heroClass: HeroClass, phone: boolean): Stage {
   });
   return {
     root,
+    canvas: camp.canvas,
     apply(candidates) {
       last = [...candidates];
       current = dressingOf(candidates, heroClass);
@@ -272,7 +279,7 @@ export function showStore(options: StoreOptions): void {
 function build(options: StoreOptions): void {
   const data = flCatalog();
   let heroClass = options.heroClass;
-  let route: Route = options.tab === 'pass' ? { s: 'pass' } : options.tab && SHELVES[options.tab] ? { s: 'cat', cat: options.tab } : { s: 'home' };
+  let route: Route = options.screen === 'photo' ? { s: 'photo' } : options.tab === 'pass' ? { s: 'pass' } : options.tab && SHELVES[options.tab] ? { s: 'cat', cat: options.tab } : { s: 'home' };
   const trail: Route[] = [];
   let selected: Item | null = null;
   let stage: Stage | null = null;
@@ -703,6 +710,19 @@ function build(options: StoreOptions): void {
         return b;
       }));
     const frames = shelf(['photoframe'], heroClass);
+    // The real photo mode, over the shop: a snapshot of this stage (the hero by the fire in what is worn), the worn frame ready on it.
+    const openPhotoMode = (): void => {
+      const shot = sceneShot(live.canvas, null, P.campCaption);
+      if (!shot) {
+        toast(P.shotFailed, { tone: 'warn' });
+        return;
+      }
+      const back = (): void => showStore({ ...options, screen: 'photo', tab: 'photo' });
+      stage?.stop();
+      stage = null;
+      flash();
+      showPhoto({ shot, onClose: back, onShop: () => showStore({ ...options, tab: 'photo' }) });
+    };
     const spots: ReadonlyArray<readonly [number, number]> = [[8, 6], [62, 8], [70, 52], [10, 54]];
     const stickerRow = swatchRow(stickers, (item) => {
       if (!cosmetics.owns(item)) return go({ s: 'bundle', id: 'stickers.pack1' });
@@ -718,7 +738,8 @@ function build(options: StoreOptions): void {
     }, () => false);
     return [
       el('div', { className: 'fl-photo-edit' }, live.root),
-      info(S.photoSoon, 'fl-hint'),
+      info(P.shopOpenHint, 'fl-hint'),
+      button(P.shopOpen, openPhotoMode, 'primary'),
       section(T('photoFrames'), null, swatchRow(frames, (item) => {
         if (cosmetics.owns(item)) void cosmetics.wear(item, !cosmetics.isWorn(item)).then(() => render());
         else go({ s: 'tryon', id: item.id });
