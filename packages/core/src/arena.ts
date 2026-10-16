@@ -482,7 +482,7 @@ type Pool = ReadonlyArray<readonly [number, Make]>;
 
 const kindOf = (kind: ItemKind, qty = 1): Make => () => createItem(kind, qty);
 const has = (hero: Hero, kind: ItemKind): boolean =>
-  hero.items.some((item) => item.kind === kind) || hero.weapon?.kind === kind || hero.armor.kind === kind || hero.rings.some((ring) => ring.kind === kind);
+  hero.items.some((item) => item.kind === kind) || hero.weapon?.kind === kind || hero.armor?.kind === kind || hero.rings.some((ring) => ring.kind === kind);
 const wands = (hero: Hero): number => hero.items.filter((item) => itemDef(item.kind).category === 'wand').length;
 
 /** To stay alive through the next wave. */

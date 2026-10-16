@@ -30,7 +30,7 @@ describe('the arena\'s rewards', () => {
           const category = itemDef(item.kind).category;
           if (category === 'weapon') expect(weaponStats(item).str, item.kind).toBeLessThanOrEqual(hero.str);
           if (category === 'armor') expect(armorStats(item).str, item.kind).toBeLessThanOrEqual(hero.str);
-          if (category === 'armor') expect(itemDef(item.kind).tier! * 10 + item.level).toBeGreaterThan(itemDef(hero.armor.kind).tier! * 10 + hero.armor.level);
+          if (category === 'armor') expect(itemDef(item.kind).tier! * 10 + item.level).toBeGreaterThan(itemDef(hero.armor!.kind).tier! * 10 + hero.armor!.level);
         }
       }
     }

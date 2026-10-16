@@ -31,7 +31,7 @@ export function itemAt(hero: Hero, ref: ItemRef): Item | undefined {
     case 'weapon':
       return hero.weapon ?? undefined;
     case 'armor':
-      return hero.armor;
+      return hero.armor ?? undefined;
     case 'ring0':
       return hero.rings[0];
     case 'ring1':
