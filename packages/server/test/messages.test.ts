@@ -30,6 +30,11 @@ describe('client messages', () => {
     expect(sanitizeAction({ type: 'arenaReady', cancel: true })).toEqual({ type: 'arenaReady', cancel: true });
     expect(sanitizeAction({ type: 'arenaReady', cancel: 'yes' })).toEqual({ type: 'arenaReady' });
     expect(sanitizeAction({ type: 'arenaPick', choice: 2, item: { kind: 'scroll.upgrade' } })).toEqual({ type: 'arenaPick', choice: 2 });
+    // The two steps of reading a scroll the party did not know.
+    expect(sanitizeAction({ type: 'scrollTarget', on: 4, junk: 1 })).toEqual({ type: 'scrollTarget', on: 4 });
+    expect(sanitizeAction({ type: 'scrollTarget', on: 'ring1' })).toEqual({ type: 'scrollTarget', on: 'ring1' });
+    expect(sanitizeAction({ type: 'scrollTarget', on: 'weapon' })).toEqual({ type: 'scrollTarget', on: 'weapon' });
+    expect(sanitizeAction({ type: 'scrollCancel', junk: 1 })).toEqual({ type: 'scrollCancel' });
   });
 
   it('refuses what is not an action of the rules', () => {
@@ -40,6 +45,7 @@ describe('client messages', () => {
       { type: 'use', item: 1, target: 'ring' }, { type: 'drop', item: 1000 }, { type: 'reward', choice: 'gold' },
       { type: 'reforge', first: 'helmet', second: 1 }, { type: 'master', item: 1, subclass: 'pirate' },
       { type: 'balance', item: 1, imbue: 'luck' }, { type: 'special', target: null }, { type: 'beacon', item: 1, mode: 'go' },
+      { type: 'scrollTarget' }, { type: 'scrollTarget', on: 'boots' }, { type: 'scrollTarget', on: 1000 }, { type: 'scrollTarget', on: -1 },
       { type: 'arenaPick' }, { type: 'arenaPick', choice: 3 }, { type: 'arenaPick', choice: -1 }, { type: 'arenaPick', choice: '1' },
     ]) {
       expect(sanitizeAction(bad), JSON.stringify(bad)).toBeNull();

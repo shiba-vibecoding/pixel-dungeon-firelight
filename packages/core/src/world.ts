@@ -11,7 +11,7 @@ import {
   heroView, isPassable, isWater, leaveCell, observe,
   swapsWithHero,
 } from './floor';
-import { inventoryProblem, isInventoryAction, type InventoryAction, performInventory } from './inventory';
+import { beginScrollRead, inventoryProblem, isInventoryAction, type InventoryAction, performInventory, readsInTwoSteps } from './inventory';
 import { type Bones, layBones } from './bones';
 import { createItem, createItems, ItemGenerator, type ItemKind, shareOfDepth, WAND_RECHARGE, wandMaxCharges } from './items';
 import { staggerTarget, stepOnPlant, sungrassHeals } from './plants';
@@ -350,6 +350,8 @@ export function isSafe(world: World, hero: Hero): boolean {
 function problemWith(world: World, hero: Hero, action: Action): string | null {
   if (world.over) return 'the run is over';
   if (!isAlive(hero)) return 'you are dead';
+  // A scroll read and waiting for its item (InventoryScroll's selector): nothing else happens until it is answered.
+  if (hero.pendingScroll && action.type !== 'scrollTarget' && action.type !== 'scrollCancel') return 'choose what to read the scroll on';
   if (isInventoryAction(action)) return inventoryProblem(world, hero, action);
   const inArena = arenaProblem(world, hero, action);
   if (inArena !== undefined) return inArena;
@@ -424,6 +426,17 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
   const problem = problemWith(world, hero, action);
   if (problem) {
     return { ok: false, reason: problem };
+  }
+  // A scroll the party did not know is read at once, and what it is read on is asked after (InventoryScroll.doRead): the
+  // reading itself takes no time, so nothing else may happen in between (no monster's turn, no one's plan).
+  if (action.type === 'use' && readsInTwoSteps(world, hero.items[action.item]!.kind)) {
+    const effects: Effect[] = [];
+    const floor = floorAt(world, hero.depth);
+    beginScrollRead({ world, depth: hero.depth, level: levelAt(world, hero.depth), floor, rng: new Rng(floor.rng), effects }, hero, action.item);
+    hero.intent = null;
+    if (world.live) hero.plan = [];
+    world.turn++;
+    return { ok: true, effects };
   }
   // Live turns: the order stands until done or replaced; the clock (liveTick) carries it out. Choices
   // that take no time (the arena's «To battle!» and its rewards) are made at once.
@@ -590,7 +603,7 @@ function advanceLive(world: World, depth: number, effects: Effect[], until: numb
       action = null;
     }
     if (!action) {
-      if (heldToTurns(world, hero)) return false;
+      if (heldToTurns(world, hero) || hero.pendingScroll) return false;
       action = { type: 'wait' };
     }
     perform(ctx, hero, action);
@@ -781,7 +794,7 @@ function advance(world: World, depth: number, effects: Effect[]): void {
       }
       continue;
     }
-    if (companionWaiting(world, hero) && isSafe(world, hero)) {
+    if (companionWaiting(world, hero) && isSafe(world, hero) && !hero.pendingScroll) {
       spend(ctx, hero, TIME_TO_REST);
       overChasm(ctx, hero);
       continue;

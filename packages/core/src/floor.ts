@@ -144,6 +144,8 @@ export type Effect =
   | { type: 'equipped'; hero: string; item: Item }
   /** A potion drunk or a scroll read; `identified` when this taught the party what it is. */
   | { type: 'used'; hero: string; kind: ItemKind; identified: boolean }
+  /** A scroll read but not used: no item was chosen for it and the player gave it up (InventoryScroll.confirmCancelation). */
+  | { type: 'scrollWasted'; hero: string; kind: ItemKind }
   | { type: 'identified'; hero: string; kind: ItemKind }
   /** Everything about an item revealed: by a scroll of identify, or a well of awareness it was dropped into (ScrollOfIdentify: "It is %s"). */
   | { type: 'revealed'; hero: string; item: Item }
