@@ -13,6 +13,7 @@ import { canFullscreen, haptics, isFullscreen, openExternal, setFullscreen } fro
 import { hints } from './hints';
 import { confirmDanger } from './mistap';
 import { confirmRisky } from './riskyuse';
+import { touchGuardSetting } from './touchguard';
 
 /*
  * The windows around the game rather than in it (design system v9): the
@@ -214,6 +215,7 @@ export function showSettings(options: SettingsOptions): void {
     options.name ? nameRow(options.name) : null,
     switchRow(t.safe.settings.danger, t.safe.settings.dangerNote, confirmDanger.on, (on) => confirmDanger.set(on)),
     switchRow(t.safe.settings.risky, t.safe.settings.riskyNote, confirmRisky.on, (on) => confirmRisky.set(on)),
+    switchRow(t.input.settings.touchGuard, t.input.settings.touchGuardNote, touchGuardSetting.on, (on) => touchGuardSetting.set(on)),
     switchRow(t.meta.hints, t.meta.hintsNote, hints.enabled, (on) => hints.setEnabled(on)),
     options.reminders ? switchRow(t.ranked.remindersSwitch, t.ranked.remindersNote, options.reminders.on, (on) => options.reminders!.set(on)) : null,
     options.hideBoards ? switchRow(options.hideBoards.label, options.hideBoards.note, options.hideBoards.on, (on) => options.hideBoards!.set(on)) : null,

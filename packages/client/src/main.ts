@@ -62,7 +62,8 @@ import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta'
 import { eraseDevice } from './challenge-info';
 import { idle, lazy, load } from './lazy';
 import { QUIP_LOG_COLOR, quipSys } from './quipsys';
-import { loop, onResume } from './lifecycle';
+import { loop, onPause, onResume } from './lifecycle';
+import { type Screen, TouchGuard, touchGuardSetting } from './touchguard';
 import { reloadForUpdate } from './update';
 import { type Camp, type CampDress, campClasses } from './camp';
 import { type DailyRulesView, showCamp } from './campui';
@@ -2269,8 +2270,31 @@ const toDevice = (clientX: number, clientY: number): { x: number; y: number } =>
   return { x: (clientX - rect.left) * sx, y: ((clientY - rect.top) * sy) / ground() };
 };
 
+/* The guard against accidental touches (touchguard.ts): a palm, a grip on the edge, the touch that wakes the app, a tap with a second finger. */
+const touchGuard = new TouchGuard();
+const guardProbe = document.createElement('div');
+guardProbe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:0 var(--safe-r,0px) var(--safe-b,0px) var(--safe-l,0px)';
+document.body.append(guardProbe);
+/** The window and the room the phone and Telegram claim at its sides and bottom (the safe areas), CSS pixels. */
+function guardScreen(): Screen {
+  const style = getComputedStyle(guardProbe);
+  return {
+    width: innerWidth, height: innerHeight,
+    left: parseFloat(style.paddingLeft) || 0, right: parseFloat(style.paddingRight) || 0, bottom: parseFloat(style.paddingBottom) || 0,
+  };
+}
+onResume(() => touchGuard.resumed(performance.now()));
+onPause(() => touchGuard.reset());
+
 canvas.addEventListener('pointerdown', (event) => {
   if (!session?.world || overlayOpen()) return;
+  touchGuard.enabled = touchGuardSetting.on;
+  const kept = touchGuard.press(
+    { id: event.pointerId, x: event.clientX, y: event.clientY, width: event.width, height: event.height, kind: event.pointerType, time: event.timeStamp },
+    guardScreen(),
+  );
+  // A palm, a grip or the touch that woke the app never reaches the camera.
+  if (kept) return;
   // The middle button pans; the browser's own use of it (a scrolling cursor) is not wanted.
   if (event.button === 1) event.preventDefault();
   // The HUD, log and toolbar are HTML over the canvas: what reaches here is a touch on the map.
@@ -2294,13 +2318,14 @@ canvas.addEventListener('pointermove', (event) => {
 
 const lift = (event: PointerEvent): void => {
   const at = toDevice(event.clientX, event.clientY);
+  const tapped = touchGuard.release(event.pointerId);
   if (event.type !== 'pointerup') {
     cam.pointerCancel(event.pointerId);
     return;
   }
-  // A drag, a pinch or a fling stopped is not a tap: the camera says what was one.
+  // A drag, a pinch or a fling stopped is not a tap: the camera says what was one; the guard, whether it was meant.
   const tap = cam.pointerUp(event.pointerId, at.x, at.y, event.timeStamp);
-  if (tap) tapAt(tap.x, tap.y);
+  if (tap && tapped) tapAt(tap.x, tap.y);
 };
 canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);

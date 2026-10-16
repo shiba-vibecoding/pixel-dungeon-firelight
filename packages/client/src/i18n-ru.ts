@@ -4,6 +4,7 @@ import type { Strings } from './i18n-en';
 import { CAMP_RU } from './i18n-camp.ru';
 import { GUIDE_RU } from './i18n-guide.ru';
 import { SAFETY_RU } from './i18n-safety.ru';
+import { INPUT_RU } from './i18n-input.ru';
 import { capitalize, plural } from './i18n-util';
 
 /* Interface text in Russian: a chunk of its own, fetched only when the page is in Russian (i18n.ts). */
@@ -852,6 +853,7 @@ export const ru: Strings = {
     blindness: 'Слепота', deferred: 'Отложенный урон', bleeding: 'Кровотечение', sacrifice: 'Отмечен для жертвы',
   },
   safe: SAFETY_RU,
+  input: INPUT_RU,
   camp: CAMP_RU.camp,
   mail: CAMP_RU.mail,
   coach: CAMP_RU.coach,
