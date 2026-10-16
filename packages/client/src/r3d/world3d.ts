@@ -38,6 +38,7 @@ import { PerfOverlay } from './perfoverlay';
 import { canPost, Post } from './post';
 import { blankMirror, makeMirrorUniforms, Mirror, reflects, withMirror } from './mirror';
 import { BloodWater, withBlood } from './bloodwater';
+import { Grass } from './grass3d';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
 import type { WearQuad } from '../wearfx';
@@ -117,7 +118,7 @@ const SCONCE_REACH = 14;
  */
 /** What a mirror is given for a level whose water shows no reflection. */
 const NO_KINDS = new Uint8Array(LENGTH);
-const GLOW_GAIN = { sprites: 1.5, terrain: 1.4, lava: 1.6 };
+const GLOW_GAIN = { sprites: 1.5, terrain: 1.4, lava: 1.6, grass: 1.15 };
 
 /** How the sprite batch stands a picture up: leaned toward the camera (characters, items) or straight up (a sconce on a wall). */
 const LEANED = 0;
@@ -237,8 +238,12 @@ export class World3D {
   /** Blood in the water: the red a victim leaves in it (bloodwater.ts). */
   private readonly blood = new BloodWater();
   private waterScroll: [number, number] = [0, 0.006];
-  /** The cells of the level that carry a prop that stands over the floor (high grass, fungi, a signpost), and their cut-outs. */
+  /** The cells of the level that carry a signpost, and the cut-out of it; the high grass and fungi stand in their own batch (grass3d.ts). */
   private props: number[] = [];
+  private grass: Grass | null = null;
+  private grassCells: number[] = [];
+  /** The time of the last frame (the clock the grass folds by when it is trampled between frames). */
+  private lastNow = 0;
   private grassCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
   private signCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
 
@@ -493,6 +498,7 @@ export class World3D {
     const on = this.post !== null;
     for (const batch of [this.sprites, this.deadMesh]) (batch.material as MeshLambertMaterial).emissiveIntensity = on ? GLOW_GAIN.sprites : 1;
     if (this.terrainMaterial) this.terrainMaterial.emissiveIntensity = on ? GLOW_GAIN.terrain : 1;
+    if (this.grass) this.grass.material.emissiveIntensity = on ? GLOW_GAIN.grass : 1;
     if (this.waterMaterial) this.waterMaterial.emissiveIntensity = this.waterGlow * (on && this.lava ? GLOW_GAIN.lava : 1);
   }
 
@@ -541,6 +547,7 @@ export class World3D {
       this.region = region;
       this.makeMaterials(region);
       this.cutProps(images, region);
+      this.makeGrass();
       this.dropMeshes();
     }
     const a = atmosphere(this.kit, region, level.depth);
@@ -548,7 +555,7 @@ export class World3D {
     const under = new Map<number, number>([[HIGH_GRASS, region >= 2 ? 1 : 2], [SIGN, 1]]);
     this.geom = new LevelGeom(level.map, 16, 16, this.geomKit(region), under);
     this.makeMeshes();
-    this.scanProps();
+    this.scanProps(true);
     this.configureMirror();
 
     // The air: the kit's light, haze and particles of the region, or of the boss's arena.
@@ -620,11 +627,28 @@ export class World3D {
     this.signCut = propCutout(images, SIGN, 1);
   }
 
-  /** Which cells of the level carry a prop that stands over the floor. */
-  private scanProps(): void {
+  /** The region's high grass: its crossed quads, made from the cut-out of its tile. */
+  private makeGrass(): void {
+    if (this.grass) {
+      this.scene.remove(this.grass.mesh);
+      this.grass.dispose();
+    }
+    const cut = this.grassCut!;
+    this.grass = new Grass(this.air, cut.color, cut.glow, this.kit.sprites.selfLight);
+    this.scene.add(this.grass.mesh);
+    this.applyGlowGain();
+  }
+
+  /** Which cells of the level carry a signpost and which high grass; the grass batch follows the map (trampled grass folds flat). */
+  private scanProps(snap = false): void {
     this.props = [];
+    this.grassCells.length = 0;
     const g = this.geom!;
-    for (let i = 0; i < LENGTH; i++) if (g.terrain[i] === HIGH_GRASS || g.terrain[i] === SIGN) this.props.push(i);
+    for (let i = 0; i < LENGTH; i++) {
+      if (g.terrain[i] === SIGN) this.props.push(i);
+      else if (g.terrain[i] === HIGH_GRASS) this.grassCells.push(i);
+    }
+    this.grass?.set(this.grassCells, this.lastNow, snap);
   }
 
   /** A door opened, grass was trampled: the geometry follows the map. */
@@ -935,6 +959,8 @@ export class World3D {
     const f = this.options.reveal ? { ...given, visible: this.everything, explored: this.everything } : given;
     const t0 = performance.now();
     this.current = f;
+    this.lastNow = f.now;
+    this.grass?.frame(f.now);
     this.renderer.info.reset();
     this.syncGeometry();
 
@@ -1154,24 +1180,16 @@ export class World3D {
     }
   }
 
-  /** High grass, fungi and signposts: cards standing over their cells (the grass sways), cut out of the region's tiles. */
+  /** Signposts: cards standing over their cells, cut out of the region's tiles (the high grass is its own batch). */
   private addProps(f: Frame3D, hx: number, hz: number): void {
-    const geom = this.geom!;
     const props = this.props;
-    const t = f.now / 1000;
     for (let i = 0; i < props.length; i++) {
       const cell = props[i]!;
       if (!f.explored[cell]) continue;
       const x = cell % WIDTH;
       const z = Math.trunc(cell / WIDTH);
       if (Math.abs(x + 0.5 - hx) > PROP_REACH || Math.abs(z + 0.5 - hz) > PROP_REACH) continue;
-      const terrain = geom.terrain[cell];
-      if (terrain === HIGH_GRASS) {
-        const sway = Math.sin(t * 3.77 + cell * 0.9) * 0.05;
-        this.sprite(this.grassCut!.color, 0, 0, 16, 16, cell % 2 === 0, x + 0.5, 0, z + 0.62, 1, 1.05, 1, LEANED, sway, this.grassCut!.glow);
-      } else if (terrain === SIGN) {
-        this.sprite(this.signCut!.color, 0, 0, 16, 16, false, x + 0.5, 0, z + 0.62, 1, 1, 1, LEANED, 0, this.signCut!.glow);
-      }
+      this.sprite(this.signCut!.color, 0, 0, 16, 16, false, x + 0.5, 0, z + 0.62, 1, 1, 1, LEANED, 0, this.signCut!.glow);
     }
   }
 
@@ -1291,6 +1309,10 @@ export class World3D {
     this.waterMaterial?.dispose();
     this.terrain?.dispose();
     this.waterTex?.dispose();
+    if (this.grass) {
+      this.scene.remove(this.grass.mesh);
+      this.grass.dispose();
+    }
     this.mirror?.dispose();
     this.blankMirror.dispose();
     this.post?.dispose();

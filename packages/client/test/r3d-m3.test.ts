@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { Vector3 } from 'three';
+import { Texture, Vector3 } from 'three';
 import { LENGTH, T, WIDTH, createWorld, levelAt } from '@pd/core';
 import { bloomWeights } from '../src/r3d/post';
 import { TIERS } from '../src/r3d/governor';
 import { blankMirror, makeMirrorUniforms, Mirror } from '../src/r3d/mirror';
 import { K_FLOOR, K_WALL, K_WATER, LevelGeom, tileRect } from '../src/r3d/levelgeom';
+import { FOLD_MS, Grass, crossedQuads, grassHeight } from '../src/r3d/grass3d';
+import { makeAir } from '../src/r3d/fogofwar';
 import { parseKit } from '../src/r3d/kit';
 import { readFileSync } from 'node:fs';
 
@@ -201,5 +203,80 @@ describe('the stairs as steps (levelgeom.ts)', () => {
     expect(geom.boxes.indices).toBeLessThanOrEqual(geom.boxes.index.length);
     const stairs = quads(geom).filter((q) => q.ys.some((y) => y !== 0 && Math.abs(y) <= 0.5) && q.xs.every((x) => Math.abs(x - level.entrance % WIDTH - 0.5) <= 0.5));
     expect(stairs.length).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe('high grass as crossed billboards (grass3d.ts)', () => {
+  const stub = { width: 16, height: 16 } as unknown as HTMLCanvasElement;
+  const make = (): Grass => new Grass(makeAir(new Texture()), stub, stub, 0.14);
+  const where = (g: Grass, i: number): [number, number] => {
+    const m = g.mesh.instanceMatrix.array as Float32Array;
+    return [m[i * 16 + 12]!, m[i * 16 + 14]!];
+  };
+  const fold = (g: Grass): number[] => Array.from(g.mesh.geometry.getAttribute('aFold').array as Float32Array).slice(0, g.drawn);
+
+  it('is two quads a quarter turn apart in one geometry', () => {
+    const geometry = crossedQuads();
+    const pos = geometry.getAttribute('position').array as Float32Array;
+    expect(pos.length / 3).toBe(8);
+    expect(geometry.getIndex()!.count).toBe(12);
+    // The foot line of each quad (its first two vertices) in the ground plane.
+    const dir = (q: number): [number, number] => [pos[(q * 4 + 1) * 3]! - pos[q * 4 * 3]!, pos[(q * 4 + 1) * 3 + 2]! - pos[q * 4 * 3 + 2]!];
+    const [a, b] = [dir(0), dir(1)];
+    expect(a[0] * b[0] + a[1] * b[1]).toBeCloseTo(0, 6);
+    for (const q of [0, 1]) {
+      expect(pos[q * 12 + 1]).toBe(0);
+      expect(pos[q * 12 + 4]).toBe(0);
+      expect(pos[q * 12 + 7]!).toBeGreaterThan(0.5);
+    }
+  });
+
+  it('is one instance a cell, standing in the middle of it, in one draw', () => {
+    const g = make();
+    g.set([10 + 3 * WIDTH, 11 + 3 * WIDTH, 12 + 4 * WIDTH], 0, true);
+    expect(g.drawn).toBe(3);
+    expect(g.mesh.count).toBe(3);
+    expect(g.mesh.visible).toBe(true);
+    expect(where(g, 0)).toEqual([10.5, 3.5]);
+    expect(where(g, 2)).toEqual([12.5, 4.5]);
+    const m = g.mesh.instanceMatrix.array as Float32Array;
+    expect(m[5]).toBeCloseTo(grassHeight(10 + 3 * WIDTH), 6);
+    expect(grassHeight(7)).toBeGreaterThanOrEqual(0.9);
+    expect(grassHeight(7)).toBeLessThanOrEqual(1.1);
+    expect(fold(g)).toEqual([0, 0, 0]);
+  });
+
+  it('folds a trampled cell flat in a third of a second and then lets it go', () => {
+    const g = make();
+    const cells = [10, 11, 12];
+    g.set(cells, 0, true);
+    // The rules turn the cell the hero steps on into short grass: it is no longer in the list.
+    g.set([10, 12], 1000);
+    expect(g.drawn).toBe(3);
+    expect(fold(g)).toEqual([0, 0, 0]);
+    g.frame(1000 + FOLD_MS / 2);
+    expect(fold(g)[1]).toBeCloseTo(0.5, 6);
+    expect(fold(g)[0]).toBe(0);
+    g.frame(1000 + FOLD_MS);
+    expect(g.drawn).toBe(2);
+    expect(where(g, 0)).toEqual([10.5, 0.5]);
+    expect(where(g, 1)).toEqual([12.5, 0.5]);
+    expect(fold(g)).toEqual([0, 0]);
+  });
+
+  it('does nothing in a frame while nothing is folding, and takes new cells as they come', () => {
+    const g = make();
+    g.set([5], 0, true);
+    g.mesh.instanceMatrix.version = 0;
+    g.frame(10);
+    g.frame(20);
+    expect(g.mesh.instanceMatrix.version).toBe(0);
+    g.set([5, 6], 30);
+    expect(g.drawn).toBe(2);
+    expect(g.mesh.instanceMatrix.version).toBeGreaterThan(0);
+    // A new level starts clean.
+    g.set([], 40, true);
+    expect(g.drawn).toBe(0);
+    expect(g.mesh.visible).toBe(false);
   });
 });
