@@ -1,5 +1,5 @@
 import { challengeMultiplier, createItem, HEAP_SPRITES, type Hero, type Item, itemDef, type ItemKind, ITEMS, itemSprite, RoomType, T, type World } from '@pd/core';
-import { audio } from './audio';
+import { audio, type SoundSet } from './audio';
 import { CHALLENGE_MASKS, countChallenges } from './challenge-info';
 import { fx } from './fx';
 import { capitalize, lang, locale, t } from './i18n';
@@ -151,6 +151,8 @@ const group = (head: string | null, ...rows: Array<HTMLElement | null | false>):
 
 /* Settings */
 
+const SOUND_SETS: readonly SoundSet[] = ['firelight', 'original'];
+
 export interface SettingsOptions {
   onClose(): void;
   /** The effects changed: the canvas is sized anew. */
@@ -180,6 +182,18 @@ export function showSettings(options: SettingsOptions): void {
     t.meta.sound,
     stepsRow(t.musicVolume, () => level(audio.musicVolume), louder((v) => audio.setMusicVolume(v)), () => undefined),
     stepsRow(t.soundVolume, () => level(audio.soundVolume), louder((v) => audio.setSoundVolume(v)), () => audio.play('coin', 1, 0.6)),
+    el(
+      'div',
+      { className: 'pd-set-row stack' },
+      el('span', { className: 'pd-info', textContent: t.meta.soundSet }),
+      segments(SOUND_SETS.map((s) => [s, t.meta.soundSets[s]] as const), audio.soundSet, (set) => {
+        audio.setSoundSet(set);
+        // A taste of the set chosen.
+        audio.play('hit', 1, 0.8);
+        audio.later(180, 'coin', 1, 0.6);
+      }),
+      info(t.meta.soundSetNote, 'pd-note'),
+    ),
     switchRow(t.meta.vibration, t.meta.vibrationNote, haptics.on, (on) => haptics.set(on)),
   );
   // The three words are of unequal length: the buttons take what they need, not a third each.

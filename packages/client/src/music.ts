@@ -1,460 +1,160 @@
 /*
- * The music of the regions below the sewers, played here rather than from files.
+ * The sequencer: turns the songs of music-songs.ts into notes and plays them.
  *
- * The original has two tunes: the title's and the dungeon's. The sewers keep the dungeon's;
- * the prison, the caves, the dwarven city, the demon halls and the boss fights have their own,
- * written below as note data and played by a small chip of the kind the original's tunes
- * imitate: two pulse voices (duties of 12.5, 25 and 50 %), a stepped triangle for the bass and a
- * noise channel for the drums, with a little vibrato on long notes and a quiet echo for space.
+ * Songs are written as text (chords, a melody, a bass figure, a drum line; see music-songs.ts) and compiled once into a
+ * list of events for each sixteenth-note step, tagged with the layer they belong to. Three layers play in step and
+ * crossfade by the situation (`planLayers`): calm while exploring, danger with enemies in view, boss in a boss fight.
+ * A layer that is not sounding is not even scheduled.
  *
- * A song is a list of sections (an A, its variation, a B, a bridge...), each a few bars of
- * sixteen steps: the chords, a melody for the lead, an accompaniment for the second pulse
- * (a line of its own, a broken chord or rhythmic chord stabs), the bass (a line, or a figure
- * drawn from the chords) and a drum pattern. It loops, past its intro if it has one.
+ * The notes are played by a small chip of the kind the original's tunes imitate: two pulse voices (duties of 12.5, 25
+ * and 50 %), a stepped triangle for the bass and a noise channel for the drums, with a soft pad, a flute and a plucked
+ * string besides for the calm layer; a little vibrato on long notes, an echo and a room's reverb for space.
  *
- * Notes are scheduled a little ahead on the audio clock, from a timer that only looks ahead
- * ("two clocks"): a busy frame on the main thread never makes the music stutter, and while the
- * context is suspended (the app hidden) its clock stands still, so nothing piles up to burst
- * out on return. A player plays into the gain it is given; the fades, the duck and the muffle
- * are the caller's, as for the tunes from files.
+ * Notes are scheduled a little ahead on the audio clock, from a timer that only looks ahead ("two clocks"): a busy
+ * frame on the main thread never makes the music stutter, and while the context is suspended (the app hidden) its
+ * clock stands still, so nothing piles up to burst out on return. A player plays into the gain it is given; the
+ * fades, the duck and the muffle are the caller's, as for the tunes from files.
  */
 
-export type SongName = 'prison' | 'caves' | 'city' | 'halls' | 'boss';
+import {
+  type Arp, BAR, BOSS_DEFAULT, type Calm, type Drum, type Duty, type Figure, type Layer, LAYERS, SONG_DATA, type SongName, type StingerName,
+} from './music-songs';
 
-export const SONGS: readonly SongName[] = ['prison', 'caves', 'city', 'halls', 'boss'];
+export { SONGS, STINGERS, type Layer, type SongName, type StingerName } from './music-songs';
 
-/** A pulse's duty, in percent: 50 is round and hollow, 25 brighter, 12.5 thin and nasal. */
-type Duty = 12 | 25 | 50;
+type Inst = 'lead' | 'harm' | 'bass' | 'drum' | 'pad' | 'flute' | 'pluck';
+type Tune = SongName | StingerName;
+
+/* Which layer plays: the crossfade's logic. */
+
+/** What is happening: enemies awake and in sight (how many), and whether a boss is being fought. */
+export interface Situation {
+  danger: number;
+  boss: boolean;
+}
+
+/** Which layer plays, and the state kept between calls (until when the mode is held). */
+export interface LayerPlan {
+  mode: Layer;
+  /** Until when (seconds on the caller's clock) the mode is kept, though what raised it has passed. */
+  holdUntil: number;
+}
+
+/** How long danger lingers after the last enemy leaves the sight, and the boss layer after the boss falls. */
+export const HOLD: Record<Layer, number> = { calm: 0, danger: 6, boss: 4 };
+const RANK: Record<Layer, number> = { calm: 0, danger: 1, boss: 2 };
+/** Time constants of a fade: a layer coming in, a layer giving way to a higher one, and one going back down. */
+export const FADE = { up: 0.3, over: 0.7, down: 1.8 };
+
+/** The highest of the layers a song has that is at or below `mode`. */
+export function available(mode: Layer, has: readonly Layer[]): Layer {
+  for (let rank = RANK[mode]; rank >= 0; rank--) {
+    const layer = LAYERS[rank]!;
+    if (has.includes(layer)) return layer;
+  }
+  return has[0] ?? 'calm';
+}
 
 /**
- * Drums, one character a step: k kick, s snare, g ghost snare, h closed hat, o open hat,
- * t tom, c crash, `.` nothing.
+ * The next plan. Danger and boss come in at once; they go only after the hold has run out, so a fight that flickers (an enemy
+ * out of sight for a moment) does not flicker the music.
  */
-type Drum = 'k' | 's' | 'g' | 'h' | 'o' | 't' | 'c';
-
-/** A broken chord: chord tones by index (0 the root, 1 the next tone up...; `.` a rest), `len` steps each. */
-interface Arp {
-  arp: string;
-  len: number;
-  octave?: number;
+export function planLayers(prev: LayerPlan | null, situation: Situation, now: number): LayerPlan {
+  const wanted: Layer = situation.boss ? 'boss' : situation.danger > 0 ? 'danger' : 'calm';
+  const mode = prev?.mode ?? 'calm';
+  const holdUntil = prev?.holdUntil ?? 0;
+  // Up (or the same), at once; down only once the hold has run out (from a boss to danger if enemies are still in sight, then to calm).
+  if (RANK[wanted] >= RANK[mode] || now >= holdUntil) return { mode: wanted, holdUntil: now + HOLD[wanted] };
+  return { mode, holdUntil };
 }
 
-/** Chord stabs: `x` strikes the chord (a fast arpeggio, as the chip played chords), `-` holds it, `.` rests. */
-interface Stab {
-  stab: string;
-  octave?: number;
+export interface LayerLevels {
+  gains: Record<Layer, number>;
+  /** Time constants of the fades, seconds. */
+  fades: Record<Layer, number>;
 }
+
+/** Each layer's level and fade for a mode, in a song with the layers `has`: the layer below stands in for one it lacks. */
+export function layerLevels(mode: Layer, before: Layer, has: readonly Layer[]): LayerLevels {
+  const sounding = available(mode, has);
+  const was = available(before, has);
+  const gains = { calm: 0, danger: 0, boss: 0 };
+  const fades = { calm: FADE.down, danger: FADE.down, boss: FADE.down };
+  gains[sounding] = 1;
+  for (const layer of LAYERS) {
+    if (layer === sounding) fades[layer] = FADE.up;
+    else fades[layer] = RANK[sounding] > RANK[was] || RANK[sounding] > RANK[layer] ? FADE.over : FADE.down;
+  }
+  return { gains, fades };
+}
+
+/* The clock: where in the song, and when. */
+
+/** The seconds a sixteenth-note step lasts at a tempo. */
+export const stepSeconds = (bpm: number): number => 15 / bpm;
 
 /**
- * A bass figure, drawn from the chord at each note: R the root (or the slash note), 3, 5, 7
- * the chord's tones above it, O the octave; a trailing `-` takes it an octave down. It repeats
- * through the section.
+ * Walks a song's steps against the audio clock. `time` is when the step at `position` sounds; at the end of the song
+ * it goes back to `loop` (the time keeps counting on, so the join has no gap and no overlap), or, for a stinger, ends.
  */
-interface Figure {
-  figure: string;
-}
+export class StepCursor {
+  position = 0;
+  time = 0;
+  ended = false;
 
-interface Section {
-  /** Bars of four beats, sixteen steps each. */
-  bars: number;
-  /** The harmony: chord symbols and their lengths in steps ("Dm:16 Bb:8"), repeated to fill the section. */
-  chords: string;
+  constructor(
+    readonly step: number,
+    readonly length: number,
+    readonly loop: number,
+    readonly once = false,
+  ) {}
+
+  move(): void {
+    this.time += this.step;
+    this.position++;
+    if (this.position >= this.length) {
+      if (this.once) {
+        this.ended = true;
+        this.position = this.length - 1;
+      } else {
+        this.position = this.loop;
+      }
+    }
+  }
+
   /**
-   * The melody: notes as `pitch:steps` ("d5:4"; `r` rests), `!` after a note accents it and
-   * `'` makes it short. `|` marks a bar line (and checks that one falls there).
+   * Plays what falls before `now + ahead`. If the timer was held up so long that steps are past `late` seconds old, those are
+   * skipped (the song keeps its place in time) rather than crammed into this instant. `emit` gets each step and its time.
    */
-  lead?: string;
-  duty?: Duty;
-  /** Octaves the lead is moved by: the same tune lower is a variation. */
-  leadOctave?: number;
-  harm?: string | Arp | Stab;
-  harmDuty?: Duty;
-  bass?: string | Figure;
-  drums?: string;
+  run(now: number, ahead: number, late: number, emit: (position: number, time: number) => void): void {
+    if (this.ended) return;
+    if (this.time < now - late) {
+      const missed = Math.ceil((now - late - this.time) / this.step);
+      for (let i = 0; i < missed && !this.ended; i++) this.move();
+    }
+    while (!this.ended && this.time < now + ahead) {
+      emit(this.position, Math.max(this.time, now));
+      this.move();
+    }
+  }
 }
-
-interface Song {
-  bpm: number;
-  sections: readonly Section[];
-  /** The section the song comes back to when it loops (past an intro). */
-  loop?: number;
-  /** Each voice's level. */
-  levels: { lead: number; harm: number; bass: number; drums: number };
-  /** The echo: its delay in steps, how much of it comes back, how much is heard. */
-  echo: { steps: number; feedback: number; wet: number };
-  /** The brightest the music gets, Hz: darker regions are darker. */
-  tone: number;
-}
-
-/* The songs. */
-
-const BAR = 16;
-
-/*
- * The prison: a march in D minor, tense and dogged, the snare drilling and the bass in dotted
- * steps. A and its variation, a lift into the relative major that never quite settles, a
- * bridge over the Neapolitan (E flat) that winds the tension up again, and A once more.
- */
-const PRISON_A6 =
-  'd5:4 a4:2 d5:2 f5:4 e5:2 d5:2 | c#5:4 d5:2 e5:2 a4:8 | f5:4 d5:2 f5:2 bb5:4 a5:2 g5:2 | ' +
-  'a5:6 g5:2 f5:2 e5:2 c#5:4 | d5:4 a4:2 d5:2 f5:4 a5:4 | bb5:4 a5:2 g5:2 d5:4 g5:2 f5:2 |';
-const PRISON_CHORDS = 'Dm:16 Dm:16 Bb:16 A:16 Dm:16 Gm:16 A:16 Dm:16';
-const PRISON_MARCH: Figure = { figure: "R:3 R:1' 5-:4 R:3 R:1' 5-:4" };
-const PRISON_DRUMS = 'k...s..gk.k.s... | k...s..gk.k.s.gs';
-
-const PRISON: Song = {
-  bpm: 108,
-  loop: 1,
-  levels: { lead: 0.15, harm: 0.07, bass: 0.27, drums: 0.24 },
-  echo: { steps: 3, feedback: 0.25, wet: 0.18 },
-  tone: 4200,
-  sections: [
-    // The guards' drums, before anyone sings.
-    { bars: 2, chords: 'Dm:32', harm: { stab: '..x-..x-..x-..x-' }, harmDuty: 12, bass: PRISON_MARCH, drums: PRISON_DRUMS },
-    {
-      bars: 8,
-      chords: PRISON_CHORDS,
-      lead: PRISON_A6 + ' e5:4 f5:2 g5:2 e5:2 c#5:2 a4:4 | d5:8 r:4 a4:2 c#5:2',
-      duty: 25,
-      harm: { stab: '..x-..x-..x-..x-' },
-      harmDuty: 12,
-      bass: PRISON_MARCH,
-      drums: PRISON_DRUMS,
-    },
-    {
-      // The same, rounder, under a running broken chord, and a darker close (B flat over A).
-      bars: 8,
-      chords: PRISON_CHORDS,
-      lead: PRISON_A6 + ' e5:2 f5:2 g5:2 a5:2 bb5:4 a5:4 | d5:12 r:4',
-      duty: 50,
-      harm: { arp: '0121', len: 2 },
-      harmDuty: 12,
-      bass: PRISON_MARCH,
-      drums: PRISON_DRUMS,
-    },
-    {
-      // Through the relative major, in half time, always pulled back to A.
-      bars: 8,
-      chords: 'Bb:16 C:16 F:16 A:16 Bb:16 C:16 Dm:16 A:16',
-      lead:
-        'd5:6 c5:2 bb4:4 d5:4 | e5:6 d5:2 c5:4 g4:4 | a4:4 c5:4 f5:6 e5:2 | e5:6 c#5:2 a4:8 | ' +
-        'f5:6 e5:2 d5:4 f5:4 | g5:6 f5:2 e5:4 c5:4 | a5:4 g5:2 f5:2 e5:2 d5:2 f5:4 | e5:4 c#5:4 a4:4 c#5:2 e5:2',
-      duty: 25,
-      harm: { arp: '01232123', len: 2 },
-      harmDuty: 12,
-      bass: { figure: 'R:4 5-:4 O:4 5-:4' },
-      drums: 'k.......s....... | k.....k.s.....g.',
-    },
-    {
-      // The bridge: the drums fall to a heartbeat, then roll back in.
-      bars: 4,
-      chords: 'Gm:16 Eb:16 A:16 A7:16',
-      lead: 'g4:8 bb4:4 d5:4 | eb5:8 d5:4 bb4:4 | c#5:8 e5:4 g5:4 | a5:8 g5:2 f5:2 e5:2 c#5:2',
-      duty: 50,
-      harm: { stab: 'x---------------' },
-      harmDuty: 25,
-      bass: { figure: 'R:12 5-:4' },
-      drums: 'k.......k....... | k.......k....... | k.......k....... | k...s...s.s.ssss',
-    },
-    {
-      bars: 8,
-      chords: PRISON_CHORDS,
-      lead: PRISON_A6 + ' e5:4 f5:2 g5:2 e5:2 c#5:2 a4:4 | d5:8 r:4 a4:2 c#5:2',
-      duty: 50,
-      harm: { arp: '01232121', len: 1 },
-      harmDuty: 12,
-      bass: PRISON_MARCH,
-      drums: 'k.g.s..gk.k.s.g. | k.g.s..gk.k.s.gs',
-    },
-  ],
-};
-
-/*
- * The caves: slow and sparse, in A dorian (its raised sixth, the F sharp over D, is the colour),
- * turning phrygian (B flat against A) in the middle. A thin broken chord drips through a long
- * echo; the drums are a far-off thump. A, B, A an octave down, and a bridge of single calls.
- */
-const CAVES_CHORDS = 'Am:16 D:16 Am:16 D:16 C:16 G:16 Am:16 Em:16';
-const CAVES_A =
-  'r:4 e5:4 a5:6 g5:2 | f#5:8 e5:4 d5:4 | e5:12 r:4 | r:4 a4:2 b4:2 c5:4 d5:4 | ' +
-  'e5:8 g5:4 e5:4 | d5:8 b4:4 g4:4 | a4:6 b4:2 c5:4 e5:4 | b4:12 r:4';
-
-const CAVES: Song = {
-  bpm: 80,
-  levels: { lead: 0.14, harm: 0.06, bass: 0.28, drums: 0.2 },
-  echo: { steps: 3, feedback: 0.42, wet: 0.32 },
-  tone: 3600,
-  sections: [
-    {
-      bars: 8,
-      chords: CAVES_CHORDS,
-      lead: CAVES_A,
-      duty: 25,
-      harm: { arp: '02324232', len: 2 },
-      harmDuty: 12,
-      bass: { figure: 'R:12 5-:4' },
-      drums: 'k............... | ........t....... | k............... | ......h.t...h...',
-    },
-    {
-      bars: 8,
-      chords: 'Am:16 Bb:16 Am:16 Bb:16 F:16 G:16 Am:16 Am:16',
-      lead:
-        'a5:8 g5:4 e5:4 | f5:8 d5:4 bb4:4 | c5:4 e5:4 a5:8 | bb5:8 a5:4 f5:4 | ' +
-        'a5:6 g5:2 f5:4 e5:4 | d5:8 b4:4 d5:4 | e5:16 | r:16',
-      duty: 50,
-      harm: { arp: '0121', len: 2 },
-      harmDuty: 12,
-      bass: { figure: 'R:16' },
-      drums: 'k.......k....... | t...............',
-    },
-    {
-      bars: 8,
-      chords: CAVES_CHORDS,
-      lead: CAVES_A,
-      leadOctave: -1,
-      duty: 25,
-      harm: { arp: '02423242', len: 2 },
-      harmDuty: 12,
-      bass: { figure: 'R:12 5-:4' },
-      drums: 'k............... | ........t....... | k............... | ......h.t...h...',
-    },
-    {
-      // Calls into the dark, and what comes back.
-      bars: 4,
-      chords: 'Am:16 G:16 F:16 E:16',
-      lead: 'r:8 e5:2 a5:2 r:4 | r:8 d5:2 g5:2 r:4 | r:8 c5:2 f5:2 r:4 | b4:4 g#4:4 e4:8',
-      duty: 25,
-      harm: { stab: 'x---------------' },
-      harmDuty: 12,
-      bass: { figure: 'R:16' },
-      drums: '........t.......',
-    },
-  ],
-};
-
-/*
- * The dwarven city: stately and proud, in C minor, in dotted quarter-note steps over an
- * arpeggiated bass and chords struck on the beat. The B section lifts into E flat major;
- * a timpani bridge; and the last A ends on C major before the loop takes it back to minor.
- */
-const CITY_A6 =
-  'c5:6 d5:2 eb5:4 g5:4 | ab5:6 g5:2 f5:4 eb5:4 | g5:6 f5:2 eb5:4 bb4:4 | f5:6 eb5:2 d5:8 | ' +
-  'eb5:6 d5:2 c5:4 g5:4 | ab5:6 g5:2 f5:4 c5:4 |';
-const CITY_BASS: Figure = { figure: 'R:4 5:4 O:4 5:4' };
-const CITY_DRUMS = 'k.h.h.h.s.h.h.h. | k.h.h.h.s.h.k.s.';
-
-const CITY: Song = {
-  bpm: 96,
-  levels: { lead: 0.15, harm: 0.065, bass: 0.27, drums: 0.2 },
-  echo: { steps: 3, feedback: 0.3, wet: 0.2 },
-  tone: 4500,
-  sections: [
-    {
-      bars: 8,
-      chords: 'Cm:16 Ab:16 Eb:16 Bb:16 Cm:16 Fm:16 G:16 G7:16',
-      lead: CITY_A6 + ' b4:6 c5:2 d5:4 f5:4 | eb5:4 d5:4 b4:4 g4:4',
-      duty: 25,
-      harm: { stab: 'x--.x--.x--.x--.' },
-      harmDuty: 25,
-      bass: CITY_BASS,
-      drums: CITY_DRUMS,
-    },
-    {
-      bars: 8,
-      chords: 'Cm:16 Ab:16 Eb:16 Bb:16 Cm:16 Fm:16 G7:16 Cm:16',
-      lead: CITY_A6 + ' b4:4 d5:4 f5:4 ab5:4 | g5:4 eb5:4 c5:8',
-      duty: 50,
-      harm: { arp: '01230123', len: 2 },
-      harmDuty: 12,
-      bass: CITY_BASS,
-      drums: CITY_DRUMS,
-    },
-    {
-      // The lift: E flat major, the halls in their glory.
-      bars: 8,
-      chords: 'Eb:16 Bb:16 Cm:16 Ab:16 Eb:16 Bb:16 Ab:16 Bb:16',
-      lead:
-        'eb5:4 g5:4 bb5:6 ab5:2 | f5:6 g5:2 f5:4 d5:4 | eb5:4 g5:4 c6:6 bb5:2 | ab5:4 c6:4 ab5:4 eb5:4 | ' +
-        'g5:6 ab5:2 bb5:4 g5:4 | f5:6 g5:2 ab5:4 f5:4 | eb5:4 f5:4 g5:4 ab5:4 | bb5:12 r:4',
-      duty: 50,
-      harm: { stab: 'x--.x--.x--.x--.' },
-      harmDuty: 25,
-      bass: CITY_BASS,
-      drums: 'k.h.h.h.s.h.h.h. | k.h.k.h.s.h.h.s.',
-    },
-    {
-      // Timpani, and a shimmer of fast broken chords.
-      bars: 4,
-      chords: 'Fm:16 G:16 Ab:16 G7:16',
-      lead: 'c5:8 ab4:8 | b4:8 d5:8 | c5:4 eb5:4 ab5:8 | g5:8 f5:4 d5:4',
-      duty: 25,
-      harm: { arp: '0123', len: 1 },
-      harmDuty: 12,
-      bass: { figure: 'R:8 R:8' },
-      drums: 't...t...t...t.t.',
-    },
-    {
-      bars: 8,
-      chords: 'Cm:16 Ab:16 Eb:16 Bb:16 Cm:16 Fm:16 G7:16 C:16',
-      lead: CITY_A6 + ' b4:4 d5:4 f5:4 ab5:4 | g5:4 e5:4 c5:8',
-      duty: 25,
-      harm: { stab: 'x--.x--.x--.x--.' },
-      harmDuty: 25,
-      bass: CITY_BASS,
-      drums: 'k.h.h.h.s.h.h.h. | k.h.h.h.s.h.h.h. | k.h.h.h.s.h.h.h. | k.h.h.h.s.h.h.h. | ' +
-        'k.h.h.h.s.h.h.h. | k.h.h.h.s.h.h.h. | k.h.h.h.s.h.k.s. | c...............',
-    },
-  ],
-};
-
-/*
- * The demon halls: a slow heartbeat in E minor and lines that slide by half steps. Chords
- * a half step away from each other (E minor, F, C minor, B flat against E); the B section
- * climbs the bass chromatically from A to D sharp and falls back into E. A, B, A an octave down.
- */
-const HALLS_CHORDS = 'Em:16 F:16 Em:16 Cm:16 Em:16 F:16 Bb:16 B7:16';
-const HALLS_A =
-  'e5:8 d#5:4 e5:4 | f5:12 e5:4 | g5:6 f#5:2 e5:4 b4:4 | c5:8 eb5:4 g5:4 | ' +
-  'b5:8 bb5:4 a5:4 | a5:4 ab5:4 g5:8 | f5:8 d5:4 bb4:4 | d#5:8 f#5:4 a5:4';
-const HEARTBEAT: Figure = { figure: 'R:2 R:4 r:10' };
-const HEARTBEAT_DRUMS = 'k.k............. | k.k.........g...';
-
-const HALLS: Song = {
-  bpm: 66,
-  loop: 1,
-  levels: { lead: 0.16, harm: 0.07, bass: 0.34, drums: 0.27 },
-  echo: { steps: 2, feedback: 0.35, wet: 0.25 },
-  tone: 3000,
-  sections: [
-    { bars: 2, chords: 'Em:32', harm: { stab: 'x-------........' }, harmDuty: 12, bass: HEARTBEAT, drums: HEARTBEAT_DRUMS },
-    {
-      bars: 8,
-      chords: HALLS_CHORDS,
-      lead: HALLS_A,
-      duty: 50,
-      // An inner voice that barely moves, a half step at a time.
-      harm: 'b4:16 | a4:16 | b4:16 | g4:16 | g4:16 | a4:16 | bb4:16 | b4:8 a4:8',
-      harmDuty: 12,
-      bass: HEARTBEAT,
-      drums: HEARTBEAT_DRUMS,
-    },
-    {
-      bars: 8,
-      chords: 'Am:16 Bb:16 Em/B:16 C:16 C#dim:16 D:16 D#dim7:16 B7:16',
-      lead:
-        'a4:4 c5:4 e5:8 | f5:4 d5:4 bb4:8 | b4:4 e5:4 g5:8 | c5:4 e5:4 g5:8 | ' +
-        'g5:4 e5:4 c#5:8 | d5:4 f#5:4 a5:8 | a5:4 f#5:4 d#5:8 | b4:4 d#5:4 f#5:4 a5:4',
-      duty: 25,
-      harm: { stab: 'x-..x-..x-..x-..' },
-      harmDuty: 12,
-      bass: { figure: 'R:2 r:2 R:2 r:2 R:2 r:2 R:2 r:2' },
-      drums: 'k.k.....g...t... | k.k.....g...t.g.',
-    },
-    {
-      bars: 8,
-      chords: HALLS_CHORDS,
-      lead: HALLS_A,
-      leadOctave: -1,
-      duty: 25,
-      harm: { arp: '0121', len: 4 },
-      harmDuty: 12,
-      bass: HEARTBEAT,
-      drums: 'k.k............. | k.k.........g... | k.k............. | k.k.....t...t.t.',
-    },
-  ],
-};
-
-/*
- * A boss: fast and urgent, in E minor, octave bass in eighths and the drums on every beat.
- * A hook that stabs and climbs, its variation, a soaring B that turns on B major (the
- * dominant pulling back to E), a breakdown that builds from the kick alone, and the hook again.
- */
-const BOSS_CHORDS = 'Em:16 Em:16 C:16 D:16 Em:16 Em:16 C:16 B:16';
-const BOSS_A6 =
-  'e5:3 e5:1 r:2 g5:2 f#5:2 e5:2 d5:2 b4:2 | e5:6 g5:2 b5:4 a5:2 g5:2 | g5:3 g5:1 r:2 e5:2 g5:2 c6:4 b5:2 | ' +
-  'a5:6 f#5:2 d5:4 f#5:4 | e5:3 e5:1 r:2 g5:2 f#5:2 e5:2 d5:2 b4:2 | e5:4 b4:2 e5:2 g5:4 b5:4 |';
-const BOSS_A = BOSS_A6 + ' c6:6 b5:2 a5:2 g5:2 e5:4 | d#5:6 f#5:2 b5:8';
-const OCTAVES: Figure = { figure: 'R:2 O:2' };
-const BOSS_DRUMS = 'k.h.s.hkk.h.s.h. | k.h.s.hkk.h.s.hs';
-
-const BOSS: Song = {
-  bpm: 152,
-  loop: 1,
-  levels: { lead: 0.15, harm: 0.06, bass: 0.27, drums: 0.24 },
-  echo: { steps: 3, feedback: 0.2, wet: 0.12 },
-  tone: 4800,
-  sections: [
-    { bars: 2, chords: 'Em:32', harm: { arp: '0123', len: 1 }, harmDuty: 12, bass: OCTAVES, drums: 'k...k...k...k... | k...k...k.s.ssss' },
-    {
-      bars: 8,
-      chords: BOSS_CHORDS,
-      lead: BOSS_A,
-      duty: 25,
-      harm: { arp: '01231210', len: 1 },
-      harmDuty: 12,
-      bass: OCTAVES,
-      drums: BOSS_DRUMS,
-    },
-    {
-      bars: 8,
-      chords: BOSS_CHORDS,
-      lead: BOSS_A6 + ' c6:4 b5:4 a5:4 g5:4 | f#5:4 g5:4 a5:4 b5:4',
-      duty: 50,
-      harm: { stab: 'x-x-..x-x-x-..x-' },
-      harmDuty: 25,
-      bass: OCTAVES,
-      drums: BOSS_DRUMS,
-    },
-    {
-      bars: 8,
-      chords: 'Am:16 F:16 C:16 G:16 Am:16 F:16 B:16 B7:16',
-      lead:
-        'a5:8 c6:4 b5:4 | a5:8 f5:4 c5:4 | e5:6 f5:2 g5:8 | d5:8 g5:4 b5:4 | ' +
-        'c6:8 b5:4 a5:4 | a5:6 g5:2 f5:4 a5:4 | f#5:6 g5:2 f#5:4 d#5:4 | b4:4 d#5:4 f#5:4 b5:4',
-      duty: 25,
-      harm: { arp: '0121', len: 2 },
-      harmDuty: 12,
-      bass: { figure: 'R:2 R:1 R:1' },
-      drums: 'k.h.s.h.k.h.s.h. | k.h.s.h.k.k.s.ss',
-    },
-    {
-      // The breakdown: the kick alone under a running arpeggio, then the lead calls and it all comes back.
-      bars: 8,
-      chords: 'Em:16 Em:16 C:16 C:16 Am:16 Am:16 B:16 B:16',
-      lead:
-        'r:16 | r:16 | r:16 | r:16 | e5:2 r:2 e5:2 r:2 e5:2 g5:2 a5:2 b5:2 | c6:4 b5:4 a5:4 g5:4 | ' +
-        "f#5:2 r:2 f#5:2 r:2 f#5:2 g5:2 a5:2 b5:2 | d#6:4! r:4 b5:8",
-      duty: 50,
-      harm: { arp: '01234321', len: 1 },
-      harmDuty: 25,
-      bass: { figure: 'R:1' },
-      drums:
-        'k...k...k...k... | k...k...k...k... | k...k...k...k... | k...k...k...s.ss | ' +
-        'k.h.s.h.k.h.s.h. | k.h.s.h.k.h.s.h. | k.h.s.h.k.h.s.h. | k.s.s.s.ssssssss',
-    },
-    {
-      bars: 8,
-      chords: BOSS_CHORDS,
-      lead: BOSS_A,
-      duty: 25,
-      harm: { stab: 'x-x-..x-x-x-..x-' },
-      harmDuty: 25,
-      bass: OCTAVES,
-      drums: BOSS_DRUMS,
-    },
-  ],
-};
-
-const SONG_DATA: Record<SongName, Song> = { prison: PRISON, caves: CAVES, city: CITY, halls: HALLS, boss: BOSS };
 
 /* From note data to events. */
 
-type Voice = 'lead' | 'harm' | 'bass';
-
-type Event =
-  | { voice: 'lead' | 'harm'; midi: number; len: number; vol: number; gate: number; duty: Duty; arp: readonly number[] | null }
-  | { voice: 'bass'; midi: number; len: number; vol: number; gate: number }
-  | { voice: 'drum'; drum: Drum; vol: number };
+interface Event {
+  inst: Inst;
+  layer: Layer;
+  midi: number;
+  len: number;
+  vol: number;
+  gate: number;
+  duty: Duty;
+  /** A chord on one voice: its tones in quick turn. */
+  arp: readonly number[] | null;
+  drum: Drum | null;
+  /** A pad's tones. */
+  tones: readonly number[] | null;
+}
 
 interface Compiled {
   /** Seconds a step lasts. */
@@ -463,6 +163,10 @@ interface Compiled {
   steps: Event[][];
   /** The step the song loops back to. */
   loop: number;
+  once: boolean;
+  layers: readonly Layer[];
+  /** What was wrong in the note data. */
+  problems: string[];
 }
 
 interface Chord {
@@ -494,8 +198,11 @@ function pitchClass(name: string): number {
   return (base + accidental + 12) % 12;
 }
 
-/** A mistake in the note data shows in the console while composing; the song still plays. */
+/** Mistakes in the note data: shown in the console while composing (the song still plays), and kept for the tests. */
+let sink: string[] | null = null;
+
 function complain(where: string, what: string): void {
+  sink?.push(`${where}: ${what}`);
   if (import.meta.env?.DEV) console.warn(`music: ${where}: ${what}`);
 }
 
@@ -523,7 +230,7 @@ function parseLine(text: string, where: string): { notes: Note[]; length: number
   return { notes, length: at };
 }
 
-/** The chord sounding at each step of a section. */
+/** The chord sounding at each step of a section (one object to a chord, shared by its steps). */
 function parseChords(text: string, steps: number, where: string): Chord[] {
   const spans: { chord: Chord; len: number }[] = [];
   for (const token of text.trim().split(/\s+/)) {
@@ -558,102 +265,172 @@ function chordTone(chord: Chord, root: number, index: number): number {
   return root + chord.tones[index % n]! + 12 * Math.floor(index / n);
 }
 
-/** Where the accompaniment's chords sit (from G3 up), and the bass's (from E2: low, but still heard on a phone). */
+/** Where the accompaniment's chords sit (from G3 up), the bass's (from E2: low, but still heard on a phone) and the pad's. */
 const HARM_LOW = 55;
 const BASS_LOW = 40;
+const PAD_LOW = 48;
 
-function compile(name: SongName): Compiled {
+/** What one layer of a section plays. */
+interface Parts {
+  lead?: string;
+  duty?: Duty;
+  leadOctave?: number;
+  harm?: string | Arp | { stab: string; octave?: number };
+  harmDuty?: Duty;
+  bass?: string | Figure;
+  drums?: string;
+}
+
+interface Where {
+  name: string;
+  length: number;
+  chords: readonly Chord[];
+  put(at: number, event: Event): void;
+}
+
+const event = (inst: Inst, layer: Layer, midi: number, len: number, extra: Partial<Event> = {}): Event => ({
+  inst, layer, midi, len, vol: 0.8, gate: 0.9, duty: 25, arp: null, drum: null, tones: null, ...extra,
+});
+
+function addLine(w: Where, layer: Layer, text: string, inst: 'lead' | 'harm' | 'bass' | 'flute', shift: number, duty: Duty, volume = 1): void {
+  const where = `${w.name} ${layer} ${inst}`;
+  const { notes, length } = parseLine(text, where);
+  if (length !== w.length) complain(where, `lasts ${length} steps of ${w.length}`);
+  for (const note of notes) {
+    if (note.midi === null) continue;
+    w.put(note.at, event(inst, layer, note.midi + shift, note.len, { vol: note.vol * volume, gate: note.gate, duty }));
+  }
+}
+
+function addBroken(w: Where, layer: Layer, arp: Arp, inst: 'harm' | 'pluck', duty: Duty): void {
+  const pattern = arp.arp.replace(/\s/g, '');
+  for (let at = 0, i = 0; at < w.length; at += arp.len, i++) {
+    const symbol = pattern[i % pattern.length]!;
+    if (symbol === '.') continue;
+    const chord = w.chords[at]!;
+    const root = place(chord.root, HARM_LOW + 12 * (arp.octave ?? 0));
+    w.put(at, event(inst, layer, chordTone(chord, root, Number(symbol)), arp.len, { gate: 0.85, duty }));
+  }
+}
+
+function addStabs(w: Where, layer: Layer, stab: { stab: string; octave?: number }, duty: Duty): void {
+  const pattern = stab.stab.replace(/[\s|]/g, '');
+  for (let at = 0; at < w.length; at++) {
+    if (pattern[at % pattern.length] !== 'x') continue;
+    let len = 1;
+    while (at + len < w.length && pattern[(at + len) % pattern.length] === '-') len++;
+    const chord = w.chords[at]!;
+    const root = place(chord.root, HARM_LOW + 12 * (stab.octave ?? 0));
+    // A triad is played with its octave on top, so the arpeggio rolls rather than wobbles.
+    const arp = chord.tones.length === 3 ? [...chord.tones, 12] : [...chord.tones];
+    w.put(at, event('harm', layer, root, len, { vol: 0.75, gate: 0.9, duty, arp }));
+  }
+}
+
+function addBass(w: Where, layer: Layer, bass: string | Figure): void {
+  if (typeof bass === 'string') return addLine(w, layer, bass, 'bass', 0, 25);
+  const figure = parseFigure(bass.figure, `${w.name} ${layer} bass`);
+  const cycle = figure.reduce((sum, note) => sum + note.len, 0);
+  for (let start = 0; cycle > 0 && start < w.length; start += cycle) {
+    for (const note of figure) {
+      const at = start + note.at;
+      if (at >= w.length || note.degree === 'r') continue;
+      const chord = w.chords[at]!;
+      const root = place(chord.root, BASS_LOW);
+      const low = place(chord.bass, BASS_LOW);
+      let midi =
+        note.degree === 'R' ? low
+        : note.degree === 'O' ? low + 12
+        : note.degree === '3' ? root + chord.tones[1]!
+        : note.degree === '5' ? root + chord.tones[2]!
+        : root + (chord.tones[3] ?? 12);
+      midi += 12 * note.shift;
+      w.put(at, event('bass', layer, midi, Math.min(note.len, w.length - at), { vol: 0.85, gate: note.gate }));
+    }
+  }
+}
+
+function addDrums(w: Where, layer: Layer, drums: string, volume = 1): void {
+  const pattern = drums.replace(/[\s|]/g, '');
+  for (let at = 0; at < w.length; at++) {
+    const symbol = pattern[at % pattern.length]!;
+    if (symbol === '.') continue;
+    if (!'ksghotc'.includes(symbol)) {
+      complain(`${w.name} ${layer}`, `no drum "${symbol}"`);
+      continue;
+    }
+    w.put(at, event('drum', layer, 0, 1, { drum: symbol as Drum, vol: (symbol === 'g' ? 0.35 : 1) * volume }));
+  }
+}
+
+/** What a layer written out plays (the danger layer, and the boss layer drawn from the same tune). */
+function addParts(w: Where, layer: Layer, parts: Parts): void {
+  if (parts.lead) addLine(w, layer, parts.lead, 'lead', 12 * (parts.leadOctave ?? 0), parts.duty ?? 25);
+  const duty = parts.harmDuty ?? 12;
+  const harm = parts.harm;
+  if (typeof harm === 'string') addLine(w, layer, harm, 'harm', 0, duty);
+  else if (harm && 'arp' in harm) addBroken(w, layer, harm, 'harm', duty);
+  else if (harm) addStabs(w, layer, harm, duty);
+  if (parts.bass) addBass(w, layer, parts.bass);
+  if (parts.drums) addDrums(w, layer, parts.drums);
+}
+
+/** The calm layer: a pad on the chords, a flute on the tune, a plucked broken chord, the root in the bass. */
+function addCalm(w: Where, calm: Calm, tune: { lead?: string; leadOctave?: number }): void {
+  if (calm.pad !== false) {
+    let from = 0;
+    for (let at = 1; at <= w.length; at++) {
+      if (at < w.length && w.chords[at] === w.chords[from]) continue;
+      const chord = w.chords[from]!;
+      const root = place(chord.root, PAD_LOW);
+      // The root, and the chord's tones above it; a triad's root once more on top.
+      const tones = [root, ...chord.tones.slice(1).map((tone) => root + tone), ...(chord.tones.length === 3 ? [root + 12] : [])];
+      w.put(from, event('pad', 'calm', root, at - from, { vol: 0.7, gate: 1, tones }));
+      from = at;
+    }
+  }
+  const lead = calm.lead === false ? undefined : calm.lead ?? tune.lead;
+  if (lead) addLine(w, 'calm', lead, 'flute', 12 * ((calm.octave ?? 0) + (calm.lead ? 0 : tune.leadOctave ?? 0)), 50, 0.9);
+  const pluck = calm.pluck === undefined ? { arp: '0212', len: 4 } : calm.pluck;
+  if (pluck) addBroken(w, 'calm', pluck, 'pluck', 25);
+  const bass = calm.bass === undefined ? { figure: 'R:16' } : calm.bass;
+  if (bass) addBass(w, 'calm', bass);
+  if (calm.drums) addDrums(w, 'calm', calm.drums, 0.5);
+}
+
+function compile(name: Tune): Compiled {
   const song = SONG_DATA[name];
+  const layers = song.layers ?? LAYERS;
+  const problems: string[] = [];
+  sink = problems;
   const total = song.sections.reduce((sum, section) => sum + section.bars * BAR, 0);
   const steps: Event[][] = Array.from({ length: total }, () => []);
   let base = 0;
   let loop = 0;
   song.sections.forEach((section, index) => {
-    const where = `${name} section ${index + 1}`;
+    const label = `${name} section ${index + 1}`;
     const length = section.bars * BAR;
     if (index === (song.loop ?? 0)) loop = base;
-    const chords = parseChords(section.chords, length, where);
-    const put = (at: number, event: Event): void => {
-      if (at < length) steps[base + at]!.push(event);
+    const w: Where = {
+      name: label,
+      length,
+      chords: parseChords(section.chords, length, label),
+      put: (at, made) => {
+        if (at < length) steps[base + at]!.push(made);
+      },
     };
-    const line = (text: string, voice: Voice, shift: number): void => {
-      const { notes, length: written } = parseLine(text, `${where} ${voice}`);
-      if (written !== length) complain(where, `the ${voice} lasts ${written} steps of ${length}`);
-      for (const note of notes) {
-        if (note.midi === null) continue;
-        const midi = note.midi + shift;
-        if (voice === 'bass') put(note.at, { voice, midi, len: note.len, vol: note.vol, gate: note.gate });
-        else put(note.at, { voice, midi, len: note.len, vol: note.vol, gate: note.gate, duty: voice === 'lead' ? section.duty ?? 25 : section.harmDuty ?? 12, arp: null });
-      }
-    };
-
-    if (section.lead) line(section.lead, 'lead', 12 * (section.leadOctave ?? 0));
-
-    const harm = section.harm;
-    const duty = section.harmDuty ?? 12;
-    if (typeof harm === 'string') line(harm, 'harm', 0);
-    else if (harm && 'arp' in harm) {
-      const pattern = harm.arp.replace(/\s/g, '');
-      for (let at = 0, i = 0; at < length; at += harm.len, i++) {
-        const symbol = pattern[i % pattern.length]!;
-        if (symbol === '.') continue;
-        const chord = chords[at]!;
-        const root = place(chord.root, HARM_LOW + 12 * (harm.octave ?? 0));
-        put(at, { voice: 'harm', midi: chordTone(chord, root, Number(symbol)), len: harm.len, vol: 0.8, gate: 0.85, duty, arp: null });
-      }
-    } else if (harm) {
-      const pattern = harm.stab.replace(/[\s|]/g, '');
-      for (let at = 0; at < length; at++) {
-        if (pattern[at % pattern.length] !== 'x') continue;
-        let len = 1;
-        while (at + len < length && pattern[(at + len) % pattern.length] === '-') len++;
-        const chord = chords[at]!;
-        const root = place(chord.root, HARM_LOW + 12 * (harm.octave ?? 0));
-        // A triad is played with its octave on top, so the arpeggio rolls rather than wobbles.
-        const arp = chord.tones.length === 3 ? [...chord.tones, 12] : [...chord.tones];
-        put(at, { voice: 'harm', midi: root, len, vol: 0.75, gate: 0.9, duty, arp });
-      }
+    if (layers.includes('danger')) addParts(w, 'danger', section);
+    if (layers.includes('boss')) {
+      const style = { ...BOSS_DEFAULT, ...song.boss };
+      addParts(w, 'boss', { lead: section.lead, duty: 25, leadOctave: section.leadOctave, harm: style.harm, harmDuty: 12, bass: style.bass, drums: style.drums });
+      // The tune doubled an octave up, thin and bright.
+      if (section.lead) addLine(w, 'boss', section.lead, 'lead', 12 * ((section.leadOctave ?? 0) + 1), 12, 0.55);
     }
-
-    const bass = section.bass;
-    if (typeof bass === 'string') line(bass, 'bass', 0);
-    else if (bass) {
-      const figure = parseFigure(bass.figure, `${where} bass`);
-      const cycle = figure.reduce((sum, note) => sum + note.len, 0);
-      for (let start = 0; cycle > 0 && start < length; start += cycle) {
-        for (const note of figure) {
-          const at = start + note.at;
-          if (at >= length || note.degree === 'r') continue;
-          const chord = chords[at]!;
-          const root = place(chord.root, BASS_LOW);
-          const low = place(chord.bass, BASS_LOW);
-          let midi =
-            note.degree === 'R' ? low
-            : note.degree === 'O' ? low + 12
-            : note.degree === '3' ? root + chord.tones[1]!
-            : note.degree === '5' ? root + chord.tones[2]!
-            : root + (chord.tones[3] ?? 12);
-          midi += 12 * note.shift;
-          put(at, { voice: 'bass', midi, len: Math.min(note.len, length - at), vol: 0.85, gate: note.gate });
-        }
-      }
-    }
-
-    if (section.drums) {
-      const pattern = section.drums.replace(/[\s|]/g, '');
-      for (let at = 0; at < length; at++) {
-        const symbol = pattern[at % pattern.length]!;
-        if (symbol === '.') continue;
-        if (!'ksghotc'.includes(symbol)) {
-          complain(where, `no drum "${symbol}"`);
-          continue;
-        }
-        put(at, { voice: 'drum', drum: symbol as Drum, vol: symbol === 'g' ? 0.35 : 1 });
-      }
-    }
+    if (layers.includes('calm')) addCalm(w, section.calm ?? {}, section);
     base += length;
   });
-  return { step: 15 / song.bpm, steps, loop };
+  sink = null;
+  return { step: stepSeconds(song.bpm), steps, loop, once: song.once === true, layers, problems };
 }
 
 function parseFigure(text: string, where: string): { at: number; len: number; degree: string; shift: number; gate: number }[] {
@@ -672,9 +449,9 @@ function parseFigure(text: string, where: string): { at: number; len: number; de
   return notes;
 }
 
-const compiled = new Map<SongName, Compiled>();
+const compiled = new Map<Tune, Compiled>();
 
-function song(name: SongName): Compiled {
+function song(name: Tune): Compiled {
   let done = compiled.get(name);
   if (!done) {
     done = compile(name);
@@ -684,9 +461,17 @@ function song(name: SongName): Compiled {
 }
 
 /** How long a song plays before it loops, in seconds (for tests and the curious). */
-export function songLength(name: SongName): { intro: number; loop: number } {
+export function songLength(name: Tune): { intro: number; loop: number } {
   const { step, steps, loop } = song(name);
   return { intro: loop * step, loop: (steps.length - loop) * step };
+}
+
+/** Mistakes found in a song's note data (bars that do not add up, notes that cannot be read): none, for a song that is right. */
+export const songProblems = (name: Tune): readonly string[] => song(name).problems;
+
+/** The events of a song, for the tests: every step's, with the layer and instrument of each. */
+export function songEvents(name: Tune): ReadonlyArray<ReadonlyArray<{ inst: string; layer: Layer; midi: number; len: number }>> {
+  return song(name).steps;
 }
 
 /* The chip. */
@@ -722,6 +507,8 @@ interface Chip {
   triangle: PeriodicWave;
   /** A second of the noise channel's long sequence (a 15-bit shift register). */
   noise: AudioBuffer;
+  /** A room: noise dying away, darker as it goes. */
+  room: AudioBuffer;
 }
 
 const chips = new WeakMap<BaseAudioContext, Chip>();
@@ -738,6 +525,21 @@ function chip(ctx: BaseAudioContext): Chip {
     register = (register >> 1) | (bit << 14);
     data[i] = register & 1 ? 0.8 : -0.8;
   }
+  const room = ctx.createBuffer(2, Math.round(ctx.sampleRate * 1.6), ctx.sampleRate);
+  for (let channel = 0; channel < 2; channel++) {
+    const samples = room.getChannelData(channel);
+    let s = 0x9e3779b9 * (channel + 1);
+    let dark = 0;
+    for (let i = 0; i < samples.length; i++) {
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      const u = i / samples.length;
+      // Each pass through the room takes the top off a little more.
+      dark += (0.55 - 0.45 * u) * (((s >>> 0) / 4294967296) * 2 - 1 - dark);
+      samples[i] = dark * (1 - u) ** 2.6;
+    }
+  }
   made = {
     pulse: { 12: pulse(0.125), 25: pulse(0.25), 50: pulse(0.5) },
     triangle: periodic(ctx, (phase) => {
@@ -746,29 +548,51 @@ function chip(ctx: BaseAudioContext): Chip {
       return level / 7.5 - 1;
     }),
     noise,
+    room,
   };
   chips.set(ctx, made);
   return made;
 }
 
-/** How each voice's notes swell and fade: attack, decay (a time constant), sustain level, release. */
-const ENVELOPES: Record<Voice, { attack: number; decay: number; sustain: number; release: number }> = {
+/** How each instrument's notes swell and fade: attack, decay (a time constant), sustain level, release. */
+const ENVELOPES: Record<Exclude<Inst, 'drum'>, { attack: number; decay: number; sustain: number; release: number }> = {
   lead: { attack: 0.01, decay: 0.4, sustain: 0.72, release: 0.035 },
   harm: { attack: 0.004, decay: 0.12, sustain: 0.42, release: 0.03 },
   bass: { attack: 0.004, decay: 0.6, sustain: 0.85, release: 0.015 },
+  pad: { attack: 0.45, decay: 1.2, sustain: 0.9, release: 0.6 },
+  flute: { attack: 0.07, decay: 0.5, sustain: 0.8, release: 0.14 },
+  pluck: { attack: 0.003, decay: 0.09, sustain: 0.1, release: 0.08 },
 };
 
 /** How far ahead notes are scheduled, how often the timer looks, and how late a note may still play. */
 const AHEAD = 0.15;
 const TICK_MS = 25;
 const LATE = 0.05;
-/** The whole mix's level: the songs measure about as loud as game.mp3 (RMS) with it. */
+/** The whole mix's level: the songs measure about as loud as the original's dungeon tune (RMS) with it. */
 const MIX = 0.58;
 /** A chord stab steps through its tones this fast (seconds a tone). */
 const ARP_RATE = 0.03;
 
 function frequency(midi: number): number {
   return 440 * 2 ** ((midi - 69) / 12);
+}
+
+/** Calm music sits a little under the others: the fight is the louder. */
+const TRIM: Record<Layer, number> = { calm: 0.7, danger: 1, boss: 1 };
+
+/** One layer's voices, mixed into its gain. */
+interface Rack {
+  gain: GainNode;
+  bus: Record<Inst, GainNode>;
+  snare: AudioNode;
+  hat: AudioNode;
+}
+
+export interface PlayerOptions {
+  /** The layer to sound at first (default: calm; a stinger plays its only layer). */
+  mode?: Layer;
+  /** A stinger has played to its end and died away. */
+  onEnd?(): void;
 }
 
 export class MusicPlayer {
@@ -778,18 +602,20 @@ export class MusicPlayer {
   private readonly graph: AudioNode[] = [];
   /** Sounding (or soon to sound) sources, stopped if the player is let go mid-note. */
   private readonly live = new Set<AudioScheduledSourceNode>();
-  private readonly voices: Record<Voice | 'drum', AudioNode>;
-  private readonly snare: AudioNode;
-  private readonly hat: AudioNode;
-  private position = 0;
-  private nextTime = 0;
+  private readonly rack: Partial<Record<Layer, Rack>> = {};
+  /** Until when (audio clock) each layer's notes are still scheduled: a layer faded out is let go after its fade. */
+  private readonly until: Record<Layer, number> = { calm: 0, danger: 0, boss: 0 };
+  private readonly cursor: StepCursor;
   private timer = 0;
   private done = false;
+  private endAt = 0;
+  private mode: Layer;
 
-  constructor(private readonly ctx: BaseAudioContext, name: SongName, out: AudioNode) {
+  constructor(private readonly ctx: BaseAudioContext, name: Tune, out: AudioNode, private readonly options: PlayerOptions = {}) {
     const data = SONG_DATA[name];
     this.song = song(name);
     this.chip = chip(ctx);
+    this.cursor = new StepCursor(this.song.step, this.song.steps.length, this.song.loop, this.song.once);
     const node = <T extends AudioNode>(made: T): T => {
       this.graph.push(made);
       return made;
@@ -805,64 +631,104 @@ export class MusicPlayer {
       made.pan.value = value;
       return made;
     };
+    const filter = (type: BiquadFilterType, hz: number, q = 0.5): BiquadFilterNode => {
+      const made = node(ctx.createBiquadFilter());
+      made.type = type;
+      made.frequency.value = hz;
+      made.Q.value = q;
+      return made;
+    };
 
     // Everything meets in a gentle low-pass: the pulses' edge is kept, their glare is not.
     // The level matches the sewers' tune from its file, so no region is louder than another.
     const mix = gain(MIX);
-    const tone = node(ctx.createBiquadFilter());
-    tone.type = 'lowpass';
-    tone.frequency.value = data.tone;
-    tone.Q.value = 0.5;
-    mix.connect(tone).connect(out);
+    mix.connect(filter('lowpass', data.tone)).connect(out);
 
-    const lead = gain(data.levels.lead);
-    const harm = gain(data.levels.harm);
-    const bass = gain(data.levels.bass);
-    const drum = gain(data.levels.drums);
-    // The two pulses a little apart, the bass and drums in the middle.
-    lead.connect(pan(-0.1)).connect(mix);
-    harm.connect(pan(0.22)).connect(mix);
-    bass.connect(mix);
-    drum.connect(mix);
+    // The room: every layer sends some of itself to one reverb, without its lows.
+    const reverb = data.reverb ?? 0.15;
+    const send = gain(1);
+    if (reverb > 0) {
+      const room = node(ctx.createConvolver());
+      room.buffer = this.chip.room;
+      send.connect(room).connect(filter('highpass', 260)).connect(gain(reverb)).connect(mix);
+    }
 
-    // The echo: the pulses only, darker on each return, from the other side.
+    // The echo: the pulses and the melodic voices, darker on each return, from the other side.
     const delay = node(ctx.createDelay(1));
     delay.delayTime.value = Math.min(0.9, data.echo.steps * this.song.step);
-    const dark = node(ctx.createBiquadFilter());
-    dark.type = 'lowpass';
-    dark.frequency.value = 2200;
+    const dark = filter('lowpass', 2200);
     const feedback = gain(data.echo.feedback);
     const wet = gain(data.echo.wet);
-    lead.connect(delay);
-    harm.connect(gain(0.6)).connect(delay);
     delay.connect(dark);
     dark.connect(feedback).connect(delay);
     dark.connect(wet).connect(pan(0.15)).connect(mix);
 
-    // The drums' noise through their own filters: a snare's body, a hat's hiss.
-    const highpass = (hz: number): BiquadFilterNode => {
-      const made = node(ctx.createBiquadFilter());
-      made.type = 'highpass';
-      made.frequency.value = hz;
-      made.connect(drum);
-      return made;
+    const levels = data.levels;
+    const level: Record<Inst, number> = {
+      lead: levels.lead, harm: levels.harm, bass: levels.bass, drum: levels.drums,
+      pad: levels.pad ?? 0.08, flute: levels.flute ?? 0.15, pluck: levels.pluck ?? 0.08,
     };
-    this.snare = highpass(700);
-    this.hat = highpass(5000);
+    for (const layer of this.song.layers) {
+      const layerGain = gain(0);
+      layerGain.connect(mix);
+      layerGain.connect(send);
+      const bus = {} as Record<Inst, GainNode>;
+      for (const inst of Object.keys(level) as Inst[]) bus[inst] = gain(level[inst]);
+      // The two pulses a little apart, the flute and the guitar either side, the bass and drums in the middle.
+      bus.lead.connect(pan(-0.1)).connect(layerGain);
+      bus.harm.connect(pan(0.22)).connect(layerGain);
+      bus.flute.connect(pan(-0.12)).connect(layerGain);
+      bus.pluck.connect(pan(0.25)).connect(layerGain);
+      bus.pad.connect(filter('lowpass', 1500)).connect(layerGain);
+      bus.bass.connect(layerGain);
+      bus.drum.connect(layerGain);
+      bus.lead.connect(delay);
+      bus.harm.connect(gain(0.6)).connect(delay);
+      bus.flute.connect(gain(0.7)).connect(delay);
+      bus.pluck.connect(gain(0.8)).connect(delay);
+      // The drums' noise through their own filters: a snare's body, a hat's hiss.
+      const highpass = (hz: number): BiquadFilterNode => {
+        const made = filter('highpass', hz);
+        made.connect(bus.drum);
+        return made;
+      };
+      this.rack[layer] = { gain: layerGain, bus, snare: highpass(700), hat: highpass(5000) };
+    }
+    this.mode = options.mode ?? 'calm';
+    this.apply(this.mode, this.mode, true);
+  }
 
-    this.voices = { lead, harm, bass, drum };
+  /** The layer to sound: crossfades to it. */
+  setMode(mode: Layer): void {
+    if (mode === this.mode) return;
+    const before = this.mode;
+    this.mode = mode;
+    this.apply(mode, before, false);
+  }
+
+  private apply(mode: Layer, before: Layer, immediately: boolean): void {
+    const now = this.ctx.currentTime;
+    const { gains, fades } = layerLevels(mode, before, this.song.layers);
+    for (const layer of this.song.layers) {
+      const rack = this.rack[layer]!;
+      const target = gains[layer] * TRIM[layer];
+      if (immediately) rack.gain.gain.value = target;
+      else rack.gain.gain.setTargetAtTime(target, now, fades[layer]);
+      // A layer is played while it sounds, and through its fade out.
+      this.until[layer] = gains[layer] > 0 ? Infinity : immediately ? 0 : Math.min(this.until[layer], now + fades[layer] * 4);
+    }
   }
 
   /** Starts (or picks up again) on the audio clock: a timer schedules what falls in the next moment. */
   play(): void {
     if (this.done || this.timer) return;
-    this.nextTime = this.ctx.currentTime + 0.06;
+    this.cursor.time = this.ctx.currentTime + 0.06;
     this.timer = window.setInterval(() => this.pump(), TICK_MS);
     this.pump();
   }
 
   /**
-   * Stops where it is (sound turned off): the few notes already scheduled ring out under the
+   * Stops where it is (sound turned off, the app hidden): the few notes already scheduled ring out under the
    * fading bus, and `play` picks up from the next step.
    */
   pause(): void {
@@ -880,8 +746,8 @@ export class MusicPlayer {
 
   /** Schedules the first `seconds` at once: for an OfflineAudioContext (to hear or measure a song). */
   render(seconds: number): void {
-    this.nextTime = 0.05;
-    while (this.nextTime < seconds) this.advance();
+    this.cursor.time = 0.05;
+    while (this.cursor.time < seconds && !this.cursor.ended) this.advance(0);
   }
 
   private silence(): void {
@@ -900,64 +766,80 @@ export class MusicPlayer {
     // A suspended context's clock stands still: nothing is due, and nothing piles up.
     if (ctx.state !== 'running') return;
     const now = ctx.currentTime;
-    // Far behind (the timer was held up longer than the look-ahead): what is past is skipped,
-    // the song keeps its place in time rather than cramming the missed notes into this instant.
-    if (this.nextTime < now - LATE) {
-      const missed = Math.ceil((now - LATE - this.nextTime) / this.song.step);
-      for (let i = 0; i < missed; i++) this.move();
+    this.cursor.run(now, AHEAD, LATE, (position, time) => this.step(position, time));
+    if (this.cursor.ended) {
+      // A stinger has played its last step: it is let go once the last note has died away.
+      if (!this.endAt) this.endAt = this.cursor.time + 2.5;
+      if (now > this.endAt) {
+        this.pause();
+        this.options.onEnd?.();
+      }
     }
-    while (this.nextTime < now + AHEAD) this.advance(now);
   }
 
-  /** Plays the current step at its time and moves on. */
-  private advance(now = 0): void {
-    const time = Math.max(this.nextTime, now);
-    for (const event of this.song.steps[this.position]!) this.sound(event, time);
-    this.move();
+  /** Plays the current step at its time and moves on (offline). */
+  private advance(now: number): void {
+    this.cursor.run(this.cursor.time, 0.0001, 1e9, (position, time) => this.step(position, Math.max(time, now)));
   }
 
-  private move(): void {
-    this.nextTime += this.song.step;
-    this.position++;
-    if (this.position >= this.song.steps.length) this.position = this.song.loop;
+  private step(position: number, time: number): void {
+    for (const made of this.song.steps[position]!) if (time < this.until[made.layer]) this.sound(made, time);
   }
 
-  private sound(event: Event, time: number): void {
-    if (event.voice === 'drum') {
-      this.drum(event.drum, time, event.vol);
+  private sound(made: Event, time: number): void {
+    if (made.inst === 'drum') {
+      this.drum(made, time);
       return;
     }
     const ctx = this.ctx;
-    const shape = ENVELOPES[event.voice];
-    const length = event.len * this.song.step;
-    const off = time + Math.max(shape.attack * 2, length * event.gate);
-    const end = off + shape.release * 7;
+    const rack = this.rack[made.layer]!;
+    const shape = ENVELOPES[made.inst];
+    const length = made.len * this.song.step;
+    const off = time + Math.max(shape.attack * 2, length * made.gate);
+    const end = off + shape.release * (made.inst === 'pad' ? 5 : 7);
+    const envelope = ctx.createGain();
+    envelope.gain.setValueAtTime(0, time);
+    envelope.gain.linearRampToValueAtTime(made.vol, time + shape.attack);
+    envelope.gain.setTargetAtTime(made.vol * shape.sustain, time + shape.attack, shape.decay);
+    envelope.gain.setTargetAtTime(0, off, shape.release);
+    envelope.connect(rack.bus[made.inst]);
+    const extra: AudioNode[] = [envelope];
+
+    if (made.inst === 'pad') {
+      // The chord's tones, each from two voices a few cents apart: slow beating, a warmth.
+      for (const tone of made.tones ?? []) {
+        for (const cents of [-7, 7]) {
+          const osc = ctx.createOscillator();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(frequency(tone), time);
+          osc.detune.value = cents;
+          osc.connect(envelope);
+          this.start(osc, time, end, extra);
+        }
+      }
+      return;
+    }
+
     const osc = ctx.createOscillator();
-    osc.setPeriodicWave(event.voice === 'bass' ? this.chip.triangle : this.chip.pulse[event.duty]);
-    if (event.voice !== 'bass' && event.arp) {
+    if (made.inst === 'flute') osc.type = 'triangle';
+    else osc.setPeriodicWave(made.inst === 'bass' ? this.chip.triangle : this.chip.pulse[made.duty]);
+    if ((made.inst === 'lead' || made.inst === 'harm') && made.arp) {
       // A chord on one voice: its tones in quick turn, as the chip had to.
       for (let t = time, i = 0; t < off; t += ARP_RATE, i++) {
-        osc.frequency.setValueAtTime(frequency(event.midi + event.arp[i % event.arp.length]!), t);
+        osc.frequency.setValueAtTime(frequency(made.midi + made.arp[i % made.arp.length]!), t);
       }
     } else {
-      osc.frequency.setValueAtTime(frequency(event.midi), time);
+      osc.frequency.setValueAtTime(frequency(made.midi), time);
     }
-    const envelope = ctx.createGain();
-    const peak = event.vol;
-    envelope.gain.setValueAtTime(0, time);
-    envelope.gain.linearRampToValueAtTime(peak, time + shape.attack);
-    envelope.gain.setTargetAtTime(peak * shape.sustain, time + shape.attack, shape.decay);
-    envelope.gain.setTargetAtTime(0, off, shape.release);
-    osc.connect(envelope).connect(this.voices[event.voice]);
-    const extra: AudioNode[] = [envelope];
-    // A held note of the lead sings: a vibrato that comes in after the note has spoken.
-    if (event.voice === 'lead' && length > 0.3) {
+    osc.connect(envelope);
+    // A held note of the lead or the flute sings: a vibrato that comes in after the note has spoken.
+    if ((made.inst === 'lead' || made.inst === 'flute') && length > 0.3) {
       const lfo = ctx.createOscillator();
-      lfo.frequency.value = 5.5;
+      lfo.frequency.value = made.inst === 'flute' ? 5 : 5.5;
       const depth = ctx.createGain();
       depth.gain.setValueAtTime(0, time);
       depth.gain.setValueAtTime(0, time + 0.18);
-      depth.gain.linearRampToValueAtTime(14, time + 0.45);
+      depth.gain.linearRampToValueAtTime(made.inst === 'flute' ? 9 : 14, time + 0.45);
       lfo.connect(depth).connect(osc.detune);
       this.start(lfo, time, end);
       extra.push(depth);
@@ -965,8 +847,11 @@ export class MusicPlayer {
     this.start(osc, time, end, extra);
   }
 
-  private drum(kind: Drum, time: number, vol: number): void {
+  private drum(made: Event, time: number): void {
     const ctx = this.ctx;
+    const rack = this.rack[made.layer]!;
+    const vol = made.vol;
+    const kind = made.drum!;
     /** An envelope that strikes at once, holds a moment and dies away; returns when it is silent. */
     const strike = (level: number, hold: number, decay: number): { envelope: GainNode; end: number } => {
       const envelope = ctx.createGain();
@@ -982,7 +867,7 @@ export class MusicPlayer {
       osc.frequency.setValueAtTime(from, time);
       osc.frequency.exponentialRampToValueAtTime(to, time + fall);
       const { envelope, end } = strike(level, hold, decay);
-      osc.connect(envelope).connect(this.voices.drum);
+      osc.connect(envelope).connect(rack.bus.drum);
       this.start(osc, time, end, [envelope]);
     };
     if (kind === 'k') return dive(170, 42, 0.11, 1, 0.04, 0.035);
@@ -992,10 +877,10 @@ export class MusicPlayer {
     source.buffer = this.chip.noise;
     source.loop = true;
     const [rate, level, hold, decay, into] =
-      kind === 's' || kind === 'g' ? [0.55, 0.9, 0.01, 0.055, this.snare]
-      : kind === 'h' ? [1, 0.35, 0.004, 0.016, this.hat]
-      : kind === 'o' ? [1, 0.3, 0.01, 0.08, this.hat]
-      : [0.8, 0.45, 0.02, 0.3, this.hat];
+      kind === 's' || kind === 'g' ? [0.55, 0.9, 0.01, 0.055, rack.snare]
+      : kind === 'h' ? [1, 0.35, 0.004, 0.016, rack.hat]
+      : kind === 'o' ? [1, 0.3, 0.01, 0.08, rack.hat]
+      : [0.8, 0.45, 0.02, 0.3, rack.hat];
     source.playbackRate.value = rate;
     const { envelope, end } = strike(level, hold, decay);
     source.connect(envelope).connect(into);

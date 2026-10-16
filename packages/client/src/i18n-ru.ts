@@ -916,6 +916,9 @@ export const ru: Strings = {
   meta: {
     settings: 'Настройки',
     sound: 'Звук',
+    soundSet: 'Набор звуков',
+    soundSetNote: 'Свои звуки и музыка Firelight или семплы и мелодии оригинального Pixel Dungeon.',
+    soundSets: { firelight: 'Firelight', original: 'Оригинал' },
     vibration: 'Вибрация',
     vibrationNote: 'При ударах и находках',
     quips: 'Реплики героя',

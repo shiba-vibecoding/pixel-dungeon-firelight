@@ -914,6 +914,9 @@ export const en = {
   meta: {
     settings: 'Settings',
     sound: 'Sound',
+    soundSet: 'Sound set',
+    soundSetNote: "Firelight's own sounds and music, or the original Pixel Dungeon's samples and tunes.",
+    soundSets: { firelight: 'Firelight', original: 'Original' } as Record<'firelight' | 'original', string>,
     vibration: 'Vibration',
     vibrationNote: 'On hits and finds',
     quips: 'Hero quips',

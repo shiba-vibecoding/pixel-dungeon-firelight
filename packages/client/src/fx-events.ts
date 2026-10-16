@@ -234,7 +234,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
         fx.shake(1 + share * 7, 160 + share * 200, now);
         if (share >= 0.2) fx.hitStop(70);
       } else if (mine && heavy) {
-        audio.play('hit', 0.55, 0.8);
+        audio.play('crit', 1, 0.8);
         fx.shake(1.5 + share * 3, 160, now);
         fx.hitStop(55 + share * 50);
         // A heavy blow's number lands big, my killing blow's bigger still.
@@ -342,8 +342,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
           // «Оглушительный рёв»: red-orange shockwaves racing out, the view jolted, the hero's scream in specks.
           fx.wave(at.x, at.y, now, { colors: ['#e0402a', '#ff7a3a'], rings: 4, tiles: 6, duration: 700, width: 2.5 });
           burst(at, now, { count: 28, colors: ['#e0402a', '#ff7a3a', '#ffb070'], glow: true, speed: [50, 130], life: [300, 600], drag: 0.08, size: [1, 2], spread: 3 });
-          // No roar among the sounds: the blast, low and heavy, stands in.
-          audio.play('blast', 0.55, 0.9);
+          audio.play('roar', 1, 0.9, mine ? undefined : at);
           if (mine) {
             fx.shake(3, 300, now);
             fx.flash('224, 64, 42', 0.3, 500, now, true);
@@ -351,11 +350,13 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
           return;
         }
         case 'terror':
+          audio.play('wail', 1, 0.8, mine ? undefined : at);
           fx.wave(at.x, at.y, now, { colors: ['#5a2a8a', '#3a1a60'], rings: 3, tiles: 5, duration: 1100, stagger: 200, width: 2.5 });
           burst(at, now, { count: 14, colors: VOID, speed: [10, 40], life: [500, 1000], drag: 0.3, size: [1, 2], spread: 4 });
           if (mine) fx.flash('30, 0, 50', 0.35, 700, now, true);
           return;
         case 'lullaby':
+          audio.play('lullaby', 1, 0.8, mine ? undefined : at);
           fx.wave(at.x, at.y, now, { colors: ['#bfe0ff', '#dff0ff'], rings: 3, tiles: 5, duration: 1500, stagger: 260, width: 2 });
           burst(at, now, { count: 8, colors: ['#dff0ff', '#a8d0ff'], glow: true, speed: [4, 14], life: [900, 1500], rise: 18, drag: 0.4, size: [1, 2], spread: 6 });
           return;

@@ -250,7 +250,7 @@ export class Hud {
   private laid = false;
   /** What each part last showed, so the DOM is only touched when something changed. */
   private shown: Record<string, string> = {};
-  private hold: { start: number; timer: number; fired: boolean } | null = null;
+  private hold: { start: number; timer: number; fired: boolean; ticks: number } | null = null;
 
   constructor(private readonly handlers: HudHandlers) {
     this.root = document.getElementById('ui')!;
@@ -431,10 +431,15 @@ export class Hud {
       stop();
       audio.play('click');
       button.classList.remove('resting');
-      const hold = { start: performance.now(), fired: false, timer: 0 };
+      const hold = { start: performance.now(), fired: false, timer: 0, ticks: 0 };
       hold.timer = window.setInterval(() => {
         const v = Math.min(1, (performance.now() - hold.start) / HOLD_MS);
         button.style.setProperty('--hold', String(Math.floor(v * 8) / 8));
+        // The ring fills in eighths; each one ticks, a little higher.
+        if (Math.floor(v * 8) > hold.ticks) {
+          hold.ticks = Math.floor(v * 8);
+          audio.play('tick', 1 + v * 0.6, 0.4);
+        }
         if (v >= 1 && !hold.fired) {
           hold.fired = true;
           clearInterval(hold.timer);
