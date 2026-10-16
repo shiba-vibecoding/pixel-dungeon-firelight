@@ -1739,7 +1739,7 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
         options.onClose();
       }
     };
-    if (action.type === 'equip') askEquip(dragged, options.world, go, back);
+    if (action.type === 'equip') askEquip(dragged, options.world, options.hero, go, back, action.replace);
     else go();
   };
   box.addEventListener('pointerup', release);
@@ -1884,17 +1884,42 @@ function firstAction(options: ItemOptions): void {
  * Putting on what is not known not to be cursed asks first (riskyuse.ts): a cursed thing will not come off. `go` puts it
  * on; `back` is where a no returns to.
  */
-function askEquip(item: Item, world: World, go: () => void, back: () => void): void {
-  if (!confirmRisky.on || !equipRisk(item)) {
-    go();
+function askEquip(item: Item, world: World, hero: Hero, go: (replace?: 0 | 1) => void, back: () => void, replace?: 0 | 1): void {
+  const F = t.safe.ask;
+  const category = itemDef(item.kind).category;
+  // MissileWeapon.doEquip: «Do you really want to equip it as a melee weapon?»
+  if (category === 'missile') {
+    pauseBag();
+    showConfirm(F.missileTitle, F.missileText, F.missileYes, F.missileNo, () => go(), back, undefined, { calm: true });
     return;
   }
-  const F = t.safe.ask;
-  pauseBag();
-  showConfirm(
-    F.putOnTitle(itemName(world, item)), F.putOnText(t.items['scroll.identify'], t.items['scroll.removeCurse']), F.putOn, F.cancel, go, back,
-    { label: F.putOnNever, onPress: () => confirmRisky.set(false) }, { calm: true },
-  );
+  const risky = (which?: 0 | 1): void => {
+    if (!confirmRisky.on || !equipRisk(item)) {
+      go(which);
+      return;
+    }
+    pauseBag();
+    showConfirm(
+      F.putOnTitle(itemName(world, item)), F.putOnText(t.items['scroll.identify'], t.items['scroll.removeCurse']), F.putOn, F.cancel, () => go(which), back,
+      { label: F.putOnNever, onPress: () => confirmRisky.set(false) }, { calm: true },
+    );
+  };
+  // Ring.doEquip: both hands full, WndOptions asks which ring comes off (a drop on a ring's place has said it already).
+  if (category === 'ring' && hero.rings.length >= 2 && replace === undefined) {
+    pauseBag();
+    show(
+      windowOf(
+        { narrow: true, className: 'pd-confirm2' },
+        el('h2', { className: 'pd-heading center', textContent: F.ringTitle }),
+        info(F.ringText, 'pd-info center'),
+        el('div', { className: 'pd-confirm-more' }, ...hero.rings.map((ring, i) => button(capitalize(itemName(world, ring)), () => risky(i === 0 ? 0 : 1)))),
+        button(F.cancel, back, 'quiet'),
+      ),
+      back,
+    );
+    return;
+  }
+  risky(replace);
 }
 
 /**
@@ -2104,7 +2129,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     }
     if (category === 'weapon' || category === 'armor' || category === 'ring') {
       use(category === 'ring' ? t.putOn : t.equip, () =>
-        askEquip(item, world, () => stay({ type: 'equip', item: index }), () => showBackpack(options, { index })));
+        askEquip(item, world, hero, (replace) => stay({ type: 'equip', item: index, ...(replace === undefined ? {} : { replace }) }), () => showBackpack(options, { index })));
     }
     if (category === 'beacon') {
       // LloydsBeacon: set it here, or go back to where it was set.
@@ -2120,6 +2145,10 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'missile' || category === 'wand' || category === 'bomb' || category === 'honeypot') {
       const kind = category === 'wand' ? 'zap' : 'throw';
       use(kind === 'throw' ? t.throwItem : t.zap, () => aimWith(kind, index));
+    }
+    // MissileWeapon.actions: a huntress and a rogue may also hold the thrown ones in hand, as a melee weapon.
+    if (category === 'missile' && (hero.heroClass === 'huntress' || hero.heroClass === 'rogue')) {
+      use(t.equip, () => askEquip(item, world, hero, () => stay({ type: 'equip', item: index }), () => showBackpack(options, { index })));
     }
     if (category === 'potion') use(t.throwItem, () => aimWith('throw', index));
     if (category === 'honeypot') use(t.shatterPot, () => act({ type: 'use', item: index }));
@@ -2151,6 +2180,8 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (ring !== undefined) use(t.takeOff, () => stay({ type: 'remove', ring }));
     else use(t.takeOff, () => stay(ref === 'weapon' ? { type: 'unequip' } : { type: 'unequip', slot: 'armor' }));
     use(t.throwItem, () => aimWith('throw', ref));
+    // EquipableItem.doDrop: taken off first, then dropped.
+    danger.push(button(t.dropItem, () => act({ type: 'drop', item: ref }), 'danger'));
   }
   return { main, more, danger };
 }

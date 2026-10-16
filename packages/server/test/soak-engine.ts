@@ -231,8 +231,8 @@ function chaosAction(world: World, rng: Rng, cases?: readonly number[]): Action 
     case 2: return { type: 'use', item, target: rng.int(2) === 0 ? 'weapon' : 'armor' };
     case 3: return { type: 'throw', item: ref(), target };
     case 4: return { type: 'zap', item, target };
-    case 5: return { type: 'equip', item };
-    case 6: return { type: 'drop', item };
+    case 5: return rng.int(3) === 0 ? { type: 'equip', item, replace: rng.int(2) === 0 ? 0 : 1 } : { type: 'equip', item };
+    case 6: return { type: 'drop', item: rng.int(4) === 0 ? ref() : item };
     case 7: return { type: 'pickup' };
     case 8: return { type: 'special', target };
     case 9: return { type: 'use', item, on: ref() };

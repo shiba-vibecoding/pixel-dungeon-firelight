@@ -65,11 +65,13 @@ describe('rings', () => {
     act(world, 'p', { type: 'equip', item: 0 });
     expect(heroAttackSkill(hero)).toBe(Math.trunc(before * Math.fround(1.4 ** 2)));
     act(world, 'p', { type: 'equip', item: 0 });
-    act(world, 'p', { type: 'equip', item: 0 });
-    expect(hero.rings.map((r) => r.kind)).toEqual(['ring.haste', 'ring.mending']);
+    // Two on: a third must say which comes off (Ring.doEquip's WndOptions), and then takes its place.
+    expect(act(world, 'p', { type: 'equip', item: 0 })).toEqual({ ok: false, reason: 'choose the ring to take off' });
+    expect(act(world, 'p', { type: 'equip', item: 0, replace: 0 }).ok).toBe(true);
+    expect(hero.rings.map((r) => r.kind)).toEqual(['ring.mending', 'ring.haste']);
     expect(hero.items.map((r) => r.kind)).toEqual(['ring.accuracy']);
     act(world, 'p', { type: 'remove', ring: 0 });
-    expect(hero.rings.map((r) => r.kind)).toEqual(['ring.mending']);
+    expect(hero.rings.map((r) => r.kind)).toEqual(['ring.haste']);
     expect(hero.items).toHaveLength(2);
   });
 
