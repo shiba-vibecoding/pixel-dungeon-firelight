@@ -59,3 +59,14 @@ describe('error reports', () => {
     expect(await readBody(new Request('https://x/'), 10)).toBe('');
   });
 });
+
+describe('what a report may carry', () => {
+  it('never keeps a page address with its query or hash (Telegram init data)', () => {
+    const leaked = 'ResizeObserver loop @ #tgWebAppData=user%3D%257B%2522id%2522%253A364316344%252C%2522first_name%2522 at x';
+    const report = parseReport({ kind: 'error', message: leaked, stack: 'Error\n at f (https://x.io/app/?a=1#tgWebAppData=hash%3Dabc:1:2)' }, 0)!;
+    expect(report.message).not.toContain('tgWebAppData');
+    expect(report.message).not.toContain('364316344');
+    expect(report.stack).not.toContain('tgWebAppData');
+    expect(report.stack).toContain('https://x.io/app/');
+  });
+});

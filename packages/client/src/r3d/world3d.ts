@@ -1455,15 +1455,7 @@ export class World3D {
       // Under the feet, tight and dark: a small hard ellipse in front of the soft one, weaker for what flies, smaller and fainter the higher it is.
       const width = Math.min(0.62, CONTACT_WIDTH + 0.12 * (sheet.w / 12)) * scale;
       this.effects.contactShadow(tx - this.strong.ux * away * 0.4, tz - this.strong.uz * away * 0.4, width * (air ? 0.8 : 1), CONTACT_OPACITY * (air ? 0.5 : 1), ground, up);
-      // Blades of short grass over the feet.
-      if (standing && geom.terrain[feetCell] === T.GRASS) {
-        const t = this.tufts;
-        if (t) {
-          t.add(tx - 0.14, tz + 0.1, 0.26);
-          t.add(tx + 0.13, tz + 0.14, 0.22);
-          t.add(tx + 0.01, tz + 0.21, 0.28);
-        }
-      }
+      // (No blades of short grass over the feet: the owner found the swaying tufts under the hero odd; short grass stays the floor's decal.)
     }
     if (BOSS_KINDS.has(puppet.kind) && puppet.alive) {
       this.bossFound = true;

@@ -333,7 +333,15 @@ export function showCamp(options: CampScreenOptions): CampScreen {
   refit();
   // The card, and the sheet (the day's rules opened, a new language) change the room too, and so does Telegram's safe area at the top.
   if (typeof ResizeObserver === 'function') {
-    const watch = new ResizeObserver(refit);
+    // In the next frame: a refit that changes a watched size inside the observer's own callback is what the browser calls a loop.
+    let queued = 0;
+    const watch = new ResizeObserver(() => {
+      if (queued) return;
+      queued = requestAnimationFrame(() => {
+        queued = 0;
+        refit();
+      });
+    });
     for (const node of [root, top, sheet]) watch.observe(node, { box: 'border-box' });
   }
   return { camp };

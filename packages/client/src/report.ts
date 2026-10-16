@@ -22,8 +22,22 @@ export const build = ((): string => {
   return /index-([\w-]+)\.js/.exec(script?.src ?? '')?.[1] ?? (import.meta.env.DEV ? 'dev' : '?');
 })();
 
+/**
+ * Takes out of a text everything after a ? or a # in it: a page's address carries Telegram's init data (who the player is, and the
+ * signature of their login) in its hash, and nothing of it may leave in a report.
+ */
+export function scrub(text: string): string {
+  return text.replace(/[?#][^\s)'"]*/g, '');
+}
+
+/** Browser notes that are not errors of the game: a ResizeObserver that could not deliver everything in one frame, and the like. */
+const BENIGN = /^ResizeObserver loop/;
+
 export function report(kind: string, message: string, stack?: string, context: Context = {}): void {
   if (!endpoint || sent >= LIMIT) return;
+  if (BENIGN.test(message)) return;
+  message = scrub(message);
+  stack = stack === undefined ? undefined : scrub(stack);
   const key = `${kind}|${message}`;
   if (said.has(key)) return;
   said.add(key);
@@ -71,7 +85,8 @@ export function startReporting(server: string, context: () => Context): void {
   addEventListener('error', (event) => {
     // A resource that failed to load has no message; scripts' errors do.
     if (!event.message || opaqueError(event)) return;
-    const where = event.filename ? ` @ ${event.filename.replace(/^.*\//, '')}:${event.lineno}:${event.colno}` : '';
+    // The file's name only: never the page's address with its query or hash (scrub).
+    const where = event.filename ? ` @ ${scrub(event.filename).replace(/^.*\//, '')}:${event.lineno}:${event.colno}` : '';
     report('error', `${event.message}${where}`, (event.error as Error | undefined)?.stack);
   });
   addEventListener('unhandledrejection', (event) => {

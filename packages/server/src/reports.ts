@@ -48,7 +48,9 @@ export const REPORT_WINDOW_MS = 10 * 60_000;
 /** The header the Worker passes a client's address in, for the limit; the server's own reports have none. */
 export const ADDRESS_HEADER = 'X-Report-Address';
 
-const text = (value: unknown, limit: number): string => String(value ?? '').slice(0, limit);
+/** Everything after a ? or a # taken out: an old client could send the page's address, and Telegram's init data is in its hash. */
+export const scrubAddress = (value: string): string => value.replace(/[?#][^\s)'"]*/g, '');
+const text = (value: unknown, limit: number): string => scrubAddress(String(value ?? '').slice(0, limit * 4)).slice(0, limit);
 
 /** A client's report, cut down to what is safe and small to keep. */
 export function parseReport(body: unknown, now: number): Report | null {
@@ -70,7 +72,7 @@ export function parseReport(body: unknown, now: number): Report | null {
 
 /** A stack cut to its first lines and a bounded length. */
 export function shortStack(stack: unknown): string {
-  return String(stack ?? '').split('\n', STACK_LINES).join('\n').slice(0, STACK_CHARS);
+  return scrubAddress(String(stack ?? '')).split('\n', STACK_LINES).join('\n').slice(0, STACK_CHARS);
 }
 
 /** Drops the oldest reports until the rest fit in `maxBytes` as stored (JSON). */
