@@ -41,6 +41,8 @@ export interface AirUniforms {
   /** The low red mist of the demon halls (the kit's fog.mist): its opacity and its height in cells (0 for none), and its colour. */
   uMist: { value: Vector2 };
   uMistColor: { value: Color };
+  /** The colour of the floor of the level in its light, in linear light: what a figure's feet take back from it (the bounce, SpriteLook.row). */
+  uFloor: { value: Color };
 }
 
 export function makeAir(fog: Texture): AirUniforms {
@@ -55,6 +57,7 @@ export function makeAir(fog: Texture): AirUniforms {
     uPool: { value: POOL_STRENGTH },
     uMist: { value: new Vector2(0, 0.4) },
     uMistColor: { value: new Color(0x5a1a10) },
+    uFloor: { value: new Color(0.2, 0.18, 0.15) },
   };
 }
 
@@ -146,6 +149,8 @@ const NEWLINE = String.fromCharCode(10);
 export interface SpriteLook {
   selfLight: number;
   texel: readonly [number, number];
+  /** One row of the atlas in uv (1 / its height): the feet's shader counts the rows of a frame above its lowest opaque one. */
+  row: number;
 }
 
 function spriteFragment(look: SpriteLook): string {
@@ -153,6 +158,22 @@ function spriteFragment(look: SpriteLook): string {
   return [
     '#include <emissivemap_fragment>',
     `totalEmissiveRadiance += diffuseColor.rgb * ${f(look.selfLight)};`,
+    // A figure stands on the floor (vFeet: the clear rows under its feet, the rows of water it wades in, and whether it is one): its
+    // feet are a little darker where it meets the floor (the ambient light is shut out), the lower quarter takes back some of the floor's
+    // own colour and the light that falls on it (the floor's bounce), and in water the lowest row is under the surface and the next two
+    // are wet, cool and dark.
+    'if (vFeet.z > 0.5) {',
+    `  float above = (vMapUv.y - min(vRect.y, vRect.y + vRect.w)) / ${f(look.row)} - vFeet.x;`,
+    `  float body = max(1.0, vRect.w / ${f(look.row)} - vFeet.x);`,
+    '  if (vFeet.y > 0.0) {',
+    '    if (above < 0.9) discard;',
+    '    float wet = 1.0 - smoothstep(vFeet.y - 1.0, vFeet.y + 0.5, above);',
+    '    diffuseColor.rgb *= mix(vec3(1.0), vec3(0.5, 0.68, 0.82), wet);',
+    '  }',
+    '  diffuseColor.rgb *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 2.5, above));',
+    '  float lowQuarter = 1.0 - smoothstep(0.0, 0.3 * body, above);',
+    '  totalEmissiveRadiance += uFloor * lowQuarter * 0.5 * (1.0 + 2.5 * max(vPool.r, max(vPool.g, vPool.b)));',
+    '}',
     'if (vRim.x != 0.0 || vRim.y != 0.0) {',
     '  vec2 lo = min(vRect.xy, vRect.xy + vRect.zw);',
     '  vec2 hi = max(vRect.xy, vRect.xy + vRect.zw);',
@@ -187,10 +208,11 @@ export function withFog(
     shader.uniforms.uPool = air.uPool;
     shader.uniforms.uMist = air.uMist;
     shader.uniforms.uMistColor = air.uMistColor;
+    shader.uniforms.uFloor = air.uFloor;
     const declarations = [
       '#include <common>', 'uniform sampler2D tFog;', 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;',
       mode === 'attribute' ? 'attribute vec2 aFog;' : 'attribute vec4 aUv;',
-      ...(sprite ? ['attribute vec3 aRim;', 'attribute vec3 aRimColor;', 'varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec4 vRect;'] : []),
+      ...(sprite ? ['attribute vec3 aRim;', 'attribute vec3 aRimColor;', 'attribute vec3 aFeet;', 'varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec3 vFeet;', 'varying vec4 vRect;'] : []),
     ].join(NEWLINE);
     const fetch =
       mode === 'attribute'
@@ -200,7 +222,9 @@ export function withFog(
     if (mode === 'instance') {
       vertex = vertex.replace('#include <uv_vertex>', ['#ifdef USE_MAP', 'vMapUv = aUv.xy + uv * aUv.zw;', '#endif', '#ifdef USE_EMISSIVEMAP', 'vEmissiveMapUv = aUv.xy + uv * aUv.zw;', '#endif'].join(NEWLINE));
     }
-    if (sprite) vertex = vertex.replace('#include <begin_vertex>', ['#include <begin_vertex>', 'vRim = aRim; vRimColor = aRimColor; vRect = aUv;'].join(NEWLINE));
+    if (sprite) vertex = vertex.replace('#include <begin_vertex>', ['#include <begin_vertex>', 'vRim = aRim; vRimColor = aRimColor; vFeet = aFeet; vRect = aUv;'].join(NEWLINE));
+    // A figure is lit where its feet are, as the floor beside it is, not where each part of it happens to hang (a torch above a wall is nearer its head).
+    if (sprite) vertex = vertex.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;');
     shader.vertexShader = vertex;
     const memory = lit
       ? [
@@ -230,7 +254,7 @@ export function withFog(
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec4 vRect;'] : []), 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;', 'uniform vec3 uMistColor;', 'uniform vec2 uMist;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;', 'uniform float uTime;', 'uniform float uMem;', 'uniform float uPool;'].join(NEWLINE),
+        ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec3 vFeet;', 'varying vec4 vRect;', 'uniform vec3 uFloor;'] : []), 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;', 'uniform vec3 uMistColor;', 'uniform vec2 uMist;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;', 'uniform float uTime;', 'uniform float uMem;', 'uniform float uPool;'].join(NEWLINE),
       )
       .replace('#include <emissivemap_fragment>', sprite ? spriteFragment(sprite) : '#include <emissivemap_fragment>')
       .replace(

@@ -29,6 +29,7 @@ const PARTICLES_AT = [0, 0, 96, 8] as const;
 const RIPPLE_AT = [0, 8, 96, 16] as const;
 export const SOLID_AT = [0, 24, 8, 8] as const;
 export const DOT_AT = [16, 24, 32, 32] as const;
+const DISC_AT = [64, 24, 32, 32] as const;
 const RING_AT = [0, 64, 64, 64] as const;
 const MIST_AT = [128, 0, 128, 128] as const;
 
@@ -41,6 +42,8 @@ const rect = (at: readonly [number, number, number, number], i = 0, frames = 1):
 const RIPPLE_UV: Array<[number, number, number, number]> = [0, 1, 2, 3, 4, 5].map((i) => rect(RIPPLE_AT, i, 6));
 export const UV_SOLID = rect(SOLID_AT);
 export const UV_DOT = rect(DOT_AT);
+/** A small ellipse with a hard edge: the contact shadow under a foot. */
+export const UV_DISC = rect(DISC_AT);
 const UV_RING = rect(RING_AT);
 const UV_MIST = rect(MIST_AT);
 
@@ -62,6 +65,8 @@ export function fxTexture(images: SharedImages): CanvasTexture {
     g.fillRect(at[0], at[1], at[2], at[3]);
   };
   radial(DOT_AT, [[0, 'rgba(255,255,255,1)'], [0.3, 'rgba(255,255,255,0.55)'], [1, 'rgba(255,255,255,0)']]);
+  // The contact shadow: dark to the edge, which falls away over the last tenth, so it is sharp and not a smudge.
+  radial(DISC_AT, [[0, 'rgba(255,255,255,1)'], [0.62, 'rgba(255,255,255,0.9)'], [0.86, 'rgba(255,255,255,0.4)'], [1, 'rgba(255,255,255,0)']]);
   radial(MIST_AT, [[0, 'rgba(255,255,255,0.9)'], [0.5, 'rgba(255,255,255,0.35)'], [1, 'rgba(255,255,255,0)']]);
   // The ring of a wave: thin, a little soft on both sides.
   const rc = RING_AT[2] / 2;
@@ -330,6 +335,23 @@ export class Effects3D {
     this.soft.flat(x, 0.02 + ground, z, size, size * squash, 0, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], 0.01, 0.012, 0.03, opacity);
   }
 
+  /**
+   * The contact shadow: a small, sharp, dark ellipse right under a foot (`width` cells across, a little over a third as deep), on top of the
+   * soft blob; it is drawn on the floor, before any figure. `lift` is how high the figure is off the floor (a flyer, a leap): it shrinks
+   * and fades with it.
+   */
+  contactShadow(x: number, z: number, width: number, opacity: number, ground = 0, lift = 0): void {
+    const k = Math.max(0, 1 - lift / 0.7);
+    if (k <= 0.02) return;
+    const w = width * (0.55 + 0.45 * k);
+    this.soft.flat(x, 0.024 + ground, z, w, w * 0.4, 0, UV_DISC[0], UV_DISC[1], UV_DISC[2], UV_DISC[3], 0.005, 0.006, 0.014, Math.min(1, opacity * k));
+  }
+
+  /** A ring on the water where a foot comes down (see the drops': a quarter of a second later it is wide and gone). */
+  ripple(x: number, z: number, now: number): void {
+    this.ringAt(x, z, now);
+  }
+
   /** The halo round a torch's flame. */
   halo(x: number, y: number, z: number, color: Float32Array, size: number, strength: number): void {
     this.glow.billboard(x, y, z, size, size, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], color[0]! * strength, color[1]! * strength, color[2]! * strength, 0.9);
@@ -421,7 +443,7 @@ export class Effects3D {
         const y = (b.y[0] + 0.1) - fall;
         this.py[i] = y;
         if (y <= 0.03) {
-          if (this.geom!.kinds[Math.floor(this.px[i]!) + Math.floor(this.pz[i]!) * WIDTH] === K_WATER) this.ripple(this.px[i]!, this.pz[i]!, c.now);
+          if (this.geom!.kinds[Math.floor(this.px[i]!) + Math.floor(this.pz[i]!) * WIDTH] === K_WATER) this.ringAt(this.px[i]!, this.pz[i]!, c.now);
           this.pAlive[i] = 0;
           continue;
         }
@@ -465,7 +487,7 @@ export class Effects3D {
     }
   }
 
-  private ripple(x: number, z: number, now: number): void {
+  private ringAt(x: number, z: number, now: number): void {
     let slot = 0;
     let oldest = Infinity;
     for (let i = 0; i < RIPPLES; i++) {
@@ -486,7 +508,7 @@ export class Effects3D {
           const cz = Math.floor(c.hz + (Math.random() * 2 - 1) * 6);
           const cell = cx + cz * WIDTH;
           if (cx < 0 || cz < 0 || cx >= WIDTH || cz >= HEIGHT || !c.visible[cell] || this.geom!.kinds[cell] !== K_WATER) continue;
-          this.ripple(cx + 0.5, cz + 0.5, c.now);
+          this.ringAt(cx + 0.5, cz + 0.5, c.now);
           break;
         }
       }
@@ -582,8 +604,8 @@ export class Effects3D {
       // (Blood and dust are drawn bigger than their art pixel: seen from above and far away a single pixel is lost.)
       const size = Math.max(0.1, (p.size / TILE) * (p.glow ? 1.5 : SPECK_GROW));
       const a = rgb[3]! * (1 - k);
-      if (p.glow) this.glow.billboard(p.x / TILE, 0.3 + 0.5 * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, a);
-      else this.soft.billboard(p.x / TILE, 0.3 + 0.35 * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
+      if (p.glow) this.glow.billboard(p.x / TILE, (p.low ? 0.04 : 0.3) + (p.low ? 0.2 : 0.5) * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, a);
+      else this.soft.billboard(p.x / TILE, (p.low ? 0.04 : 0.3) + (p.low ? 0.14 : 0.35) * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
     }
     // Chunks in the air and on the floor.
     for (const g of fx.gibs) {
