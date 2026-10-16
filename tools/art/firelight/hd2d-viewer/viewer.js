@@ -495,11 +495,25 @@ const FACE = { sheet: (cls, facing, look) => {
     return `mart/fl/pets/${pet}-back`;
   } };
 const FLY = new Set(['firefly', 'bat', 'skull', 'ember']);
+// stage 2: the monsters (&kind=...). sheet: PD's sheet; off: the variant's first frame on it (albino, bandit); run: PD's run frames and fps;
+// same: the facing whose picture is the side's (spinner, bat already face the camera: no front sheet)
+const MOBF = {
+  rat: { sheet: 'rat', w: 16, h: 15, run: [6, 7, 8, 9, 10], fps: 10 }, albino: { sheet: 'rat', w: 16, h: 15, off: 16, run: [6, 7, 8, 9, 10], fps: 10 },
+  fetidRat: { sheet: 'rat', w: 16, h: 15, run: [6, 7, 8, 9, 10], fps: 10 },
+  gnoll: { sheet: 'gnoll', w: 12, h: 15, run: [4, 5, 6, 7], fps: 12 }, shaman: { sheet: 'shaman', w: 12, h: 15, run: [4, 5, 6, 7], fps: 12 },
+  skeleton: { sheet: 'skeleton', w: 12, h: 15, run: [4, 5, 6, 7, 8, 9], fps: 15 },
+  thief: { sheet: 'thief', w: 12, h: 13, run: [0, 0, 2, 3, 3, 4], fps: 15 }, bandit: { sheet: 'thief', w: 12, h: 13, off: 21, run: [0, 0, 2, 3, 3, 4], fps: 15 },
+  bee: { sheet: 'bee', w: 16, h: 16, run: [0, 1, 1, 0, 2, 2], fps: 15, fly: true }, sheep: { sheet: 'sheep', w: 16, h: 15, run: [0, 0, 0, 0, 1, 2, 3, 0], fps: 8 },
+  spinner: { sheet: 'spinner', w: 16, h: 16, run: [0, 2, 0, 3], fps: 15, same: 'front' }, bat: { sheet: 'bat', w: 15, h: 15, run: [0, 1], fps: 12, fly: true, same: 'front' },
+};
+const MOBSHEET = (k, facing) => { const M = MOBF[k]; return facing === 'side' || M.same === facing ? M.sheet : `dirs/${M.sheet}-${facing}`; };
 window.__frame = null;
 if (DIRS) {
   const cls = Q.get('cls') || 'warrior', tier = +(Q.get('tier') ?? 1), look = Q.get('look'), hatK = Q.get('hat'), petK = Q.get('pet'), F0 = +(Q.get('f') ?? 0);
+  const kind = Q.get('kind'), MK = kind && MOBF[kind];
   const [hx_, hz_] = hero;
   async function figure(facing, flip, frame, x, z) {
+    if (MK) return { m: await charSprite(MOBSHEET(kind, facing), MK.w, MK.h, (MK.off || 0) + frame, 0, [x - 0.5, z - 0.5], 1, !!MK.fly, flip), h: null };
     const m = await charSprite(FACE.sheet(cls, facing, look), 12, 15, frame, tier, [x - 0.5, z - 0.5], 1, false, flip);
     let h = null;
     if (hatK) h = await charSprite(FACE.hat(cls, hatK, facing), 16, 22, frame, tier, [x - 0.5, z - 0.5], 1, false, flip);
@@ -533,9 +547,9 @@ if (DIRS) {
       let d = (ms / 1000 * speed) % len, i = 0; while (d > path[i][2]) { d -= path[i][2]; i++; }
       const [dx, dz] = path[i]; let x = x0, z = z0; for (let k = 0; k < i; k++) { x += path[k][0] * path[k][2]; z += path[k][1] * path[k][2]; } x += dx * d; z += dz * d;
       const facing = dx ? 'side' : (dz > 0 ? 'front' : 'back'); const flip = dx < 0;
-      const frame = 2 + Math.floor(ms / 50) % 6;
+      const frame = MK ? MK.run[Math.floor(ms / 1000 * MK.fps) % MK.run.length] : 2 + Math.floor(ms / 50) % 6;
       const put = async (key, mk, px, pz) => { const o = await get(key, mk); o.visible = true; o.position.x = px; o.position.z = pz; if (o.userData.shadow) { o.userData.shadow.visible = true; o.userData.shadow.position.x = px; o.userData.shadow.position.z = pz + 0.02; } shown.push(o); };
-      await put(`h${facing}${flip}${frame}`, async () => charSprite(FACE.sheet(cls, facing, look), 12, 15, frame, tier, [x - 0.5, z - 0.5], 1, false, flip), x, z + SP.feet);
+      await put(`h${facing}${flip}${frame}`, async () => (await figure(facing, flip, frame, x, z)).m, x, z + SP.feet);
       if (hatK) await put(`hat${facing}${flip}${frame}`, async () => charSprite(FACE.hat(cls, hatK, facing), 16, 22, frame, tier, [x - 0.5, z - 0.5], 1, false, flip), x, z + SP.feet);
       if (petK) { const pf = 4 + Math.floor(ms / 150) % 4; const bx = x - dx * 0.9, bz = z - dz * 0.9 + (dx ? 0.05 : 0);
         await put(`p${facing}${flip}${pf}`, async () => petFig(facing, flip, pf, bx, bz), bx, bz + SP.feet); }

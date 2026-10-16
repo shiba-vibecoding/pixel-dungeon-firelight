@@ -29,3 +29,5 @@ him round a loop (right: side, down: front, left: the side mirrored, up: back) a
 Parameters: `cls` = warrior | mage | rogue | ranger, `tier` 0-6, `look` (a part 5 look), `hat`, `pet`, `f` (the frame for `four`).
 `node dirs-render.cjs shot <out> "r,w,h,dpr,query,name"` takes pictures; `node dirs-render.cjs walk <prefix> "r,w,h,dpr,query" 0 3850 50`
 the frames of the walk (the viewer served on 8765, `PORT` to change it).
+Stage 2: `kind` = rat | albino | fetidRat | gnoll | shaman | skeleton | thief | bandit | bee | sheep | spinner | bat stands or walks that monster
+instead of the hero (its sheets from `assets/dirs/`, its PD run frames; `MOBF` in `viewer.js`), e.g. `?r=0&close=1&dirs=walk&kind=gnoll`.

@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 2,
  "note": "The PD 1.9 sprites face the side (right; left is the mirror). Part 8 adds the front (walking towards the camera, down the screen) and the back (away from it, up the screen). The side stays as it is; diagonals are shown from the side.",
  "facings": [
   "side",
@@ -295,8 +295,520 @@
   "rule": "the pet takes the facing of its own step behind the hero (the same rule); a symmetric pet has one sheet"
  },
  "mobs": {
+  "rule": "as for the heroes: the step's dx != 0 -> side (flipped when dx < 0), dy > 0 -> front, dy < 0 -> back; standing keeps the last facing; a new monster faces side (as PD draws it) until it moves; an attack turns it to the target; the facing holds at least 120 ms; die frames are the same picture in every facing",
+  "fallback": "a kind without a facing sheet (stage 3, the symmetric ones) is drawn from the side in every facing",
+  "kinds": {
+   "rat": {
+    "sheet": "rat",
+    "cell": [
+     16,
+     15
+    ],
+    "off": 0,
+    "anims": {
+     "idle": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "run": [
+      6,
+      7,
+      8,
+      9,
+      10
+     ],
+     "attack": [
+      2,
+      3,
+      4,
+      5,
+      0
+     ],
+     "die": [
+      11,
+      12,
+      13,
+      14
+     ]
+    },
+    "sheets": {
+     "side": "rat.png",
+     "front": "dirs/rat-front.png",
+     "back": "dirs/rat-back.png"
+    }
+   },
+   "albino": {
+    "sheet": "rat",
+    "cell": [
+     16,
+     15
+    ],
+    "off": 16,
+    "anims": {
+     "idle": [
+      16,
+      16,
+      16,
+      17
+     ],
+     "run": [
+      22,
+      23,
+      24,
+      25,
+      26
+     ],
+     "attack": [
+      18,
+      19,
+      20,
+      21
+     ],
+     "die": [
+      27,
+      28,
+      29,
+      30
+     ]
+    },
+    "sheets": {
+     "side": "rat.png",
+     "front": "dirs/rat-front.png",
+     "back": "dirs/rat-back.png"
+    }
+   },
+   "fetidRat": {
+    "sheet": "rat",
+    "cell": [
+     16,
+     15
+    ],
+    "off": 0,
+    "anims": "as rat",
+    "note": "PD draws the fetid rat with the rat's sheet: so do its facings (the stench is the game's own effect)",
+    "sheets": {
+     "side": "rat.png",
+     "front": "dirs/rat-front.png",
+     "back": "dirs/rat-back.png"
+    }
+   },
+   "gnoll": {
+    "sheet": "gnoll",
+    "cell": [
+     12,
+     15
+    ],
+    "off": 0,
+    "anims": {
+     "idle": [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1
+     ],
+     "run": [
+      4,
+      5,
+      6,
+      7
+     ],
+     "attack": [
+      2,
+      3,
+      0
+     ],
+     "die": [
+      8,
+      9,
+      10
+     ]
+    },
+    "sheets": {
+     "side": "gnoll.png",
+     "front": "dirs/gnoll-front.png",
+     "back": "dirs/gnoll-back.png"
+    }
+   },
+   "shaman": {
+    "sheet": "shaman",
+    "cell": [
+     12,
+     15
+    ],
+    "off": 0,
+    "anims": {
+     "idle": [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1
+     ],
+     "run": [
+      4,
+      5,
+      6,
+      7
+     ],
+     "attack": [
+      2,
+      3,
+      0
+     ],
+     "zap": "as attack",
+     "die": [
+      8,
+      9,
+      10
+     ]
+    },
+    "sheets": {
+     "side": "shaman.png",
+     "front": "dirs/shaman-front.png",
+     "back": "dirs/shaman-back.png"
+    }
+   },
+   "skeleton": {
+    "sheet": "skeleton",
+    "cell": [
+     12,
+     15
+    ],
+    "off": 0,
+    "anims": {
+     "idle": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      2,
+      3
+     ],
+     "run": [
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "attack": [
+      14,
+      15,
+      16
+     ],
+     "die": [
+      10,
+      11,
+      12,
+      13
+     ]
+    },
+    "sheets": {
+     "side": "skeleton.png",
+     "front": "dirs/skeleton-front.png",
+     "back": "dirs/skeleton-back.png"
+    }
+   },
+   "thief": {
+    "sheet": "thief",
+    "cell": [
+     12,
+     13
+    ],
+    "off": 0,
+    "anims": {
+     "idle": [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1
+     ],
+     "run": [
+      0,
+      0,
+      2,
+      3,
+      3,
+      4
+     ],
+     "attack": [
+      10,
+      11,
+      12,
+      0
+     ],
+     "die": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ]
+    },
+    "sheets": {
+     "side": "thief.png",
+     "front": "dirs/thief-front.png",
+     "back": "dirs/thief-back.png"
+    }
+   },
+   "bandit": {
+    "sheet": "thief",
+    "cell": [
+     12,
+     13
+    ],
+    "off": 21,
+    "anims": {
+     "idle": [
+      21,
+      21,
+      21,
+      22,
+      21,
+      21,
+      21,
+      21,
+      22
+     ],
+     "run": [
+      21,
+      21,
+      23,
+      24,
+      24,
+      25
+     ],
+     "attack": [
+      31,
+      32,
+      33
+     ],
+     "die": [
+      25,
+      27,
+      28,
+      29,
+      30
+     ]
+    },
+    "sheets": {
+     "side": "thief.png",
+     "front": "dirs/thief-front.png",
+     "back": "dirs/thief-back.png"
+    }
+   },
+   "bee": {
+    "sheet": "bee",
+    "cell": [
+     16,
+     16
+    ],
+    "off": 0,
+    "fly": true,
+    "anims": {
+     "idle": [
+      0,
+      1,
+      1,
+      0,
+      2,
+      2
+     ],
+     "run": [
+      0,
+      1,
+      1,
+      0,
+      2,
+      2
+     ],
+     "attack": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "die": [
+      7,
+      8,
+      9,
+      10
+     ]
+    },
+    "sheets": {
+     "side": "bee.png",
+     "front": "dirs/bee-front.png",
+     "back": "dirs/bee-back.png"
+    }
+   },
+   "sheep": {
+    "sheet": "sheep",
+    "cell": [
+     16,
+     15
+    ],
+    "off": 0,
+    "anims": {
+     "idle": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      2,
+      3,
+      0
+     ],
+     "run": [
+      0
+     ],
+     "attack": [
+      0
+     ],
+     "die": [
+      4
+     ]
+    },
+    "sheets": {
+     "side": "sheep.png",
+     "front": "dirs/sheep-front.png",
+     "back": "dirs/sheep-back.png"
+    }
+   },
+   "spinner": {
+    "sheet": "spinner",
+    "cell": [
+     16,
+     16
+    ],
+    "off": 0,
+    "same": [
+     "front"
+    ],
+    "anims": {
+     "idle": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      1
+     ],
+     "run": [
+      0,
+      2,
+      0,
+      3
+     ],
+     "attack": [
+      0,
+      4,
+      5,
+      0
+     ],
+     "die": [
+      6,
+      7,
+      8,
+      9
+     ]
+    },
+    "sheets": {
+     "side": "spinner.png",
+     "front": "spinner.png",
+     "back": "dirs/spinner-back.png"
+    }
+   },
+   "bat": {
+    "sheet": "bat",
+    "cell": [
+     15,
+     15
+    ],
+    "off": 0,
+    "fly": true,
+    "same": [
+     "front"
+    ],
+    "anims": {
+     "idle": [
+      0,
+      1
+     ],
+     "run": [
+      0,
+      1
+     ],
+     "attack": [
+      2,
+      3,
+      0,
+      1
+     ],
+     "die": [
+      4,
+      5,
+      6
+     ]
+    },
+    "sheets": {
+     "side": "bat.png",
+     "front": "bat.png",
+     "back": "dirs/bat-back.png"
+    }
+   }
+  },
+  "pose": {
+   "gnoll": "the hyena head turned to the camera (ears up, the muzzle and its black nose at the camera) on PD's body; from behind the mane down the nape, the fur without its light chest",
+   "shaman": "the red mask across the eyes, the pale muzzle under it; from behind the mask's strap over the fur",
+   "skeleton": "the skull square to the camera, the sockets either side of the middle; from behind the round back of the skull, the spine and the shoulder blades. Idle 1-3 is PD's skull spinning round, the other way round from behind",
+   "thief": "the face in the middle of the hood, the hands holding the loot at the chest; from behind the hood and the cloak. The stab: the blade comes out of the hands at the camera",
+   "rat": "sitting up, the snout at the camera, ears either side, the paws at the chest, the tail curling out; from behind the backs of the ears and the tail between the feet. The bite lunges a pixel at the camera (away from it from behind); the run hops",
+   "bee": "the camera looks down on the bee: coming at it, the head and eyes are nearest, the striped abdomen rises behind between the wings; going away, the abdomen and its sting are nearest. The wings stay see-through and flap; PD's own height over the shadow",
+   "sheep": "PD's face (drawn frontal at the right edge of the wool) in the middle of the fleece, chewing as in PD's idle frames; from behind the fleece and a white tail that wags",
+   "spinner": "already faces the camera: the front is the side; the back is the same picture without the eyes",
+   "bat": "already faces the camera: the front is the side; the back is the same picture without the red eyes and mouth",
+   "variants": "the rat and thief views in the colours of PD's second row (the palette PD swaps between the rows)",
+   "humanoids": "PD draws the body square to the viewer and turns only the head, so the front is a front head in the sheet's own palette on the side body. Walking lifts the legs in turn; the blow comes a pixel at the camera, or away from it from behind",
+   "die": "as in PD: the body falling is the same picture from every side"
+  },
   "stage2": {
-   "note": "the frequent monsters of the first depths, next package",
+   "done": true,
    "list": [
     "rat",
     "albino",
@@ -307,11 +819,13 @@
     "thief",
     "bandit",
     "bee",
-    "sheep"
+    "sheep",
+    "spinner",
+    "bat"
    ]
   },
   "stage3": {
-   "note": "the rest, then the bosses",
+   "note": "next package: the rest, then the bosses",
    "list": [
     "brute",
     "shielded",
@@ -351,13 +865,8 @@
     "wraith",
     "ghost",
     "crab",
-    "spinner",
     "mimic"
-   ],
-   "maybe": {
-    "bat": "front as drawn; a back without the red eyes is one recolour (as the pet bat)",
-    "spinner": "radial: a back without the eyes, if wanted"
-   }
+   ]
   }
  }
 }

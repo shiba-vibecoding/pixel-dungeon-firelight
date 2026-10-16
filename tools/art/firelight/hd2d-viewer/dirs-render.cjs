@@ -2,7 +2,7 @@
 //   node dirs-render.cjs shot out_dir "r,w,h,dpr,query,name" ...          one picture per job
 //   node dirs-render.cjs walk out_prefix "r,w,h,dpr,query" from to step     the walk round the loop, frame by frame (window.__frame)
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
-const PORT = process.env.PORT || 8765;   // the viewer's own server (npm run serve)
+const PORT = process.env.PORT || 8794;
 (async () => {
   const [,, mode, out, ...rest] = process.argv;
   const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
