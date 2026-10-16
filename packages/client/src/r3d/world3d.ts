@@ -1212,7 +1212,7 @@ export class World3D {
     this.bossFound = false;
     this.blood.update(f.now);
     if (this.goreLayer.version !== gore.version) this.goreLayer.replay(gore.data, gore.version);
-    this.goreLayer.update();
+    this.goreLayer.update(this.renderer);
     gore.sweep(f.now, CORPSE_FADE_MS);
     this.effects.begin();
     f.view.puppets.forEach(this.puppetPass);

@@ -6,7 +6,8 @@
  * wall cell (768 x 1152): about 6 MB of memory for the two (`bytes`), however much blood falls.
  */
 import {
-  BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, MeshLambertMaterial, Mesh, NearestFilter, type Scene, SRGBColorSpace,
+  Box2, BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, MeshLambertMaterial, Mesh, NearestFilter, type Scene, SRGBColorSpace, Texture,
+  Vector2, type WebGLRenderer,
 } from 'three';
 import { HEIGHT, WIDTH } from '@pd/core';
 import { faceShows, type GoreData, groundCell, POOL, type Splat, WALL } from '../gore';
@@ -25,11 +26,31 @@ export const GORE_BYTES = (FLOOR_W * FLOOR_H + WALL_W * WALL_H_PX) * 4;
 const css = (rgb: number, a: number): string => `rgba(${(rgb >> 16) & 255}, ${(rgb >> 8) & 255}, ${rgb & 255}, ${a})`;
 const ALPHA = 0.82;
 
+/**
+ * A canvas the blood is painted on and the texture of it on the card. Only what was painted is sent: the box of this frame's splats (the
+ * union of them, grown by a pixel) goes up with one `copyTextureToTexture`, a few KB for a blow; the whole canvas goes up only when it
+ * has been cleared and repainted (a level, a reload), and that once.
+ */
 class Sheet {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
   readonly texture: CanvasTexture;
-  dirty = false;
+  /** The card has the canvas once the whole of it has gone up. */
+  private onCard = false;
+  private whole = true;
+  /** The box painted since the last upload, in canvas pixels; empty while x1 < x0. */
+  private x0 = 1e9;
+  private y0 = 1e9;
+  private x1 = -1;
+  private y1 = -1;
+  /** What a copy reads from (the canvas itself) and where the box goes, kept to be reused. */
+  private readonly source: Texture;
+  private readonly region = new Box2();
+  private readonly at = new Vector2();
+  /** Bytes sent to the card since the start (tests, the perf overlay). */
+  uploaded = 0;
+  /** Debug: send the whole canvas for every painted frame, as the first version did (to measure what the boxes save). */
+  forceFull = false;
   constructor(w: number, h: number) {
     this.canvas = document.createElement('canvas');
     this.canvas.width = w;
@@ -39,15 +60,60 @@ class Sheet {
     this.texture.colorSpace = SRGBColorSpace;
     this.texture.magFilter = this.texture.minFilter = NearestFilter;
     this.texture.generateMipmaps = false;
+    // (The texture is not sent until it is first drawn: this first send is the whole of it, empty.)
+    this.texture.needsUpdate = true;
+    this.source = new Texture(this.canvas);
   }
+
+  /** Notes a painted rectangle (canvas pixels). */
+  mark(x: number, y: number, w: number, h: number): void {
+    this.x0 = Math.min(this.x0, x - 1);
+    this.y0 = Math.min(this.y0, y - 1);
+    this.x1 = Math.max(this.x1, x + w + 1);
+    this.y1 = Math.max(this.y1, y + h + 1);
+  }
+
+  get dirty(): boolean {
+    return this.whole || this.x1 >= this.x0;
+  }
+
+  /** Wiped: all of it is to go up again. */
   clear(): void {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.dirty = true;
+    this.whole = true;
   }
-  flush(): void {
-    if (!this.dirty) return;
-    this.dirty = false;
-    this.texture.needsUpdate = true;
+
+  /** Sends what was painted (once a frame). */
+  flush(renderer: WebGLRenderer): void {
+    if (this.whole || !this.onCard || (this.forceFull && this.x1 >= this.x0)) {
+      this.whole = false;
+      this.onCard = true;
+      this.x0 = 1e9;
+      this.y0 = 1e9;
+      this.x1 = -1;
+      this.y1 = -1;
+      this.texture.needsUpdate = true;
+      this.uploaded += this.canvas.width * this.canvas.height * 4;
+      return;
+    }
+    if (this.x1 < this.x0) return;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const x0 = Math.max(0, Math.floor(this.x0));
+    const y0 = Math.max(0, Math.floor(this.y0));
+    const x1 = Math.min(w, Math.ceil(this.x1));
+    const y1 = Math.min(h, Math.ceil(this.y1));
+    this.x0 = 1e9;
+    this.y0 = 1e9;
+    this.x1 = -1;
+    this.y1 = -1;
+    if (x1 <= x0 || y1 <= y0) return;
+    // (The texture is stored flipped, as a canvas texture is: the box that lies y0..y1 down the canvas lies h - y1 up from the bottom.)
+    this.region.min.set(x0, y0);
+    this.region.max.set(x1, y1);
+    this.at.set(x0, h - y1);
+    renderer.copyTextureToTexture(this.source, this.texture, this.region, this.at);
+    this.uploaded += (x1 - x0) * (y1 - y0) * 4;
   }
 }
 
@@ -101,6 +167,16 @@ export class GoreLayer {
     this.held = version;
   }
 
+  /** Bytes sent to the card so far for the floor and the walls (tests, the perf overlay). */
+  /** Debug: the whole canvas on every painted frame (see Sheet.forceFull). */
+  set forceFull(on: boolean) {
+    this.floor.forceFull = this.wall.forceFull = on;
+  }
+
+  get uploaded(): number {
+    return this.floor.uploaded + this.wall.uploaded;
+  }
+
   get version(): number {
     return this.held;
   }
@@ -110,7 +186,7 @@ export class GoreLayer {
     if (s.layer === WALL) {
       this.wall.ctx.fillStyle = css(s.rgb, ALPHA);
       this.wall.ctx.fillRect(s.x, s.y, s.w, s.h);
-      this.wall.dirty = true;
+      this.wall.mark(s.x, s.y, s.w, s.h);
     } else if (s.layer === POOL) {
       // An ellipse of rows, whole pixels, the edge a shade darker.
       const g = this.floor.ctx;
@@ -122,18 +198,18 @@ export class GoreLayer {
         g.fillStyle = css(s.rgb, ALPHA);
         g.fillRect(s.x - half, s.y + j, half * 2, 1);
       }
-      this.floor.dirty = true;
+      this.floor.mark(s.x - s.w, s.y - s.h, s.w * 2, s.h * 2 + 1);
     } else {
       this.floor.ctx.fillStyle = css(s.rgb, ALPHA);
       this.floor.ctx.fillRect(s.x, s.y, s.w, s.h);
-      this.floor.dirty = true;
+      this.floor.mark(s.x, s.y, s.w, s.h);
     }
   }
 
   /** Once a frame: sends what was painted, and shows the meshes only if anything has been. */
-  update(): void {
-    this.floor.flush();
-    this.wall.flush();
+  update(renderer: WebGLRenderer): void {
+    this.floor.flush(renderer);
+    this.wall.flush(renderer);
     if (this.floorMesh) this.floorMesh.visible = this.any;
     if (this.wallMesh) this.wallMesh.visible = this.any;
   }
