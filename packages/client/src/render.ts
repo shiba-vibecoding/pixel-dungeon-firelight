@@ -1,5 +1,6 @@
 import { MEMORY_DESATURATE } from './r3d/memory';
 import { heapDrawn } from './heapsight';
+import { figureShown } from './figuresight';
 import { drawVignette } from './vignette';
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
@@ -567,7 +568,7 @@ export function render(
 
   // Characters, back to front. Monsters only show where the party can see.
   const shown = [...view.puppets.values()]
-    .filter((puppet) => puppet.isHero || scene.seeAll || visible[puppet.to] || visible[puppet.from] || (puppet.aim !== undefined && visible[puppet.aim]))
+    .filter((puppet) => figureShown(puppet, visible, scene.seeAll))
     .map((puppet) => {
       // On whole screen pixels, as the map is: a walker between them shimmered against the floor.
       const at = view.position(puppet, now);

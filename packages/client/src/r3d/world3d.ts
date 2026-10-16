@@ -39,6 +39,7 @@ import { DoorSwing, writeLeafMatrix } from './doorswing';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
 import { TIERS, type Tier } from './governor';
 import { heapDrawn } from '../heapsight';
+import { figureShown } from '../figuresight';
 import { PerfOverlay } from './perfoverlay';
 import { canPost, Post } from './post';
 import { still } from './quadbatch';
@@ -1340,7 +1341,8 @@ export class World3D {
   private addPuppet(puppet: Puppet): void {
     const f = this.current!;
     const { visible } = f;
-    if (!(puppet.isHero || f.seeAll || visible[puppet.to] || visible[puppet.from] || (puppet.aim !== undefined && visible[puppet.aim]))) return;
+    // Only where its cell is in sight now (figuresight.ts), the hero and what the hero senses excepted.
+    if (!figureShown(puppet, visible, f.seeAll)) return;
     const now = f.now;
     const pos = f.view.positionInto(puppet, now, this.at);
     const { sheet, anims } = puppet.sprite;
