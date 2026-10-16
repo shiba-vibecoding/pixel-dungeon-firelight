@@ -15,7 +15,7 @@ export const SEASON_DAYS = compete.season.weeks * 7;
 const DAY_MS = 86_400_000;
 
 /** The first season's first day: a Monday. The server's COMPETE_SEASON_START (YYYY-MM-DD) overrides it. */
-export const DEFAULT_SEASON_START = '2026-10-19';
+export const DEFAULT_SEASON_START = '2026-10-12';
 
 /** The start as a time: the variable if it is a day, else the default; moved back to the Monday on or before it. */
 export function seasonStart(value?: string): number {

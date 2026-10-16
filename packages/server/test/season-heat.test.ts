@@ -4,7 +4,7 @@ import { CATALOG, itemById } from '../../client/src/catalog';
 import { addCircleWeek, addDay, addLeagueWeek, BEST_DAYS, bestSum, dayPoints, emptyHeat, HEAT, heatOf, inBest } from '../src/heat';
 import { awardKeys, DAY_TITLE_MIN_PLAYERS, dayTitleEarned, grant, HONOUR_KEYS, seasonAwards } from '../src/honours';
 import type { Standing } from '../src/mail';
-import { artSeason, hallOpensAt, inSeason, SEASON_DAYS, seasonAt, seasonNumbered, seasonNumber, seasonStart } from '../src/season-clock';
+import { artSeason, DEFAULT_SEASON_START, hallOpensAt, inSeason, SEASON_DAYS, seasonAt, seasonNumbered, seasonNumber, seasonStart } from '../src/season-clock';
 import { earnedBy } from '../src/shopapi';
 import { closeDueSeasons, putHeat, rollSeason, type SeasonDeps, type SeasonProfile, settleBoard } from '../src/season-flow';
 
@@ -19,7 +19,7 @@ describe('the seasons of the competitions (season-clock.ts)', () => {
     expect(new Date(start).getUTCDay()).toBe(1);
     // A start given on a Wednesday is moved back to its Monday; nonsense falls back to the default.
     expect(new Date(seasonStart('2026-10-21')).toISOString().slice(0, 10)).toBe('2026-10-19');
-    expect(seasonStart('soon')).toBe(start);
+    expect(seasonStart('soon')).toBe(seasonStart(DEFAULT_SEASON_START));
   });
 
   it('numbers the seasons from the start, and calls the time before it the first season, not begun', () => {
