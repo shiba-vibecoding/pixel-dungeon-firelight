@@ -249,16 +249,6 @@ export type Effect =
   | { type: 'burnt'; depth: number; pos: number }
   /** A thrown potion breaking; `identified` when what came out taught the party what it was. */
   | { type: 'shattered'; hero: string; depth: number; pos: number; kind: ItemKind; identified: boolean }
-  /**
-   * The arena of waves (arena.ts): a wave begins (its boss, if it has one); the last of it falls; a hero's
-   * three rewards; a hero is ready for the next; the arena sinks to the next region's depth; its gates open or shut.
-   */
-  | { type: 'arenaWave'; depth: number; wave: number; champions: boolean; tier: number; count: number; boss?: MobKind }
-  | { type: 'arenaCleared'; depth: number; wave: number }
-  | { type: 'arenaOffer'; hero: string; items: Item[] }
-  | { type: 'arenaReady'; hero: string; ready: boolean }
-  | { type: 'arenaSinks'; depth: number; tier: number }
-  | { type: 'arenaGates'; depth: number; open: boolean; cells: number[] }
   /** A queued action that became impossible before the hero's turn came. */
   | { type: 'interrupted'; hero: string; reason: string };
 

@@ -95,7 +95,6 @@ describe('checked runs', () => {
     const run = start(logic);
     const device = structuredClone(run.world);
     const { finish } = waitToDeath(logic, 'dungeon', 'r1', device);
-    expect(finish!.summary.mode).toBe('dungeon');
     expect(finish!.summary.ranked).toBe(true);
     expect(logic.profile.best).toBe(finish!.summary.score);
     expect(logic.profile.history).toHaveLength(1);

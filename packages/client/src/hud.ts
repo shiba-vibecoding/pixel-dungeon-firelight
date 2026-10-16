@@ -81,26 +81,6 @@ export interface HudHandlers {
   buff(name: BuffName, turns?: number): void;
   /** A tap on a companion. */
   mate(id: string): void;
-  /** The arena's «To battle!» (pressed again: not ready after all). */
-  fight(): void;
-}
-
-/** The arena of waves in the HUD (design system v14): the wave board, «To battle!», who is ready. */
-export interface ArenaHud {
-  phase: 'fight' | 'rest';
-  /** The wave on, or (at rest) the last one beaten. */
-  wave: number;
-  /** Monsters of the wave still to beat, and the share of it beaten. */
-  left: number;
-  beaten: number;
-  champions: boolean;
-  /** Co-op: how many living heroes are ready, of how many; and the names still awaited. */
-  ready: readonly [number, number] | null;
-  waiting: readonly string[];
-  /** I pressed «To battle!» already. */
-  meReady: boolean;
-  /** What each companion is up to at rest, by hero id. */
-  mates: Readonly<Record<string, 'ready' | 'picking' | 'resting'>>;
 }
 
 /** The status line under the HUD: one passing state at a time (the design's .pd-status). */
@@ -135,18 +115,6 @@ export interface HudState {
   newLoot: boolean;
   /** What each player wears (Pixel-Mart): my portrait's frame, the patron's star by companions' names. */
   looks: Record<string, Look>;
-  /** In the arena of waves: its board and readiness instead of the depth. */
-  arena?: ArenaHud | null;
-}
-
-/** «осталось {n}»: the text with the number in bold, as the design writes it. */
-function withNumber(template: string, n: string): Node[] {
-  const [before = '', after = ''] = template.split('{n}');
-  const parts: Node[] = [];
-  if (before) parts.push(document.createTextNode(before));
-  parts.push(el('b', '', n));
-  if (after) parts.push(document.createTextNode(after));
-  return parts;
 }
 
 export interface QuickState {
@@ -226,11 +194,6 @@ export class Hud {
   private readonly food: HTMLElement;
   private readonly depth: Text;
   private readonly depthStat: HTMLElement;
-  /** The arena's board and «To battle!» (hidden in the dungeon). */
-  private readonly waveboard: HTMLElement;
-  private readonly fightBox: HTMLElement;
-  private readonly fightButton: HTMLButtonElement;
-  private readonly fightNote: HTMLElement;
   private readonly keys: Text;
   private readonly buffBox: HTMLElement;
   private readonly mates: HTMLElement;
@@ -285,14 +248,6 @@ export class Hud {
     this.mates = el('div', 'pd-mates');
     this.notice = el('div', 'pd-status');
     this.notice.setAttribute('role', 'status');
-    this.waveboard = el('div', 'pd-waveboard');
-    this.waveboard.setAttribute('role', 'status');
-    this.waveboard.hidden = true;
-    this.fightButton = el('button', 'pd-button primary', t.arena.fight);
-    this.fightButton.onclick = tap(() => handlers.fight());
-    this.fightNote = el('span', 'pd-fight-note');
-    this.fightBox = el('div', 'pd-fight', this.fightButton, this.fightNote);
-    this.fightBox.hidden = true;
     this.depthStat = el('span', 'pd-stat', icon('depth'), this.depth);
     this.main = el(
         'div',
@@ -317,7 +272,7 @@ export class Hud {
         ),
         menu,
       );
-    this.band = el('header', 'pd-hud', this.main, this.waveboard, this.buffBox, this.mates, this.notice);
+    this.band = el('header', 'pd-hud', this.main, this.buffBox, this.mates, this.notice);
 
     this.more = el('button', 'pd-log-more', t.history);
     this.more.onclick = tap(() => handlers.history());
@@ -370,7 +325,6 @@ export class Hud {
     this.islandRight.ariaLabel = t.backpack;
 
     this.root.prepend(this.band, this.log, this.toolbar);
-    this.root.append(this.fightBox);
     this.setLayout(false, 1);
   }
 
@@ -406,13 +360,10 @@ export class Hud {
       this.islandRight.append(this.tools.quick, this.tools.quick2, this.tools.bag);
       this.band.remove();
       this.toolbar.remove();
-      // The arena's board stands at the top in the middle.
-      this.waveboard.classList.add('top');
-      this.root.prepend(this.column, this.corner, this.waveboard, this.log, this.islandLeft, this.islandRight);
+      this.root.prepend(this.column, this.corner, this.log, this.islandLeft, this.islandRight);
     } else {
       this.main.append(this.menu);
-      this.waveboard.classList.remove('top');
-      this.band.append(this.main, this.waveboard, this.buffBox, this.mates, this.notice);
+      this.band.append(this.main, this.buffBox, this.mates, this.notice);
       this.toolbar.append(this.tools.wait, this.tools.search, this.tools.examine, this.tools.quick, this.tools.bag);
       this.column.remove();
       this.corner.remove();
@@ -504,9 +455,6 @@ export class Hud {
       this.food.classList.toggle('starving', isStarving(me));
     }
     if (this.changed('depth', String(me.depth))) this.depth.data = String(me.depth);
-    // The arena has no depths to speak of: its board says where the party stands.
-    this.depthStat.style.display = state.arena ? 'none' : '';
-    this.updateArena(state.arena ?? null, dead);
     if (this.changed('keys', String(state.keys))) this.keys.data = String(state.keys);
     this.avatar.parentElement!.classList.toggle('dead', dead);
 
@@ -525,10 +473,9 @@ export class Hud {
       sprites(this.buffBox);
     }
 
-    const arena = state.arena;
     const mateKey = state.party
-      .map((h) => `${h.id}:${h.name}:${h.heroClass}:${Math.max(0, h.hp)}/${h.ht}:${h.depth}:${state.online.includes(h.id)}:${state.looks[h.id]?.patron ?? ''}:${state.waitingFor?.includes(h.id) ?? false}:${arena?.mates[h.id] ?? ''}`)
-      .join('|') + `@${me.depth}:${Boolean(arena)}`;
+      .map((h) => `${h.id}:${h.name}:${h.heroClass}:${Math.max(0, h.hp)}/${h.ht}:${h.depth}:${state.online.includes(h.id)}:${state.looks[h.id]?.patron ?? ''}:${state.waitingFor?.includes(h.id) ?? false}`)
+      .join('|') + `@${me.depth}`;
     if (this.changed('mates', mateKey)) {
       this.mates.hidden = state.party.length === 0;
       this.mates.replaceChildren(
@@ -540,20 +487,14 @@ export class Hud {
           const away = hero.depth !== me.depth || !state.online.includes(hero.id);
           const turn = Boolean(state.waitingFor?.includes(hero.id));
           // The wide screen's card says what the companion is up to.
-          // At the arena's rest: ready, picking a reward, or resting.
-          const rest = arena?.mates[hero.id];
           const what = !isAlive(hero) ? t.mateFallen
             : !state.online.includes(hero.id) ? t.mateOffline
-            : rest === 'ready' ? t.arena.readyMark
-            : rest === 'picking' ? t.arena.picking
-            : rest === 'resting' ? t.arena.resting
             : hero.depth !== me.depth ? t.mateOnDepth(hero.depth)
             : turn ? t.mateTurn : '';
-          // The arena has no depths: none on the cards either.
-          const depth = arena ? '' : String(hero.depth);
+          const depth = String(hero.depth);
           const node = el(
             'button',
-            `${this.wide ? 'pd-pcard' : 'pd-mate'}${!isAlive(hero) ? ' dead' : turn ? ' turn' : away ? ' away' : ''}${rest === 'ready' ? ' ready' : ''}`,
+            `${this.wide ? 'pd-pcard' : 'pd-mate'}${!isAlive(hero) ? ' dead' : turn ? ' turn' : away ? ' away' : ''}`,
             face,
             el('span', 'pd-mate-name', state.looks[hero.id]?.patron ? el('i', 'pd-patron-mark sm') : null, hero.name),
             this.wide ? el('span', 'pd-mate-depth', depth) : bar,
@@ -592,55 +533,6 @@ export class Hud {
     this.tools.bag.classList.toggle('alert', state.newLoot);
     this.tools.wait.classList.toggle('resting', resting);
     for (const button of Object.values(this.tools)) button.disabled = dead;
-  }
-
-  /**
-   * The arena's board: «Wave 7 · 5 left» and how much of it is beaten, in a fight; «Breather ·
-   * Wave 8 · Ready 2/3» at rest. And at rest «To battle!» over the log, with who is awaited.
-   */
-  private updateArena(arena: ArenaHud | null, dead: boolean): void {
-    const key = arena
-      ? `${arena.phase}:${arena.wave}:${arena.left}:${arena.beaten.toFixed(2)}:${arena.champions}:${arena.ready?.join('/') ?? ''}:${this.wide}`
-      : '';
-    if (this.changed('waveboard', key)) {
-      this.waveboard.hidden = !arena;
-      if (arena) {
-        const rest = arena.phase === 'rest';
-        this.waveboard.className = `pd-waveboard${rest ? ' rest' : ''}${!rest && arena.champions ? ' champions' : ''}${this.wide ? ' top' : ''}`;
-        if (rest) {
-          this.waveboard.replaceChildren(
-            el('span', 'pd-wave-n', t.arena.rest),
-            el('span', 'pd-wave-left', t.arena.wave(arena.wave + 1)),
-            ...(arena.ready ? [el('span', 'pd-wave-ready', t.arena.ready(arena.ready[0], arena.ready[1]))] : []),
-          );
-        } else {
-          const bar = el('div', 'pd-bar');
-          bar.style.setProperty('--v', String(arena.beaten));
-          this.waveboard.replaceChildren(
-            el('span', 'pd-wave-n', t.arena.wave(arena.wave)),
-            el('span', 'pd-wave-left', ...withNumber(t.arena.left, String(arena.left))),
-            bar,
-          );
-        }
-      }
-    }
-    const fight = arena?.phase === 'rest' && !dead;
-    const fightKey = fight ? `${arena.meReady}:${arena.ready?.join('/') ?? ''}:${arena.waiting.join(',')}` : '';
-    if (this.changed('fight', fightKey)) {
-      this.fightBox.hidden = !fight;
-      if (fight) {
-        this.fightButton.classList.toggle('waiting', arena.meReady);
-        this.fightButton.setAttribute('aria-pressed', String(arena.meReady));
-        // Alone, the button simply starts the wave: nothing to say under it.
-        const note: Node[] = [];
-        if (arena.ready) {
-          note.push(document.createTextNode(t.arena.ready(arena.ready[0], arena.ready[1])));
-          if (arena.waiting.length > 0) note.push(document.createTextNode(' · '), ...withNumber(t.arena.waitingFor, arena.waiting.join(', ')));
-        }
-        this.fightNote.replaceChildren(...note);
-        this.fightNote.hidden = note.length === 0;
-      }
-    }
   }
 
   /** A quick slot's button: the item, its count or charges, its wear; the key on a wide screen. */

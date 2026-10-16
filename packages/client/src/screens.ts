@@ -7,7 +7,7 @@ import { adjacentFoes, backpackMustClose, keepsOpen, resolveDrop, SNAP_BACK_MS }
 import { seenEnemies } from './sight';
 import { haptic } from './telegram';
 import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
-import { ARENA_BADGES, BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
+import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
 import { P } from './i18n-photo';
@@ -133,11 +133,7 @@ export function closeOverlay(): boolean {
 /** Sets --ix/--iy (items.png, badges.png: 8 a row) and --bx/--by (buffs.png: 18 a row) from data-i and data-b. */
 export function sprites(scope: ParentNode): void {
   scope.querySelectorAll<HTMLElement>('[data-i]').forEach((node) => {
-    let i = Number(node.dataset.i);
-    // The arena's badges have a sheet of their own, in one row (badges.ts ARENA_BADGES).
-    const arena = node.classList.contains('pd-badge') && i >= ARENA_BADGES;
-    node.classList.toggle('arena', arena);
-    if (arena) i -= ARENA_BADGES;
+    const i = Number(node.dataset.i);
     node.style.setProperty('--ix', String(i % 8));
     node.style.setProperty('--iy', String(Math.floor(i / 8)));
   });
@@ -434,8 +430,7 @@ export function showBadges(onClose: () => void): void {
     sprites(detail);
   };
   const grid = el('div', { className: 'pd-grid c6' });
-  // The arena's badges are left out: the arena of waves is no longer offered.
-  for (const badge of BADGES.filter((b) => b.image < ARENA_BADGES)) {
+  for (const badge of BADGES) {
     const icon = el('i', { className: `pd-badge${earned.has(badge.id) ? '' : ' dim'}` });
     icon.dataset.i = String(badge.image);
     const node = el('button', { className: `pd-slot${fresh.has(badge.id) ? ' new' : ''}`, ariaLabel: badgeText(badge.id) }, icon);
@@ -1075,9 +1070,7 @@ export function showRankings(records: readonly RunRecord[], onClose: () => void,
           'span',
           { className: 'pd-rank-name', textContent: `${record.name} · ${t.classes[record.heroClass]}` },
           el('small', {
-            textContent: record.mode === 'arena'
-              ? `${t.arena.title} · ${t.levelShort} ${record.lvl} · ${t.arena.waveWord(record.depth)}${what ? ` · ${what}` : ''}`
-              : `${t.levelShort} ${record.lvl} · ${t.depthShort(record.depth)}${what ? ` · ${what}` : ''}`,
+            textContent: `${t.levelShort} ${record.lvl} · ${t.depthShort(record.depth)}${what ? ` · ${what}` : ''}`,
           }),
         ),
         el('span', { className: 'pd-rank-score', textContent: record.score.toLocaleString(locale) }),

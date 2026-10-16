@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { type Action, dayOf, type HeroClass, isPatron, RULES_VERSION } from '@pd/core';
-import { BOARD_KINDS, type BoardKind, boardName, boardObject, boardOfRun, boardsFor } from './boards';
+import { BOARD_KINDS, type BoardKind, boardName, boardObject, boardOfRun, boardsFor, isArenaBoard } from './boards';
 import { secretDailySeed } from './daily-seed';
 import { CORS, json, jsonBody } from './http';
 import type { Env } from './index';
@@ -191,6 +191,14 @@ export async function patchWorn(env: Env, user: number): Promise<void> {
     // The boards catch up with the next change or the next run.
   }
 }
+
+/*
+ * What the arena of waves left in a profile (its trophies, finished runs and badges) stays in the storage, but is not served: the game
+ * has no such mode now.
+ */
+const shownTrophy = (trophy: { board: string }): boolean => !isArenaBoard(trophy.board);
+const shownLetter = (letter: { board: string }): boolean => !isArenaBoard(letter.board);
+const shownRun = (run: RunSummary): boolean => (run as { mode?: string }).mode !== 'arena' && (run.slot as string) !== 'arena';
 
 /** A player's checked runs and profile (runs.ts), kept in storage as run-store.ts cuts them. */
 export class Player extends DurableObject<Env> {
@@ -427,7 +435,7 @@ export class Player extends DurableObject<Env> {
     const id = typeof body.id === 'string' ? body.id : '';
     const changed = op === 'claimAll' ? claimAll(p, now) > 0 : op === 'claim' ? claimLetter(p, id, now) === 'claimed' : op === 'readAll' ? readAll(p) : false;
     if (changed) await this.persist(new Set(), new Map());
-    return { mail: p.mail, trophies: p.trophies };
+    return { mail: p.mail.filter(shownLetter), trophies: p.trophies.filter(shownTrophy) };
   }
 
   /** The profile, with the places held now and any letters of boards finished since last asked. */
@@ -458,8 +466,9 @@ export class Player extends DurableObject<Env> {
     );
     return {
       name: p.name, games: p.games, wins: p.wins, deepest: p.deepest, best: p.best, bestByClass: p.bestByClass,
-      arenaWaves: p.arenaWaves, arenaBest: p.arenaBest, streak: streakNow(p.streak, today, await outageDays(this.env)), dailyDone: p.dailyDate === today,
-      badges: p.badges, history: p.history, trophies: p.trophies, mail: p.mail, coachDone: p.coachDone, newsSeen: p.newsSeen ?? null, honors: p.honors ?? [], places, totals, runs, today,
+      streak: streakNow(p.streak, today, await outageDays(this.env)), dailyDone: p.dailyDate === today,
+      badges: { ...p.badges, earned: p.badges.earned.filter((id) => !/^arena\d+$/.test(id)) }, history: p.history.filter(shownRun),
+      trophies: p.trophies.filter(shownTrophy), mail: p.mail.filter(shownLetter), coachDone: p.coachDone, newsSeen: p.newsSeen ?? null, honors: p.honors ?? [], places, totals, runs, today,
     };
   }
 }

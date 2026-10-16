@@ -1,5 +1,4 @@
 import type { Hero } from './actors';
-import { wavesCleared } from './arena';
 import type { Effect } from './floor';
 import { ITEMS, type Item, itemDef, type ItemKind } from './items';
 import { levelKnown } from './ident';
@@ -18,7 +17,7 @@ export type BadgeId =
   | 'deathGlyph' | 'deathFalling' | 'yasd' | 'boss1' | 'boss2' | 'boss3' | 'boss4' | 'boss1AllClasses' | 'boss3AllSubclasses'
   | 'haggler' | 'thorns' | 'str1' | 'str2' | 'str3' | 'str4' | 'food1' | 'food2' | 'food3' | 'food4' | 'item1' | 'item2' | 'item3'
   | 'item4' | 'rare' | 'victory' | 'victoryAllClasses' | 'happyEnd' | 'combo' | 'cooked1' | 'cooked2' | 'cooked3' | 'cooked4' | 'grim' | 'piranhas'
-  | 'games1' | 'games2' | 'games3' | 'games4' | 'champion' | 'arena5' | 'arena10' | 'arena20';
+  | 'games1' | 'games2' | 'games3' | 'games4' | 'champion';
 
 /** What a player's badges stand on: those earned, and what gathers towards the ones earned over many runs. */
 export interface BadgeProgress {
@@ -102,8 +101,6 @@ export function checkBadges(progress: BadgeProgress, world: World, me: Hero, eff
   tiers(['food1', 'food2', 'food3', 'food4'], me.stats?.food ?? 0, [10, 20, 30, 40]);
   tiers(['cooked1', 'cooked2', 'cooked3', 'cooked4'], me.stats?.brewed ?? 0, [3, 6, 9, 12]);
   earn('piranhas', (me.stats?.piranhas ?? 0) >= 6);
-  // The arena of waves: so many waves held.
-  if (world.arena) tiers(['arena5', 'arena10', 'arena20'], wavesCleared(world.arena), [5, 10, 20]);
 
   const belongings: Item[] = [...me.items, ...me.rings, me.armor, ...(me.weapon ? [me.weapon] : [])];
   // Badges.validateItemLevelAquired: only a level that is known counts.
