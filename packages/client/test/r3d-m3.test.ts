@@ -7,6 +7,7 @@ import { blankMirror, makeMirrorUniforms, Mirror } from '../src/r3d/mirror';
 import { K_FLOOR, K_WALL, K_WATER, LevelGeom, tileRect } from '../src/r3d/levelgeom';
 import { FOLD_MS, Grass, crossedQuads, grassHeight } from '../src/r3d/grass3d';
 import { makeAir } from '../src/r3d/fogofwar';
+import { GOLD_ORE, GOLD_REGION, orePixels } from '../src/r3d/ore';
 import { parseKit } from '../src/r3d/kit';
 import { readFileSync } from 'node:fs';
 
@@ -278,5 +279,28 @@ describe('high grass as crossed billboards (grass3d.ts)', () => {
     g.set([], 40, true);
     expect(g.drawn).toBe(0);
     expect(g.mesh.visible).toBe(false);
+  });
+});
+
+describe('the gold ore of the caves (ore.ts)', () => {
+  it('has the numbers the kit gives the gold of the caves', () => {
+    // hd2d-kit.json, caves, override of wall_face: "the gold ore (12) is metal: roughness 0.3, metalness 0.9".
+    const note = kit.regions.caves.override.wall_face as { roughness?: number };
+    expect(note).toBeDefined();
+    expect(GOLD_ORE).toEqual({ tile: 12, roughness: 0.3, metalness: 0.9 });
+    expect(GOLD_REGION).toBe(2);
+    expect(kit.regions.caves.emissive['12']).toBe('#ffd75a');
+  });
+
+  it('is the pixels the glow map lights, and no others', () => {
+    const glow = new Uint8ClampedArray(16 * 16 * 4);
+    for (const [x, y] of [[3, 4], [4, 4], [10, 11]] as const) {
+      const o = (x + y * 16) * 4;
+      glow[o] = 255; glow[o + 1] = 215; glow[o + 2] = 90; glow[o + 3] = 255;
+    }
+    // A pixel that only barely glows is stone.
+    glow[(8 + 8 * 16) * 4] = 6;
+    expect(orePixels(glow)).toEqual([3 + 4 * 16, 4 + 4 * 16, 10 + 11 * 16]);
+    expect(orePixels(new Uint8ClampedArray(16 * 16 * 4))).toEqual([]);
   });
 });

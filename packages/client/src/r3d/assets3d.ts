@@ -7,6 +7,7 @@
 import { CanvasTexture, NearestFilter, NoColorSpace, SRGBColorSpace, type Texture } from 'three';
 import { paintDoorTiles } from './doorart';
 import { type Kit, materialOf, parseKit } from './kit';
+import { GOLD_ORE, GOLD_REGION, orePixels } from './ore';
 
 declare const __BUILD__: { commit: string; date: string } | undefined;
 const VERSION = typeof __BUILD__ !== 'undefined' ? __BUILD__.commit : 'dev';
@@ -77,6 +78,8 @@ export interface TerrainTextures {
   color: Texture;
   emissive: Texture;
   rough: Texture;
+  /** The metalness of the caves' gold ore (ore.ts), black elsewhere; null for a region with none. */
+  metal: Texture | null;
   dispose(): void;
 }
 
@@ -135,13 +138,34 @@ export function buildTerrain(images: RegionImages, kit: Kit, region: number): Te
   rough.g.fillRect(0, images.tiles.height, width, 16);
   rough.g.fillStyle = gray(materialOf(kit, region, 'wall_face').roughness);
   rough.g.fillRect(0, images.tiles.height + 16, width, 16);
+  // The caves' gold ore is metal, by the kit (ore.ts): the pixels the glow map lights on the deco face (and on tile 12 of the sheet) are
+  // given the kit's roughness in the roughness map and its metalness in a map of their own; everything else stays as it was.
+  let metal: CanvasTexture | null = null;
+  if (region === GOLD_REGION) {
+    const m = canvasOf(width, width);
+    m.g.fillStyle = '#000';
+    m.g.fillRect(0, 0, width, width);
+    for (const [x, y] of [[16, images.tiles.height + 16], [(GOLD_ORE.tile % 16) * 16, Math.trunc(GOLD_ORE.tile / 16) * 16]] as const) {
+      for (const i of orePixels(glow.g.getImageData(x, y, 16, 16).data)) {
+        const px = x + (i % 16);
+        const py = y + Math.trunc(i / 16);
+        rough.g.fillStyle = gray(GOLD_ORE.roughness);
+        rough.g.fillRect(px, py, 1, 1);
+        m.g.fillStyle = gray(GOLD_ORE.metalness);
+        m.g.fillRect(px, py, 1, 1);
+      }
+    }
+    metal = nearest(new CanvasTexture(m.canvas), false);
+  }
   const textures = { color: nearest(new CanvasTexture(color.canvas), true), emissive: nearest(new CanvasTexture(glow.canvas), true), rough: nearest(new CanvasTexture(rough.canvas), false) };
   return {
     ...textures,
+    metal,
     dispose() {
       textures.color.dispose();
       textures.emissive.dispose();
       textures.rough.dispose();
+      metal?.dispose();
     },
   };
 }

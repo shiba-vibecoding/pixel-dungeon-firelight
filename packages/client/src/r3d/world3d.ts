@@ -39,6 +39,7 @@ import { canPost, Post } from './post';
 import { blankMirror, makeMirrorUniforms, Mirror, reflects, withMirror } from './mirror';
 import { BloodWater, withBlood } from './bloodwater';
 import { Grass } from './grass3d';
+import { withGlint } from './ore';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
 import type { WearQuad } from '../wearfx';
@@ -593,10 +594,12 @@ export class World3D {
   private makeMaterials(region: number): void {
     const t = this.terrain!;
     this.terrainMaterial = new MeshStandardMaterial({
-      map: t.color, emissiveMap: t.emissive, emissive: 0xffffff, emissiveIntensity: 1, roughnessMap: t.rough, roughness: 1, metalness: 0,
-      vertexColors: true, alphaTest: 0.5,
+      map: t.color, emissiveMap: t.emissive, emissive: 0xffffff, emissiveIntensity: 1, roughnessMap: t.rough, roughness: 1, metalness: t.metal ? 1 : 0,
+      ...(t.metal ? { metalnessMap: t.metal } : {}), vertexColors: true, alphaTest: 0.5,
     });
     withFog(this.terrainMaterial, this.air, 'attribute');
+    // The gold ore of the caves is metal, and glints in the light (ore.ts).
+    if (t.metal) withGlint(this.terrainMaterial);
     this.decalMaterial = new MeshBasicMaterial({ map: t.color, vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 });
     withFog(this.decalMaterial, this.air, 'attribute');
     const w = materialOf(this.kit, region, 'water');
