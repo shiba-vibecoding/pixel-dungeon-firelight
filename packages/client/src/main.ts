@@ -16,7 +16,7 @@ import './fl-mart.css';
 import './fl-mart-ext.css';
 import './photo.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
-import { quickIndex, quickUse } from './quickslot';
+import { quickItem, quickRef, quickUse } from './quickslot';
 import { fx } from './fx';
 import { fxp } from './fxplayer';
 import { loadFx, whenFx } from './fxsheet';
@@ -401,7 +401,7 @@ const tutorialHost = {
       case 'backpack':
         return newLoot || world.turn > 200;
       case 'quick':
-        return quickIndex(me, 0) >= 0 && attackTarget(world, me) === null;
+        return quickItem(me, 0) !== undefined && attackTarget(world, me) === null;
     }
   },
   noun: (step: StepId): string => {
@@ -1269,9 +1269,16 @@ function toggleQuickslot(slot = 0): void {
     aim = null;
     return;
   }
-  const index = quickIndex(me, slot);
-  if (index < 0) return;
-  const item = me.items[index]!;
+  const ref = quickRef(me, slot);
+  const item = quickItem(me, slot);
+  if (!item) return;
+  // Something in the hand (a stack of darts, the boomerang): thrown from there, which is all a worn thing can do from a slot.
+  if (typeof ref === 'string') {
+    walk.reset();
+    aim = usesTargeting(item.kind) ? { index: -2, worn: ref, kind: 'throw', slot, marked: startTargeting(world, me) } : { index: -2, worn: ref, kind: 'throw' };
+    return;
+  }
+  const index = ref;
   // Wand.actions: no zapping a wand known to be empty (one of unknown charges may be tried, and fizzle).
   if (item.charges === 0 && chargesKnown(item)) {
     view.say(t.noCharges, '#cccccc');
@@ -3260,8 +3267,10 @@ function tick(now: number): void {
     holdingSince = 0;
     holdingFelt = false;
   }
-  const quickItem = me.items[quickIndex(me, 0)];
-  const quickItem2 = hud.wide ? me.items[quickIndex(me, 1)] : undefined;
+  const slotItem = quickItem(me, 0);
+  const slotItem2 = hud.wide ? quickItem(me, 1) : undefined;
+  /** Whether the aim is on what a quick slot holds (a pack slot's number, or something worn). */
+  const aimsAt = (ref: number | string): boolean => aim !== null && (typeof ref === 'string' ? aim.worn === ref : aim.worn === undefined && aim.index === ref);
   const quickState = (item: Item | undefined, aiming: boolean): QuickState | null =>
     item
       ? {
@@ -3301,8 +3310,8 @@ function tick(now: number): void {
         newLoot,
         looks: session.looks,
         keys: me.items.filter((i) => (i.kind === 'key.iron' || i.kind === 'key.skeleton') && i.depth === me.depth).length,
-        quick: quickState(quickItem, aim !== null && aim.index === quickIndex(me, 0)),
-        quick2: quickState(quickItem2, aim !== null && aim.index === quickIndex(me, 1)),
+        quick: quickState(slotItem, aimsAt(quickRef(me, 0))),
+        quick2: quickState(slotItem2, aimsAt(quickRef(me, 1))),
         waitingFor: session.mode === 'online' ? holders.filter((id) => id !== me.id) : [],
       },
       walk.resting,

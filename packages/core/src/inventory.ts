@@ -592,7 +592,9 @@ function throwItem(ctx: Ctx, hero: Hero, item: Item, index: number, target: numb
   if (!boomerang) {
     if (item.qty > 1) {
       item.qty--;
-      thrown = { kind: item.kind, qty: 1, level: item.level };
+      // Item.detach: one of a stack leaves as a new instance of its class (`getClass().newInstance()`): none of 1.9.2a's thrown weapons
+      // is ever upgraded, so what leaves is a plain one.
+      thrown = createItem(item.kind);
     } else {
       hero.items.splice(index, 1);
     }
