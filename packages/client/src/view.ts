@@ -781,6 +781,9 @@ export class View {
           if (effect.hero === myId && effect.kind === 'potion.purity') this.say(t.noSmell, COLORS.default, now);
           break;
         }
+        case 'scrollWasted':
+          if (effect.hero === myId) this.say(t.scrollWasted, COLORS.warning, now);
+          break;
         case 'identified':
           if (effect.hero === myId) this.say(t.identifiedAs(t.items[effect.kind]), COLORS.highlight, now);
           break;

@@ -819,6 +819,8 @@ export const ru: Strings = {
   readOn: 'Прочитать на…',
   pickTitle: { 'scroll.upgrade': 'Улучшить предмет', 'scroll.enchantment': 'Зачаровать предмет', 'scroll.identify': 'Опознать предмет' },
   pickTarget: 'Коснитесь предмета, на котором прочитать свиток.',
+  scrollWaste: { title: 'Вы уверены?', text: 'Свиток будет потрачен впустую.', yes: 'Да', no: 'Нет' },
+  scrollWasted: 'Свиток потрачен впустую.',
   charges: (status) => `Заряды: ${status}`,
   missileInfo: (min, max) => `Урон при броске ${min}–${max}.`,
   wandDamage: (min, max) => `Урон ${min}–${max}.`,

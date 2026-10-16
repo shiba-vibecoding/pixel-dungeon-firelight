@@ -1228,12 +1228,14 @@ function keepOpen(options: BackpackOptions, action: Action, follow?: Item | null
   const qty = used?.qty ?? 0;
   const sprite = used ? itemSprite(used, world.run.labels) : undefined;
   const pos = used && action.type === 'use' ? loosePosition(hero, action.item) : undefined;
-  const target = action.type === 'use' && action.on !== undefined ? itemAt(hero, action.on) : undefined;
+  // A scroll read before (its kind learned by reading) and now used on what was chosen: the scroll is spoken of by the hero's pending one.
+  const pending = action.type === 'scrollTarget' ? hero.pendingScroll : undefined;
+  const target = action.type === 'use' && action.on !== undefined ? itemAt(hero, action.on) : action.type === 'scrollTarget' ? itemAt(hero, action.on) : undefined;
   options.onAction(action);
   // A use the core refused changed nothing: nothing to celebrate.
   const spent = used !== undefined && (!hero.items.includes(used) || used.qty < qty);
   if (used && spent) addFx({ kind: 'used', item: used, sprite, pos });
-  const text = kind && spent ? flourish(kind) : undefined;
+  const text = kind && spent ? flourish(kind) : pending && !hero.pendingScroll ? flourish(pending.kind) : undefined;
   if (target && text) addFx({ kind: 'plus', item: target, text });
   for (const one of fx) addFx(one);
   const chosen = follow ?? target ?? (used && hero.items.includes(used) ? used : undefined);
@@ -1243,6 +1245,50 @@ function keepOpen(options: BackpackOptions, action: Action, follow?: Item | null
   // Drawn anew: from the open backpack, or (after a question, a pick) from the options in hand.
   if (frozen) refreshBackpack(world, hero);
   else showBackpack(options, choice);
+}
+
+/**
+ * InventoryScroll.doRead for a scroll the party did not know: it was read and learned already (Hero.pendingScroll), and what to read
+ * it on is asked now, in the selector a known scroll uses (the backpack with only what the scroll can act on to tap). A choice is
+ * the scroll read on it (and the backpack stays open, as after a known scroll); backing out asks «Are you sure? The scroll will be
+ * wasted» (confirmCancelation): yes gives the scroll up, no asks again. The pending scroll is part of the run, not of this window:
+ * main.ts asks again whenever it is pending and no window is open (a reload, a window that went away).
+ */
+export function askPendingScroll(options: BackpackOptions): void {
+  const { world, hero } = options;
+  const pending = hero.pendingScroll;
+  if (!pending) return;
+  const targets = scrollTargets(world, hero, pending.kind);
+  // Nothing to put back with the window memo: the run itself remembers.
+  pickOrigin = null;
+  const again = (): void => askPendingScroll(options);
+  showBackpack({
+    ...options,
+    pick: {
+      title: t.pickTitle[pending.kind],
+      targets,
+      onPick: (on) => askTarget(options, pending.kind, on, () => keepOpen(options, { type: 'scrollTarget', on }), again),
+      onCancel: () => askWaste(options, again),
+    },
+  });
+}
+
+/** InventoryScroll.confirmCancelation. */
+function askWaste(options: BackpackOptions, again: () => void): void {
+  const F = t.scrollWaste;
+  let given = false;
+  pauseBag();
+  // (The question closes itself before its yes is answered: the pick comes back only if it was a no.)
+  showConfirm(F.title, F.text, F.yes, F.no, () => {
+    given = true;
+    closeBag();
+    options.onAction({ type: 'scrollCancel' });
+    options.onClose();
+  }, () => {
+    setTimeout(() => {
+      if (!given) again();
+    }, 0);
+  });
 }
 
 /**

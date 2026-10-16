@@ -38,7 +38,7 @@ import { beta3d, covers3D } from './r3d/setting';
 import { brightness } from './brightness';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
-  askDrink, onWindow, reopenWindow, type WindowState, windowState,
+  askDrink, askPendingScroll, onWindow, reopenWindow, type WindowState, windowState,
   backpackOpen, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
 import { rankingBlock, showBoards, trophyText } from './rankui';
@@ -1886,6 +1886,20 @@ function syncWindowMemo(): void {
   saveMemo(lastWindow);
 }
 
+/**
+ * A scroll the party did not know has been read and waits for the item it is read on (Hero.pendingScroll, InventoryScroll's
+ * selector): kept in the run itself, so it is asked for again whenever no window is open: after the read, after a reload or a
+ * return to the game, and when the question was closed by something else. Nothing else can be done meanwhile (the rules refuse it).
+ */
+function syncPendingScroll(): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me || !me.pendingScroll || world.over || !isAlive(me) || overlayOpen()) return;
+  walk.reset();
+  aim = null;
+  askPendingScroll(backpackOptions(world, me));
+}
+
 /** The game is back in view or its size changed: a window that was open and is gone is opened again. */
 function recoverWindow(): void {
   if (!session || !lastWindow || overlayOpen()) return;
@@ -2594,6 +2608,7 @@ function frame(now: number): void {
     tick(now);
     guardRun(runUnderway());
     syncWindowMemo();
+    syncPendingScroll();
     loopFailures = 0;
   } catch (error) {
     // A frame that fails now and then is only reported; one that fails again and again leaves the game stuck: the error screen.

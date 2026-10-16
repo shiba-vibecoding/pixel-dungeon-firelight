@@ -810,6 +810,9 @@ export const en = {
     'scroll.upgrade': 'Upgrade an item', 'scroll.enchantment': 'Enchant an item', 'scroll.identify': 'Identify an item',
   } as Record<'scroll.upgrade' | 'scroll.enchantment' | 'scroll.identify', string>,
   pickTarget: 'Tap the item to read the scroll on.',
+  /** InventoryScroll.confirmCancelation: a scroll read but given up on is lost. */
+  scrollWaste: { title: 'Are you sure?', text: 'The scroll will be wasted.', yes: 'Yes', no: 'No' },
+  scrollWasted: 'The scroll is wasted.',
   charges: (status: string) => `Charges: ${status}`,
   missileInfo: (min: number, max: number) => `Damage ${min}–${max} when thrown.`,
   wandDamage: (min: number, max: number) => `Damage ${min}–${max}.`,
