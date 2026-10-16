@@ -304,3 +304,20 @@ describe('the gold ore of the caves (ore.ts)', () => {
     expect(orePixels(new Uint8ClampedArray(16 * 16 * 4))).toEqual([]);
   });
 });
+
+describe('the haze of the demon halls', () => {
+  it('is for the two highest tiers, and the kit has the halls a low red mist', () => {
+    expect(TIERS.map((t) => [t.name, t.haze])).toEqual([['high', true], ['mid', true], ['low', false], ['min', false]]);
+    const mist = kit.regions.halls.fog.mist!;
+    expect(mist).toEqual({ color: '#5a1a10', density: 0.18, height: 0.4 });
+    expect(kit.regions.halls.particles.some((p) => p.type === 'haze')).toBe(true);
+    // The other regions that have mist (the sewers, the caves) keep their wisps: the layer is the halls' own.
+    expect(kit.regions.sewers.fog.mist).not.toBeNull();
+  });
+
+  it('is off until a level asks for it', () => {
+    const air = makeAir(new Texture());
+    expect(air.uMist.value.x).toBe(0);
+    expect(air.uMist.value.y).toBeGreaterThan(0);
+  });
+});

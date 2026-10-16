@@ -109,10 +109,21 @@ uniform sampler2D tScene;
 uniform sampler2D tBloom;
 uniform vec2 uSize;
 uniform float uStrength;
+uniform float uHeat;
+uniform float uTime;
 ${DECODE}
 void main() {
   // The pixel's own centre: the art is read as it is, never filtered.
-  vec2 uv = (floor(gl_FragCoord.xy) + 0.5) / uSize;
+  vec2 px = floor(gl_FragCoord.xy);
+  vec2 uv = (px + 0.5) / uSize;
+  if (uHeat > 0.0) {
+    // The heat haze over what burns (the kit's haze pass of the halls): the picture is read a pixel or so off, by whole pixels, in slow
+    // waves, where the glow is (the lava, the flames), none elsewhere. The art is moved, never blurred.
+    float heat = clamp(dot(texture2D(tBloom, uv).rgb, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
+    vec2 wave = vec2(sin(px.y * 0.11 + uTime * 3.1), sin(px.x * 0.09 + px.y * 0.05 - uTime * 2.3));
+    px += floor(wave * uHeat * heat + 0.5);
+    uv = (px + 0.5) / uSize;
+  }
   vec4 base = texture2D(tScene, uv);
   // Light is added over a figure too, but gently: its colours stay its own.
   vec3 c = decode(base.rgb) + texture2D(tBloom, uv).rgb * uStrength * mix(0.3, 1.0, base.a);
@@ -171,7 +182,7 @@ export class Post {
     this.upToEighth = pass(UP, { tSrc: { value: this.sixteenth.texture }, uTexel: { value: this.texel.sixteenth }, uWeight: { value: w.wide } }, true);
     this.upToQuarter = pass(UP, { tSrc: { value: this.eighth.texture }, uTexel: { value: this.texel.eighth }, uWeight: { value: w.mid } }, true);
     this.output = new ShaderMaterial({
-      uniforms: { tScene: { value: this.scene.texture }, tBloom: { value: this.quarter.texture }, uSize: { value: this.size }, uStrength: { value: kit.strength } },
+      uniforms: { tScene: { value: this.scene.texture }, tBloom: { value: this.quarter.texture }, uSize: { value: this.size }, uStrength: { value: kit.strength }, uHeat: { value: 0 }, uTime: { value: 0 } },
       vertexShader: VERTEX, fragmentShader: OUTPUT, depthTest: false, depthWrite: false,
     });
     const geometry = new BufferGeometry();
@@ -215,8 +226,14 @@ export class Post {
     renderer.render(this.screen, this.camera);
   }
 
-  /** The glow and the canvas: five small passes and the one over the whole frame. */
-  composite(renderer: WebGLRenderer): void {
+  /** The heat haze of the level, in pixels (0 for none): the output pass moves the picture this far where the glow is. */
+  setHeat(pixels: number): void {
+    this.output.uniforms.uHeat!.value = pixels;
+  }
+
+  /** The glow and the canvas: five small passes and the one over the whole frame. `seconds`: the clock of the heat haze. */
+  composite(renderer: WebGLRenderer, seconds = 0): void {
+    this.output.uniforms.uTime!.value = seconds;
     const clear = renderer.autoClear;
     renderer.autoClear = false;
     const tone = renderer.toneMapping;

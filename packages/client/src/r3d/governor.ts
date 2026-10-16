@@ -18,13 +18,15 @@ export interface Tier {
   bloom: boolean;
   /** A faint reflection of the walls and what glows above them in the water (mirror.ts). */
   mirror: boolean;
+  /** The halls' haze: a low red mist in the shaders and, with the bloom's pass, a heat shimmer over what burns. */
+  haze: boolean;
 }
 
 export const TIERS: readonly Tier[] = [
-  { name: 'high', shadowLights: 2, dpr: 2, particles: true, bloom: true, mirror: true },
-  { name: 'mid', shadowLights: 1, dpr: 2, particles: true, bloom: true, mirror: false },
-  { name: 'low', shadowLights: 0, dpr: 1.5, particles: false, bloom: false, mirror: false },
-  { name: 'min', shadowLights: 0, dpr: 1, particles: false, bloom: false, mirror: false },
+  { name: 'high', shadowLights: 2, dpr: 2, particles: true, bloom: true, mirror: true, haze: true },
+  { name: 'mid', shadowLights: 1, dpr: 2, particles: true, bloom: true, mirror: false, haze: true },
+  { name: 'low', shadowLights: 0, dpr: 1.5, particles: false, bloom: false, mirror: false, haze: false },
+  { name: 'min', shadowLights: 0, dpr: 1, particles: false, bloom: false, mirror: false, haze: false },
 ];
 
 /** From this tier down, a 120 Hz screen held at a playable 60 is good enough (it is not stepped further down for the 120). */

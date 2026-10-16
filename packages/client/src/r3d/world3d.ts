@@ -30,7 +30,7 @@ import { ATLAS_H, ATLAS_W, Atlas } from './atlas';
 import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrain, loadKit, loadRegion, propCutout } from './assets3d';
 import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
-import { type Kit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
+import { type Kit, type MistKit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
 import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
 import type { Tier } from './governor';
@@ -117,6 +117,8 @@ const SCONCE_REACH = 14;
  * With the bloom on, what glows is brighter than 1 in the frame before the tone map takes it down (the way light is, and the way the
  * designer's frames were made), so the bloom has it to take: by this much for what is lit by its glow map, and for lava.
  */
+/** How far the heat haze of the halls moves the picture where it burns, in device pixels (the kit says half a pixel; whole pixels are moved). */
+const HEAT_PIXELS = 1.5;
 /** What a mirror is given for a level whose water shows no reflection. */
 const NO_KINDS = new Uint8Array(LENGTH);
 const GLOW_GAIN = { sprites: 1.5, terrain: 1.4, lava: 1.6, grass: 1.15 };
@@ -231,6 +233,8 @@ export class World3D {
   private terrainMaterial: MeshStandardMaterial | null = null;
   /** The glow of the water as the kit has it (lava glows; plain water shines a little), and whether it is lava. */
   private waterGlow = 1;
+  private mistKit: MistKit | null = null;
+  private halls = false;
   /** The water of this region reflects (not lava). */
   private reflective = false;
   private lava = false;
@@ -465,6 +469,7 @@ export class World3D {
     if (on && !this.post && !this.postFailed && canPost(this.renderer)) {
       this.post = new Post(this.kit.bloom);
       this.post.resize(this.width, this.height);
+      this.applyHaze();
     } else if (!on && this.post) {
       this.post.dispose();
       this.post = null;
@@ -472,6 +477,7 @@ export class World3D {
     // The stand-in for the bloom (a soft glow over the shining tiles) is drawn only where there is no real one.
     this.effects.setBloom(this.post !== null);
     this.applyGlowGain();
+    this.applyHaze();
     this.setMirror(on && this.tier.mirror && this.post !== null && this.ortho !== null);
   }
 
@@ -492,6 +498,22 @@ export class World3D {
   private configureMirror(): void {
     // (Lava reflects nothing: its level has a mirror with no water to show.)
     if (this.mirror && this.geom) this.mirror.configure(this.reflective ? this.geom.kinds : NO_KINDS, materialOf(this.kit, this.region, 'water').height);
+  }
+
+  /**
+   * The demon halls' haze (the kit: its fog.mist, a low red layer, and the `haze` particle, a heat distortion over lava), at the tiers that
+   * have it: the mist is a few lines in the terrain's and sprites' shaders (the uniforms of the fog), the shimmer a line in the bloom's
+   * output pass. Without the layer the mist is the older big soft wisps, where there are particles at all.
+   */
+  private applyHaze(): void {
+    const on = this.tier.haze && this.halls && this.mistKit !== null;
+    const mist = this.mistKit;
+    if (on && mist) {
+      this.air.uMist.value.set(mist.density, mist.height);
+      this.air.uMistColor.value.setHex(hex(mist.color));
+    } else this.air.uMist.value.x = 0;
+    this.effects.setMist(on ? null : mist);
+    this.post?.setHeat(on ? HEAT_PIXELS : 0);
   }
 
   /** What glows is brightened for the bloom (GLOW_GAIN), or put back as the kit has it. */
@@ -580,7 +602,9 @@ export class World3D {
     this.accentBase = a.accent ? a.accent.intensity * 2.2 : 0;
     this.bossName = a.boss;
     this.effects.configure(this.kit, a, this.geom, region, this.tier);
-    this.effects.setMist(a.fog.mist);
+    this.mistKit = a.fog.mist;
+    this.halls = region === 4;
+    this.applyHaze();
     this.bossSeen = false;
     this.heroCell = -1;
     this.waterScroll = a.region.water.scroll;
@@ -1100,7 +1124,7 @@ export class World3D {
         } else this.mirrorUniforms.uMirrorOn.value = 0;
       }
       post.renderScene(this.renderer, this.scene, cam);
-      post.composite(this.renderer);
+      post.composite(this.renderer, f.now / 1000);
     } else this.renderer.render(this.scene, cam);
     this.perf.renderMs = performance.now() - r0;
     this.measureEnd();
