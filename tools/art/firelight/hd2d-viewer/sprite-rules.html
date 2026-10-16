@@ -1,0 +1,57 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sprite rules</title>
+<style>
+@font-face { font-family: G11; src: url(fonts/Galmuri11.woff2); } @font-face { font-family: G9; src: url(fonts/Galmuri9.woff2); }
+:root { --void:#0b0b09; --s9:#1f211c; --s8:#282a24; --s3:#7a8173; --ink:#e8e2c8; --mut:#b0b5a3; --light:#ffeba4; --gold:#ffcc66; --flame:#ff9a3a; --litdark:#4a3424; }
+* { box-sizing: border-box; } html, body { margin: 0; background: var(--void); color: var(--ink); font: 11px/1.45 G11, monospace; -webkit-font-smoothing: none; }
+img { image-rendering: pixelated; display: block; width: 100%; border: 2px solid var(--litdark); }
+.page { padding: 16px; display: grid; gap: 10px; } .page > * { min-width: 0; }
+h1 { font: 22px/1 G11; color: var(--light); margin: 0; text-shadow: 2px 2px 0 #1a0a06; } h2 { font: 11px/1 G11; color: var(--gold); margin: 0 0 6px; }
+.top { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; border-bottom: 2px solid var(--litdark); padding-bottom: 8px; } .sub { color: var(--mut); }
+.panel { background: var(--s9); border: 2px solid var(--s8); border-bottom-color: var(--litdark); padding: 8px 10px; }
+.cap { color: var(--mut); font: 9px/1.3 G9; margin-top: 3px; } b { color: var(--light); font-weight: normal; }
+ul { margin: 0; padding-left: 14px; } li { margin: 2px 0; } li::marker { color: var(--flame); }
+.g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.desk .g3 img { aspect-ratio: 2 / 1; object-fit: cover; } .g5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.desk .main { display: grid; grid-template-columns: 1fr 430px; gap: 10px; }
+.phone .main { display: grid; gap: 10px; } .phone .g3 { grid-template-columns: 1fr; } .phone .g5 { grid-template-columns: repeat(3, 1fr); }
+svg { display: block; width: 100%; height: auto; }
+</style></head><body><div id="app"></div><script type="module">
+const L = new URLSearchParams(location.search).get('lang') || 'en'; const PH = innerWidth < 600; document.body.className = PH ? 'phone' : 'desk';
+const T = { en: {
+  h: 'Sprites in the HD-2D world', sub: 'characters, pets, items: flat PD 1.9 sprites · hd2d-kit.json → sprites',
+  c: ['Before: leaned with the floor, squashed, hot from the hero light', 'Leaned 20° and stretched, no rim', 'All rules: rim of the torch, blob slips away from it'],
+  r1: 'Stand-up', r1t: ['An upright quad, feet at the bottom middle of the cell, <b>leaned back 20°</b> toward the 70° camera; no yaw, ever.', 'Drawn <b>1 / cos(70° − 20°) = 1.56</b> times taller, so on screen it keeps the proportions of its art.', 'Nearest filter, alpha test 0.5, 1 art pixel = 1/16 of a cell; walls in front hide it by depth.'],
+  r2: 'Shadow', r2t: ['A soft <b>blob</b> under the feet: 0.9 of the sprite width, squashed to 0.42, black at 55 %.', 'It slips <b>0.08 cell away</b> from the strongest light, so the figure stands on the floor, not on a sticker.', 'Flyers (bat, eye, firefly, ember spirit) hover 0.35 and bob 1.2 Hz; their blob is 0.7 wide and fades to 55 %.'],
+  r3: 'Rim light', r3t: ['<b>One art pixel</b> on the silhouette side that faces the strongest light within its distance (torch, lava, fungi, boss accent).', 'Colour = that light, strength = 0.3 × intensity × (1 − d / distance)² / d, at most 0.6; added on top, never on the hero’s own light.', 'Snapped to 8 directions: a pixel rim, not a gradient.'],
+  r4: 'Region tint', r4t: ['Lit like the floor (Lambert): the region’s ambient and torches colour it, so a hero is green-grey in the sewers and red in the halls.', 'Never darker than its <b>self light 0.14</b> (emissive = its own colours), so a figure in shadow still reads.', 'Effects and looks from the shop are tinted the same way; only emissive parts (legendary glow, ember spirit) ignore it.'],
+  tint: 'The same hero in the five regions', frames: 'Close frames: sewers, caves, demon halls' },
+ ru: {
+  h: 'Спрайты в мире HD-2D', sub: 'персонажи, питомцы, предметы: плоские спрайты PD 1.9 · hd2d-kit.json → sprites',
+  c: ['До: лежит вдоль пола, сплющен, пересвечен светом героя', 'Наклон 20° и растяжка, без контура', 'Все правила: контур от факела, тень отходит от него'],
+  r1: 'Как стоит', r1t: ['Вертикальный квад, ноги в нижней середине клетки, <b>откинут на 20°</b> к камере 70°; поворота по оси нет никогда.', 'Растянут в <b>1 / cos(70° − 20°) = 1,56</b> раза по высоте: на экране сохраняет пропорции рисунка.', 'Фильтр nearest, alpha test 0,5, 1 пиксель арта = 1/16 клетки; стена впереди закрывает его по глубине.'],
+  r2: 'Тень', r2t: ['Мягкое <b>пятно</b> под ногами: 0,9 ширины спрайта, сжато до 0,42, чёрное на 55 %.', 'Сдвинуто на <b>0,08 клетки от</b> самого сильного света — фигура стоит на полу, а не на наклейке.', 'Летуны (летучая мышь, глаз, светлячок, огонёк) парят на 0,35 и качаются 1,2 Гц; пятно 0,7 ширины и бледнеет до 55 %.'],
+  r3: 'Контурный свет', r3t: ['<b>Один пиксель арта</b> на стороне силуэта, обращённой к самому сильному свету в его радиусе (факел, лава, грибы, акцент босса).', 'Цвет — цвет этого света, сила 0,3 × яркость × (1 − d / радиус)² / d, не больше 0,6; прибавляется сверху, от собственного света героя — нет.', 'Направление округляется до 8 сторон: пиксельный кант, не градиент.'],
+  r4: 'Подкраска регионом', r4t: ['Освещён как пол (Ламберт): окружающий свет и факелы региона красят его — в канализации герой серо-зелёный, в залах красный.', 'Не темнее <b>собственного света 0,14</b> (emissive = его же цвета): фигура в тени всё равно читается.', 'Облики и эффекты из магазина подкрашиваются так же; не подкрашиваются только светящиеся части (свечение легендарных обликов, огонёк).'],
+  tint: 'Один герой в пяти регионах', frames: 'Крупные кадры: канализация, пещеры, демонические залы' } }[L];
+const sec = (h, list) => `<div class="panel"><h2>${h}</h2><ul>${list.map((x) => `<li>${x}</li>`).join('')}</ul></div>`;
+const svg = `<svg viewBox="0 0 400 150"><rect width="400" height="150" fill="#14150f"/>
+ <line x1="20" y1="120" x2="380" y2="120" stroke="#74583c" stroke-width="2"/>
+ <line x1="200" y1="120" x2="${200 + Math.sin(20 * Math.PI / 180) * -95}" y2="${120 - Math.cos(20 * Math.PI / 180) * 95}" stroke="#ffcc66" stroke-width="5"/>
+ <ellipse cx="204" cy="122" rx="26" ry="6" fill="#000" opacity=".6"/>
+ <line x1="200" y1="120" x2="200" y2="20" stroke="#4a4e45" stroke-dasharray="3 3"/>
+ <path d="M200 60 A60 60 0 0 0 ${200 + Math.sin(-20 * Math.PI / 180) * 60} ${120 - Math.cos(20 * Math.PI / 180) * 60}" fill="none" stroke="#ff9a3a"/>
+ <text x="150" y="58" fill="#ff9a3a" font-family="G9" font-size="10">20°</text>
+ <line x1="360" y1="${120 - 120 * Math.tan(70 * Math.PI / 180) * 0.25}" x2="240" y2="120" stroke="#7a8173" stroke-dasharray="4 3"/>
+ <rect x="350" y="${120 - 120 * Math.tan(70 * Math.PI / 180) * 0.25 - 12}" width="26" height="16" fill="#3b3e36"/><text x="300" y="20" fill="#b0b5a3" font-family="G9" font-size="10">${L === 'ru' ? 'камера 70°' : 'camera 70°'}</text>
+ <circle cx="80" cy="40" r="6" fill="#ff9448"/><line x1="86" y1="44" x2="168" y2="70" stroke="#ff9448" stroke-dasharray="2 3"/><text x="40" y="24" fill="#ff9448" font-family="G9" font-size="10">${L === 'ru' ? 'факел → контур' : 'torch → rim'}</text>
+ <text x="214" y="140" fill="#b0b5a3" font-family="G9" font-size="10">${L === 'ru' ? 'тень 0,9 × 0,42' : 'blob 0.9 × 0.42'}</text></svg>`;
+const cmp = ['sewers-close1pitch70cells4rules0-640x400.png', 'sewers-close1pitch70cells4norim1-640x400.png', 'sewers-close1pitch70cells4-640x400.png'];
+const tint = ['sewers', 'prison', 'caves', 'city', 'halls'].map((n) => `sprite-frames/${n}-pitch70cells3dz2-400x400.png`);
+const names = L === 'ru' ? ['Канализация', 'Тюрьма', 'Пещеры', 'Город', 'Залы'] : ['Sewers', 'Prison', 'Caves', 'City', 'Halls'];
+document.getElementById('app').innerHTML = `<div class="page"><div class="top"><h1>${T.h}</h1><span class="sub">${T.sub}</span></div>
+ <div class="g3">${cmp.map((f, i) => `<div><img src="sprite-frames/${f}"><div class="cap">${T.c[i]}</div></div>`).join('')}</div>
+ <div class="main"><div style="display:grid;gap:10px;align-content:start"><div class="panel"><h2>${T.tint}</h2><div class="g5">${tint.map((f, i) => `<div><img src="${f}"><div class="cap">${names[i]}</div></div>`).join('')}</div></div>
+   <div style="display:grid;grid-template-columns:${PH ? '1fr' : '1fr 1fr 1fr'};gap:10px">${sec(T.r1, T.r1t)}${sec(T.r2, T.r2t)}${sec(T.r4, T.r4t)}</div></div>
+  <div style="display:grid;gap:10px;align-content:start"><div class="panel">${svg}</div>${sec(T.r3, T.r3t)}</div></div></div>`;
+await document.fonts.ready; await Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((ok) => (i.onload = i.onerror = ok)))); window.__ready = true;
+</script></body></html>

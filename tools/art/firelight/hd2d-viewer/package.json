@@ -3,7 +3,7 @@
   "private": true,
   "description": "Firelight HD-2D kit viewer: sample rooms lit from hd2d-kit.json, mood frames and lighting sheets",
   "scripts": {
-    "link": "ln -sfn ../../../../packages/client/public/assets assets && ln -sfn ../../../../packages/client/public/assets/hd2d hd2d && ln -sfn ../../../../packages/client/public/fonts fonts && ln -sfn ../../../../docs/design/previews/firelight/world/frames frames && ln -sfn ../../../../docs/design/previews/firelight/world/closeups close",
+    "link": "ln -sfn ../../../../packages/client/public/assets assets && ln -sfn ../../../../packages/client/public/assets/hd2d hd2d && ln -sfn ../../../../packages/client/public/fonts fonts && ln -sfn ../../../../docs/design/previews/firelight/world/frames frames && ln -sfn ../../../../docs/design/previews/firelight/world/closeups close && ln -sfn ../../../../docs/design/previews/firelight/sprites/frames sprite-frames",
     "serve": "python3 -m http.server 8765 --bind 127.0.0.1"
   },
   "dependencies": {

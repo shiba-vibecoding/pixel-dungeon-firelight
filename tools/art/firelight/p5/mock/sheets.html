@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pixel-Mart art sheets</title>
+<style>
+@font-face { font-family: G11; src: url(/fonts/Galmuri11.woff2); } @font-face { font-family: G9; src: url(/fonts/Galmuri9.woff2); }
+* { box-sizing: border-box; } html, body { margin: 0; background: #0b0b09; color: #e8e2c8; font: 15px/1.35 G9, monospace; -webkit-font-smoothing: none; }
+canvas { image-rendering: pixelated; display: block; }
+#app { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.sh-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-bottom: 2px solid #4a3424; padding-bottom: 8px; }
+.sh-head h1 { margin: 0; font: 28px/1 G11; color: #ffeba4; text-shadow: 2px 2px 0 #1a0a06; } .sh-head span { color: #b0b5a3; }
+.sh-page { display: flex; flex-direction: column; gap: 10px; }
+.sh-sec { background: #1f211c; border: 2px solid #282a24; border-bottom-color: #4a3424; padding: 8px 10px; min-width: 0; }
+.sh-sec h3 { margin: 0 0 8px; font: 18px/1.1 G11; color: #ffcc66; font-weight: 400; } .sh-sec h3 span { margin-left: 10px; font: 13px G9; color: #b0b5a3; }
+.sh-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.sh-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; background: #282a24; min-width: 0; }
+.sh-cell b { font: 13px/1.15 G9; font-weight: 400; color: #e8e2c8; max-width: 110px; text-align: center; } .sh-cell span { font: 12px G9; color: #ffcc66; }
+.sh-wide { overflow: hidden; background: #14150f; padding: 4px; } .sh-wide canvas { max-width: 100%; height: auto !important; }
+.sh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.sh-card { display: flex; flex-direction: column; gap: 4px; padding: 6px; background: #282a24; min-width: 0; } .sh-card canvas { max-width: 100%; height: auto !important; }
+.sh-card b { font: 16px G11; font-weight: 400; color: #ffeba4; } .sh-card span { font: 12px G9; color: #b0b5a3; }
+.sh-strip { display: flex; gap: 6px; align-items: flex-end; flex-wrap: wrap; }
+.sh-title { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 6px 0 2px; border: 8px solid transparent; border-image-slice: 4 fill; border-image-width: 8px; image-rendering: pixelated; font: 13px G9; white-space: nowrap; }
+.sh-name { font: 22px G11; padding: 4px 10px; background: #14150f; text-shadow: 0 2px 0 #0b0b09; }
+@media (max-width: 600px) { .sh-grid { grid-template-columns: 1fr; } }
+</style></head><body><div id="app"></div><script type="module" src="/sheets.js"></script></body></html>

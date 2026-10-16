@@ -1,0 +1,2779 @@
+{
+ "version": 1,
+ "currency": "stars",
+ "priceBands": {
+  "small": [
+   25,
+   50
+  ],
+  "looks": [
+   100,
+   250
+  ],
+  "legendary": [
+   500,
+   null
+  ]
+ },
+ "categories": [
+  {
+   "id": "looks",
+   "kinds": [
+    "skin"
+   ],
+   "en": "Looks",
+   "ru": "Облики",
+   "icon": "mart/fl/looks/icons/warrior-ember.png"
+  },
+  {
+   "id": "fires",
+   "kinds": [
+    "fire"
+   ],
+   "en": "Campfires",
+   "ru": "Костры",
+   "icon": "mart/fl/fires/icons/blue.png",
+   "signature": true
+  },
+  {
+   "id": "hats",
+   "kinds": [
+    "hat"
+   ],
+   "en": "Hats",
+   "ru": "Шапки",
+   "icon": "mart/fl/hats/icons/tricorn.png"
+  },
+  {
+   "id": "pets",
+   "kinds": [
+    "pet"
+   ],
+   "en": "Pets",
+   "ru": "Питомцы",
+   "icon": "mart/fl/pets/icons/ember.png"
+  },
+  {
+   "id": "effects",
+   "kinds": [
+    "trail",
+    "kill",
+    "death",
+    "digits"
+   ],
+   "en": "Effects",
+   "ru": "Эффекты",
+   "icon": "mart/fl/fx/icons/kill-stars.png"
+  },
+  {
+   "id": "quips",
+   "kinds": [
+    "quips"
+   ],
+   "en": "Quips",
+   "ru": "Реплики",
+   "icon": "mart/fl/quips/pirate.png"
+  },
+  {
+   "id": "camp",
+   "kinds": [
+    "decor"
+   ],
+   "en": "Camp",
+   "ru": "Привал",
+   "icon": "mart/fl/decor/icons/tent.png"
+  },
+  {
+   "id": "profile",
+   "kinds": [
+    "frame",
+    "title",
+    "name"
+   ],
+   "en": "Profile",
+   "ru": "Профиль",
+   "icon": "mart/fl/profile/frame-ember.png"
+  },
+  {
+   "id": "photo",
+   "kinds": [
+    "photoframe",
+    "stickers"
+   ],
+   "en": "Photo",
+   "ru": "Фото",
+   "icon": "mart/fl/photo/sticker-fire.png"
+  }
+ ],
+ "items": [
+  {
+   "sku": "skin.warrior.moss",
+   "kind": "skin",
+   "heroClass": "warrior",
+   "skin": "moss",
+   "stars": 100,
+   "name": {
+    "en": "Moss",
+    "ru": "Моховой"
+   },
+   "sheet": "mart/fl/looks/warrior-moss.png",
+   "icon": "mart/fl/looks/icons/warrior-moss.png"
+  },
+  {
+   "sku": "skin.warrior.frost",
+   "kind": "skin",
+   "heroClass": "warrior",
+   "skin": "frost",
+   "stars": 150,
+   "name": {
+    "en": "Frost",
+    "ru": "Морозный"
+   },
+   "sheet": "mart/fl/looks/warrior-frost.png",
+   "icon": "mart/fl/looks/icons/warrior-frost.png"
+  },
+  {
+   "sku": "skin.warrior.ember",
+   "kind": "skin",
+   "heroClass": "warrior",
+   "skin": "ember",
+   "stars": 150,
+   "name": {
+    "en": "Ember",
+    "ru": "Угольный"
+   },
+   "sheet": "mart/fl/looks/warrior-ember.png",
+   "icon": "mart/fl/looks/icons/warrior-ember.png"
+  },
+  {
+   "sku": "skin.warrior.dusk",
+   "kind": "skin",
+   "heroClass": "warrior",
+   "skin": "dusk",
+   "stars": 200,
+   "name": {
+    "en": "Dusk",
+    "ru": "Сумеречный"
+   },
+   "sheet": "mart/fl/looks/warrior-dusk.png",
+   "icon": "mart/fl/looks/icons/warrior-dusk.png"
+  },
+  {
+   "sku": "skin.warrior.brass",
+   "kind": "skin",
+   "heroClass": "warrior",
+   "skin": "brass",
+   "stars": 250,
+   "name": {
+    "en": "Brass",
+    "ru": "Латунный"
+   },
+   "sheet": "mart/fl/looks/warrior-brass.png",
+   "icon": "mart/fl/looks/icons/warrior-brass.png"
+  },
+  {
+   "sku": "skin.warrior.forgeborn",
+   "kind": "skin",
+   "legendary": true,
+   "heroClass": "warrior",
+   "skin": "forgeborn",
+   "stars": 600,
+   "name": {
+    "en": "Forgeborn",
+    "ru": "Рождённый в горне"
+   },
+   "sheet": "mart/fl/legendary/warrior-forgeborn.png",
+   "glow": "mart/fl/legendary/warrior-forgeborn-glow.png",
+   "aura": {
+    "sheet": "mart/fl/legendary/warrior-forgeborn-aura.png",
+    "frames": 8,
+    "w": 24,
+    "h": 28,
+    "feet": [
+     12,
+     26
+    ],
+    "ms": 120
+   },
+   "glowPulse": {
+    "hz": 1.0,
+    "min": 0.55,
+    "max": 1.0
+   },
+   "icon": "mart/fl/legendary/icons/warrior-forgeborn.png"
+  },
+  {
+   "sku": "skin.mage.moss",
+   "kind": "skin",
+   "heroClass": "mage",
+   "skin": "moss",
+   "stars": 100,
+   "name": {
+    "en": "Moss",
+    "ru": "Моховой"
+   },
+   "sheet": "mart/fl/looks/mage-moss.png",
+   "icon": "mart/fl/looks/icons/mage-moss.png"
+  },
+  {
+   "sku": "skin.mage.frost",
+   "kind": "skin",
+   "heroClass": "mage",
+   "skin": "frost",
+   "stars": 150,
+   "name": {
+    "en": "Frost",
+    "ru": "Морозный"
+   },
+   "sheet": "mart/fl/looks/mage-frost.png",
+   "icon": "mart/fl/looks/icons/mage-frost.png"
+  },
+  {
+   "sku": "skin.mage.ember",
+   "kind": "skin",
+   "heroClass": "mage",
+   "skin": "ember",
+   "stars": 150,
+   "name": {
+    "en": "Ember",
+    "ru": "Угольный"
+   },
+   "sheet": "mart/fl/looks/mage-ember.png",
+   "icon": "mart/fl/looks/icons/mage-ember.png"
+  },
+  {
+   "sku": "skin.mage.dusk",
+   "kind": "skin",
+   "heroClass": "mage",
+   "skin": "dusk",
+   "stars": 200,
+   "name": {
+    "en": "Dusk",
+    "ru": "Сумеречный"
+   },
+   "sheet": "mart/fl/looks/mage-dusk.png",
+   "icon": "mart/fl/looks/icons/mage-dusk.png"
+  },
+  {
+   "sku": "skin.mage.brass",
+   "kind": "skin",
+   "heroClass": "mage",
+   "skin": "brass",
+   "stars": 250,
+   "name": {
+    "en": "Brass",
+    "ru": "Латунный"
+   },
+   "sheet": "mart/fl/looks/mage-brass.png",
+   "icon": "mart/fl/looks/icons/mage-brass.png"
+  },
+  {
+   "sku": "skin.mage.starflame",
+   "kind": "skin",
+   "legendary": true,
+   "heroClass": "mage",
+   "skin": "starflame",
+   "stars": 600,
+   "name": {
+    "en": "Starflame",
+    "ru": "Звёздное пламя"
+   },
+   "sheet": "mart/fl/legendary/mage-starflame.png",
+   "glow": "mart/fl/legendary/mage-starflame-glow.png",
+   "aura": {
+    "sheet": "mart/fl/legendary/mage-starflame-aura.png",
+    "frames": 8,
+    "w": 24,
+    "h": 28,
+    "feet": [
+     12,
+     26
+    ],
+    "ms": 120
+   },
+   "glowPulse": {
+    "hz": 1.0,
+    "min": 0.55,
+    "max": 1.0
+   },
+   "icon": "mart/fl/legendary/icons/mage-starflame.png"
+  },
+  {
+   "sku": "skin.rogue.moss",
+   "kind": "skin",
+   "heroClass": "rogue",
+   "skin": "moss",
+   "stars": 100,
+   "name": {
+    "en": "Moss",
+    "ru": "Моховой"
+   },
+   "sheet": "mart/fl/looks/rogue-moss.png",
+   "icon": "mart/fl/looks/icons/rogue-moss.png"
+  },
+  {
+   "sku": "skin.rogue.frost",
+   "kind": "skin",
+   "heroClass": "rogue",
+   "skin": "frost",
+   "stars": 150,
+   "name": {
+    "en": "Frost",
+    "ru": "Морозный"
+   },
+   "sheet": "mart/fl/looks/rogue-frost.png",
+   "icon": "mart/fl/looks/icons/rogue-frost.png"
+  },
+  {
+   "sku": "skin.rogue.ember",
+   "kind": "skin",
+   "heroClass": "rogue",
+   "skin": "ember",
+   "stars": 150,
+   "name": {
+    "en": "Ember",
+    "ru": "Угольный"
+   },
+   "sheet": "mart/fl/looks/rogue-ember.png",
+   "icon": "mart/fl/looks/icons/rogue-ember.png"
+  },
+  {
+   "sku": "skin.rogue.dusk",
+   "kind": "skin",
+   "heroClass": "rogue",
+   "skin": "dusk",
+   "stars": 200,
+   "name": {
+    "en": "Dusk",
+    "ru": "Сумеречный"
+   },
+   "sheet": "mart/fl/looks/rogue-dusk.png",
+   "icon": "mart/fl/looks/icons/rogue-dusk.png"
+  },
+  {
+   "sku": "skin.rogue.brass",
+   "kind": "skin",
+   "heroClass": "rogue",
+   "skin": "brass",
+   "stars": 250,
+   "name": {
+    "en": "Brass",
+    "ru": "Латунный"
+   },
+   "sheet": "mart/fl/looks/rogue-brass.png",
+   "icon": "mart/fl/looks/icons/rogue-brass.png"
+  },
+  {
+   "sku": "skin.rogue.smoulder",
+   "kind": "skin",
+   "legendary": true,
+   "heroClass": "rogue",
+   "skin": "smoulder",
+   "stars": 500,
+   "name": {
+    "en": "Smouldering Shade",
+    "ru": "Тлеющая тень"
+   },
+   "sheet": "mart/fl/legendary/rogue-smoulder.png",
+   "glow": "mart/fl/legendary/rogue-smoulder-glow.png",
+   "aura": {
+    "sheet": "mart/fl/legendary/rogue-smoulder-aura.png",
+    "frames": 8,
+    "w": 24,
+    "h": 28,
+    "feet": [
+     12,
+     26
+    ],
+    "ms": 120
+   },
+   "glowPulse": {
+    "hz": 1.0,
+    "min": 0.55,
+    "max": 1.0
+   },
+   "icon": "mart/fl/legendary/icons/rogue-smoulder.png"
+  },
+  {
+   "sku": "skin.ranger.moss",
+   "kind": "skin",
+   "heroClass": "ranger",
+   "skin": "moss",
+   "stars": 100,
+   "name": {
+    "en": "Moss",
+    "ru": "Моховой"
+   },
+   "sheet": "mart/fl/looks/ranger-moss.png",
+   "icon": "mart/fl/looks/icons/ranger-moss.png"
+  },
+  {
+   "sku": "skin.ranger.frost",
+   "kind": "skin",
+   "heroClass": "ranger",
+   "skin": "frost",
+   "stars": 150,
+   "name": {
+    "en": "Frost",
+    "ru": "Морозный"
+   },
+   "sheet": "mart/fl/looks/ranger-frost.png",
+   "icon": "mart/fl/looks/icons/ranger-frost.png"
+  },
+  {
+   "sku": "skin.ranger.ember",
+   "kind": "skin",
+   "heroClass": "ranger",
+   "skin": "ember",
+   "stars": 150,
+   "name": {
+    "en": "Ember",
+    "ru": "Угольный"
+   },
+   "sheet": "mart/fl/looks/ranger-ember.png",
+   "icon": "mart/fl/looks/icons/ranger-ember.png"
+  },
+  {
+   "sku": "skin.ranger.dusk",
+   "kind": "skin",
+   "heroClass": "ranger",
+   "skin": "dusk",
+   "stars": 200,
+   "name": {
+    "en": "Dusk",
+    "ru": "Сумеречный"
+   },
+   "sheet": "mart/fl/looks/ranger-dusk.png",
+   "icon": "mart/fl/looks/icons/ranger-dusk.png"
+  },
+  {
+   "sku": "skin.ranger.brass",
+   "kind": "skin",
+   "heroClass": "ranger",
+   "skin": "brass",
+   "stars": 250,
+   "name": {
+    "en": "Brass",
+    "ru": "Латунный"
+   },
+   "sheet": "mart/fl/looks/ranger-brass.png",
+   "icon": "mart/fl/looks/icons/ranger-brass.png"
+  },
+  {
+   "sku": "skin.ranger.wildfire",
+   "kind": "skin",
+   "legendary": true,
+   "heroClass": "ranger",
+   "skin": "wildfire",
+   "stars": 500,
+   "name": {
+    "en": "Wildfire",
+    "ru": "Лесной пожар"
+   },
+   "sheet": "mart/fl/legendary/ranger-wildfire.png",
+   "glow": "mart/fl/legendary/ranger-wildfire-glow.png",
+   "aura": {
+    "sheet": "mart/fl/legendary/ranger-wildfire-aura.png",
+    "frames": 8,
+    "w": 24,
+    "h": 28,
+    "feet": [
+     12,
+     26
+    ],
+    "ms": 120
+   },
+   "glowPulse": {
+    "hz": 1.0,
+    "min": 0.55,
+    "max": 1.0
+   },
+   "icon": "mart/fl/legendary/icons/ranger-wildfire.png"
+  },
+  {
+   "sku": "fire.classic",
+   "kind": "fire",
+   "fire": "classic",
+   "stars": 0,
+   "name": {
+    "en": "Classic",
+    "ru": "Классический"
+   },
+   "flame": {
+    "sheet": "mart/fl/fires/classic-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 100
+   },
+   "logs": "mart/fl/fires/classic-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "mart/fl/fires/classic-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3
+   },
+   "light": "#ff9a3a",
+   "icon": "mart/fl/fires/icons/classic.png",
+   "default": true
+  },
+  {
+   "sku": "fire.blue",
+   "kind": "fire",
+   "fire": "blue",
+   "stars": 50,
+   "name": {
+    "en": "Blue Flame",
+    "ru": "Синее пламя"
+   },
+   "flame": {
+    "sheet": "mart/fl/fires/blue-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 100
+   },
+   "logs": "mart/fl/fires/blue-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "mart/fl/fires/blue-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3
+   },
+   "light": "#4aa8ff",
+   "icon": "mart/fl/fires/icons/blue.png"
+  },
+  {
+   "sku": "fire.green",
+   "kind": "fire",
+   "fire": "green",
+   "stars": 50,
+   "name": {
+    "en": "Witch Green",
+    "ru": "Ведьмин зелёный"
+   },
+   "flame": {
+    "sheet": "mart/fl/fires/green-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 100
+   },
+   "logs": "mart/fl/fires/green-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "mart/fl/fires/green-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3
+   },
+   "light": "#72e04a",
+   "icon": "mart/fl/fires/icons/green.png"
+  },
+  {
+   "sku": "fire.ghost",
+   "kind": "fire",
+   "fire": "ghost",
+   "stars": 100,
+   "name": {
+    "en": "Ghost Fire",
+    "ru": "Призрачный огонь"
+   },
+   "flame": {
+    "sheet": "mart/fl/fires/ghost-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 100
+   },
+   "logs": "mart/fl/fires/ghost-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "mart/fl/fires/ghost-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3
+   },
+   "light": "#92e0dc",
+   "icon": "mart/fl/fires/icons/ghost.png"
+  },
+  {
+   "sku": "fire.rainbow",
+   "kind": "fire",
+   "fire": "rainbow",
+   "stars": 150,
+   "name": {
+    "en": "Rainbow",
+    "ru": "Радужный"
+   },
+   "flame": {
+    "sheet": "mart/fl/fires/rainbow-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 100
+   },
+   "logs": "mart/fl/fires/rainbow-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "mart/fl/fires/rainbow-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3
+   },
+   "light": "#ff6ad8",
+   "icon": "mart/fl/fires/icons/rainbow.png"
+  },
+  {
+   "sku": "fire.cursed",
+   "kind": "fire",
+   "fire": "cursed",
+   "stars": 100,
+   "name": {
+    "en": "Cursed Purple",
+    "ru": "Проклятый лиловый"
+   },
+   "flame": {
+    "sheet": "mart/fl/fires/cursed-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 100
+   },
+   "logs": "mart/fl/fires/cursed-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "mart/fl/fires/cursed-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3
+   },
+   "light": "#a44aff",
+   "icon": "mart/fl/fires/icons/cursed.png"
+  },
+  {
+   "sku": "fire.golden",
+   "kind": "fire",
+   "fire": "golden",
+   "stars": 150,
+   "name": {
+    "en": "Golden",
+    "ru": "Золотой"
+   },
+   "flame": {
+    "sheet": "mart/fl/fires/golden-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 100
+   },
+   "logs": "mart/fl/fires/golden-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "mart/fl/fires/golden-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3
+   },
+   "light": "#ffd040",
+   "icon": "mart/fl/fires/icons/golden.png"
+  },
+  {
+   "sku": "fire.ice",
+   "kind": "fire",
+   "fire": "ice",
+   "stars": 100,
+   "name": {
+    "en": "Ice Flame",
+    "ru": "Ледяное пламя"
+   },
+   "flame": {
+    "sheet": "mart/fl/fires/ice-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 100
+   },
+   "logs": "mart/fl/fires/ice-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "mart/fl/fires/ice-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3
+   },
+   "light": "#ace8ff",
+   "icon": "mart/fl/fires/icons/ice.png"
+  },
+  {
+   "sku": "hat.straw",
+   "kind": "hat",
+   "hat": "straw",
+   "stars": 50,
+   "name": {
+    "en": "Straw Hat",
+    "ru": "Соломенная шляпа"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-straw.png",
+    "mage": "mart/fl/hats/mage-straw.png",
+    "rogue": "mart/fl/hats/rogue-straw.png",
+    "ranger": "mart/fl/hats/ranger-straw.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/straw.png"
+  },
+  {
+   "sku": "hat.tricorn",
+   "kind": "hat",
+   "hat": "tricorn",
+   "stars": 50,
+   "name": {
+    "en": "Pirate Tricorn",
+    "ru": "Треуголка"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-tricorn.png",
+    "mage": "mart/fl/hats/mage-tricorn.png",
+    "rogue": "mart/fl/hats/rogue-tricorn.png",
+    "ranger": "mart/fl/hats/ranger-tricorn.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/tricorn.png"
+  },
+  {
+   "sku": "hat.wizard",
+   "kind": "hat",
+   "hat": "wizard",
+   "stars": 50,
+   "name": {
+    "en": "Stargazer Cap",
+    "ru": "Колпак звездочёта"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-wizard.png",
+    "mage": "mart/fl/hats/mage-wizard.png",
+    "rogue": "mart/fl/hats/rogue-wizard.png",
+    "ranger": "mart/fl/hats/ranger-wizard.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/wizard.png"
+  },
+  {
+   "sku": "hat.crown",
+   "kind": "hat",
+   "hat": "crown",
+   "stars": 100,
+   "name": {
+    "en": "Crown of Embers",
+    "ru": "Корона углей"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-crown.png",
+    "mage": "mart/fl/hats/mage-crown.png",
+    "rogue": "mart/fl/hats/rogue-crown.png",
+    "ranger": "mart/fl/hats/ranger-crown.png"
+   },
+   "glow": {
+    "warrior": "mart/fl/hats/warrior-crown-glow.png",
+    "mage": "mart/fl/hats/mage-crown-glow.png",
+    "rogue": "mart/fl/hats/rogue-crown-glow.png",
+    "ranger": "mart/fl/hats/ranger-crown-glow.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/crown.png"
+  },
+  {
+   "sku": "hat.horns",
+   "kind": "hat",
+   "hat": "horns",
+   "stars": 50,
+   "name": {
+    "en": "Horned Helm",
+    "ru": "Рогатый шлем"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-horns.png",
+    "mage": "mart/fl/hats/mage-horns.png",
+    "rogue": "mart/fl/hats/rogue-horns.png",
+    "ranger": "mart/fl/hats/ranger-horns.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/horns.png"
+  },
+  {
+   "sku": "hat.tophat",
+   "kind": "hat",
+   "hat": "tophat",
+   "stars": 50,
+   "name": {
+    "en": "Top Hat",
+    "ru": "Цилиндр"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-tophat.png",
+    "mage": "mart/fl/hats/mage-tophat.png",
+    "rogue": "mart/fl/hats/rogue-tophat.png",
+    "ranger": "mart/fl/hats/ranger-tophat.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/tophat.png"
+  },
+  {
+   "sku": "hat.wreath",
+   "kind": "hat",
+   "hat": "wreath",
+   "stars": 25,
+   "name": {
+    "en": "Flower Wreath",
+    "ru": "Венок"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-wreath.png",
+    "mage": "mart/fl/hats/mage-wreath.png",
+    "rogue": "mart/fl/hats/rogue-wreath.png",
+    "ranger": "mart/fl/hats/ranger-wreath.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/wreath.png"
+  },
+  {
+   "sku": "hat.bandana",
+   "kind": "hat",
+   "hat": "bandana",
+   "stars": 25,
+   "name": {
+    "en": "Bandana",
+    "ru": "Бандана"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-bandana.png",
+    "mage": "mart/fl/hats/mage-bandana.png",
+    "rogue": "mart/fl/hats/rogue-bandana.png",
+    "ranger": "mart/fl/hats/ranger-bandana.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/bandana.png"
+  },
+  {
+   "sku": "hat.pompom",
+   "kind": "hat",
+   "hat": "pompom",
+   "stars": 25,
+   "name": {
+    "en": "Pompom Hat",
+    "ru": "Шапка с помпоном"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-pompom.png",
+    "mage": "mart/fl/hats/mage-pompom.png",
+    "rogue": "mart/fl/hats/rogue-pompom.png",
+    "ranger": "mart/fl/hats/ranger-pompom.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/pompom.png",
+   "season": "winter"
+  },
+  {
+   "sku": "hat.halo",
+   "kind": "hat",
+   "hat": "halo",
+   "stars": 100,
+   "name": {
+    "en": "Halo",
+    "ru": "Нимб"
+   },
+   "slot": "head",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-halo.png",
+    "mage": "mart/fl/hats/mage-halo.png",
+    "rogue": "mart/fl/hats/rogue-halo.png",
+    "ranger": "mart/fl/hats/ranger-halo.png"
+   },
+   "glow": {
+    "warrior": "mart/fl/hats/warrior-halo-glow.png",
+    "mage": "mart/fl/hats/mage-halo-glow.png",
+    "rogue": "mart/fl/hats/rogue-halo-glow.png",
+    "ranger": "mart/fl/hats/ranger-halo-glow.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/halo.png"
+  },
+  {
+   "sku": "hat.eyepatch",
+   "kind": "hat",
+   "hat": "eyepatch",
+   "stars": 25,
+   "name": {
+    "en": "Eyepatch",
+    "ru": "Повязка на глаз"
+   },
+   "slot": "eye",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-eyepatch.png",
+    "mage": "mart/fl/hats/mage-eyepatch.png",
+    "rogue": "mart/fl/hats/rogue-eyepatch.png",
+    "ranger": "mart/fl/hats/ranger-eyepatch.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/eyepatch.png"
+  },
+  {
+   "sku": "hat.scarf",
+   "kind": "hat",
+   "hat": "scarf",
+   "stars": 25,
+   "name": {
+    "en": "Fire Scarf",
+    "ru": "Огненный шарф"
+   },
+   "slot": "neck",
+   "sheets": {
+    "warrior": "mart/fl/hats/warrior-scarf.png",
+    "mage": "mart/fl/hats/mage-scarf.png",
+    "rogue": "mart/fl/hats/rogue-scarf.png",
+    "ranger": "mart/fl/hats/ranger-scarf.png"
+   },
+   "cell": {
+    "w": 16,
+    "h": 22,
+    "heroAt": [
+     2,
+     7
+    ]
+   },
+   "icon": "mart/fl/hats/icons/scarf.png"
+  },
+  {
+   "sku": "pet.firefly",
+   "kind": "pet",
+   "pet": "firefly",
+   "stars": 50,
+   "name": {
+    "en": "Firefly",
+    "ru": "Светлячок"
+   },
+   "fly": true,
+   "sheet": {
+    "file": "mart/fl/pets/firefly.png",
+    "w": 12,
+    "h": 12,
+    "frames": 8,
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "walk": [
+     4,
+     5,
+     6,
+     7
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "ms": 150
+   },
+   "glow": "mart/fl/pets/firefly-glow.png",
+   "follow": {
+    "behind": 1,
+    "lag_ms": 220
+   },
+   "icon": "mart/fl/pets/icons/firefly.png"
+  },
+  {
+   "sku": "pet.rat",
+   "kind": "pet",
+   "pet": "rat",
+   "stars": 50,
+   "name": {
+    "en": "Little Rat",
+    "ru": "Крысёнок"
+   },
+   "fly": false,
+   "sheet": {
+    "file": "mart/fl/pets/rat.png",
+    "w": 12,
+    "h": 12,
+    "frames": 8,
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "walk": [
+     4,
+     5,
+     6,
+     7
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "ms": 150
+   },
+   "follow": {
+    "behind": 1,
+    "lag_ms": 220
+   },
+   "icon": "mart/fl/pets/icons/rat.png"
+  },
+  {
+   "sku": "pet.slime",
+   "kind": "pet",
+   "pet": "slime",
+   "stars": 50,
+   "name": {
+    "en": "Slime",
+    "ru": "Слизнячок"
+   },
+   "fly": false,
+   "sheet": {
+    "file": "mart/fl/pets/slime.png",
+    "w": 12,
+    "h": 12,
+    "frames": 8,
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "walk": [
+     4,
+     5,
+     6,
+     7
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "ms": 150
+   },
+   "follow": {
+    "behind": 1,
+    "lag_ms": 220
+   },
+   "icon": "mart/fl/pets/icons/slime.png"
+  },
+  {
+   "sku": "pet.bat",
+   "kind": "pet",
+   "pet": "bat",
+   "stars": 100,
+   "name": {
+    "en": "Pocket Bat",
+    "ru": "Карманная мышь"
+   },
+   "fly": true,
+   "sheet": {
+    "file": "mart/fl/pets/bat.png",
+    "w": 12,
+    "h": 12,
+    "frames": 8,
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "walk": [
+     4,
+     5,
+     6,
+     7
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "ms": 150
+   },
+   "follow": {
+    "behind": 1,
+    "lag_ms": 220
+   },
+   "icon": "mart/fl/pets/icons/bat.png"
+  },
+  {
+   "sku": "pet.skull",
+   "kind": "pet",
+   "pet": "skull",
+   "stars": 100,
+   "name": {
+    "en": "Grinning Skull",
+    "ru": "Весёлый череп"
+   },
+   "fly": true,
+   "sheet": {
+    "file": "mart/fl/pets/skull.png",
+    "w": 12,
+    "h": 12,
+    "frames": 8,
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "walk": [
+     4,
+     5,
+     6,
+     7
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "ms": 150
+   },
+   "follow": {
+    "behind": 1,
+    "lag_ms": 220
+   },
+   "icon": "mart/fl/pets/icons/skull.png"
+  },
+  {
+   "sku": "pet.ember",
+   "kind": "pet",
+   "pet": "ember",
+   "stars": 100,
+   "name": {
+    "en": "Ember Spirit",
+    "ru": "Огонёк"
+   },
+   "fly": true,
+   "sheet": {
+    "file": "mart/fl/pets/ember.png",
+    "w": 12,
+    "h": 12,
+    "frames": 8,
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "walk": [
+     4,
+     5,
+     6,
+     7
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "ms": 150
+   },
+   "glow": "mart/fl/pets/ember-glow.png",
+   "follow": {
+    "behind": 1,
+    "lag_ms": 220
+   },
+   "icon": "mart/fl/pets/icons/ember.png"
+  },
+  {
+   "sku": "trail.embers",
+   "kind": "trail",
+   "stars": 25,
+   "name": {
+    "en": "Ember Steps",
+    "ru": "Угольки под ногами"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/trail-embers.png",
+    "w": 8,
+    "h": 8,
+    "frames": 4,
+    "ms": 110,
+    "at": [
+     4,
+     6
+    ]
+   },
+   "icon": "mart/fl/fx/icons/trail-embers.png"
+  },
+  {
+   "sku": "trail.frost",
+   "kind": "trail",
+   "stars": 25,
+   "name": {
+    "en": "Frost Steps",
+    "ru": "Иней"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/trail-frost.png",
+    "w": 8,
+    "h": 8,
+    "frames": 4,
+    "ms": 110,
+    "at": [
+     4,
+     6
+    ]
+   },
+   "icon": "mart/fl/fx/icons/trail-frost.png"
+  },
+  {
+   "sku": "trail.petals",
+   "kind": "trail",
+   "stars": 25,
+   "name": {
+    "en": "Petals",
+    "ru": "Лепестки"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/trail-petals.png",
+    "w": 8,
+    "h": 8,
+    "frames": 4,
+    "ms": 110,
+    "at": [
+     4,
+     6
+    ]
+   },
+   "icon": "mart/fl/fx/icons/trail-petals.png"
+  },
+  {
+   "sku": "trail.gold",
+   "kind": "trail",
+   "stars": 50,
+   "name": {
+    "en": "Gold Dust",
+    "ru": "Золотая пыль"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/trail-gold.png",
+    "w": 8,
+    "h": 8,
+    "frames": 4,
+    "ms": 110,
+    "at": [
+     4,
+     6
+    ]
+   },
+   "icon": "mart/fl/fx/icons/trail-gold.png"
+  },
+  {
+   "sku": "trail.shadow",
+   "kind": "trail",
+   "stars": 50,
+   "name": {
+    "en": "Shadow Steps",
+    "ru": "Теневой след"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/trail-shadow.png",
+    "w": 8,
+    "h": 8,
+    "frames": 4,
+    "ms": 110,
+    "at": [
+     4,
+     6
+    ]
+   },
+   "icon": "mart/fl/fx/icons/trail-shadow.png"
+  },
+  {
+   "sku": "trail.ghost",
+   "kind": "trail",
+   "stars": 50,
+   "name": {
+    "en": "Ghost Prints",
+    "ru": "Призрачные следы"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/trail-ghost.png",
+    "w": 8,
+    "h": 8,
+    "frames": 4,
+    "ms": 110,
+    "at": [
+     4,
+     6
+    ]
+   },
+   "icon": "mart/fl/fx/icons/trail-ghost.png"
+  },
+  {
+   "sku": "kill.ember_burst",
+   "kind": "kill",
+   "stars": 50,
+   "name": {
+    "en": "Ember Burst",
+    "ru": "Взрыв углей"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/kill-ember_burst.png",
+    "w": 24,
+    "h": 24,
+    "frames": 6,
+    "ms": 80
+   },
+   "icon": "mart/fl/fx/icons/kill-ember_burst.png"
+  },
+  {
+   "sku": "kill.soul",
+   "kind": "kill",
+   "stars": 50,
+   "name": {
+    "en": "Soul Wisp",
+    "ru": "Улетающая душа"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/kill-soul.png",
+    "w": 24,
+    "h": 24,
+    "frames": 6,
+    "ms": 80
+   },
+   "icon": "mart/fl/fx/icons/kill-soul.png"
+  },
+  {
+   "sku": "kill.coins",
+   "kind": "kill",
+   "stars": 50,
+   "name": {
+    "en": "Coin Pop",
+    "ru": "Монетки"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/kill-coins.png",
+    "w": 24,
+    "h": 24,
+    "frames": 6,
+    "ms": 80
+   },
+   "icon": "mart/fl/fx/icons/kill-coins.png"
+  },
+  {
+   "sku": "kill.pillar",
+   "kind": "kill",
+   "stars": 50,
+   "name": {
+    "en": "Flame Pillar",
+    "ru": "Огненный столб"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/kill-pillar.png",
+    "w": 24,
+    "h": 24,
+    "frames": 6,
+    "ms": 80
+   },
+   "icon": "mart/fl/fx/icons/kill-pillar.png"
+  },
+  {
+   "sku": "kill.stars",
+   "kind": "kill",
+   "stars": 50,
+   "name": {
+    "en": "Starshatter",
+    "ru": "Звёздный осколок"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/kill-stars.png",
+    "w": 24,
+    "h": 24,
+    "frames": 6,
+    "ms": 80
+   },
+   "icon": "mart/fl/fx/icons/kill-stars.png"
+  },
+  {
+   "sku": "kill.smoke_ring",
+   "kind": "kill",
+   "stars": 25,
+   "name": {
+    "en": "Smoke Ring",
+    "ru": "Кольцо дыма"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/kill-smoke_ring.png",
+    "w": 24,
+    "h": 24,
+    "frames": 6,
+    "ms": 80
+   },
+   "icon": "mart/fl/fx/icons/kill-smoke_ring.png"
+  },
+  {
+   "sku": "death.ascend",
+   "kind": "death",
+   "stars": 100,
+   "name": {
+    "en": "Ascension",
+    "ru": "Вознесение"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/death-ascend.png",
+    "w": 32,
+    "h": 32,
+    "frames": 8,
+    "ms": 110,
+    "feet": [
+     16,
+     30
+    ]
+   },
+   "icon": "mart/fl/fx/icons/death-ascend.png"
+  },
+  {
+   "sku": "death.ash",
+   "kind": "death",
+   "stars": 100,
+   "name": {
+    "en": "Ash to Ash",
+    "ru": "Прах к праху"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/death-ash.png",
+    "w": 32,
+    "h": 32,
+    "frames": 8,
+    "ms": 110,
+    "feet": [
+     16,
+     30
+    ]
+   },
+   "icon": "mart/fl/fx/icons/death-ash.png"
+  },
+  {
+   "sku": "death.ghost",
+   "kind": "death",
+   "stars": 100,
+   "name": {
+    "en": "Restless Ghost",
+    "ru": "Неупокоенный дух"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/death-ghost.png",
+    "w": 32,
+    "h": 32,
+    "frames": 8,
+    "ms": 110,
+    "feet": [
+     16,
+     30
+    ]
+   },
+   "icon": "mart/fl/fx/icons/death-ghost.png"
+  },
+  {
+   "sku": "death.eruption",
+   "kind": "death",
+   "stars": 150,
+   "name": {
+    "en": "Last Flame",
+    "ru": "Последнее пламя"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/death-eruption.png",
+    "w": 32,
+    "h": 32,
+    "frames": 8,
+    "ms": 110,
+    "feet": [
+     16,
+     30
+    ]
+   },
+   "icon": "mart/fl/fx/icons/death-eruption.png"
+  },
+  {
+   "sku": "digits.ember",
+   "kind": "digits",
+   "stars": 50,
+   "name": {
+    "en": "Ember Numbers",
+    "ru": "Огненные цифры"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/digits-ember.png",
+    "w": 7,
+    "h": 9,
+    "glyphs": "0123456789-+!",
+    "advance": 6
+   },
+   "icon": "mart/fl/fx/digits-ember.png"
+  },
+  {
+   "sku": "digits.frost",
+   "kind": "digits",
+   "stars": 50,
+   "name": {
+    "en": "Frost Numbers",
+    "ru": "Ледяные цифры"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/digits-frost.png",
+    "w": 7,
+    "h": 9,
+    "glyphs": "0123456789-+!",
+    "advance": 6
+   },
+   "icon": "mart/fl/fx/digits-frost.png"
+  },
+  {
+   "sku": "digits.gold",
+   "kind": "digits",
+   "stars": 50,
+   "name": {
+    "en": "Gold Numbers",
+    "ru": "Золотые цифры"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/digits-gold.png",
+    "w": 7,
+    "h": 9,
+    "glyphs": "0123456789-+!",
+    "advance": 6
+   },
+   "icon": "mart/fl/fx/digits-gold.png"
+  },
+  {
+   "sku": "digits.toxic",
+   "kind": "digits",
+   "stars": 25,
+   "name": {
+    "en": "Toxic Numbers",
+    "ru": "Ядовитые цифры"
+   },
+   "sheet": {
+    "file": "mart/fl/fx/digits-toxic.png",
+    "w": 7,
+    "h": 9,
+    "glyphs": "0123456789-+!",
+    "advance": 6
+   },
+   "icon": "mart/fl/fx/digits-toxic.png"
+  },
+  {
+   "sku": "quips.pirate",
+   "kind": "quips",
+   "pack": "pirate",
+   "stars": 50,
+   "name": {
+    "en": "Pirate",
+    "ru": "Пират"
+   },
+   "icon": "mart/fl/quips/pirate.png"
+  },
+  {
+   "sku": "quips.gopnik",
+   "kind": "quips",
+   "pack": "gopnik",
+   "stars": 50,
+   "name": {
+    "en": "Gopnik",
+    "ru": "Гопник"
+   },
+   "icon": "mart/fl/quips/gopnik.png"
+  },
+  {
+   "sku": "quips.knight",
+   "kind": "quips",
+   "pack": "knight",
+   "stars": 50,
+   "name": {
+    "en": "Knight",
+    "ru": "Рыцарь"
+   },
+   "icon": "mart/fl/quips/knight.png"
+  },
+  {
+   "sku": "quips.philosopher",
+   "kind": "quips",
+   "pack": "philosopher",
+   "stars": 50,
+   "name": {
+    "en": "Philosopher",
+    "ru": "Философ"
+   },
+   "icon": "mart/fl/quips/philosopher.png"
+  },
+  {
+   "sku": "quips.granny",
+   "kind": "quips",
+   "pack": "granny",
+   "stars": 50,
+   "name": {
+    "en": "Granny",
+    "ru": "Бабка"
+   },
+   "icon": "mart/fl/quips/granny.png"
+  },
+  {
+   "sku": "quips.robot",
+   "kind": "quips",
+   "pack": "robot",
+   "stars": 50,
+   "name": {
+    "en": "Robot",
+    "ru": "Робот"
+   },
+   "icon": "mart/fl/quips/robot.png"
+  },
+  {
+   "sku": "decor.tent",
+   "kind": "decor",
+   "decor": "tent",
+   "stars": 150,
+   "name": {
+    "en": "Tent",
+    "ru": "Палатка"
+   },
+   "sprite": "mart/fl/decor/tent.png",
+   "w": 25,
+   "h": 14,
+   "place": {
+    "zone": "left",
+    "feet": [
+     12,
+     107
+    ]
+   },
+   "icon": "mart/fl/decor/icons/tent.png"
+  },
+  {
+   "sku": "decor.banner",
+   "kind": "decor",
+   "decor": "banner",
+   "stars": 100,
+   "name": {
+    "en": "Firelight Banner",
+    "ru": "Знамя костра"
+   },
+   "sprite": "mart/fl/decor/banner.png",
+   "w": 11,
+   "h": 20,
+   "place": {
+    "zone": "right",
+    "feet": [
+     89,
+     113
+    ]
+   },
+   "icon": "mart/fl/decor/icons/banner.png"
+  },
+  {
+   "sku": "decor.lantern",
+   "kind": "decor",
+   "decor": "lantern",
+   "stars": 50,
+   "name": {
+    "en": "Lantern",
+    "ru": "Фонарь"
+   },
+   "sprite": "mart/fl/decor/lantern.png",
+   "w": 7,
+   "h": 15,
+   "place": {
+    "zone": "path",
+    "feet": [
+     37,
+     124
+    ]
+   },
+   "glow": "mart/fl/decor/lantern-glow.png",
+   "icon": "mart/fl/decor/icons/lantern.png"
+  },
+  {
+   "sku": "decor.statue",
+   "kind": "decor",
+   "decor": "statue",
+   "stars": 150,
+   "name": {
+    "en": "Hero Statue",
+    "ru": "Статуя героя"
+   },
+   "sprite": "mart/fl/decor/statue.png",
+   "w": 13,
+   "h": 15,
+   "place": {
+    "zone": "back",
+    "feet": [
+     84,
+     104
+    ]
+   },
+   "icon": "mart/fl/decor/icons/statue.png"
+  },
+  {
+   "sku": "decor.musicbox",
+   "kind": "decor",
+   "decor": "musicbox",
+   "stars": 100,
+   "name": {
+    "en": "Music Box",
+    "ru": "Музыкальная шкатулка"
+   },
+   "sprite": "mart/fl/decor/musicbox.png",
+   "w": 10,
+   "h": 10,
+   "place": {
+    "zone": "right",
+    "feet": [
+     63,
+     126
+    ]
+   },
+   "icon": "mart/fl/decor/icons/musicbox.png"
+  },
+  {
+   "sku": "decor.chest",
+   "kind": "decor",
+   "decor": "chest",
+   "stars": 50,
+   "name": {
+    "en": "Treasure Chest",
+    "ru": "Сундук"
+   },
+   "sprite": "mart/fl/decor/chest.png",
+   "w": 14,
+   "h": 10,
+   "place": {
+    "zone": "left",
+    "feet": [
+     11,
+     131
+    ]
+   },
+   "icon": "mart/fl/decor/icons/chest.png"
+  },
+  {
+   "sku": "decor.bedroll",
+   "kind": "decor",
+   "decor": "bedroll",
+   "stars": 50,
+   "name": {
+    "en": "Bedroll",
+    "ru": "Спальник"
+   },
+   "sprite": "mart/fl/decor/bedroll.png",
+   "w": 20,
+   "h": 6,
+   "place": {
+    "zone": "left",
+    "feet": [
+     16,
+     141
+    ]
+   },
+   "icon": "mart/fl/decor/icons/bedroll.png"
+  },
+  {
+   "sku": "decor.cauldron",
+   "kind": "decor",
+   "decor": "cauldron",
+   "stars": 100,
+   "name": {
+    "en": "Witch Cauldron",
+    "ru": "Котёл ведьмы"
+   },
+   "sprite": "mart/fl/decor/cauldron.png",
+   "w": 14,
+   "h": 10,
+   "place": {
+    "zone": "right",
+    "feet": [
+     80,
+     134
+    ]
+   },
+   "glow": "mart/fl/decor/cauldron-glow.png",
+   "icon": "mart/fl/decor/icons/cauldron.png"
+  },
+  {
+   "sku": "decor.bench",
+   "kind": "decor",
+   "decor": "bench",
+   "stars": 50,
+   "name": {
+    "en": "Log Bench",
+    "ru": "Скамья из бревна"
+   },
+   "sprite": "mart/fl/decor/bench.png",
+   "w": 22,
+   "h": 6,
+   "place": {
+    "zone": "path",
+    "feet": [
+     24,
+     152
+    ]
+   },
+   "icon": "mart/fl/decor/icons/bench.png"
+  },
+  {
+   "sku": "decor.dummy",
+   "kind": "decor",
+   "decor": "dummy",
+   "stars": 50,
+   "name": {
+    "en": "Training Dummy",
+    "ru": "Чучело для тренировки"
+   },
+   "sprite": "mart/fl/decor/dummy.png",
+   "w": 13,
+   "h": 17,
+   "place": {
+    "zone": "back",
+    "feet": [
+     86,
+     152
+    ]
+   },
+   "icon": "mart/fl/decor/icons/dummy.png"
+  },
+  {
+   "sku": "decor.signpost",
+   "kind": "decor",
+   "decor": "signpost",
+   "stars": 50,
+   "name": {
+    "en": "Signpost",
+    "ru": "Указатель"
+   },
+   "sprite": "mart/fl/decor/signpost.png",
+   "w": 14,
+   "h": 15,
+   "place": {
+    "zone": "path",
+    "feet": [
+     64,
+     105
+    ]
+   },
+   "icon": "mart/fl/decor/icons/signpost.png"
+  },
+  {
+   "sku": "decor.woodpile",
+   "kind": "decor",
+   "decor": "woodpile",
+   "stars": 25,
+   "name": {
+    "en": "Woodpile",
+    "ru": "Поленница"
+   },
+   "sprite": "mart/fl/decor/woodpile.png",
+   "w": 18,
+   "h": 7,
+   "place": {
+    "zone": "left",
+    "feet": [
+     14,
+     146
+    ]
+   },
+   "icon": "mart/fl/decor/icons/woodpile.png"
+  },
+  {
+   "sku": "frame.ember",
+   "kind": "frame",
+   "frame": "ember",
+   "stars": 50,
+   "name": {
+    "en": "Ember",
+    "ru": "Угли"
+   },
+   "sprite": "mart/fl/profile/frame-ember.png",
+   "slice": 4,
+   "anim": {
+    "sheet": "mart/fl/profile/frame-ember-anim.png",
+    "frames": 4,
+    "ms": 180
+   }
+  },
+  {
+   "sku": "frame.frost",
+   "kind": "frame",
+   "frame": "frost",
+   "stars": 50,
+   "name": {
+    "en": "Frost",
+    "ru": "Иней"
+   },
+   "sprite": "mart/fl/profile/frame-frost.png",
+   "slice": 4
+  },
+  {
+   "sku": "frame.moss",
+   "kind": "frame",
+   "frame": "moss",
+   "stars": 25,
+   "name": {
+    "en": "Moss",
+    "ru": "Мох"
+   },
+   "sprite": "mart/fl/profile/frame-moss.png",
+   "slice": 4
+  },
+  {
+   "sku": "frame.bone",
+   "kind": "frame",
+   "frame": "bone",
+   "stars": 50,
+   "name": {
+    "en": "Bone",
+    "ru": "Кость"
+   },
+   "sprite": "mart/fl/profile/frame-bone.png",
+   "slice": 4
+  },
+  {
+   "sku": "frame.stars",
+   "kind": "frame",
+   "frame": "stars",
+   "stars": 50,
+   "name": {
+    "en": "Night Sky",
+    "ru": "Звёздная ночь"
+   },
+   "sprite": "mart/fl/profile/frame-stars.png",
+   "slice": 4,
+   "anim": {
+    "sheet": "mart/fl/profile/frame-stars-anim.png",
+    "frames": 4,
+    "ms": 180
+   }
+  },
+  {
+   "sku": "frame.runes",
+   "kind": "frame",
+   "frame": "runes",
+   "stars": 50,
+   "name": {
+    "en": "Demon Runes",
+    "ru": "Демонские руны"
+   },
+   "sprite": "mart/fl/profile/frame-runes.png",
+   "slice": 4
+  },
+  {
+   "sku": "frame.crystal",
+   "kind": "frame",
+   "frame": "crystal",
+   "stars": 50,
+   "name": {
+    "en": "Cave Crystal",
+    "ru": "Пещерный кристалл"
+   },
+   "sprite": "mart/fl/profile/frame-crystal.png",
+   "slice": 4
+  },
+  {
+   "sku": "frame.sunforge",
+   "kind": "frame",
+   "frame": "sunforge",
+   "stars": 100,
+   "name": {
+    "en": "Sunforge",
+    "ru": "Солнечная кузня"
+   },
+   "sprite": "mart/fl/profile/frame-sunforge.png",
+   "slice": 4
+  },
+  {
+   "sku": "title.kindler",
+   "kind": "title",
+   "title": "kindler",
+   "rarity": "common",
+   "name": {
+    "en": "Kindler",
+    "ru": "Разжигатель"
+   },
+   "icon": "mart/fl/profile/title-kindler.png",
+   "plate": "mart/fl/profile/title-plate-common.png",
+   "stars": 25
+  },
+  {
+   "sku": "title.keeper",
+   "kind": "title",
+   "title": "keeper",
+   "rarity": "rare",
+   "name": {
+    "en": "Keeper of the Fire",
+    "ru": "Хранитель костра"
+   },
+   "icon": "mart/fl/profile/title-keeper.png",
+   "plate": "mart/fl/profile/title-plate-rare.png",
+   "stars": 50
+  },
+  {
+   "sku": "title.ratking",
+   "kind": "title",
+   "title": "ratking",
+   "rarity": "common",
+   "name": {
+    "en": "Rat Whisperer",
+    "ru": "Крысиный шептун"
+   },
+   "icon": "mart/fl/profile/title-ratking.png",
+   "plate": "mart/fl/profile/title-plate-common.png",
+   "stars": 25
+  },
+  {
+   "sku": "title.deepdiver",
+   "kind": "title",
+   "title": "deepdiver",
+   "rarity": "rare",
+   "name": {
+    "en": "Deep Diver",
+    "ru": "Ныряльщик в глубины"
+   },
+   "icon": "mart/fl/profile/title-deepdiver.png",
+   "plate": "mart/fl/profile/title-plate-rare.png",
+   "stars": 0,
+   "how": "badge:depth20"
+  },
+  {
+   "sku": "title.slayer",
+   "kind": "title",
+   "title": "slayer",
+   "rarity": "common",
+   "name": {
+    "en": "Goo Slayer",
+    "ru": "Гроза Жижи"
+   },
+   "icon": "mart/fl/profile/title-slayer.png",
+   "plate": "mart/fl/profile/title-plate-common.png",
+   "stars": 0,
+   "how": "badge:boss1"
+  },
+  {
+   "sku": "title.alchemist",
+   "kind": "title",
+   "title": "alchemist",
+   "rarity": "rare",
+   "name": {
+    "en": "Mad Alchemist",
+    "ru": "Безумный алхимик"
+   },
+   "icon": "mart/fl/profile/title-alchemist.png",
+   "plate": "mart/fl/profile/title-plate-rare.png",
+   "stars": 50
+  },
+  {
+   "sku": "title.lucky",
+   "kind": "title",
+   "title": "lucky",
+   "rarity": "common",
+   "name": {
+    "en": "Lucky Fool",
+    "ru": "Везучий дурак"
+   },
+   "icon": "mart/fl/profile/title-lucky.png",
+   "plate": "mart/fl/profile/title-plate-common.png",
+   "stars": 25
+  },
+  {
+   "sku": "title.ghost",
+   "kind": "title",
+   "title": "ghost",
+   "rarity": "rare",
+   "name": {
+    "en": "Friend of Ghosts",
+    "ru": "Друг призраков"
+   },
+   "icon": "mart/fl/profile/title-ghost.png",
+   "plate": "mart/fl/profile/title-plate-rare.png",
+   "stars": 0,
+   "how": "season:1"
+  },
+  {
+   "sku": "title.sage",
+   "kind": "title",
+   "title": "sage",
+   "rarity": "legend",
+   "name": {
+    "en": "Sage of the Halls",
+    "ru": "Мудрец залов"
+   },
+   "icon": "mart/fl/profile/title-sage.png",
+   "plate": "mart/fl/profile/title-plate-legend.png",
+   "stars": 0,
+   "how": "badge:victory"
+  },
+  {
+   "sku": "title.ember",
+   "kind": "title",
+   "title": "ember",
+   "rarity": "legend",
+   "name": {
+    "en": "Ember Soul",
+    "ru": "Душа углей"
+   },
+   "icon": "mart/fl/profile/title-ember.png",
+   "plate": "mart/fl/profile/title-plate-legend.png",
+   "stars": 0,
+   "how": "season:1"
+  },
+  {
+   "sku": "title.patron",
+   "kind": "title",
+   "title": "patron",
+   "rarity": "legend",
+   "name": {
+    "en": "Patron of the Fire",
+    "ru": "Покровитель костра"
+   },
+   "icon": "mart/fl/profile/title-patron.png",
+   "plate": "mart/fl/profile/title-plate-legend.png",
+   "stars": 0,
+   "how": "patron"
+  },
+  {
+   "sku": "title.first",
+   "kind": "title",
+   "title": "first",
+   "rarity": "legend",
+   "name": {
+    "en": "First Spark",
+    "ru": "Первая искра"
+   },
+   "icon": "mart/fl/profile/title-first.png",
+   "plate": "mart/fl/profile/title-plate-legend.png",
+   "stars": 0,
+   "how": "season:1"
+  },
+  {
+   "sku": "name.ember",
+   "kind": "name",
+   "color": "#ff9a3a",
+   "stars": 25,
+   "name": {
+    "en": "Ember",
+    "ru": "Угольный"
+   },
+   "css": "fl-name-ember"
+  },
+  {
+   "sku": "name.gold",
+   "kind": "name",
+   "color": "#ffcc66",
+   "stars": 50,
+   "name": {
+    "en": "Gold",
+    "ru": "Золотой"
+   },
+   "css": "fl-name-gold"
+  },
+  {
+   "sku": "name.frost",
+   "kind": "name",
+   "color": "#9fdcff",
+   "stars": 25,
+   "name": {
+    "en": "Frost",
+    "ru": "Морозный"
+   },
+   "css": "fl-name-frost"
+  },
+  {
+   "sku": "name.moss",
+   "kind": "name",
+   "color": "#8adc5a",
+   "stars": 25,
+   "name": {
+    "en": "Moss",
+    "ru": "Моховой"
+   },
+   "css": "fl-name-moss"
+  },
+  {
+   "sku": "name.rose",
+   "kind": "name",
+   "color": "#ff8aa8",
+   "stars": 25,
+   "name": {
+    "en": "Rose",
+    "ru": "Розовый"
+   },
+   "css": "fl-name-rose"
+  },
+  {
+   "sku": "name.violet",
+   "kind": "name",
+   "color": "#b48aff",
+   "stars": 25,
+   "name": {
+    "en": "Violet",
+    "ru": "Фиалковый"
+   },
+   "css": "fl-name-violet"
+  },
+  {
+   "sku": "name.ash",
+   "kind": "name",
+   "color": "#c8c2b8",
+   "stars": 25,
+   "name": {
+    "en": "Ash",
+    "ru": "Пепельный"
+   },
+   "css": "fl-name-ash"
+  },
+  {
+   "sku": "name.flame",
+   "kind": "name",
+   "color": "linear-gradient(#fff6c8, #ffcc66 35%, #ff9a3a 65%, #e8641f)",
+   "stars": 50,
+   "name": {
+    "en": "Living Flame",
+    "ru": "Живое пламя"
+   },
+   "css": "fl-name-flame"
+  },
+  {
+   "sku": "photo.polaroid",
+   "kind": "photoframe",
+   "stars": 25,
+   "name": {
+    "en": "Instant Photo",
+    "ru": "Моментальное фото"
+   },
+   "sprite": "mart/fl/photo/frame-polaroid.png",
+   "slice": 8
+  },
+  {
+   "sku": "photo.film",
+   "kind": "photoframe",
+   "stars": 25,
+   "name": {
+    "en": "Film Strip",
+    "ru": "Плёнка"
+   },
+   "sprite": "mart/fl/photo/frame-film.png",
+   "slice": 8
+  },
+  {
+   "sku": "photo.dungeon",
+   "kind": "photoframe",
+   "stars": 25,
+   "name": {
+    "en": "Dungeon Stone",
+    "ru": "Камень подземелья"
+   },
+   "sprite": "mart/fl/photo/frame-dungeon.png",
+   "slice": 8
+  },
+  {
+   "sku": "photo.gilded",
+   "kind": "photoframe",
+   "stars": 50,
+   "name": {
+    "en": "Gilded",
+    "ru": "Позолота"
+   },
+   "sprite": "mart/fl/photo/frame-gilded.png",
+   "slice": 8
+  },
+  {
+   "sku": "photo.frost",
+   "kind": "photoframe",
+   "stars": 50,
+   "name": {
+    "en": "Frozen",
+    "ru": "Изморозь"
+   },
+   "sprite": "mart/fl/photo/frame-frost.png",
+   "slice": 8
+  },
+  {
+   "sku": "photo.embers",
+   "kind": "photoframe",
+   "stars": 50,
+   "name": {
+    "en": "Glowing Coals",
+    "ru": "Тлеющие угли"
+   },
+   "sprite": "mart/fl/photo/frame-embers.png",
+   "slice": 8
+  },
+  {
+   "sku": "sticker.fire",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Fire",
+    "ru": "Огонь"
+   },
+   "sprite": "mart/fl/photo/sticker-fire.png"
+  },
+  {
+   "sku": "sticker.skull",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Skull",
+    "ru": "Череп"
+   },
+   "sprite": "mart/fl/photo/sticker-skull.png"
+  },
+  {
+   "sku": "sticker.heart",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Heart",
+    "ru": "Сердце"
+   },
+   "sprite": "mart/fl/photo/sticker-heart.png"
+  },
+  {
+   "sku": "sticker.crown",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Crown",
+    "ru": "Корона"
+   },
+   "sprite": "mart/fl/photo/sticker-crown.png"
+  },
+  {
+   "sku": "sticker.star",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Star",
+    "ru": "Звезда"
+   },
+   "sprite": "mart/fl/photo/sticker-star.png"
+  },
+  {
+   "sku": "sticker.amulet",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Amulet",
+    "ru": "Амулет"
+   },
+   "sprite": "mart/fl/photo/sticker-amulet.png"
+  },
+  {
+   "sku": "sticker.sword",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Sword",
+    "ru": "Меч"
+   },
+   "sprite": "mart/fl/photo/sticker-sword.png"
+  },
+  {
+   "sku": "sticker.potion",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Potion",
+    "ru": "Зелье"
+   },
+   "sprite": "mart/fl/photo/sticker-potion.png"
+  },
+  {
+   "sku": "sticker.rat",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Rat",
+    "ru": "Крыса"
+   },
+   "sprite": "mart/fl/photo/sticker-rat.png"
+  },
+  {
+   "sku": "sticker.ghost",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "Ghost",
+    "ru": "Призрак"
+   },
+   "sprite": "mart/fl/photo/sticker-ghost.png"
+  },
+  {
+   "sku": "sticker.gg",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "GG",
+    "ru": "GG"
+   },
+   "sprite": "mart/fl/photo/sticker-gg.png"
+  },
+  {
+   "sku": "sticker.wow",
+   "kind": "sticker",
+   "stars": 0,
+   "pack": "stickers",
+   "name": {
+    "en": "!?",
+    "ru": "!?"
+   },
+   "sprite": "mart/fl/photo/sticker-wow.png"
+  },
+  {
+   "sku": "stickers.pack1",
+   "kind": "stickers",
+   "stars": 50,
+   "name": {
+    "en": "Sticker Pack: Deep Night",
+    "ru": "Набор наклеек «Глубокая ночь»"
+   },
+   "items": [
+    "sticker.fire",
+    "sticker.skull",
+    "sticker.heart",
+    "sticker.crown",
+    "sticker.star",
+    "sticker.amulet",
+    "sticker.sword",
+    "sticker.potion",
+    "sticker.rat",
+    "sticker.ghost",
+    "sticker.gg",
+    "sticker.wow"
+   ],
+   "icon": "mart/fl/photo/sticker-fire.png"
+  }
+ ],
+ "bundles": [
+  {
+   "sku": "bundle.forge",
+   "kind": "bundle",
+   "items": [
+    "skin.warrior.forgeborn",
+    "hat.crown",
+    "pet.ember",
+    "fire.golden"
+   ],
+   "stars": 690,
+   "art": "forge",
+   "name": {
+    "en": "Forge Kit",
+    "ru": "Набор кузнеца"
+   },
+   "full": 950,
+   "save": 27
+  },
+  {
+   "sku": "bundle.night",
+   "kind": "bundle",
+   "items": [
+    "skin.rogue.dusk",
+    "hat.tricorn",
+    "pet.bat",
+    "trail.shadow",
+    "fire.cursed"
+   ],
+   "stars": 359,
+   "art": "night",
+   "name": {
+    "en": "Night Watch",
+    "ru": "Ночной дозор"
+   },
+   "full": 500,
+   "save": 28
+  },
+  {
+   "sku": "bundle.camp",
+   "kind": "bundle",
+   "items": [
+    "decor.tent",
+    "decor.lantern",
+    "decor.bench",
+    "fire.blue",
+    "frame.ember"
+   ],
+   "stars": 249,
+   "art": "camp",
+   "name": {
+    "en": "First Camp",
+    "ru": "Первый привал"
+   },
+   "full": 350,
+   "save": 29
+  }
+ ],
+ "season": {
+  "id": "s1",
+  "name": {
+   "en": "Embers of the Deep",
+   "ru": "Угли глубин"
+  },
+  "number": 1,
+  "days": 56,
+  "levels": 30,
+  "xpPerLevel": 1000,
+  "pass_stars": 300,
+  "banner": "mart/fl/season/banner.png",
+  "how": {
+   "en": "Season XP comes from runs: depth, bosses, the daily dungeon. Nothing in the pass changes a run.",
+   "ru": "Опыт сезона дают забеги: глубина, боссы, подземелье дня. Ничто в пропуске не меняет забег."
+  },
+  "free": [
+   [
+    1,
+    "sticker.fire"
+   ],
+   [
+    2,
+    "name.ember"
+   ],
+   [
+    4,
+    "trail.embers"
+   ],
+   [
+    6,
+    "sticker.skull"
+   ],
+   [
+    8,
+    "fire.green"
+   ],
+   [
+    10,
+    "title.kindler"
+   ],
+   [
+    12,
+    "quips.robot"
+   ],
+   [
+    15,
+    "frame.moss"
+   ],
+   [
+    18,
+    "kill.smoke_ring"
+   ],
+   [
+    20,
+    "decor.woodpile"
+   ],
+   [
+    24,
+    "digits.toxic"
+   ],
+   [
+    28,
+    "hat.wreath"
+   ],
+   [
+    30,
+    "title.ghost"
+   ]
+  ],
+  "paid": [
+   [
+    1,
+    "frame.sunforge"
+   ],
+   [
+    3,
+    "hat.pompom"
+   ],
+   [
+    5,
+    "pet.firefly"
+   ],
+   [
+    7,
+    "fire.ghost"
+   ],
+   [
+    9,
+    "photo.embers"
+   ],
+   [
+    11,
+    "skin.mage.frost"
+   ],
+   [
+    13,
+    "kill.pillar"
+   ],
+   [
+    16,
+    "decor.musicbox"
+   ],
+   [
+    19,
+    "death.ascend"
+   ],
+   [
+    22,
+    "name.flame"
+   ],
+   [
+    25,
+    "title.ember"
+   ],
+   [
+    27,
+    "pet.skull"
+   ],
+   [
+    30,
+    "title.first"
+   ]
+  ]
+ },
+ "gift": {
+  "allowed": [
+   "skin",
+   "fire",
+   "hat",
+   "pet",
+   "trail",
+   "kill",
+   "death",
+   "digits",
+   "quips",
+   "decor",
+   "frame",
+   "title",
+   "name",
+   "photoframe",
+   "stickers",
+   "bundle"
+  ],
+  "note": "gifts go to a Telegram friend who has played; the receiver gets a mail at the camp"
+ }
+}

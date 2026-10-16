@@ -13,6 +13,38 @@
   "toneMapping": "Neutral",
   "note": "Three.js r169 (physical lights): multiply the ambient and hemisphere intensities, add to the torch decay; the frames were rendered so"
  },
+ "sprites": {
+  "note": "characters, items and pets: flat PD sprites standing in the world (see firelight-sprites.md)",
+  "camera_pitch": 70,
+  "lean": 20,
+  "stretch": "1 / cos(pitch - lean)",
+  "feet": 0.0,
+  "selfLight": 0.14,
+  "shadow": {
+   "width": 0.9,
+   "squash": 0.42,
+   "opacity": 0.55,
+   "offset": 0.08,
+   "note": "blob width is a share of the sprite width; it slips offset cells away from the strongest light"
+  },
+  "fly": {
+   "hover": 0.35,
+   "shadowScale": 0.7,
+   "shadowFade": 0.55,
+   "bob": {
+    "hz": 1.2,
+    "amp": 0.06
+   }
+  },
+  "rim": {
+   "on": true,
+   "strength": 0.3,
+   "max": 0.6,
+   "px": 1,
+   "note": "one art pixel on the silhouette side facing the strongest light within its distance; colour = that light"
+  },
+  "castShadow": false
+ },
  "fog_note": "fog near/far are cells from the camera focus (the hero): the renderer adds its camera distance; mist is a low noise layer at mist.height, density = its opacity",
  "bloom": {
   "threshold": 0.82,

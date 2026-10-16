@@ -7,7 +7,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
-import { MAPS, BOSS_MAPS, MOBS, BOSSES } from './maps.js';
+import { MAPS, BOSS_MAPS, MOBS, BOSSES, CLOSE, CLOSE_MOBS } from './maps.js';
 
 const Q = new URLSearchParams(location.search);
 const R = +(Q.get('r') || 0);
@@ -25,7 +25,9 @@ let seed = 1234 + R * 77 + (BOSS ? 999 : 0);
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
 /* ---------- map ---------- */
-const rows = (BOSS ? BOSS_MAPS : MAPS)[RN];
+const CL = Q.has('close');
+const rows = CL ? CLOSE[RN] : (BOSS ? BOSS_MAPS : MAPS)[RN];
+const RULES = Q.get('rules') !== '0'; // the sprite rules: lean 20 deg, stretch, rim, shadow offset
 const PAD = 7;
 const W = 16, H = rows.length + PAD * 2;
 const ch = (x, y) => (y < PAD || y >= H - PAD || x < 0 || x >= W) ? '#' : (rows[y - PAD][x] || '#');
@@ -35,13 +37,14 @@ const isChasm = (c) => c === 'C';
 const isWater = (c) => c === '~';
 const solid = (x, y) => isWall(ch(x, y));
 const open = (x, y) => { const c = ch(x, y); return !isWall(c) && !isChasm(c); };
-const TILE = { '.': 1, ',': 24, '_': 14, G: 2, h: 15, '~': 63, C: 0, D: 5, '>': 8, '<': 7, e: 9, S: 35, P: 11, g: 29, x: 17, y: 32, H: 1, M: 1, K: 1 };
-let hero = [8, 10], mob = null, boss = null;
+const TILE = { '.': 1, ',': 24, '_': 14, G: 2, h: 15, '~': 63, C: 0, D: 5, '>': 8, '<': 7, e: 9, S: 35, P: 11, g: 29, x: 17, y: 32, H: 1, M: 1, K: 1, a: 1, b: 1, c: 1 };
+let hero = [8, 10], mob = null, boss = null; const extra = [];
 for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
   const c = ch(x, y);
   if (c === 'H') hero = [x, y];
   if (c === 'M') mob = [x, y];
   if (c === 'K') boss = [x, y];
+  if (CL && 'abc'.includes(c)) extra.push([c, x, y]);
 }
 
 /* ---------- textures ---------- */
@@ -103,8 +106,8 @@ const camera = new THREE.PerspectiveCamera(cam.fov, vw / vh, 1, 200);
 const cells = +(Q.get('cells') || (vw / vh < 0.8 ? 9 : 12));
 const hTan = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * (vw / vh);
 const dist = (cells / 2) / hTan;
-const target = new THREE.Vector3(hero[0] + 0.5 + (+(Q.get('dx') || 0)), 0.5, hero[1] + 0.5 + (+(Q.get('dz') || 0)) - (vw / vh < 0.8 ? 3 : 2));
-const pitch = THREE.MathUtils.degToRad(cam.pitch);
+const target = new THREE.Vector3(hero[0] + 0.5 + (+(Q.get('dx') || 0)), 0.5, hero[1] + 0.5 + (+(Q.get('dz') || 0)) - (CL ? 0.3 : (vw / vh < 0.8 ? 3 : 2)));
+const pitch = THREE.MathUtils.degToRad(+(Q.get('pitch') || cam.pitch));
 camera.position.copy(target).add(new THREE.Vector3(0, Math.sin(pitch) * dist, Math.cos(pitch) * dist));
 camera.lookAt(target);
 scene.fog = new THREE.Fog(fogC, env.fog.near + dist, env.fog.far + dist);
@@ -299,33 +302,66 @@ for (const p of props) {
 }
 
 /* ---------- characters ---------- */
+// Sprite rules (kit.sprites): an upright quad, feet at the bottom middle, leaned back LEAN toward the camera and stretched
+// 1 / cos(pitch - lean) so it keeps the proportions of its art; lit like the floor (the region tints it), never darker than
+// its self light; a rim of the strongest light nearby on the silhouette's side that faces it; a soft blob under the feet.
+const SP = kit.sprites;
+const LEAN = THREE.MathUtils.degToRad(SP.lean);
+const STRETCH = 1 / Math.cos(pitch - LEAN);
 const sheetCache = {};
-async function charSprite(name, fw, fh, frame, row, at, scale = 1) {
+const figures = [];
+function rimMaterial(tex, fw, fh) {
+  const m = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, roughness: 1, emissiveMap: tex, emissive: 0xffffff,
+    emissiveIntensity: RULES ? SP.selfLight : 0.12, side: THREE.DoubleSide });
+  m.userData.u = { uRimDir: { value: new THREE.Vector2(0, 1) }, uRimColor: { value: new THREE.Color(0) }, uTexel: { value: new THREE.Vector2(1 / fw, 1 / fh) } };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, m.userData.u);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec2 uRimDir; uniform vec3 uRimColor; uniform vec2 uTexel;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        { // the rim: this texel is solid, the one toward the light is empty (or off the sprite)
+          vec2 q = vMapUv + uRimDir * uTexel;
+          float out_ = (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) ? 1.0 : step(texture2D(map, q).a, 0.5);
+          totalEmissiveRadiance += uRimColor * out_;
+        }`);
+  };
+  return m;
+}
+async function charSprite(name, fw, fh, frame, row, at, scale = 1, fly = false) {
   const img = sheetCache[name] || (sheetCache[name] = await loadImg(`assets/${name}.png`));
   const cols = Math.floor(img.width / fw);
   const tex = cellTexture(img, (frame % cols) * fw, row * fh + Math.floor(frame / cols) * fh, fw, fh);
-  const w = fw / 16 * scale, h = fh / 16 * scale;
+  const w = fw / 16 * scale, h = fh / 16 * scale * (RULES ? STRETCH : 1);
   const g = new THREE.PlaneGeometry(w, h); g.translate(0, h / 2, 0);
-  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, roughness: 1, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.12 }));
-  m.rotation.x = -pitch * 0.85; m.position.set(at[0] + 0.5, 0.02, at[1] + 0.55);
-  m.castShadow = true; m.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.5 });
+  const mat_ = rimMaterial(tex, fw, fh);
+  const m = new THREE.Mesh(g, mat_);
+  const hover = fly ? SP.fly.hover : 0;
+  m.rotation.x = RULES ? -LEAN : -pitch * 0.85; m.position.set(at[0] + 0.5, 0.02 + hover, at[1] + 0.5 + SP.feet);
+  m.castShadow = !!SP.castShadow; m.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.5 });
   scene.add(m);
-  // a soft contact shadow under the feet
-  const s = new THREE.Mesh(new THREE.CircleGeometry(w * 0.42, 16), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.45, depthWrite: false }));
-  s.rotation.x = -Math.PI / 2; s.scale.y = 0.55; s.position.set(at[0] + 0.5, 0.012, at[1] + 0.58); scene.add(s);
+  const sw = w * SP.shadow.width * (fly ? SP.fly.shadowScale : 1);
+  const s = new THREE.Mesh(new THREE.CircleGeometry(sw / 2, 20), new THREE.MeshBasicMaterial({ map: blobTex, color: 0, transparent: true,
+    opacity: SP.shadow.opacity * (fly ? SP.fly.shadowFade : 1), depthWrite: false }));
+  s.rotation.x = -Math.PI / 2; s.scale.y = SP.shadow.squash; s.position.set(at[0] + 0.5, 0.012, at[1] + 0.5 + SP.feet + 0.02); scene.add(s);
+  figures.push({ m, s, at: new THREE.Vector3(at[0] + 0.5, hover + h * 0.5, at[1] + 0.5 + SP.feet), mat: mat_ });
   return m;
 }
+const blobTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, 'rgba(255,255,255,.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
 const MOBDIM = { gnoll: [12, 15], skeleton: [12, 15], bat: [15, 15], monk: [15, 14], succubus: [12, 15],
   goo: [20, 14], tengu: [14, 16], dm300: [22, 20], king: [16, 16], yog: [20, 19] };
 await charSprite('warrior', 12, 15, 0, 1, hero);
-if (mob) await charSprite(MOBS[R], ...MOBDIM[MOBS[R]], 0, 0, mob);
+if (mob) await charSprite(MOBS[R], ...MOBDIM[MOBS[R]], 0, 0, mob, 1, MOBS[R] === 'bat');
 if (boss) await charSprite(BOSSES[R], ...MOBDIM[BOSSES[R]], 0, 0, boss, BOSSES[R] === 'yog' ? 1.6 : 1.25);
+for (const [k, x, y] of extra) { const [n, fw, fh, f] = CLOSE_MOBS[RN][k]; await charSprite(n, fw, fh, 0, 0, [x, y], 1, f === 'fly'); }
+const rimLights = [];
 
 /* ---------- light ---------- */
 scene.add(new THREE.AmbientLight(env.ambient.color, env.ambient.intensity * kit.three.ambientScale));
 scene.add(new THREE.HemisphereLight(reg.hemi.sky, reg.hemi.ground, reg.hemi.intensity * kit.three.hemiScale));
 const hl = kit.hero_light;
-const heroL = new THREE.PointLight(hl.color, hl.intensity, hl.distance, hl.decay); heroL.position.set(hero[0] + 0.5, 0.9, hero[1] + 0.6); scene.add(heroL);
+const heroL = new THREE.PointLight(hl.color, hl.intensity, hl.distance, hl.decay); heroL.position.set(hero[0] + 0.5, RULES ? kit.sprites.heroLightY ?? 1.8 : 0.9, hero[1] + 0.6); scene.add(heroL);
 const tk = reg.torch; const torchTex = cellTexture(itemsImg, 4 * 16, 10 * 16, 16, 16);
 const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -363,6 +399,29 @@ if (BOSS && boss) {
   const L = new THREE.PointLight(a.color, a.intensity * 2.2 * pulse, 7, 1.2); L.position.set(boss[0] + 0.5, 2.2, boss[1] + 1.2);
   if (RN === 'prison' || RN === 'city') { L.castShadow = true; L.shadow.mapSize.set(512, 512); L.shadow.bias = -0.004; }
   scene.add(L);
+}
+
+/* ---------- the rim of the strongest light on each figure ---------- */
+if (RULES && SP.rim.on && !Q.has('norim')) {
+  const lights = []; scene.traverse((o) => { if (o.isPointLight || o.isSpotLight) lights.push(o); });
+  const up = new THREE.Vector3(0, Math.cos(LEAN), -Math.sin(LEAN));
+  for (const f of figures) {
+    let best = null, bw = 0;
+    for (const L of lights) {
+      const d = L.position.clone().sub(f.at); const len = d.length();
+      if (len < 0.45 || len > (L.distance || 8)) continue;
+      const w = L.intensity * Math.pow(1 - len / (L.distance || 8), 2) / Math.max(len, 0.6);
+      if (w > bw) { bw = w; best = { L, d }; }
+    }
+    if (!best) continue;
+    let u = best.d.x, v = best.d.dot(up); const n = Math.hypot(u, v) || 1; u /= n; v /= n;
+    f.mat.userData.u.uRimDir.value.set(Math.abs(u) > 0.38 ? Math.sign(u) : 0, Math.abs(v) > 0.38 ? Math.sign(v) : 0);
+    const k = Math.min(SP.rim.max, bw * SP.rim.strength);
+    f.mat.userData.u.uRimColor.value.copy(best.L.color).multiplyScalar(k);
+    // the blob slips a little away from that light
+    const away = new THREE.Vector2(-best.d.x, -best.d.z).normalize().multiplyScalar(SP.shadow.offset);
+    f.s.position.x += away.x; f.s.position.z += away.y;
+  }
 }
 
 /* ---------- mist ---------- */
