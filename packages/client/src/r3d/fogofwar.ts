@@ -14,7 +14,7 @@ export const FOG_REMEMBERED = 0.55;
  * What a remembered cell keeps of the look it has in the light (a share of its own colour, added in the shader, cool and washed out
  * so it still differs from what is in sight), and how strong a baked pool of fire light is at its middle.
  */
-export const MEMORY_LIFT = 0.8;
+export const MEMORY_LIFT = 0.6;
 export const POOL_STRENGTH = 0.85;
 const FOG_REVEAL_MS = 70;
 const FOG_FORGET_MS = 260;
