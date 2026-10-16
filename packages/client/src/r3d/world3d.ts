@@ -10,12 +10,14 @@
  *   - nothing but the walls casts a shadow, so shadow maps are drawn only when a wall or a torch changes (autoUpdate off);
  *   - the fog of war is a 48 x 48 texture read by the vertex shaders, the region's haze is a line in the same shaders: no pass;
  *   - nothing is made in the frame loop: vectors, matrices and records are made once and written in place.
- * What does not come over: the kit's mirror under water (a second render of the scene; the water is a bright surface that shines
- * under the lights instead), its bloom, and the haze pass of the demon halls.
+ * The kit's bloom is a pass (post.ts) at the two highest tiers: the frame goes through a half-float target and a blurred copy of its
+ * bright part is added. At the highest, the water carries a faint mirror of the walls and what glows above them (mirror.ts). The
+ * stairs are real steps (levelgeom.ts), high grass is one instanced batch of crossed quads (grass3d.ts), the caves' gold is metal
+ * (ore.ts), and the demon halls have the kit's haze: a low red mist in the fog shaders, a heat shimmer in the bloom's last pass.
  */
 import {
   AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
-  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
+  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, NoBlending, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
   PlaneGeometry, RepeatWrapping, Scene, SRGBColorSpace, Texture, WebGLRenderer,
 } from 'three';
 import { LENGTH, type Level, WIDTH } from '@pd/core';
@@ -31,14 +33,18 @@ import { ATLAS_H, ATLAS_W, Atlas } from './atlas';
 import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrain, loadKit, loadRegion, propCutout } from './assets3d';
 import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
-import { type Kit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
+import { type Kit, type MistKit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
 import { type Buffers, doorLeafBuffers, type GeomKit, K_WALL, LevelGeom } from './levelgeom';
 import { DoorSwing, writeLeafMatrix } from './doorswing';
-import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf } from './lightrig';
+import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
 import type { Tier } from './governor';
 import { heapDrawn } from '../heapsight';
 import { PerfOverlay } from './perfoverlay';
+import { canPost, Post } from './post';
+import { blankMirror, makeMirrorUniforms, Mirror, reflects, withMirror } from './mirror';
 import { BloodWater, withBlood } from './bloodwater';
+import { Grass } from './grass3d';
+import { withGlint } from './ore';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
 import type { WearQuad } from '../wearfx';
@@ -112,6 +118,15 @@ const SIGN = 29;
 const PROP_REACH = 11;
 /** A torch out of sight keeps its halo this near the hero, cells. */
 const SCONCE_REACH = 14;
+/**
+ * With the bloom on, what glows is brighter than 1 in the frame before the tone map takes it down (the way light is, and the way the
+ * designer's frames were made), so the bloom has it to take: by this much for what is lit by its glow map, and for lava.
+ */
+/** How far the heat haze of the halls moves the picture where it burns, in device pixels (the kit says half a pixel; whole pixels are moved). */
+const HEAT_PIXELS = 1.5;
+/** What a mirror is given for a level whose water shows no reflection. */
+const NO_KINDS = new Uint8Array(LENGTH);
+const GLOW_GAIN = { sprites: 1.5, terrain: 1.4, lava: 1.6, grass: 1.15 };
 
 /** How the sprite batch stands a picture up: leaned toward the camera (characters, items) or straight up (a sconce on a wall). */
 const LEANED = 0;
@@ -223,6 +238,13 @@ export class World3D {
   private seenFloor = -1;
   private seenBox = -1;
   private terrainMaterial: MeshStandardMaterial | null = null;
+  /** The glow of the water as the kit has it (lava glows; plain water shines a little), and whether it is lava. */
+  private waterGlow = 1;
+  private mistKit: MistKit | null = null;
+  private halls = false;
+  /** The water of this region reflects (not lava). */
+  private reflective = false;
+  private lava = false;
   private decalMaterial: MeshBasicMaterial | null = null;
   private waterMaterial: MeshStandardMaterial | null = null;
   /**
@@ -239,8 +261,12 @@ export class World3D {
   /** Blood in the water: the red a victim leaves in it (bloodwater.ts). */
   private readonly blood = new BloodWater();
   private waterScroll: [number, number] = [0, 0.006];
-  /** The cells of the level that carry a prop that stands over the floor (high grass, fungi, a signpost), and their cut-outs. */
+  /** The cells of the level that carry a signpost, and the cut-out of it; the high grass and fungi stand in their own batch (grass3d.ts). */
   private props: number[] = [];
+  private grass: Grass | null = null;
+  private grassCells: number[] = [];
+  /** The time of the last frame (the clock the grass folds by when it is trampled between frames). */
+  private lastNow = 0;
   private grassCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
   private signCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
 
@@ -298,6 +324,15 @@ export class World3D {
   hz = 60;
   private readonly fxContext: FxContext;
   private readonly everything: boolean[] = new Array<boolean>(LENGTH).fill(true);
+  /** The bloom's targets and passes (post.ts), while the tier has the bloom and the device can draw into half-float targets. */
+  private post: Post | null = null;
+  private postFailed = false;
+  /** The mirror under the water (mirror.ts): the highest tier, with the bloom's targets, in the orthographic view. */
+  private mirror: Mirror | null = null;
+  private readonly blankMirror = blankMirror();
+  private readonly mirrorUniforms = makeMirrorUniforms(this.blankMirror);
+  private width = 1;
+  private height = 1;
 
   constructor(canvas: HTMLCanvasElement, private readonly assets: Assets, options: World3DOptions) {
     if (!kitState) throw new Error('the world kit is not loaded');
@@ -336,11 +371,15 @@ export class World3D {
     this.scene.add(this.ambient, this.hemi);
     this.rig = new LightRig(this.scene, options.phone);
     this.effects = new Effects3D(this.scene, this.air, this.shared);
+    // What the mirror under the water sees: the lights (a camera's layer filters lights too), the batch of light, the sprites (below).
+    for (const light of [this.ambient, this.hemi, ...this.rig.all]) reflects(light);
+    reflects(this.effects.glow.mesh);
 
     // The sprite batch: one quad, many instances, one atlas (and the atlas of what glows).
     const quad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
     const makeMaterial = (): MeshLambertMaterial => {
-      const m = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide });
+      // (No blending: a cut-out pixel is whole, and its alpha in the frame says how much of it glows, post.ts.)
+      const m = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide, blending: NoBlending });
       withFog(m, this.air, 'instance', { selfLight: this.kit.sprites.selfLight, texel: [this.kit.sprites.rim.px / ATLAS_W, this.kit.sprites.rim.px / ATLAS_H] });
       return m;
     };
@@ -367,6 +406,7 @@ export class World3D {
     this.sprites.renderOrder = 2;
     this.sprites.count = 0;
     this.sprites.renderOrder = 3.5;
+    reflects(this.sprites);
     this.scene.add(this.sprites);
 
     const deadMaterial = makeMaterial();
@@ -460,16 +500,87 @@ export class World3D {
     }
     this.rig.setShadowLights(tier.shadowLights);
     this.effects.setParticles(tier.particles);
+    this.setBloom(tier.bloom);
+  }
+
+  /** The bloom on or off: made when first wanted, given back when the tier goes without. */
+  private setBloom(on: boolean): void {
+    if (on && !this.post && !this.postFailed && canPost(this.renderer)) {
+      this.post = new Post(this.kit.bloom);
+      this.post.resize(this.width, this.height);
+      this.applyHaze();
+    } else if (!on && this.post) {
+      this.post.dispose();
+      this.post = null;
+    }
+    // The stand-in for the bloom (a soft glow over the shining tiles) is drawn only where there is no real one.
+    this.effects.setBloom(this.post !== null);
+    this.applyGlowGain();
+    this.applyHaze();
+    this.setMirror(on && this.tier.mirror && this.post !== null && this.ortho !== null);
+  }
+
+  /** The mirror under the water on or off: made when first wanted, given back when the tier goes without. */
+  private setMirror(on: boolean): void {
+    if (on && !this.mirror) {
+      this.mirror = new Mirror(this.mirrorUniforms, this.kit.camera.pitch);
+      this.mirror.resize(this.width, this.height);
+      this.configureMirror();
+    } else if (!on && this.mirror) {
+      this.mirror.dispose();
+      this.mirror = null;
+      this.mirrorUniforms.tMirror.value = this.blankMirror;
+      this.mirrorUniforms.uMirrorOn.value = 0;
+    }
+  }
+
+  private configureMirror(): void {
+    // (Lava reflects nothing: its level has a mirror with no water to show.)
+    if (this.mirror && this.geom) this.mirror.configure(this.reflective ? this.geom.kinds : NO_KINDS, materialOf(this.kit, this.region, 'water').height);
+  }
+
+  /**
+   * The demon halls' haze (the kit: its fog.mist, a low red layer, and the `haze` particle, a heat distortion over lava), at the tiers that
+   * have it: the mist is a few lines in the terrain's and sprites' shaders (the uniforms of the fog), the shimmer a line in the bloom's
+   * output pass. Without the layer the mist is the older big soft wisps, where there are particles at all.
+   */
+  private applyHaze(): void {
+    const on = this.tier.haze && this.halls && this.mistKit !== null;
+    const mist = this.mistKit;
+    if (on && mist) {
+      this.air.uMist.value.set(mist.density, mist.height);
+      this.air.uMistColor.value.setHex(hex(mist.color));
+    } else this.air.uMist.value.x = 0;
+    this.effects.setMist(on ? null : mist);
+    this.post?.setHeat(on ? HEAT_PIXELS : 0);
+  }
+
+  /** What glows is brightened for the bloom (GLOW_GAIN), or put back as the kit has it. */
+  private applyGlowGain(): void {
+    const on = this.post !== null;
+    for (const batch of [this.sprites, this.deadMesh]) (batch.material as MeshLambertMaterial).emissiveIntensity = on ? GLOW_GAIN.sprites : 1;
+    if (this.terrainMaterial) this.terrainMaterial.emissiveIntensity = on ? GLOW_GAIN.terrain : 1;
+    if (this.grass) this.grass.material.emissiveIntensity = on ? GLOW_GAIN.grass : 1;
+    if (this.waterMaterial) this.waterMaterial.emissiveIntensity = this.waterGlow * (on && this.lava ? GLOW_GAIN.lava : 1);
   }
 
   resize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
     this.renderer.setSize(width, height, false);
+    this.post?.resize(width, height);
+    this.mirror?.resize(width, height);
   }
 
   /** The kit's heights, in the form the geometry takes them. */
   private geomKit(region: number): GeomKit {
     const m = (key: string): number => materialOf(this.kit, region, key).height;
-    return { wall: m('wall_face'), door: m('door'), statue: m('statue'), bookshelf: m('bookshelf'), barricade: m('barricade'), well: m('well'), chasm: m('chasm'), water: m('water') };
+    // (The stairs' heights are optional in a kit: its own values, or the numbers of the design.)
+    const stairs = (key: string, fallback: number): number => (this.kit.materials[key] ? m(key) : fallback);
+    return {
+      wall: m('wall_face'), door: m('door'), statue: m('statue'), bookshelf: m('bookshelf'), barricade: m('barricade'), well: m('well'), chasm: m('chasm'), water: m('water'),
+      stairsDown: stairs('stairs_down', -0.5), stairsUp: stairs('stairs_up', 0.5),
+    };
   }
 
   /** A new floor (or run): the geometry of its map, torches, a fresh fog. `key` tells one floor from another. */
@@ -499,6 +610,7 @@ export class World3D {
       this.region = region;
       this.makeMaterials(region);
       this.cutProps(images, region);
+      this.makeGrass();
       this.dropMeshes();
     }
     const a = atmosphere(this.kit, region, level.depth);
@@ -506,7 +618,8 @@ export class World3D {
     const under = new Map<number, number>([[HIGH_GRASS, region >= 2 ? 1 : 2], [SIGN, 1]]);
     this.geom = new LevelGeom(level.map, 16, 16, this.geomKit(region), under);
     this.makeMeshes();
-    this.scanProps();
+    this.scanProps(true);
+    this.configureMirror();
 
     // The air: the kit's light, haze and particles of the region, or of the boss's arena.
     const L = lights(this.kit, a);
@@ -521,7 +634,7 @@ export class World3D {
     this.renderer.setClearColor(this.air.uBg.value, 1);
     this.fires = sourcesOf(this.kit, a.region, this.geom, true);
     this.rig.configure(L, this.fires, this.tier.shadowLights);
-    this.fog.setPools(bakePools([...this.fires, ...doorGlow(this.geom.terrain)], this.geom.kinds));
+    this.fog.setPools(bakePools([...this.fires, ...doorGlow(this.geom.terrain), ...stairGlow(this.geom.terrain)], this.geom.kinds));
     this.lightBase = { ambient: L.ambient.intensity, hemi: L.hemi.intensity };
     this.bright = 0;
     if (a.accent) this.rig.setAccent(hex(a.accent.color), a.accent.intensity * 2.2);
@@ -529,7 +642,9 @@ export class World3D {
     this.accentBase = a.accent ? a.accent.intensity * 2.2 : 0;
     this.bossName = a.boss;
     this.effects.configure(this.kit, a, this.geom, region, this.tier);
-    this.effects.setMist(a.fog.mist);
+    this.mistKit = a.fog.mist;
+    this.halls = region === 4;
+    this.applyHaze();
     this.bossSeen = false;
     this.heroCell = -1;
     this.waterScroll = a.region.water.scroll;
@@ -543,10 +658,12 @@ export class World3D {
   private makeMaterials(region: number): void {
     const t = this.terrain!;
     this.terrainMaterial = new MeshStandardMaterial({
-      map: t.color, emissiveMap: t.emissive, emissive: 0xffffff, emissiveIntensity: 1, roughnessMap: t.rough, roughness: 1, metalness: 0,
-      vertexColors: true, alphaTest: 0.5,
+      map: t.color, emissiveMap: t.emissive, emissive: 0xffffff, emissiveIntensity: 1, roughnessMap: t.rough, roughness: 1, metalness: t.metal ? 1 : 0,
+      ...(t.metal ? { metalnessMap: t.metal } : {}), vertexColors: true, alphaTest: 0.5,
     });
     withFog(this.terrainMaterial, this.air, 'attribute');
+    // The gold ore of the caves is metal, and glints in the light (ore.ts).
+    if (t.metal) withGlint(this.terrainMaterial);
     // A leaf is drawn after the floor and the walls, testing the depth but not writing it, and before the figures: nobody in a
     // doorway is ever covered by the door, whatever the angle of the swing.
     this.leafMaterial = new MeshStandardMaterial({
@@ -566,6 +683,15 @@ export class World3D {
     if (!lava) this.waterMaterial.color.multiplyScalar(1.6);
     withFog(this.waterMaterial, this.air, 'attribute');
     withBlood(this.waterMaterial, this.blood);
+    // The kit's mirror: its colour and how much of the water it takes (0.6 of its strength, as the designer's frames have it); lava has none.
+    const mu = this.mirrorUniforms;
+    mu.uReflect.value.setHex(a.reflect ? hex(a.reflect) : 0xffffff);
+    mu.uReflectK.value = a.reflect && !lava ? 0.6 * a.reflectStrength : 0;
+    this.reflective = Boolean(a.reflect) && !lava;
+    if (a.reflect && !lava) withMirror(this.waterMaterial, mu);
+    this.waterGlow = this.waterMaterial.emissiveIntensity;
+    this.lava = lava;
+    this.applyGlowGain();
   }
 
   /** Cuts the region's props (high grass or fungi, the signpost) out of its tiles, and puts them on the sprite atlas. */
@@ -574,11 +700,28 @@ export class World3D {
     this.signCut = propCutout(images, SIGN, 1);
   }
 
-  /** Which cells of the level carry a prop that stands over the floor. */
-  private scanProps(): void {
+  /** The region's high grass: its crossed quads, made from the cut-out of its tile. */
+  private makeGrass(): void {
+    if (this.grass) {
+      this.scene.remove(this.grass.mesh);
+      this.grass.dispose();
+    }
+    const cut = this.grassCut!;
+    this.grass = new Grass(this.air, cut.color, cut.glow, this.kit.sprites.selfLight);
+    this.scene.add(this.grass.mesh);
+    this.applyGlowGain();
+  }
+
+  /** Which cells of the level carry a signpost and which high grass; the grass batch follows the map (trampled grass folds flat). */
+  private scanProps(snap = false): void {
     this.props = [];
+    this.grassCells.length = 0;
     const g = this.geom!;
-    for (let i = 0; i < LENGTH; i++) if (g.terrain[i] === HIGH_GRASS || g.terrain[i] === SIGN) this.props.push(i);
+    for (let i = 0; i < LENGTH; i++) {
+      if (g.terrain[i] === SIGN) this.props.push(i);
+      else if (g.terrain[i] === HIGH_GRASS) this.grassCells.push(i);
+    }
+    this.grass?.set(this.grassCells, this.lastNow, snap);
   }
 
   /** A door opened, grass was trampled: the geometry follows the map. */
@@ -595,10 +738,11 @@ export class World3D {
       this.rig.shadowsStale = true;
     }
     this.scanProps();
+    this.configureMirror();
     if (change !== 'patched') {
       this.rig.shadowsStale = true;
       // A wall or a door went: the pools of the fixed fires reach differently.
-      this.fog.setPools(bakePools([...this.fires, ...doorGlow(geom.terrain)], geom.kinds));
+      this.fog.setPools(bakePools([...this.fires, ...doorGlow(geom.terrain), ...stairGlow(geom.terrain)], geom.kinds));
     }
   }
 
@@ -654,6 +798,7 @@ export class World3D {
       mesh.renderOrder = 1;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      reflects(mesh);
       this.scene.add(mesh);
       if (locked) this.lockMesh = mesh;
       else this.leafMesh = mesh;
@@ -700,6 +845,7 @@ export class World3D {
     this.boxMesh = new Mesh(boxes, this.terrainMaterial!);
     this.boxMesh.castShadow = true;
     this.boxMesh.receiveShadow = true;
+    reflects(this.boxMesh);
     const water = new BufferGeometry();
     attrs(water, geom.water);
     this.waterMesh = new Mesh(water, this.waterMaterial!);
@@ -891,8 +1037,9 @@ export class World3D {
     const hover = puppet.levitating && puppet.alive ? 4 + Math.round(Math.sin(now / 320)) : 0;
     // The sad ghost floats a little off the floor and bobs gently, slowly, with a cold light round it.
     const spectral = puppet.kind === 'ghost' && puppet.alive;
-    const lift = flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7)
-      : spectral ? 0.12 + 0.05 * Math.sin(now / 650 + puppet.to * 0.9) : hover / TILE;
+    const ground = this.geom!.groundAt(px / TILE, py / TILE);
+    const lift = ground + (flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7)
+      : spectral ? 0.12 + 0.05 * Math.sin(now / 650 + puppet.to * 0.9) : hover / TILE);
     // A figure whose picture has soft pixels (a ghost, a wraith, bees' wings) is drawn blended, with its own alpha, not cut at one half.
     const blend = !puppet.isHero && hasSoftBody(sheet.image);
     let tint = 1;
@@ -949,7 +1096,7 @@ export class World3D {
       const air = flyer || spectral || hover > 0;
       const size = Math.max(0.35, sk.shadow.width * (sheet.w / TILE)) * (air ? sk.fly.shadowScale : 1) * scale;
       const away = lit ? sk.shadow.offset : 0;
-      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1), sk.shadow.squash);
+      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1), sk.shadow.squash, ground);
     }
     if (BOSS_KINDS.has(puppet.kind) && puppet.alive) {
       this.bossFound = true;
@@ -970,6 +1117,8 @@ export class World3D {
     const f = this.options.reveal ? { ...given, visible: this.everything, explored: this.everything } : given;
     const t0 = performance.now();
     this.current = f;
+    this.lastNow = f.now;
+    this.grass?.frame(f.now);
     this.renderer.info.reset();
     this.syncGeometry();
 
@@ -1104,7 +1253,19 @@ export class World3D {
     }
     this.measureBegin();
     const r0 = performance.now();
-    this.renderer.render(this.scene, cam);
+    const post = this.post;
+    if (post) {
+      const mirror = this.mirror;
+      if (mirror && this.ortho) {
+        // The cells in view, with a margin for what stands over the shore.
+        const reach = f.height / ys / (2 * unit) + 2;
+        if (mirror.seen(cx - halfW - 2, cx + halfW + 2, cz - reach, cz + reach, f.explored)) {
+          mirror.render(this.renderer, cx, cz, halfW + 1, reach, (target, camera) => post.renderScene(this.renderer, this.scene, camera, target));
+        } else this.mirrorUniforms.uMirrorOn.value = 0;
+      }
+      post.renderScene(this.renderer, this.scene, cam);
+      post.composite(this.renderer, f.now / 1000);
+    } else this.renderer.render(this.scene, cam);
     this.perf.renderMs = performance.now() - r0;
     this.measureEnd();
     const info = this.renderer.info;
@@ -1187,24 +1348,16 @@ export class World3D {
     }
   }
 
-  /** High grass, fungi and signposts: cards standing over their cells (the grass sways), cut out of the region's tiles. */
+  /** Signposts: cards standing over their cells, cut out of the region's tiles (the high grass is its own batch). */
   private addProps(f: Frame3D, hx: number, hz: number): void {
-    const geom = this.geom!;
     const props = this.props;
-    const t = f.now / 1000;
     for (let i = 0; i < props.length; i++) {
       const cell = props[i]!;
       if (!f.explored[cell]) continue;
       const x = cell % WIDTH;
       const z = Math.trunc(cell / WIDTH);
       if (Math.abs(x + 0.5 - hx) > PROP_REACH || Math.abs(z + 0.5 - hz) > PROP_REACH) continue;
-      const terrain = geom.terrain[cell];
-      if (terrain === HIGH_GRASS) {
-        const sway = Math.sin(t * 3.77 + cell * 0.9) * 0.05;
-        this.sprite(this.grassCut!.color, 0, 0, 16, 16, cell % 2 === 0, x + 0.5, 0, z + 0.62, 1, 1.05, 1, LEANED, sway, this.grassCut!.glow);
-      } else if (terrain === SIGN) {
-        this.sprite(this.signCut!.color, 0, 0, 16, 16, false, x + 0.5, 0, z + 0.62, 1, 1, 1, LEANED, 0, this.signCut!.glow);
-      }
+      this.sprite(this.signCut!.color, 0, 0, 16, 16, false, x + 0.5, 0, z + 0.62, 1, 1, 1, LEANED, 0, this.signCut!.glow);
     }
   }
 
@@ -1325,6 +1478,13 @@ export class World3D {
     this.waterMaterial?.dispose();
     this.terrain?.dispose();
     this.waterTex?.dispose();
+    if (this.grass) {
+      this.scene.remove(this.grass.mesh);
+      this.grass.dispose();
+    }
+    this.mirror?.dispose();
+    this.blankMirror.dispose();
+    this.post?.dispose();
     this.atlas.dispose();
     this.fog.dispose();
     this.blood.dispose();

@@ -1,0 +1,62 @@
+{
+ "before-sprite-cards": {
+  "sewers": {
+   "cpu": 0.906,
+   "render": 0.749,
+   "gpu": 2.578,
+   "calls": 18.0,
+   "tris": 5940.0
+  },
+  "caves": {
+   "cpu": 0.706,
+   "render": 0.583,
+   "gpu": 2.057,
+   "calls": 18.0,
+   "tris": 5192.0
+  },
+  "city": {
+   "cpu": 0.57,
+   "render": 0.478,
+   "gpu": 3.347,
+   "calls": 18.0,
+   "tris": 5694.0
+  },
+  "halls": {
+   "cpu": 0.514,
+   "render": 0.404,
+   "gpu": 1.922,
+   "calls": 15.0,
+   "tris": 3096.0
+  }
+ },
+ "after-crossed-quads": {
+  "sewers": {
+   "cpu": 0.592,
+   "render": 0.486,
+   "gpu": 2.442,
+   "calls": 19.0,
+   "tris": 5955.0
+  },
+  "caves": {
+   "cpu": 0.559,
+   "render": 0.458,
+   "gpu": 1.895,
+   "calls": 19.0,
+   "tris": 5212.0
+  },
+  "city": {
+   "cpu": 0.61,
+   "render": 0.513,
+   "gpu": 3.378,
+   "calls": 19.0,
+   "tris": 5767.0
+  },
+  "halls": {
+   "cpu": 0.563,
+   "render": 0.452,
+   "gpu": 2.643,
+   "calls": 16.0,
+   "tris": 3302.0
+  }
+ }
+}

@@ -38,6 +38,9 @@ export interface AirUniforms {
   /** The share of its colour a remembered cell keeps, and the pools' strength (MEMORY_LIFT, POOL_STRENGTH). */
   uMem: { value: number };
   uPool: { value: number };
+  /** The low red mist of the demon halls (the kit's fog.mist): its opacity and its height in cells (0 for none), and its colour. */
+  uMist: { value: Vector2 };
+  uMistColor: { value: Color };
 }
 
 export function makeAir(fog: Texture): AirUniforms {
@@ -50,6 +53,8 @@ export function makeAir(fog: Texture): AirUniforms {
     uTime: { value: 0 },
     uMem: { value: MEMORY_LIFT },
     uPool: { value: POOL_STRENGTH },
+    uMist: { value: new Vector2(0, 0.4) },
+    uMistColor: { value: new Color(0x5a1a10) },
   };
 }
 
@@ -180,15 +185,17 @@ export function withFog(
     shader.uniforms.uTime = air.uTime;
     shader.uniforms.uMem = air.uMem;
     shader.uniforms.uPool = air.uPool;
+    shader.uniforms.uMist = air.uMist;
+    shader.uniforms.uMistColor = air.uMistColor;
     const declarations = [
-      '#include <common>', 'uniform sampler2D tFog;', 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;',
+      '#include <common>', 'uniform sampler2D tFog;', 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;',
       mode === 'attribute' ? 'attribute vec2 aFog;' : 'attribute vec4 aUv;',
       ...(sprite ? ['attribute vec3 aRim;', 'attribute vec3 aRimColor;', 'varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec4 vRect;'] : []),
     ].join(NEWLINE);
     const fetch =
       mode === 'attribute'
-        ? 'vec4 fogTex = texture2D(tFog, aFog); vFog = fogTex.r; vPool = fogTex.gba; vWPos = position.xz;'
-        : `vec4 fogAt = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0); vec4 fogTex = texture2D(tFog, vec2(fogAt.x / ${WIDTH}.0, fogAt.z / ${HEIGHT}.0)); vFog = fogTex.r; vPool = fogTex.gba; vWPos = fogAt.xz;`;
+        ? 'vec4 fogTex = texture2D(tFog, aFog); vFog = fogTex.r; vPool = fogTex.gba; vWPos = position.xz; vWY = position.y;'
+        : `vec4 fogAt = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0); vec4 fogTex = texture2D(tFog, vec2(fogAt.x / ${WIDTH}.0, fogAt.z / ${HEIGHT}.0)); vFog = fogTex.r; vPool = fogTex.gba; vWPos = fogAt.xz; vWY = (instanceMatrix * vec4(position, 1.0)).y;`;
     let vertex = shader.vertexShader.replace('#include <common>', declarations).replace('#include <begin_vertex>', ['#include <begin_vertex>', fetch].join(NEWLINE));
     if (mode === 'instance') {
       vertex = vertex.replace('#include <uv_vertex>', ['#ifdef USE_MAP', 'vMapUv = aUv.xy + uv * aUv.zw;', '#endif', '#ifdef USE_EMISSIVEMAP', 'vEmissiveMapUv = aUv.xy + uv * aUv.zw;', '#endif'].join(NEWLINE));
@@ -223,7 +230,7 @@ export function withFog(
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec4 vRect;'] : []), 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;', 'uniform float uTime;', 'uniform float uMem;', 'uniform float uPool;'].join(NEWLINE),
+        ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec4 vRect;'] : []), 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;', 'uniform vec3 uMistColor;', 'uniform vec2 uMist;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;', 'uniform float uTime;', 'uniform float uMem;', 'uniform float uPool;'].join(NEWLINE),
       )
       .replace('#include <emissivemap_fragment>', sprite ? spriteFragment(sprite) : '#include <emissivemap_fragment>')
       .replace(
@@ -236,7 +243,17 @@ export function withFog(
           '  float haze = smoothstep(uHaze.x, uHaze.y, distance(vWPos, uHero));',
           // Far away, in sight, the air thickens; what is only remembered is not hidden by it.
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, uFogColor, haze * 0.85 * (1.0 - 0.75 * rem));',
+          // The kit's low mist (the halls' red): a layer of slow noise hugging the floor, thinning to nothing at its height.
+          '  if (uMist.x > 0.0) {',
+          '    float low = 1.0 - smoothstep(0.0, uMist.y, vWY);',
+          '    float wave = 0.62 + 0.38 * sin(vWPos.x * 0.8 + uTime * 0.31) * sin(vWPos.y * 0.9 - uTime * 0.23) + 0.14 * sin((vWPos.x + vWPos.y) * 2.3 + uTime * 0.7);',
+          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, uMistColor, clamp(uMist.x * 2.4 * low * wave, 0.0, 0.75) * (1.0 - 0.6 * rem));',
+          '  }',
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, uBg, smoothstep(0.52, 1.0, vFog));',
+          // A sprite's alpha, once its pixel has been cut out, is what the bloom takes of it (post.ts): none for a plain figure, the
+          // strength of its own glow where it has one (a legendary look, a wand); the batch is drawn without blending, so this is the
+          // pixel's alpha in the frame. (On the canvas, with no alpha, it is nothing.)
+          ...(sprite ? ['  #ifdef USE_EMISSIVEMAP', '  gl_FragColor.a = min(1.0, max(emissiveColor.r, max(emissiveColor.g, emissiveColor.b)));', '  #endif'] : []),
           '}',
         ].join(NEWLINE),
       );
