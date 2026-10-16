@@ -263,8 +263,6 @@ export class View {
   looks: Record<string, Look> = {};
   /** What my hero's cosmetics put on the floor: footprints, the effects of a kill and a fall, the pet. */
   readonly wearFx = new WearFx();
-  /** Who last struck each foe (a kill's effect is played for my own kills only). */
-  private readonly struck = new Map<string, string>();
   depth = 0;
   /** When the "boss slain" banner appeared, or 0. */
   bannerStart = 0;
@@ -288,7 +286,6 @@ export class View {
   reset(depth: number): void {
     this.depth = depth;
     this.puppets.clear();
-    this.struck.clear();
     this.wearFx.reset();
     this.floaters = [];
     this.flashes = [];
@@ -611,7 +608,6 @@ export class View {
           }
           if (effect.hit) {
             if (target) target.flashUntil = now + 160;
-            if (effect.target.startsWith('#')) this.struck.set(effect.target, effect.attacker);
             const toHero = !effect.target.startsWith('#');
             this.float(effect.target, String(effect.damage), toHero ? COLORS.negative : COLORS.warning, now);
             audio.play(blowSound(world, effect.attacker, this.puppets.get(effect.attacker)?.kind), 0.8 + Math.random() * 0.45, 1, this.placeOf(effect.target, now));
@@ -642,11 +638,15 @@ export class View {
           if (effect.who.startsWith('#')) {
             const kind = this.puppets.get(effect.who)?.kind as MobKind | undefined;
             if (kind && effect.depth === this.depth) this.say(t.killed(t.mobs[kind]), COLORS.neutral, now);
-            // My own kill: the effect of the one I wear, where the foe stood.
-            const fallen = this.puppets.get(effect.who);
-            if (fallen && effect.depth === this.depth && this.struck.get(effect.who) === myId) {
-              const at = this.position(fallen, now);
-              this.wearFx.kill(Math.round(at.x), Math.round(at.y), now);
+            // Every kill I cause plays the effect of the one I wear, where the foe stood: the core's `died` says which hero slew it (`by`),
+            // whether by a blow, a wand's bolt, a thrown weapon, a bomb or an enchantment's strike. A death by fire, poison, bleeding, a trap or
+            // gas names nobody (the core keeps no account of who set it), and a monster's or an ally's kill has no hero in it: those play nothing.
+            if (effect.by === myId && effect.depth === this.depth && seen(effect.pos)) {
+              const fallen = this.puppets.get(effect.who);
+              const at = fallen ? this.position(fallen, now) : { x: cellX(effect.pos) * TILE, y: cellY(effect.pos) * TILE };
+              // A bolt or a missile in flight to that cell lands first.
+              const flight = this.projectiles.find((p) => p.to === effect.pos && p.start === now);
+              this.wearFx.kill(Math.round(at.x), Math.round(at.y), flight ? flight.start + flight.duration : now);
             }
           } else {
             if (effect.who === myId && effect.depth === this.depth) {
