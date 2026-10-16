@@ -1,0 +1,42 @@
+{
+ "sewers": {
+  "cpu": 0.636,
+  "render": 0.5,
+  "gpu": 1.238,
+  "calls": 12,
+  "n": 171,
+  "tris": 2958
+ },
+ "prison": {
+  "cpu": 1.499,
+  "render": 1.248,
+  "gpu": 1.786,
+  "calls": 13,
+  "n": 97,
+  "tris": 3526
+ },
+ "caves": {
+  "cpu": 0.67,
+  "render": 0.546,
+  "gpu": 1.19,
+  "calls": 13,
+  "n": 140,
+  "tris": 3050
+ },
+ "city": {
+  "cpu": 1.622,
+  "render": 1.422,
+  "gpu": 1.791,
+  "calls": 15,
+  "n": 110,
+  "tris": 2888
+ },
+ "halls": {
+  "cpu": 0.555,
+  "render": 0.456,
+  "gpu": 1.469,
+  "calls": 13,
+  "n": 172,
+  "tris": 4218
+ }
+}

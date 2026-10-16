@@ -213,6 +213,8 @@ export class Effects3D {
   private glowSize = new Float32Array(0);
   private glowAlpha = new Float32Array(0);
   private glowCount = 0;
+  /** The real bloom is on (post.ts): the stand-in glow over the shining tiles is not drawn. */
+  private bloomOn = false;
 
   private bolt: BoltKit | null = null;
   private kitRef: Kit | null = null;
@@ -280,8 +282,13 @@ export class Effects3D {
     this.glowCount = cells.length;
   }
 
+  setBloom(on: boolean): void {
+    this.bloomOn = on;
+  }
+
   /** The glow over the tiles that shine: seen ones only, near the hero, flickering a little (embers more). */
   private glows(c: FxContext): void {
+    if (this.bloomOn) return;
     const t = c.now / 1000;
     for (let i = 0; i < this.glowCount; i++) {
       const cell = this.glowCells[i]!;

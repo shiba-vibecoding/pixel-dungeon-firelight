@@ -227,6 +227,10 @@ export function withFog(
           // Far away, in sight, the air thickens; what is only remembered is not hidden by it.
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, uFogColor, haze * 0.85 * (1.0 - 0.75 * rem));',
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, uBg, smoothstep(0.52, 1.0, vFog));',
+          // A sprite's alpha, once its pixel has been cut out, is what the bloom takes of it (post.ts): none for a plain figure, the
+          // strength of its own glow where it has one (a legendary look, a wand); the batch is drawn without blending, so this is the
+          // pixel's alpha in the frame. (On the canvas, with no alpha, it is nothing.)
+          ...(sprite ? ['  #ifdef USE_EMISSIVEMAP', '  gl_FragColor.a = min(1.0, max(emissiveColor.r, max(emissiveColor.g, emissiveColor.b)));', '  #endif'] : []),
           '}',
         ].join(NEWLINE),
       );

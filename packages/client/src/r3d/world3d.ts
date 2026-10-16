@@ -10,12 +10,13 @@
  *   - nothing but the walls casts a shadow, so shadow maps are drawn only when a wall or a torch changes (autoUpdate off);
  *   - the fog of war is a 48 x 48 texture read by the vertex shaders, the region's haze is a line in the same shaders: no pass;
  *   - nothing is made in the frame loop: vectors, matrices and records are made once and written in place.
- * What does not come over: the kit's mirror under water (a second render of the scene; the water is a bright surface that shines
- * under the lights instead), its bloom, and the haze pass of the demon halls.
+ * The kit's bloom is a pass (post.ts) at the two highest tiers: the frame goes through a half-float target and a blurred copy of its
+ * bright part is added. What does not come over yet: the kit's mirror under water (the water is a bright surface that shines under
+ * the lights instead), and the haze pass of the demon halls.
  */
 import {
   AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
-  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
+  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, NoBlending, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
   PlaneGeometry, RepeatWrapping, Scene, SRGBColorSpace, Texture, WebGLRenderer,
 } from 'three';
 import { LENGTH, type Level, WIDTH } from '@pd/core';
@@ -34,6 +35,7 @@ import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
+import { canPost, Post } from './post';
 import { BloodWater, withBlood } from './bloodwater';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
@@ -108,6 +110,11 @@ const SIGN = 29;
 const PROP_REACH = 11;
 /** A torch out of sight keeps its halo this near the hero, cells. */
 const SCONCE_REACH = 14;
+/**
+ * With the bloom on, what glows is brighter than 1 in the frame before the tone map takes it down (the way light is, and the way the
+ * designer's frames were made), so the bloom has it to take: by this much for what is lit by its glow map, and for lava.
+ */
+const GLOW_GAIN = { sprites: 1.5, terrain: 1.4, lava: 1.6 };
 
 /** How the sprite batch stands a picture up: leaned toward the camera (characters, items) or straight up (a sconce on a wall). */
 const LEANED = 0;
@@ -217,6 +224,9 @@ export class World3D {
   private seenFloor = -1;
   private seenBox = -1;
   private terrainMaterial: MeshStandardMaterial | null = null;
+  /** The glow of the water as the kit has it (lava glows; plain water shines a little), and whether it is lava. */
+  private waterGlow = 1;
+  private lava = false;
   private decalMaterial: MeshBasicMaterial | null = null;
   private waterMaterial: MeshStandardMaterial | null = null;
   /** Blood in the water: the red a victim leaves in it (bloodwater.ts). */
@@ -277,6 +287,11 @@ export class World3D {
   hz = 60;
   private readonly fxContext: FxContext;
   private readonly everything: boolean[] = new Array<boolean>(LENGTH).fill(true);
+  /** The bloom's targets and passes (post.ts), while the tier has the bloom and the device can draw into half-float targets. */
+  private post: Post | null = null;
+  private postFailed = false;
+  private width = 1;
+  private height = 1;
 
   constructor(canvas: HTMLCanvasElement, private readonly assets: Assets, options: World3DOptions) {
     if (!kitState) throw new Error('the world kit is not loaded');
@@ -319,7 +334,8 @@ export class World3D {
     // The sprite batch: one quad, many instances, one atlas (and the atlas of what glows).
     const quad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
     const makeMaterial = (): MeshLambertMaterial => {
-      const m = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide });
+      // (No blending: a cut-out pixel is whole, and its alpha in the frame says how much of it glows, post.ts.)
+      const m = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide, blending: NoBlending });
       withFog(m, this.air, 'instance', { selfLight: this.kit.sprites.selfLight, texel: [this.kit.sprites.rim.px / ATLAS_W, this.kit.sprites.rim.px / ATLAS_H] });
       return m;
     };
@@ -422,10 +438,36 @@ export class World3D {
     }
     this.rig.setShadowLights(tier.shadowLights);
     this.effects.setParticles(tier.particles);
+    this.setBloom(tier.bloom);
+  }
+
+  /** The bloom on or off: made when first wanted, given back when the tier goes without. */
+  private setBloom(on: boolean): void {
+    if (on && !this.post && !this.postFailed && canPost(this.renderer)) {
+      this.post = new Post(this.kit.bloom);
+      this.post.resize(this.width, this.height);
+    } else if (!on && this.post) {
+      this.post.dispose();
+      this.post = null;
+    }
+    // The stand-in for the bloom (a soft glow over the shining tiles) is drawn only where there is no real one.
+    this.effects.setBloom(this.post !== null);
+    this.applyGlowGain();
+  }
+
+  /** What glows is brightened for the bloom (GLOW_GAIN), or put back as the kit has it. */
+  private applyGlowGain(): void {
+    const on = this.post !== null;
+    for (const batch of [this.sprites, this.deadMesh]) (batch.material as MeshLambertMaterial).emissiveIntensity = on ? GLOW_GAIN.sprites : 1;
+    if (this.terrainMaterial) this.terrainMaterial.emissiveIntensity = on ? GLOW_GAIN.terrain : 1;
+    if (this.waterMaterial) this.waterMaterial.emissiveIntensity = this.waterGlow * (on && this.lava ? GLOW_GAIN.lava : 1);
   }
 
   resize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
     this.renderer.setSize(width, height, false);
+    this.post?.resize(width, height);
   }
 
   /** The kit's heights, in the form the geometry takes them. */
@@ -521,6 +563,9 @@ export class World3D {
     if (!lava) this.waterMaterial.color.multiplyScalar(1.6);
     withFog(this.waterMaterial, this.air, 'attribute');
     withBlood(this.waterMaterial, this.blood);
+    this.waterGlow = this.waterMaterial.emissiveIntensity;
+    this.lava = lava;
+    this.applyGlowGain();
   }
 
   /** Cuts the region's props (high grass or fungi, the signpost) out of its tiles, and puts them on the sprite atlas. */
@@ -966,7 +1011,11 @@ export class World3D {
     }
     this.measureBegin();
     const r0 = performance.now();
-    this.renderer.render(this.scene, cam);
+    const post = this.post;
+    if (post) {
+      post.renderScene(this.renderer, this.scene, cam);
+      post.composite(this.renderer);
+    } else this.renderer.render(this.scene, cam);
     this.perf.renderMs = performance.now() - r0;
     this.measureEnd();
     const info = this.renderer.info;
@@ -1185,6 +1234,7 @@ export class World3D {
     this.waterMaterial?.dispose();
     this.terrain?.dispose();
     this.waterTex?.dispose();
+    this.post?.dispose();
     this.atlas.dispose();
     this.fog.dispose();
     this.blood.dispose();
