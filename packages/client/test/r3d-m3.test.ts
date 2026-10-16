@@ -127,19 +127,24 @@ describe('the stairs as steps (levelgeom.ts)', () => {
   const tread = (qs: Q[], x: number, y: number, z0: number, z1: number): Q | undefined =>
     qs.find((q) => q.ys.every((v) => near(v, y)) && near(Math.min(...q.xs), x) && near(Math.max(...q.xs), x + 1) && near(Math.min(...q.zs), z0) && near(Math.max(...q.zs), z1));
 
-  it('has the entrance rise in three steps toward the north, each with a third of the stair tile', () => {
+  /** The treads, south to north, in sixteenths of the cell: the stair tile is cut into these slices, from its top row down. */
+  const SLICES = [{ depth: 0, rows: 5, top: 11 }, { depth: 5, rows: 5, top: 6 }, { depth: 10, rows: 6, top: 0 }];
+  /** The row (from the tile's top, in art pixels) a texture v is at. */
+  const rowOf = (rect: Float32Array, v: number): number => (1 - (v - rect[1]!) / (rect[3]! - rect[1]!)) * 16;
+
+  it('has the entrance rise in three steps toward the north, each with its own pixel rows of the stair tile', () => {
     const geom = new LevelGeom(room(), 16, 16);
     const qs = quads(geom);
     const rect = new Float32Array(4);
     tileRect(T.ENTRANCE, 16, 16, rect);
     for (let k = 0; k < 3; k++) {
-      const south = 6 - k / 3;
-      const t = tread(qs, 6, ((k + 1) * 0.5) / 3, south - 1 / 3, south);
+      const { depth, rows, top } = SLICES[k]!;
+      const south = 6 - depth / 16;
+      const t = tread(qs, 6, ((k + 1) * 0.5) / 3, south - rows / 16, south);
       expect(t, `tread ${k}`).toBeDefined();
-      // The tread's picture is the k-th third of the tile, south at the bottom.
-      const band = (rect[3]! - rect[1]!) / 3;
-      expect(t!.uv[1]).toBeCloseTo(rect[1]! + band * k, 6);
-      expect(t!.uv[5]).toBeCloseTo(rect[1]! + band * (k + 1), 6);
+      // The tread's picture is `rows` whole rows of the tile at its own scale (not the tile squeezed in), south at the bottom.
+      expect(rowOf(rect, t!.uv[1]!)).toBeCloseTo(top + rows, 4);
+      expect(rowOf(rect, t!.uv[5]!)).toBeCloseTo(top, 4);
       expect(t!.uv[0]).toBeCloseTo(rect[0]!, 6);
       expect(t!.uv[2]).toBeCloseTo(rect[2]!, 6);
       // And a riser under it that faces the camera.
@@ -150,20 +155,24 @@ describe('the stairs as steps (levelgeom.ts)', () => {
     expect(geom.floor.pos[geom.slot[6 + 5 * WIDTH]! * 12 + 1]).toBe(0);
   });
 
-  it('has the exit sink in three steps toward the north into a stairwell, the last one the darkest', () => {
+  it('has the exit sink in three steps toward the north into a stairwell, darker the lower it goes', () => {
     const geom = new LevelGeom(room(), 16, 16);
     const qs = quads(geom);
     for (let k = 0; k < 3; k++) {
-      const south = 6 - k / 3;
-      expect(tread(qs, 13, (-(k + 1) * 0.5) / 3, south - 1 / 3, south), `tread ${k}`).toBeDefined();
+      const { depth, rows } = SLICES[k]!;
+      const south = 6 - depth / 16;
+      const y = (-(k + 1) * 0.5) / 3;
+      // The tread, and a one-pixel dark edge along its far side (the drop to the next step).
+      expect(tread(qs, 13, y, south - (rows - 1) / 16, south), `tread ${k}`).toBeDefined();
+      expect(tread(qs, 13, y, south - rows / 16, south - (rows - 1) / 16), `edge ${k}`).toBeDefined();
     }
     // Its floor is the bottom of the stairwell, and the rock at its far end stands from the bottom to the floor round it.
     expect(geom.floor.pos[geom.slot[13 + 5 * WIDTH]! * 12 + 1]).toBeCloseTo(-0.5, 6);
     const far = qs.find((q) => q.zs.every((v) => near(v, 5)) && near(Math.min(...q.xs), 13) && near(Math.min(...q.ys), -0.5) && near(Math.max(...q.ys), 0));
     expect(far).toBeDefined();
-    // Darker as it goes down: the colour of a vertex of each tread.
+    // Darker as it goes down: the colour of the south vertex of each tread.
     const shade = (k: number): number => {
-      const south = 6 - k / 3;
+      const south = 6 - SLICES[k]!.depth / 16;
       const want = (-(k + 1) * 0.5) / 3;
       for (let v = 0; v < geom.boxes.verts; v += 4) {
         const p = geom.boxes.pos;
@@ -173,14 +182,52 @@ describe('the stairs as steps (levelgeom.ts)', () => {
     };
     expect(shade(0)).toBeGreaterThan(shade(1));
     expect(shade(1)).toBeGreaterThan(shade(2));
+    // Smooth: the far end of a tread is the colour of the south end of the next (no band steps between them).
+    const north0 = (() => {
+      for (let v = 0; v < geom.boxes.verts; v += 4) {
+        const p = geom.boxes.pos;
+        if (near(p[v * 3 + 1]!, -0.5 / 3) && near(p[(v + 2) * 3 + 1]!, -0.5 / 3) && near(p[(v + 2) * 3 + 2]!, 6 - 4 / 16)) return geom.boxes.color[(v + 2) * 3]!;
+      }
+      return NaN;
+    })();
+    expect(north0).toBeGreaterThan(shade(1) * 0.9);
+    expect(north0).toBeLessThan(shade(0));
+  });
+
+  it('draws every vertical face of a flight as whole rows of art, and no contact shadow across the stairs', () => {
+    const rect = new Float32Array(4);
+    tileRect(T.ENTRANCE, 16, 16, rect);
+    for (const exit of [false, true]) {
+      const geom = new LevelGeom(room(), 16, 16);
+      const cx = exit ? 13 : 6;
+      let faces = 0;
+      for (const q of quads(geom)) {
+        const inside = q.xs.every((v) => v >= cx - 1e-6 && v <= cx + 1 + 1e-6) && q.zs.every((v) => v >= 5 - 1e-6 && v <= 6 + 1e-6);
+        if (!inside || q.normal[1] !== 0) continue;
+        faces++;
+        const rows = Math.abs(rowOf(rect, q.uv[1]!) - rowOf(rect, q.uv[5]!));
+        expect(Math.abs(rows - Math.round(rows)), `rows of a face (${rows})`).toBeLessThan(1e-3);
+        expect(Math.round(rows)).toBeGreaterThanOrEqual(1);
+      }
+      expect(faces).toBeGreaterThan(0);
+      // The decals (contact shadows) are drawn in the floor's plane: none of them is over the stairs cell.
+      const d = geom.decals;
+      for (let v = 0; v < d.verts; v++) {
+        const x = d.pos[v * 3]!;
+        const z = d.pos[v * 3 + 2]!;
+        expect(x > cx + 1e-6 && x < cx + 1 - 1e-6 && z > 5 + 1e-6 && z < 6 - 1e-6, `decal vertex ${x}, ${z}`).toBe(false);
+      }
+    }
   });
 
   it('lifts a figure to the step it stands on', () => {
     const geom = new LevelGeom(room(), 16, 16);
+    // The steps are 5, 5 and 6 sixteenths deep, counted from the south edge of the cell.
     expect(geom.groundAt(6.5, 5.9)).toBeCloseTo(0.5 / 3, 6);
-    expect(geom.groundAt(6.5, 5.5)).toBeCloseTo(1 / 3, 6);
+    expect(geom.groundAt(6.5, 5.55)).toBeCloseTo(1 / 3, 6);
     expect(geom.groundAt(6.5, 5.1)).toBeCloseTo(0.5, 6);
     expect(geom.groundAt(13.5, 5.9)).toBeCloseTo(-0.5 / 3, 6);
+    expect(geom.groundAt(13.5, 5.55)).toBeCloseTo(-1 / 3, 6);
     expect(geom.groundAt(13.5, 5.1)).toBeCloseTo(-0.5, 6);
     expect(geom.groundAt(8.5, 5.5)).toBe(0);
     expect(geom.groundAt(-3, 5)).toBe(0);
@@ -188,11 +235,11 @@ describe('the stairs as steps (levelgeom.ts)', () => {
 
   it('keeps the locked exit of a boss level a block, and gives the unlocked one its steps', () => {
     const geom = new LevelGeom(room(T.LOCKED_EXIT), 16, 16);
-    expect(tread(quads(geom), 13, -0.5 / 3, 5 + 2 / 3, 6)).toBeUndefined();
+    expect(tread(quads(geom), 13, -0.5 / 3, 6 - 4 / 16, 6)).toBeUndefined();
     expect(geom.groundAt(13.5, 5.5)).toBe(0);
     const open = room(T.UNLOCKED_EXIT);
     expect(geom.patch(open)).toBe('solids');
-    expect(tread(quads(geom), 13, -0.5 / 3, 5 + 2 / 3, 6)).toBeDefined();
+    expect(tread(quads(geom), 13, -0.5 / 3, 6 - 4 / 16, 6)).toBeDefined();
     expect(geom.floor.pos[geom.slot[13 + 5 * WIDTH]! * 12 + 1]).toBeCloseTo(-0.5, 6);
     expect(geom.groundAt(13.5, 5.1)).toBeCloseTo(-0.5, 6);
   });
