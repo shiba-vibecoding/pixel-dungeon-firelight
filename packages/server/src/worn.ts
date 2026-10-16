@@ -44,7 +44,7 @@ export const ARMOR_TIERS = 6;
 
 /** The armour a hero wears, as the row of the hero's sheet: from the (verified) world's hero, never from a device. */
 export function armorTierOf(hero: Pick<Hero, 'armor'>): number {
-  return Math.max(0, Math.min(ARMOR_TIERS, itemDef(hero.armor.kind).tier ?? 0));
+  return Math.max(0, Math.min(ARMOR_TIERS, (hero.armor ? itemDef(hero.armor.kind) : { tier: 0 }).tier ?? 0));
 }
 
 /** The snapshot for each class a player may have played: what a patch of the open boards carries (the board picks by the entry's class). */

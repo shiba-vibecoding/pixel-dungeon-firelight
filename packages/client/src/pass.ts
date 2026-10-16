@@ -46,12 +46,11 @@ export function levelProgress(xp: number): { level: number; into: number; need: 
 export interface PassRun {
   /** The run's id: one run counts once. */
   id: string;
-  mode: 'dungeon' | 'arena';
   /** The daily dungeon's slot. */
   daily: boolean;
   /** Counts for the boards: a daily dungeon played again the same day does not. */
   ranked: boolean;
-  /** The deepest depth; in the arena, the waves held. */
+  /** The deepest depth. */
   depth: number;
   kills: number;
   won: boolean;
@@ -62,9 +61,7 @@ export function runXp(run: Omit<PassRun, 'id'>): number {
   if (!run.ranked) return 0;
   const kills = Math.max(0, run.kills);
   const depth = Math.max(0, run.depth);
-  const xp = run.mode === 'arena'
-    ? 10 + 8 * depth + Math.floor(Math.min(kills, 150) / 3)
-    : 15 + 6 * depth + Math.floor(Math.min(kills, 120) / 2) + (run.won ? 150 : 0) + (run.daily ? 60 : 0);
+  const xp = 15 + 6 * depth + Math.floor(Math.min(kills, 120) / 2) + (run.won ? 150 : 0) + (run.daily ? 60 : 0);
   return Math.min(RUN_XP_CAP, Math.floor(xp));
 }
 

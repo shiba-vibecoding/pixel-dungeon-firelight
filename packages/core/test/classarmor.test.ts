@@ -26,10 +26,10 @@ describe('the armour kit and class armour', () => {
   it('turns the armour worn into class armour, as protective as before, for its class only', () => {
     const world = solo('warrior');
     const hero = heroById(world, 'p')!;
-    const before = armorStats(hero.armor).dr;
+    const before = armorStats(hero.armor!).dr;
     expect(act(world, 'p', { type: 'use', item: 0, target: 'armor' }).ok).toBe(true);
     expect(hero.armor).toMatchObject({ kind: 'armor.warrior', base: 'armor.mail', level: 2, glyph: 'bounce' });
-    expect(armorStats(hero.armor).dr).toBe(before);
+    expect(armorStats(hero.armor!).dr).toBe(before);
     hero.items = [createItem('armor.mage')];
     expect(act(world, 'p', { type: 'equip', item: 0 })).toEqual({ ok: false, reason: 'that armour is not made for you' });
   });

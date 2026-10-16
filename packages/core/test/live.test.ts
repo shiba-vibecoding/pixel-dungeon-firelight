@@ -7,7 +7,7 @@ import { pacify } from './helpers';
 
 /** A live world with one hero (or more) on the first depth, nothing awake about; the party knows the depth. */
 function live(players = 1): World {
-  const world = pacify(createWorld(5, 0, 'dungeon', true));
+  const world = pacify(createWorld(5, 0, true));
   for (let i = 0; i < players; i++) addHero(world, { id: `p${i}`, name: `P${i}`, heroClass: 'warrior' });
   world.explored[1] = levelAt(world, 1).map.map(() => true);
   return world;

@@ -233,16 +233,6 @@ export function shareInvite(room: string, text: string): Promise<'shared' | 'cop
   return share(`room_${room}`, { room }, text);
 }
 
-/** True when the app was opened from a shared arena result: the arena's window comes up. */
-export function launchedForArena(): boolean {
-  return webApp?.initDataUnsafe.start_param === 'arena' || new URLSearchParams(location.search).has('arena');
-}
-
-/** Shares an arena result with a link that opens the arena. */
-export function shareArena(text: string): Promise<'shared' | 'copied' | 'failed'> {
-  return share('arena', { arena: '' }, text);
-}
-
 /** Shares a daily dungeon result with a link that opens today's dungeon. */
 export function shareDaily(text: string): Promise<'shared' | 'copied' | 'failed'> {
   return share('daily', { daily: '' }, text);
@@ -359,7 +349,7 @@ export function openLink(url: string): void {
 
 const at = (version: string): boolean => inTelegram && (webApp?.isVersionAtLeast?.(version) ?? false);
 
-/** The game's t.me link, opening at `start` (daily, arena) or at the title. */
+/** The game's t.me link, opening at `start` (daily) or at the title. */
 export const appLink = (start?: string): string => (start ? `${APP_LINK}?startapp=${encodeURIComponent(start)}` : APP_LINK);
 
 /** Whether this Telegram can post a story from the game. */

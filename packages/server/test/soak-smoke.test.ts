@@ -30,16 +30,6 @@ describe('the soak engine', () => {
     expect(soakRun(spec).failures).toEqual([]);
   });
 
-  it('plays the arena of waves as a slot of its own, sturdy and natural', () => {
-    for (const id of [19, 29]) {
-      const spec = { ...makeSpec(id), cap: 300 };
-      expect(spec.arena).toBe(true);
-      const { failures, stats } = soakRun(spec);
-      expect(failures.map((f) => `#${f.spec} ${f.kind}: ${f.message}`), `spec ${id}`).toEqual([]);
-      expect(stats.actions).toBeGreaterThan(50);
-    }
-  });
-
   // Spec 507 stood among its own mirror images, waiting for them to move (they never do): a limit of the bot, found by the soak.
   it('has the bot swap places with a mirror image in its way', () => {
     const world = createWorld(5);

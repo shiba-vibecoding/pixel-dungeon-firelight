@@ -14,14 +14,13 @@ export interface RunRecord {
   name: string;
   heroClass: HeroClass;
   lvl: number;
-  /** The deepest depth reached; in the arena, the waves held. */
+  /** The deepest depth reached. */
   depth: number;
   gold: number;
   won: boolean;
   /** What ended the run, as shown at its end. */
   cause: string;
-  /** The arena of waves' runs are scored by arenaScore (core arena.ts) and say so in the table. */
-  mode: 'solo' | 'daily' | 'coop' | 'arena';
+  mode: 'solo' | 'daily' | 'coop';
   /** The tier of the armour the hero wore at the end (the row of his sheet: 1 cloth ... 6 class armour); records from before it was kept draw cloth. */
   armor?: number;
   /** The server checked the run (checked.ts), so it stands on the boards too; runs of before checked runs have none. */
@@ -30,6 +29,9 @@ export interface RunRecord {
 }
 
 const KEY = 'pd-rankings';
+
+/** A record of a kind this build still has: the arena of waves' runs, kept by an earlier edition, are not shown, counted or ranked. */
+const current = (record: RunRecord): boolean => (record.mode as string) !== 'arena';
 const TABLE_SIZE = 11;
 
 /** Rankings.score: gold collected plus level times the deepest depth times a hundred, twice that for a win. */
@@ -38,7 +40,7 @@ export const runScore = (gold: number, lvl: number, depth: number, won: boolean)
 // Two devices' tables become one: every run once, the best first.
 mergeWith(KEY, (here, cloud) => {
   try {
-    const list = [...(JSON.parse(here ?? '[]') as RunRecord[]), ...(JSON.parse(cloud) as RunRecord[])];
+    const list = [...(JSON.parse(here ?? '[]') as RunRecord[]), ...(JSON.parse(cloud) as RunRecord[])].filter(current);
     const runs = [...new Map(list.map((r) => [r.key, r])).values()];
     runs.sort((a, b) => b.score - a.score || a.date - b.date);
     return JSON.stringify(runs.slice(0, TABLE_SIZE));
@@ -50,7 +52,7 @@ mergeWith(KEY, (here, cloud) => {
 export function rankings(): RunRecord[] {
   try {
     const list = JSON.parse(localStorage.getItem(KEY) ?? '[]') as RunRecord[];
-    return Array.isArray(list) ? list : [];
+    return Array.isArray(list) ? list.filter(current) : [];
   } catch {
     return [];
   }

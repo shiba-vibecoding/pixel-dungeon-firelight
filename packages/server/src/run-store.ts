@@ -12,6 +12,8 @@ import { emptyProfile, type Profile, RUN_SLOTS, type Run, type RunSlot } from '.
 export const RUN_FORMAT = 40;
 
 const PROFILE = 'profile';
+/** The stored runs of the arena of waves' slot: left alone, never read, written or deleted. */
+const OBSOLETE = /^run:arena(:|$)/;
 const runKey = (slot: RunSlot): string => `run:${slot}`;
 const depthKey = (slot: RunSlot, depth: number): string => `run:${slot}:${depth}`;
 
@@ -89,7 +91,8 @@ export class EntryWriter {
     for (const [key, value] of Object.entries(entries)) {
       if (this.written.get(key) !== value) put[key] = value;
     }
-    const remove = [...this.written.keys()].filter((key) => !(key in entries));
+    // A run kept for the arena of waves (a slot the game no longer has) is not loaded, so it is not among `entries`; it is not deleted either.
+    const remove = [...this.written.keys()].filter((key) => !(key in entries) && !OBSOLETE.test(key));
     this.written = new Map(Object.entries(entries));
     return { put, remove };
   }

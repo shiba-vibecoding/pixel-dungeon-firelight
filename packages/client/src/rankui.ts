@@ -11,13 +11,13 @@ import { type RankIcon, rankIcon, trophyKind } from './trophyicons';
 
 /*
  * The boards of checked runs (the server's player.ts): the day's daily dungeon, the week's
- * best, the arena's week, the best ever, and the player's own runs and trophies; the player's
+ * best, the best ever, and the player's own runs and trophies; the player's
  * card on the title (the streak, the best, the trophies); and the end of a run's places as
  * the server scored it. Markup after the design system's Ranked cards (v16, migration.md).
  */
 
 /** The icon of the places 1-3 of each board. */
-const BOARD_ICON: Partial<Record<string, RankIcon>> = { daily: 'gold', week: 'week', arena: 'arena' };
+const BOARD_ICON: Partial<Record<string, RankIcon>> = { daily: 'gold', week: 'week' };
 
 const number = (n: number): string => n.toLocaleString(locale);
 

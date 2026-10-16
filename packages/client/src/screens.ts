@@ -3,11 +3,11 @@ import {
   itemAt, itemSprite, type ItemKind, levelKnown, maxExp, type MobKind, SUBCLASSES, visiblyCursed, type World, CLASS_ARMOR_OF,
 } from '@pd/core';
 import { audio } from './audio';
-import { adjacentFoes, backpackMustClose, keepsOpen, resolveDrop, SNAP_BACK_MS } from './bagflow';
+import { adjacentFoes, backpackMustClose, gearDrops, keepsOpen, type Place, resolveDrop, SNAP_BACK_MS } from './bagflow';
 import { seenEnemies } from './sight';
 import { haptic } from './telegram';
 import { chooseQuickslot, quickIndex, quickUse } from './quickslot';
-import { ARENA_BADGES, BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
+import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
 import { P } from './i18n-photo';
@@ -133,11 +133,7 @@ export function closeOverlay(): boolean {
 /** Sets --ix/--iy (items.png, badges.png: 8 a row) and --bx/--by (buffs.png: 18 a row) from data-i and data-b. */
 export function sprites(scope: ParentNode): void {
   scope.querySelectorAll<HTMLElement>('[data-i]').forEach((node) => {
-    let i = Number(node.dataset.i);
-    // The arena's badges have a sheet of their own, in one row (badges.ts ARENA_BADGES).
-    const arena = node.classList.contains('pd-badge') && i >= ARENA_BADGES;
-    node.classList.toggle('arena', arena);
-    if (arena) i -= ARENA_BADGES;
+    const i = Number(node.dataset.i);
     node.style.setProperty('--ix', String(i % 8));
     node.style.setProperty('--iy', String(Math.floor(i / 8)));
   });
@@ -311,7 +307,7 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
 }
 
 /** The row of a hero's sprite sheet: the tier of the armour worn. */
-export const armorTier = (hero: Hero): number => itemDef(hero.armor.kind).tier ?? 0;
+export const armorTier = (hero: Hero): number => (hero.armor ? itemDef(hero.armor.kind).tier ?? 0 : 0);
 
 /**
  * The design system's durability bar (PD.durability): filled in 2px steps, «low» at a quarter or less,
@@ -434,8 +430,7 @@ export function showBadges(onClose: () => void): void {
     sprites(detail);
   };
   const grid = el('div', { className: 'pd-grid c6' });
-  // The arena's badges are left out: the arena of waves is no longer offered.
-  for (const badge of BADGES.filter((b) => b.image < ARENA_BADGES)) {
+  for (const badge of BADGES) {
     const icon = el('i', { className: `pd-badge${earned.has(badge.id) ? '' : ' dim'}` });
     icon.dataset.i = String(badge.image);
     const node = el('button', { className: `pd-slot${fresh.has(badge.id) ? ' new' : ''}`, ariaLabel: badgeText(badge.id) }, icon);
@@ -712,7 +707,7 @@ export function showReforge(options: ReforgeOptions): void {
   const { world, hero } = options;
   const owned: Array<{ ref: ItemRef; item: Item }> = [
     ...(hero.weapon ? [{ ref: 'weapon' as ItemRef, item: hero.weapon }] : []),
-    { ref: 'armor' as ItemRef, item: hero.armor },
+    ...(hero.armor ? [{ ref: 'armor' as ItemRef, item: hero.armor }] : []),
     ...hero.items.map((item, index) => ({ ref: index as ItemRef, item })),
   ].filter(({ item }) => {
     const category = itemDef(item.kind).category;
@@ -1075,9 +1070,7 @@ export function showRankings(records: readonly RunRecord[], onClose: () => void,
           'span',
           { className: 'pd-rank-name', textContent: `${record.name} · ${t.classes[record.heroClass]}` },
           el('small', {
-            textContent: record.mode === 'arena'
-              ? `${t.arena.title} · ${t.levelShort} ${record.lvl} · ${t.arena.waveWord(record.depth)}${what ? ` · ${what}` : ''}`
-              : `${t.levelShort} ${record.lvl} · ${t.depthShort(record.depth)}${what ? ` · ${what}` : ''}`,
+            textContent: `${t.levelShort} ${record.lvl} · ${t.depthShort(record.depth)}${what ? ` · ${what}` : ''}`,
           }),
         ),
         el('span', { className: 'pd-rank-score', textContent: record.score.toLocaleString(locale) }),
@@ -1103,7 +1096,8 @@ export interface BackpackOptions {
   hero: Hero;
   onAction(action: Action): void;
   /** Throw or zap the item at a cell the player picks next. */
-  onAim(index: number, kind: 'throw' | 'zap' | 'special'): void;
+  /** `at`: a pack slot, or something worn (a throw takes it off first). */
+  onAim(at: number | 'weapon' | 'armor' | 'ring0' | 'ring1', kind: 'throw' | 'zap' | 'special'): void;
   onClose(): void;
   /**
    * WndBag's selector: the backpack with only what a scroll can be read on to tap (worn
@@ -1113,7 +1107,7 @@ export interface BackpackOptions {
 }
 
 /** What is chosen in the backpack: an item in the pack (by slot) or one worn. */
-type BagChoice = { index: number } | { worn: 'weapon' | 'armor' } | { ring: number };
+type BagChoice = Place;
 
 /** The backpack's filters (design system v10): the rest dims but stays where it is. */
 type BagFilter = 'all' | 'potions' | 'scrolls' | 'gear';
@@ -1342,7 +1336,7 @@ function chosenItem(hero: Hero, choice: BagChoice | null): Item | undefined {
   if (!choice) return undefined;
   if ('index' in choice) return hero.items[choice.index];
   if ('ring' in choice) return hero.rings[choice.ring];
-  return choice.worn === 'weapon' ? hero.weapon ?? undefined : hero.armor;
+  return (choice.worn === 'weapon' ? hero.weapon : hero.armor) ?? undefined;
 }
 
 /** Whether an item passes a filter: «gear» is weapons, armour, rings, wands and thrown weapons. */
@@ -1395,8 +1389,8 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
       if (!passes(filter, item)) node.classList.add('dim');
       const opts = { ...options, item, ...where(here) };
       holdToUse(node, () => firstActionName(opts), () => firstAction(opts));
-      // What can be dragged: anything in the pack, and a worn ring or the weapon in hand (to take it off).
-      if ('index' in here || 'ring' in here || ('worn' in here && here.worn === 'weapon')) node.dataset.from = JSON.stringify(here);
+      // What can be dragged: anything in the pack, and anything worn (to take it off).
+      node.dataset.from = JSON.stringify(here);
     }
     node.dataset.drop = String(ref);
     return node;
@@ -1462,7 +1456,7 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
     { className: 'pd-bag-equip' },
     // Bare-handed after a monk's blow: the weapon's silhouette.
     worn(hero.weapon ?? undefined, 5, 'weapon', { worn: 'weapon' }),
-    worn(hero.armor, 6, 'armor', { worn: 'armor' }),
+    worn(hero.armor ?? undefined, 6, 'armor', { worn: 'armor' }),
     ...[0, 1].map((i) => worn(hero.rings[i], 7, i === 0 ? 'ring0' : 'ring1', { ring: i })),
     keyring,
   );
@@ -1608,26 +1602,11 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
   const dropsFor = (from: BagChoice, item: Item): Map<string, Drop> => {
     const drops = new Map<string, Drop>();
     const act = (action: Action): Drop => ({ act: action });
-    if ('ring' in from) {
-      drops.set('pack', act({ type: 'remove', ring: from.ring }));
-      hero.items.forEach((_, i) => drops.set(String(i), act({ type: 'remove', ring: from.ring })));
-      return drops;
-    }
-    // The weapon in hand back into the pack.
-    if ('worn' in from && from.worn === 'weapon') {
-      drops.set('pack', act({ type: 'unequip' }));
-      hero.items.forEach((_, i) => drops.set(String(i), act({ type: 'unequip' })));
-      return drops;
-    }
+    // What is worn, back into the pack; what is in the pack, onto its place among the worn things.
+    for (const [place, action] of gearDrops(hero, from, item)) drops.set(place, act(action));
     if (!('index' in from)) return drops;
     const index = from.index;
     const category = itemDef(item.kind).category;
-    if (category === 'weapon') drops.set('weapon', act({ type: 'equip', item: index }));
-    if (category === 'armor') drops.set('armor', act({ type: 'equip', item: index }));
-    if (category === 'ring') {
-      drops.set('ring0', act({ type: 'equip', item: index }));
-      drops.set('ring1', act({ type: 'equip', item: index }));
-    }
     if (category === 'scroll' && isKnown(world, item) && (TARGETED_SCROLLS as readonly string[]).includes(item.kind)) {
       for (const ref of scrollTargets(world, hero, item.kind)) drops.set(String(ref), act({ type: 'use', item: index, on: ref }));
     }
@@ -2060,7 +2039,7 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
   };
   /** Putting on or taking off: the item stays chosen, wherever it went, and its slot flashes gold. */
   const stay = (action: Action): void => keepOpen(options, action, item, [{ kind: 'equip', item }]);
-  const aimWith = (kind: 'throw' | 'zap' | 'special', at: number): void => {
+  const aimWith = (kind: 'throw' | 'zap' | 'special', at: number | 'weapon' | 'armor' | 'ring0' | 'ring1'): void => {
     closeBag();
     options.onClose();
     options.onAim(at, kind);
@@ -2095,7 +2074,11 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'kit') {
       use(t.applyKit, chooseFrom(options, index, t.pickKit, t.pickKitHint, kitTargets(hero), (on) => act({ type: 'use', item: index, on })));
     }
-    if (category === 'seed') use(t.plantSeed, () => aimWith('throw', index));
+    // Plant.Seed: its default action is THROW (it takes root where it lands); AC_PLANT sets one down at the hero's feet.
+    if (category === 'seed') {
+      use(t.throwItem, () => aimWith('throw', index));
+      use(t.plantSeed, () => act({ type: 'use', item: index }));
+    }
     if (category === 'scroll') {
       // A known scroll that acts on one thing asks which, from the whole pack and what is worn (WndBag's selector).
       const targeted = isKnown(world, item) && (TARGETED_SCROLLS as readonly string[]).includes(item.kind);
@@ -2156,15 +2139,18 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
       }
     }
     danger.push(button(t.dropItem, () => act({ type: 'drop', item: index }), 'danger'));
-  } else if (options.ring !== undefined) {
+  } else {
+    // Worn: taken off (UNEQUIP), or thrown (every item has AC_THROW; EquipableItem.cast takes it off first).
+    const ref = options.ring !== undefined ? (options.ring === 0 ? 'ring0' : 'ring1') : item === hero.weapon ? 'weapon' : 'armor';
+    if (ref === 'armor' && item.kind === CLASS_ARMOR_OF[hero.heroClass]) {
+      // ClassArmor.doSpecial: the leap and the smoke bomb want a cell; the others act at once.
+      const aimed = hero.heroClass === 'warrior' || hero.heroClass === 'rogue';
+      use(t.specials[hero.heroClass], () => (aimed ? aimWith('special', -1) : act({ type: 'special' })));
+    }
     const ring = options.ring;
-    use(t.takeOff, () => stay({ type: 'remove', ring }));
-  } else if (item === hero.weapon) {
-    use(t.takeOff, () => stay({ type: 'unequip' }));
-  } else if (item === hero.armor && item.kind === CLASS_ARMOR_OF[hero.heroClass]) {
-    // ClassArmor.doSpecial: the leap and the smoke bomb want a cell; the others act at once.
-    const aimed = hero.heroClass === 'warrior' || hero.heroClass === 'rogue';
-    use(t.specials[hero.heroClass], () => (aimed ? aimWith('special', -1) : act({ type: 'special' })));
+    if (ring !== undefined) use(t.takeOff, () => stay({ type: 'remove', ring }));
+    else use(t.takeOff, () => stay(ref === 'weapon' ? { type: 'unequip' } : { type: 'unequip', slot: 'armor' }));
+    use(t.throwItem, () => aimWith('throw', ref));
   }
   return { main, more, danger };
 }

@@ -337,7 +337,7 @@ const shortDate = (time: number): string => new Date(time).toLocaleDateString(la
 /** «My runs»: the shelf of trophies won, then the device's best runs, each with its date and its hero as he is dressed now. */
 function mineRows(records: readonly RunRecord[], trophies: Profile['trophies'], track: (row: VirtualRow) => void): HTMLElement[] {
   const nodes: HTMLElement[] = [];
-  const dungeon = records.filter((record) => record.mode !== 'arena');
+  const dungeon = records;
   const shelf = trophies.filter((trophy) => !trophy.board.startsWith('arena:'));
   if (shelf.length > 0) {
     nodes.push(

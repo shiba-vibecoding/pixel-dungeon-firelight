@@ -74,7 +74,7 @@ export function boardEnd(board: string): number | null {
     const day = Date.parse(`${when}T00:00:00Z`);
     return Number.isFinite(day) ? day + DAY_MS : null;
   }
-  if (kind === 'week' || kind === 'arena') {
+  if (kind === 'week') {
     const match = /^(\d{4})-W(\d{2})$/.exec(when);
     if (!match) return null;
     const year = Number(match[1]);
@@ -93,7 +93,7 @@ export function mailable(board: string, now: number): boolean {
   return end !== null && end <= now && end + MAIL_KEPT_MS > now;
 }
 
-/** The letter's kind: a cup for the day, a medal for the week. The arena's boards are not offered, so write no letters. */
+/** The letter's kind: a cup for the day, a medal for the week. */
 export function letterKind(board: string): LetterKind | null {
   const kind = board.split(':')[0];
   return kind === 'daily' ? 'cup' : kind === 'week' ? 'medal' : null;

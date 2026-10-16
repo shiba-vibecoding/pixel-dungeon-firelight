@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  act, addHero, arenaScore, buyPrice, canEnter, challengeMultiplier, CHALLENGES, charAt, createItem, createMob, createWorld, DARKNESS,
+  act, addHero, buyPrice, canEnter, challengeMultiplier, CHALLENGES, charAt, createItem, createMob, createWorld, DARKNESS,
   DARKNESS_VIEW_DISTANCE, dailyRules, deepestDepth, dungeonScore, floorAt, type Hero, heroById, HUNGRY, ItemGenerator, itemDef, ITEMS, type ItemKind,
   layBones, leaveBones, levelAt, MAX_VIEW_DISTANCE, mobStats, NEIGHBOURS8, NO_HEALING, NO_HERBALISM, NO_SCROLLS, Rng, runOutcome, STARVING, SWARM_INTELLIGENCE, T,
   trapAt, type TrapKind, type World, isShopkeeper,
@@ -548,15 +548,10 @@ describe('the score', () => {
     expect(runOutcome(world, hero).gold).toBe(before);
   });
 
-  it('gives the Wave arena 100 a wave, 5 a kill and 10 a level', () => {
-    const { world, hero } = setup(19);
-    hero.kills = 7;
-    hero.lvl = 4;
-    world.arena = { wave: 3, phase: 'rest', kills: 7 } as never;
-    expect(arenaScore(world, 'p')).toBe(3 * 100 + 7 * 5 + 4 * 10);
+  it('states the score as the rules compute it, with the challenges multiplier', () => {
     for (const [lang, guide] of both) {
       const score = text(guide, 'score');
-      for (const n of ['100', '5', '10', num(lang, '1.25'), num(lang, '2.75')]) expect(score, lang).toContain(n);
+      for (const n of ['100', num(lang, '1.25'), num(lang, '2.75')]) expect(score, lang).toContain(n);
     }
   });
 });

@@ -2,7 +2,6 @@ import {
   act, type Action, BACKPACK_SIZE, canEnter, charAt, createItem, distance, type Effect, findPath, fingerprint, floorAt, HERO_CLASSES, heroById, type HeroClass,
   HUNGRY, isAlive, isBroken, ITEMS, type Item, type ItemKind, itemDef, LENGTH, levelAt, MOBS, NEIGHBOURS8, Rng, scrollTargets, STARVING, SUBCLASSES, swapsWithHero, T, visibleCells, type World,
 } from '@pd/core';
-import { arenaBot } from '../../core/test/arena-bot';
 import { step } from '../../core/test/runner';
 import { botAction, checkInvariants } from '../../core/test/helpers';
 import { EntryWriter, fromEntries, toEntries } from '../src/run-store';
@@ -34,8 +33,6 @@ export interface Spec {
   bones: { depth: number; kind: ItemKind } | null;
   /** How many actions the run may take at most (the turn cap). */
   cap: number;
-  /** The arena of waves rather than the dungeon (no challenges, daily rules, bones or jumps there). */
-  arena: boolean;
   /** Depths to jump to on the way, with the action count at which each happens. */
   warps: Array<{ at: number; depth: number }>;
 }
@@ -113,15 +110,9 @@ export function makeSpec(id: number): Spec {
       warps.push({ at, depth });
     }
   }
-  // About one run in ten is in the arena of waves.
-  const arena = id % 10 === 9;
-  if (arena) {
-    challenges = 0;
-    warps.length = 0;
-  }
-  const cap = arena ? (mode === 'chaos' ? 1500 : 3000) : mode === 'sturdy' ? 60000 : mode === 'natural' ? 4000 : 1500;
-  const bones = !daily && !arena && rng.int(4) === 0 ? { depth: 1 + rng.int(8), kind: rng.oneOf(['weapon.sword', 'armor.mail', 'ring.haste', 'gold', 'weapon.mace', 'armor.leather'] as const) } : null;
-  return { id, seed: 1 + rng.int(2 ** 30), heroClass, challenges, daily: arena ? null : daily, mode, bones, arena, cap, warps };
+  const cap = mode === 'sturdy' ? 60000 : mode === 'natural' ? 4000 : 1500;
+  const bones = !daily && rng.int(4) === 0 ? { depth: 1 + rng.int(8), kind: rng.oneOf(['weapon.sword', 'armor.mail', 'ring.haste', 'gold', 'weapon.mace', 'armor.leather'] as const) } : null;
+  return { id, seed: 1 + rng.int(2 ** 30), heroClass, challenges, daily, mode, bones, cap, warps };
 }
 
 /** A player's logic as a run begins: with the bones of an earlier fallen hero, if the spec has them. */
@@ -133,7 +124,7 @@ function newLogic(spec: Spec): PlayerLogic {
 
 function startOptions(spec: Spec, runId: string): StartOptions {
   return {
-    slot: spec.arena ? 'arena' : spec.daily ? 'daily' : 'dungeon', heroClass: spec.heroClass, challenges: spec.challenges, name: 'Soak', seed: spec.seed, id: runId, now: 1,
+    slot: spec.daily ? 'daily' : 'dungeon', heroClass: spec.heroClass, challenges: spec.challenges, name: 'Soak', seed: spec.seed, id: runId, now: 1,
     today: spec.daily ?? '2026-10-14', ...(spec.daily ? { dailySeed: spec.seed } : {}),
   };
 }
@@ -238,7 +229,7 @@ function chaosAction(world: World, rng: Rng, cases?: readonly number[]): Action 
     case 0: case 16: case 17: return { type: 'move', to: hero.pos + rng.element(NEIGHBOURS8)! };
     case 1: case 18: return mobs.length > 0 ? { type: 'attack', target: rng.element(mobs)!.id } : { type: 'search' };
     case 2: return { type: 'use', item, target: rng.int(2) === 0 ? 'weapon' : 'armor' };
-    case 3: return { type: 'throw', item, target };
+    case 3: return { type: 'throw', item: ref(), target };
     case 4: return { type: 'zap', item, target };
     case 5: return { type: 'equip', item };
     case 6: return { type: 'drop', item };
@@ -250,7 +241,7 @@ function chaosAction(world: World, rng: Rng, cases?: readonly number[]): Action 
         case 0: return { type: 'balance', item: of('weightstone'), imbue: rng.oneOf(['speed', 'accuracy'] as const), ...(rng.int(2) === 0 ? { weapon: item } : {}) };
         case 1: return { type: 'master', item: of('tome'), subclass: rng.int(5) === 0 ? rng.oneOf(SUBCLASSES.warrior) : rng.oneOf(SUBCLASSES[hero.heroClass]) };
         case 2: return { type: 'mine' };
-        case 3: return { type: 'unequip' };
+        case 3: return rng.oneOf<Action>([{ type: 'unequip' }, { type: 'unequip', slot: 'armor' }]);
         default: return { type: 'beacon', item: of('beacon'), mode: rng.oneOf(['set', 'return'] as const) };
       }
     case 11: return hero.pos === level.exit ? { type: 'descend' } : { type: 'move', to: hero.pos + rng.element(NEIGHBOURS8)! };
@@ -265,7 +256,7 @@ function chaosAction(world: World, rng: Rng, cases?: readonly number[]): Action 
       { type: 'wandReward', choice: rng.oneOf(['battle', 'utility'] as const) }, { type: 'buy' }, { type: 'open', cell: hero.pos },
     ]);
     case 22: return rng.oneOf<Action>([
-      { type: 'plan', steps: [{ type: 'rest' }] }, { type: 'arenaReady' }, { type: 'arenaPick', choice: rng.int(3) }, { type: 'endGame' },
+      { type: 'plan', steps: [{ type: 'rest' }] }, { type: 'ascend' }, { type: 'faceCurse' }, { type: 'endGame' },
     ]);
     default: return { type: 'wait' };
   }
@@ -520,7 +511,7 @@ export function playDevice(
         action = chaosAction(world, rng);
         if (i % 40 === 39) cheat({ t: 'keep' });
       } else {
-        action = spec.arena ? arenaBot(world, ME) : spec.mode === 'sturdy' ? step(world, ME) : botAction(world, ME, 26);
+        action = spec.mode === 'sturdy' ? step(world, ME) : botAction(world, ME, 26);
         // Held up for long (summoners and boss minions keep a bot fighting at the door), the sturdy hero pushes on regardless.
         if (spec.mode === 'sturdy' && seq - lastProgress > 1500) action = rush(world) ?? action;
         // (A hero who tried unequipping or throwing away the hammer would fight bare-handed against bosses that heal or jump away, and one whose
@@ -592,7 +583,7 @@ export function playDevice(
       }
       try {
         // (The locks and their keys are looked at on arrival: a player may throw a key into a chasm, where it falls to the depth below.)
-        soakInvariants(world, seq % 97 === 0, now.depth !== priorDepth && !spec.arena);
+        soakInvariants(world, seq % 97 === 0, now.depth !== priorDepth);
       } catch (error) {
         fail('invariant', `after ${JSON.stringify(action)}: ${(error as Error).message}`);
         return finish();
