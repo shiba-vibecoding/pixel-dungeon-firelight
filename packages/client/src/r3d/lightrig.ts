@@ -7,7 +7,7 @@
 import { Color, PointLight, type Scene } from 'three';
 import { HEIGHT, LENGTH, T, WIDTH } from '@pd/core';
 import { type Kit, type Lights, type RegionKit, hex } from './kit';
-import { isDoorTile, K_WALL, K_WATER, type LevelGeom } from './levelgeom';
+import { isDoorTile, isStairsUp, K_WALL, K_WATER, type LevelGeom } from './levelgeom';
 
 /** A source of light in the level, from which the nearest are lit. */
 export interface Source {
@@ -376,6 +376,19 @@ export function bakePools(sources: readonly Source[], kinds: Uint8Array, out: Ui
     }
   }
   for (let i = 0; i < out.length; i++) out[i] = Math.round(Math.min(1, sum[i]!) * 255);
+  return out;
+}
+
+/** The cool draught from above that comes down the entrance's steps (the kit: fill 0.3): not a light, only a source of the baked pools. */
+export function stairGlow(terrain: Uint8Array): Source[] {
+  const out: Source[] = [];
+  for (let cell = 0; cell < LENGTH; cell++) {
+    if (!isStairsUp(terrain[cell]!)) continue;
+    out.push({
+      x: (cell % WIDTH) + 0.5, y: 1.0, z: Math.trunc(cell / WIDTH) + 0.5, cell, color: 0x9ab4e8, intensity: 0.3,
+      distance: 3.5, decay: 1, hz: 0, amp: 0, torch: false,
+    });
+  }
   return out;
 }
 

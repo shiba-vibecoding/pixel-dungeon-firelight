@@ -32,7 +32,7 @@ import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
 import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
-import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf } from './lightrig';
+import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
 import { canPost, Post } from './post';
@@ -507,7 +507,12 @@ export class World3D {
   /** The kit's heights, in the form the geometry takes them. */
   private geomKit(region: number): GeomKit {
     const m = (key: string): number => materialOf(this.kit, region, key).height;
-    return { wall: m('wall_face'), door: m('door'), statue: m('statue'), bookshelf: m('bookshelf'), barricade: m('barricade'), well: m('well'), chasm: m('chasm'), water: m('water') };
+    // (The stairs' heights are optional in a kit: its own values, or the numbers of the design.)
+    const stairs = (key: string, fallback: number): number => (this.kit.materials[key] ? m(key) : fallback);
+    return {
+      wall: m('wall_face'), door: m('door'), statue: m('statue'), bookshelf: m('bookshelf'), barricade: m('barricade'), well: m('well'), chasm: m('chasm'), water: m('water'),
+      stairsDown: stairs('stairs_down', -0.5), stairsUp: stairs('stairs_up', 0.5),
+    };
   }
 
   /** A new floor (or run): the geometry of its map, torches, a fresh fog. `key` tells one floor from another. */
@@ -559,7 +564,7 @@ export class World3D {
     this.renderer.setClearColor(this.air.uBg.value, 1);
     this.fires = sourcesOf(this.kit, a.region, this.geom, true);
     this.rig.configure(L, this.fires, this.tier.shadowLights);
-    this.fog.setPools(bakePools([...this.fires, ...doorGlow(this.geom.terrain)], this.geom.kinds));
+    this.fog.setPools(bakePools([...this.fires, ...doorGlow(this.geom.terrain), ...stairGlow(this.geom.terrain)], this.geom.kinds));
     this.lightBase = { ambient: L.ambient.intensity, hemi: L.hemi.intensity };
     this.bright = 0;
     if (a.accent) this.rig.setAccent(hex(a.accent.color), a.accent.intensity * 2.2);
@@ -637,7 +642,7 @@ export class World3D {
     if (change !== 'patched') {
       this.rig.shadowsStale = true;
       // A wall or a door went: the pools of the fixed fires reach differently.
-      this.fog.setPools(bakePools([...this.fires, ...doorGlow(geom.terrain)], geom.kinds));
+      this.fog.setPools(bakePools([...this.fires, ...doorGlow(geom.terrain), ...stairGlow(geom.terrain)], geom.kinds));
     }
   }
 
@@ -855,8 +860,9 @@ export class World3D {
     const hover = puppet.levitating && puppet.alive ? 4 + Math.round(Math.sin(now / 320)) : 0;
     // The sad ghost floats a little off the floor and bobs gently, slowly, with a cold light round it.
     const spectral = puppet.kind === 'ghost' && puppet.alive;
-    const lift = flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7)
-      : spectral ? 0.12 + 0.05 * Math.sin(now / 650 + puppet.to * 0.9) : hover / TILE;
+    const ground = this.geom!.groundAt(px / TILE, py / TILE);
+    const lift = ground + (flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7)
+      : spectral ? 0.12 + 0.05 * Math.sin(now / 650 + puppet.to * 0.9) : hover / TILE);
     // A figure whose picture has soft pixels (a ghost, a wraith, bees' wings) is drawn blended, with its own alpha, not cut at one half.
     const blend = !puppet.isHero && hasSoftBody(sheet.image);
     let tint = 1;
@@ -908,7 +914,7 @@ export class World3D {
       const air = flyer || spectral || hover > 0;
       const size = Math.max(0.35, sk.shadow.width * (sheet.w / TILE)) * (air ? sk.fly.shadowScale : 1) * scale;
       const away = lit ? sk.shadow.offset : 0;
-      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1), sk.shadow.squash);
+      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1), sk.shadow.squash, ground);
     }
     if (BOSS_KINDS.has(puppet.kind) && puppet.alive) {
       this.bossFound = true;

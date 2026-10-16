@@ -12,6 +12,8 @@
  *   doors   - dressed in code (writeDoor), part of `boxes`: a thin leaf (about 0.15 thick) in front of the wall line with the region's
  *             door tile on its face, thin jambs and a lintel; steel straps and a lock on a locked one; an open door's leaf standing
  *             upright, turned a quarter. The cell's top stays the wall's own cap.
+ *   steps   - the stairs, in `boxes`: the entrance's three steps rise toward the north and the exit's three steps go down into the floor
+ *             (the kit's stairs_up and stairs_down), the region's stair tile on the treads, the last of the way down the darkest.
  *   water   - a quad under every water cell, for the drifting water texture.
  *   decals  - the kit's contact shadows on the floor along the foot of every wall.
  *
@@ -40,9 +42,12 @@ export interface GeomKit {
   well: number;
   chasm: number;
   water: number;
+  /** How far the exit's steps go down (negative) and the entrance's rise, in cells. */
+  stairsDown: number;
+  stairsUp: number;
 }
 
-export const DEFAULT_GEOM: GeomKit = { wall: 1.5, door: 1.25, statue: 1.2, bookshelf: 1.4, barricade: 1.0, well: 0.4, chasm: -3, water: -0.06 };
+export const DEFAULT_GEOM: GeomKit = { wall: 1.5, door: 1.25, statue: 1.2, bookshelf: 1.4, barricade: 1.0, well: 0.4, chasm: -3, water: -0.06, stairsDown: -0.5, stairsUp: 0.5 };
 
 /** How high a wall's lower face goes: the kit's face is a cell, and the rest of the wall's height is the upper half cell. */
 const FACE_CELL = 1;
@@ -97,6 +102,18 @@ const WOOD_LIT = [1.45, 1.22, 0.98];
 const STEEL_LIT = [1.2, 1.25, 1.4];
 const LEAF_LIT = [1.5, 1.35, 1.2];
 const LEAF_LIT_LOCKED = [1.4, 1.4, 1.45];
+
+/** The entrance: three steps rising to the north. */
+export const isStairsUp = (terrain: number): boolean => terrain === T.ENTRANCE;
+/** The exit, and the exit a boss's death unlocks: three steps going down into the floor. */
+export const isStairsDown = (terrain: number): boolean => terrain === T.EXIT || terrain === T.UNLOCKED_EXIT;
+const isStairs = (terrain: number): boolean => isStairsUp(terrain) || isStairsDown(terrain);
+/** Steps in a flight, and the most quads one needs (treads, risers, sides). */
+const STEPS = 3;
+const STAIR_QUADS = 14;
+/** How bright each tread is (south to north): the way down goes dark, the way up gets a little light from above. */
+const TREAD_DOWN = [1, 0.78, 0.5];
+const TREAD_UP = [0.92, 1.02, 1.14];
 
 /** Plain wall: no floor under it, and nothing ever changes it but a rebuild. */
 const isPlainWall = (terrain: number): boolean => terrain === T.WALL || terrain === T.WALL_DECO;
@@ -346,9 +363,11 @@ export class LevelGeom {
     const x = cell % WIDTH;
     const z = Math.trunc(cell / WIDTH);
     const shape = this.shapes[this.terrain[cell]!]!;
-    const y = shape.kind === K_CHASM ? this.kit.chasm : 0;
-    // A box on the cell hides its floor; the tile there is the plain floor, for the day it opens.
-    const tile = shape.kind === K_WALL || shape.kind === K_LOW ? T.EMPTY : shape.kind === K_CHASM ? T.CHASM : (this.under.get(this.terrain[cell]!) ?? this.terrain[cell]!);
+    const stairs = isStairs(this.terrain[cell]!);
+    // The exit's floor is the bottom of its stairwell.
+    const y = shape.kind === K_CHASM ? this.kit.chasm : isStairsDown(this.terrain[cell]!) ? this.kit.stairsDown : 0;
+    // A box on the cell hides its floor; the tile there is the plain floor, for the day it opens. Stairs stand on plain floor (their tile is on their steps).
+    const tile = shape.kind === K_WALL || shape.kind === K_LOW || stairs ? T.EMPTY : shape.kind === K_CHASM ? T.CHASM : (this.under.get(this.terrain[cell]!) ?? this.terrain[cell]!);
     tileRect(tile, this.cols, this.rows, rect);
     set12(x, y, z + 1, x + 1, y, z + 1, x + 1, y, z, x, y, z);
     const v = slot * 4;
@@ -399,6 +418,7 @@ export class LevelGeom {
       else if (kind === K_CHASM) box += 4 * 2;
       if (kind === K_FLOOR || kind === K_LOW) decal += 4;
       if (isDoorTile(this.terrain[i]!)) box += DOOR_QUADS;
+      if (isStairs(this.terrain[i]!)) box += STAIR_QUADS;
     }
     return { box, water, decal };
   }
@@ -429,11 +449,89 @@ export class LevelGeom {
       else if (kind === K_CHASM) this.writeEdges(i);
       if (kind === K_FLOOR || kind === K_LOW) this.writeShadows(i);
       if (isDoorTile(this.terrain[i]!)) this.writeDoor(i);
+      if (isStairs(this.terrain[i]!)) this.writeSteps(i);
     }
     this.quads.boxes = this.boxes.verts / 4;
     this.quads.water = this.water.verts / 4;
     this.quads.decals = this.decals.verts / 4;
     this.boxVersion++;
+  }
+
+  /**
+   * A flight of three steps on a stairs cell, the way up rising and the way down sinking toward the north (away from the camera), each
+   * tread a third of the cell deep with a third of the region's stair tile on it. Up (the kit's stairs_up, 0.5 high): the risers face
+   * south, the camera, and the sides are stone; down (stairs_down, 0.5 deep): the camera sees the treads going dark and, at the far end,
+   * the rock of the stairwell. The cell's floor quad is the plain floor, or the bottom of the stairwell.
+   */
+  private writeSteps(cell: number): void {
+    const x = cell % WIDTH;
+    const z = Math.trunc(cell / WIDTH);
+    const terrain = this.terrain[cell]!;
+    const up = isStairsUp(terrain);
+    const total = up ? this.kit.stairsUp : this.kit.stairsDown;
+    const b = this.boxes;
+    tileRect(terrain, this.cols, this.rows, rect);
+    const u0 = rect[0]!;
+    const v0 = rect[1]!;
+    const u1 = rect[2]!;
+    const v1 = rect[3]!;
+    const east = this.kinds[cell + 1] !== K_WALL;
+    const west = this.kinds[cell - 1] !== K_WALL;
+    for (let k = 0; k < STEPS; k++) {
+      const south = z + 1 - k / STEPS;
+      const north = z + 1 - (k + 1) / STEPS;
+      const y = (total * (k + 1)) / STEPS;
+      const below = (total * k) / STEPS;
+      const vb = v0 + ((v1 - v0) * k) / STEPS;
+      const vt = v0 + ((v1 - v0) * (k + 1)) / STEPS;
+      shades.fill((up ? TREAD_UP : TREAD_DOWN)[k]!);
+      set12(x, y, south, x + 1, y, south, x + 1, y, north, x, y, north);
+      quad(b, corners, 0, 1, 0, shades, WHITE, u0, vb, u1, vt);
+      if (up) {
+        // The riser under the tread, facing the camera, in the shade of the step's own edge.
+        shades.fill(TREAD_UP[k]! * 0.72);
+        set12(x, below, south, x + 1, below, south, x + 1, y, south, x, y, south);
+        quad(b, corners, 0, 0, 1, shades, WHITE, u0, vb, u1, vb + (vt - vb) * 0.5);
+        shades.fill(0.8);
+        tileRect(FACE_WALL, this.cols, this.rows, rect);
+        if (east) {
+          set12(x + 1, 0, south, x + 1, 0, north, x + 1, y, north, x + 1, y, south);
+          quad(b, corners, 1, 0, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+        }
+        if (west) {
+          set12(x, 0, north, x, 0, south, x, y, south, x, y, north);
+          quad(b, corners, -1, 0, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+        }
+        tileRect(terrain, this.cols, this.rows, rect);
+      }
+    }
+    if (!up) {
+      // The stairwell's rock: the far end, and each side, from the floor's edge down to where the steps end.
+      tileRect(EDGE_ROCK, this.cols, this.rows, rect);
+      shades.fill(0.5);
+      set12(x, total, z, x + 1, total, z, x + 1, 0, z, x, 0, z);
+      quad(b, corners, 0, 0, 1, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+      shades.fill(0.62);
+      set12(x + 1, total, z, x + 1, total, z + 1, x + 1, 0, z + 1, x + 1, 0, z);
+      quad(b, corners, -1, 0, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+      set12(x, total, z + 1, x, total, z, x, 0, z, x, 0, z + 1);
+      quad(b, corners, 1, 0, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+    }
+    shades.fill(1);
+  }
+
+  /**
+   * How high the ground is under a figure standing at (x, z), in cells: the step of a flight of stairs it is on (the entrance's rise, the
+   * exit's sink), the floor's own height otherwise. A figure is lifted by it, so its feet are on the tread and not in it.
+   */
+  groundAt(x: number, z: number): number {
+    const cx = Math.floor(x);
+    const cz = Math.floor(z);
+    if (cx < 0 || cz < 0 || cx >= WIDTH || cz >= HEIGHT) return 0;
+    const terrain = this.terrain[cx + cz * WIDTH]!;
+    if (!isStairs(terrain)) return 0;
+    const step = Math.min(STEPS - 1, Math.max(0, Math.floor((cz + 1 - z) * STEPS)));
+    return ((isStairsUp(terrain) ? this.kit.stairsUp : this.kit.stairsDown) * (step + 1)) / STEPS;
   }
 
   private writeWater(cell: number): void {
