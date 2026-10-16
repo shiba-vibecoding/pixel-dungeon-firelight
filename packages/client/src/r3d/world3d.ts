@@ -11,8 +11,9 @@
  *   - the fog of war is a 48 x 48 texture read by the vertex shaders, the region's haze is a line in the same shaders: no pass;
  *   - nothing is made in the frame loop: vectors, matrices and records are made once and written in place.
  * The kit's bloom is a pass (post.ts) at the two highest tiers: the frame goes through a half-float target and a blurred copy of its
- * bright part is added. At the highest, the water carries a faint mirror of the walls and what glows above them (mirror.ts). What
- * does not come over yet: the haze pass of the demon halls.
+ * bright part is added. At the highest, the water carries a faint mirror of the walls and what glows above them (mirror.ts). The
+ * stairs are real steps (levelgeom.ts), high grass is one instanced batch of crossed quads (grass3d.ts), the caves' gold is metal
+ * (ore.ts), and the demon halls have the kit's haze: a low red mist in the fog shaders, a heat shimmer in the bloom's last pass.
  */
 import {
   AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
