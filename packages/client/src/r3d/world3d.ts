@@ -440,10 +440,12 @@ export class World3D {
     this.deadMesh.count = 0;
     this.deadMesh.renderOrder = 3;
     this.scene.add(this.deadMesh);
-    // The blended batch: the same atlas, the same fog and haze; the picture's own alpha, and a cold light of its own.
+    // The blended batch: the same atlas, the same fog and haze; the picture's own alpha, and a light of its own as the other figures
+    // have (its own colours at 0.14, through the emissive map: a flat emissive colour would wash every bat and bee pale blue). The
+    // ghost's cold glow is its halo (addPuppet).
     const softQuad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
     const softMaterial = new MeshLambertMaterial({
-      map: this.atlas.color, emissive: 0x86aedb, transparent: true, depthWrite: false, alphaTest: 0.02, side: DoubleSide,
+      map: this.atlas.color, emissive: 0x242424, emissiveMap: this.atlas.color, transparent: true, depthWrite: false, alphaTest: 0.02, side: DoubleSide,
     });
     withFog(softMaterial, this.air, 'instance');
     // The fade is through the picture's alpha: a per-instance `aAlpha` scales it (the dead batch dissolves by dither; this one blends).
