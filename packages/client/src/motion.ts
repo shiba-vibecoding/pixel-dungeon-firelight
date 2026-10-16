@@ -1,6 +1,7 @@
 import { type Effect, HEAP_SPRITES, heroById, type Level, LENGTH, T, WIDTH, type World } from '@pd/core';
 import { audio } from './audio';
 import { fx } from './fx';
+import { CLOSE_MS, REDUCED_MS } from './r3d/doorswing';
 import { quality } from './quality';
 import { type Assets, levelRegion } from './sprites';
 import { TILE, type View } from './view';
@@ -252,7 +253,8 @@ export class Motion {
       } else if (was === T.OPEN_DOOR && is === T.DOOR) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'close', ms: this.animMs(`doors${r}`, 'door', DOOR_CLOSE_MS, true) });
         // Shutting behind whoever left: only a soft knock of wood as it meets the frame.
-        audio.later(DOOR_CLOSE_MS * 0.5, 'door_close', 1, 0.7, centre(cell));
+        // The 3D leaf meets its frame at the end of its swing (r3d/doorswing.ts): the sound is timed with that.
+        audio.later(quality.reducedMotion ? REDUCED_MS : CLOSE_MS, 'door_close', 1, 0.7, centre(cell));
       } else if (was === T.HIGH_GRASS && is === T.GRASS) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'trample', ms: this.animMs(`grass${r}`, 'trample', TRAMPLE_MS) });
         const x = (cell % WIDTH) * TILE + TILE / 2;
