@@ -87,6 +87,7 @@ describe('the backpack', () => {
     const world = soloAt(3);
     const hero = heroById(world, 'p')!;
     hero.items.push(createItem('weapon.sword'), createItem('scroll.upgrade'));
+    world.known.push('scroll.upgrade');
     expect(act(world, 'p', { type: 'equip', item: 0 }).ok).toBe(true);
     expect(hero.weapon!.kind).toBe('weapon.sword');
     expect(hero.items[0]!.kind).toBe('weapon.shortSword');

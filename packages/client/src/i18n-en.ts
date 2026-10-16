@@ -572,7 +572,6 @@ export const en = {
   specialCost: 'Each use costs a third of your health.',
   specials: { warrior: 'Heroic leap', mage: 'Molten earth', rogue: 'Smoke bomb', huntress: 'Spectral blades' } as Record<HeroClass, string>,
   classArmorMade: (name: string) => `Your armour becomes the ${name}!`,
-  balanceFor: { speed: 'Balance it for speed', accuracy: 'Balance it for accuracy' },
   balanced: { speed: 'You balanced your weapon to make it faster.', accuracy: 'You balanced your weapon to make it more accurate.' },
   imbueInfo: { speed: 'It is balanced for speed.', accuracy: 'It is balanced for accuracy.' },
   burntUp: (name: string) => `Your ${name} burns up!`,
@@ -804,11 +803,23 @@ export const en = {
   zap: 'Zap',
   chooseTarget: 'Choose a target',
   readOn: 'Read on…',
+  /** ArmorKit and Weightstone: WndBag's selector titles, and Weightstone.WndBalance. */
+  pickKit: 'Select an armour to upgrade',
+  pickWeapon: 'Select a weapon to balance',
+  pickKitHint: 'Tap the armour to make a class armour of.',
+  pickWeaponHint: 'Tap the weapon to balance.',
+  balance: 'Balance…',
+  balanceAsk: (name: string) => `How would you like to balance your ${name}?`,
+  balanceImbue: { speed: 'For speed', accuracy: 'For accuracy' },
+  balanceNever: 'Never mind',
   /** WndBag's selector titles: what the scroll is to be read on. */
   pickTitle: {
     'scroll.upgrade': 'Upgrade an item', 'scroll.enchantment': 'Enchant an item', 'scroll.identify': 'Identify an item',
   } as Record<'scroll.upgrade' | 'scroll.enchantment' | 'scroll.identify', string>,
   pickTarget: 'Tap the item to read the scroll on.',
+  /** InventoryScroll.confirmCancelation: a scroll read but given up on is lost. */
+  scrollWaste: { title: 'Are you sure?', text: 'The scroll will be wasted.', yes: 'Yes', no: 'No' },
+  scrollWasted: 'The scroll is wasted.',
   charges: (status: string) => `Charges: ${status}`,
   missileInfo: (min: number, max: number) => `Damage ${min}–${max} when thrown.`,
   wandDamage: (min: number, max: number) => `Damage ${min}–${max}.`,

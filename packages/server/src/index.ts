@@ -19,6 +19,7 @@ import { boardRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRou
 import type { AdminOps } from './admin';
 import { changeOutages, normalizeDays } from './outages';
 import { adminNotice, KEEP_PROBLEMS, newId, type Problem, type StoredProblem } from './problem';
+import { photoRoute } from './photos';
 import { Card, cardRoute, challengeRoute } from './sharing';
 import { Notifier, notifierStub, notifyRoute } from './notifier';
 import { readBody, sameSecret } from './secret';
@@ -830,6 +831,7 @@ export default {
     if (url.pathname === '/mail') return mailRoute(request, env);
     if (url.pathname === '/board') return boardRoute(request, env);
     if (url.pathname === '/card' || url.pathname.startsWith('/card/')) return cardRoute(request, env, url);
+    if (url.pathname === '/photo') return photoRoute(request, env, url);
     if (url.pathname === '/challenge') return challengeRoute(request, env);
     if (url.pathname === '/notify') return notifyRoute(request, env);
     const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);

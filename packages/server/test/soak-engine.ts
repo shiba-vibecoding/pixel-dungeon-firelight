@@ -1,6 +1,6 @@
 import {
   act, type Action, BACKPACK_SIZE, canEnter, charAt, createItem, distance, type Effect, findPath, fingerprint, floorAt, HERO_CLASSES, heroById, type HeroClass,
-  HUNGRY, isAlive, isBroken, ITEMS, type Item, type ItemKind, itemDef, LENGTH, levelAt, MOBS, NEIGHBOURS8, Rng, STARVING, SUBCLASSES, swapsWithHero, T, visibleCells, type World,
+  HUNGRY, isAlive, isBroken, ITEMS, type Item, type ItemKind, itemDef, LENGTH, levelAt, MOBS, NEIGHBOURS8, Rng, scrollTargets, STARVING, SUBCLASSES, swapsWithHero, T, visibleCells, type World,
 } from '@pd/core';
 import { arenaBot } from '../../core/test/arena-bot';
 import { step } from '../../core/test/runner';
@@ -508,7 +508,13 @@ export function playDevice(
         landTried = false;
       }
       let action: Action;
-      if (pendingDescend) {
+      if (hero.pendingScroll) {
+        // A scroll the party did not know, read: its item is chosen (or the scroll given up, or a choice it cannot act on tried, and refused).
+        const chosen = rng.int(6);
+        action = chosen === 0 ? { type: 'scrollCancel' }
+          : chosen === 1 ? { type: 'scrollTarget', on: rng.int(2) === 0 ? rng.int(Math.max(1, hero.items.length)) : rng.oneOf(['weapon', 'armor', 'ring0', 'ring1'] as const) }
+          : { type: 'scrollTarget', on: rng.element(scrollTargets(world, hero, hero.pendingScroll.kind)) ?? 'armor' };
+      } else if (pendingDescend) {
         action = { type: 'descend' };
       } else if (spec.mode === 'chaos') {
         action = chaosAction(world, rng);

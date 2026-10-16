@@ -144,6 +144,8 @@ export type Effect =
   | { type: 'equipped'; hero: string; item: Item }
   /** A potion drunk or a scroll read; `identified` when this taught the party what it is. */
   | { type: 'used'; hero: string; kind: ItemKind; identified: boolean }
+  /** A scroll read but not used: no item was chosen for it and the player gave it up (InventoryScroll.confirmCancelation). */
+  | { type: 'scrollWasted'; hero: string; kind: ItemKind }
   | { type: 'identified'; hero: string; kind: ItemKind }
   /** Everything about an item revealed: by a scroll of identify, or a well of awareness it was dropped into (ScrollOfIdentify: "It is %s"). */
   | { type: 'revealed'; hero: string; item: Item }
@@ -315,6 +317,23 @@ export function heroView(world: World, hero: Hero): boolean[] {
     if (cell >= 0 && cell < LENGTH && Math.abs((cell % WIDTH) - (hero.pos % WIDTH)) <= 1) fov[cell] = true;
   }
   return fov;
+}
+
+/**
+ * Hero.visibleEnemies (checkVisibleMobs): the hostile monsters in the hero's field of view, asleep ones too; the passive (the
+ * shopkeeper, the ghost and the rest) and a mirror image are no enemies.
+ */
+export function visibleEnemies(world: World, hero: Hero): number {
+  const fov = heroView(world, hero);
+  return (world.floors[hero.depth]?.mobs ?? []).filter((mob) => mob.state !== 'passive' && mob.hp > 0 && !mob.image && fov[mob.pos]).length;
+}
+
+/**
+ * Invisibility.dispel: an invisible hero is seen again, but only when some enemy is in sight to see them; with none about,
+ * the invisibility lasts (melee blows, wands, the warrior's leap and every scroll call it, as the original's do).
+ */
+export function dispelInvisibility(world: World, hero: Hero): void {
+  if (hero.invisible > 0 && visibleEnemies(world, hero) > 0) hero.invisible = 0;
 }
 
 export function exploredCells(world: World, depth: number): boolean[] {

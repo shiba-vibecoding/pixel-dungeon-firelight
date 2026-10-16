@@ -308,6 +308,13 @@ export class Camp {
     return this.options.fill ? -this.crop[1] * this.scale : 0;
   }
 
+  /** Where the room itself lies across the screen (client x): a filled scene is wider, with dark dithered sides, which a photo leaves out. */
+  roomSpan(): { left: number; right: number } {
+    const box = this.canvas.getBoundingClientRect();
+    const k = box.width / Math.max(1, this.canvas.width);
+    return { left: box.left - this.crop[0] * k, right: box.left + (W - this.crop[0]) * k };
+  }
+
   /** The scene's pixel size on screen: the home screen picks it from the room it has (campui.ts), so the hero is big. */
   setScale(scale: number): void {
     if (scale === this.scale || !(scale > 0)) return;

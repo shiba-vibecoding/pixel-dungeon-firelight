@@ -9,8 +9,13 @@ import type { World } from './world';
 /*
  * Scrolls read on an item of the reader's choosing (InventoryScroll): upgrade,
  * enchantment and identify. The original opens the backpack (WndBag) on what
- * the scroll can act on, the equipped items included; here the client picks
- * the item before reading and sends it along with the action.
+ * the scroll can act on, the equipped items included. A scroll the party knows
+ * is asked about first: the client picks the item and sends it along with the
+ * action. One it does not know (it is learned by reading) is read in two steps,
+ * as InventoryScroll.doRead does: the read makes the kind known and leaves the
+ * hero with a PendingScroll, and only then does the player choose the item
+ * (scrollTarget), or give the scroll up (scrollCancel, the «Are you sure? The
+ * scroll will be wasted» window).
  */
 
 /** An item the hero has: one in the pack, the weapon or armour worn, or one of the two rings worn. */
@@ -88,6 +93,15 @@ export type TargetedScroll = 'scroll.upgrade' | 'scroll.enchantment' | 'scroll.i
 export const isTargetedScroll = (kind: ItemKind): kind is TargetedScroll =>
   kind === 'scroll.upgrade' || kind === 'scroll.enchantment' || kind === 'scroll.identify';
 
+/**
+ * A scroll read but not yet used (InventoryScroll.identifiedByUse): its kind is known to the party now, the scroll is out of
+ * the pack, and the hero waits for the item to read it on. `item` is the one scroll that was read.
+ */
+export interface PendingScroll {
+  kind: TargetedScroll;
+  item: Item;
+}
+
 /** Whether a scroll of `kind` can be read on `item`. */
 export function canTarget(world: World, kind: TargetedScroll, item: Item): boolean {
   switch (kind) {
@@ -114,19 +128,21 @@ export const TARGET_PROBLEMS: Readonly<Record<TargetedScroll, string>> = {
 };
 
 /**
- * When no item was chosen (an unknown scroll, whose kind the client could not
- * know to ask about, or an old client): the weapon in hand, else the armour,
- * if the scroll can act on them; for identify, the first unknown potion or
- * scroll in the pack, else the first thing held that is not identified.
- * Undefined if there is none: the scroll is wasted.
+ * WndBag.Mode.ARMOR for the armour kit: any armour held, worn or in the pack, but class armour (a kit makes that, it is not made
+ * of it).
  */
-export function defaultTarget(world: World, hero: Hero, kind: TargetedScroll): Item | undefined {
-  if (kind === 'scroll.identify') {
-    const unknown = heldRefs(hero).map((ref) => itemAt(hero, ref)!).filter((item) => isUnidentified(world, item, kind));
-    return unknown.find((item) => ['potion', 'scroll'].includes(itemDef(item.kind).category)) ?? unknown[0];
-  }
-  return [hero.weapon, hero.armor].find((item): item is Item => !!item && canTarget(world, kind, item));
+export function kitTargets(hero: Hero): ItemRef[] {
+  return heldRefs(hero).filter((ref) => isKitTarget(itemAt(hero, ref)!));
 }
+
+export const isKitTarget = (item: Item): boolean => itemDef(item.kind).category === 'armor' && !CLASS_ARMOR.includes(item.kind);
+
+/** WndBag.Mode.WEAPON for the weightstone: the melee weapon in hand and those in the pack (the pickaxe is no MeleeWeapon). */
+export function balanceTargets(hero: Hero): ItemRef[] {
+  return heldRefs(hero).filter((ref) => isBalanceTarget(itemAt(hero, ref)!));
+}
+
+export const isBalanceTarget = (item: Item): boolean => itemDef(item.kind).category === 'weapon' && item.kind !== 'weapon.pickaxe';
 
 /** ScrollOfRemoveCurse.uncurse on the one item. */
 const uncurse = (item: Item): void => {

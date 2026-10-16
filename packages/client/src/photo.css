@@ -1,0 +1,68 @@
+/* Firelight · the photo mode's screen (photoui.ts). The design's own pieces (ui.css, «Photo mode»: .fl-filters, .fl-filter, .fl-photo-bar,
+   .fl-photo-actions) are used as they are; what the live screen needs besides is here, under .ph-window so that the shop's .fl-filter
+   (fl-mart.css) does not reach it. Loaded last. */
+
+.pd-window.ph-window { --window-max: 1120px; height: 100%; gap: var(--space-2); }
+.ph-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* The picture: as large as the room allows, whole, on a dark ground. */
+.ph-stage {
+  position: relative; flex: 1 1 0; min-height: 140px; display: grid; background: var(--stone-900, #1a1b17);
+  box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--lit-dark, #3b3e36);
+  touch-action: none; user-select: none; -webkit-user-select: none; overflow: hidden; cursor: default;
+}
+.ph-canvas { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; display: block; touch-action: none; }
+.ph-select { position: absolute; pointer-events: none; outline: 2px dashed var(--fire-gold, #ffcc66); outline-offset: 2px; }
+
+.ph-side { display: flex; flex-direction: column; gap: var(--space-2); flex: none; min-width: 0; }
+.ph-window .fl-photo-bar { background: none; box-shadow: none; padding: 0; }
+.ph-window .fl-filters { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1); }
+.ph-window .fl-filter { height: auto; min-height: var(--tap-min, 44px) !important; padding: var(--space-1) 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); background: var(--stone-800); }
+.ph-window .fl-filter[aria-pressed="true"] { color: var(--fire-light, #ffeba4); background: var(--stone-800); }
+.ph-window .fl-photo-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.ph-window .fl-photo-actions.single { grid-template-columns: 1fr; }
+.ph-window .fl-photo-actions .pd-button { display: flex; align-items: center; justify-content: center; gap: var(--space-1); }
+
+.ph-tray { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ph-tray h3 { font: var(--text-label, 400 18px/24px var(--font-ui)); color: var(--fire-light, #ffeba4); margin: 0; }
+.ph-tray-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.ph-steps { display: flex; gap: var(--space-1); }
+.ph-step { width: 40px; height: 32px; padding: 0; display: grid; place-items: center; font: var(--text-title, 400 24px/28px var(--font-ui)); color: var(--ink); background: var(--stone-800); clip-path: var(--notch); }
+.ph-step:disabled { opacity: .4; }
+.ph-step:active:not(:disabled) { background: var(--stone-700, #3b3e36); }
+
+/* A row of tiles: one line that scrolls along on a phone, wrapping on a wide screen. */
+.ph-row { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 2px 4px; scrollbar-width: thin; }
+.ph-tile {
+  flex: none; min-width: 56px; height: 56px; padding: 0 6px; display: grid; place-items: center; color: var(--ink-muted);
+  font: var(--text-caption, 400 15px/20px var(--font-small)); background: var(--stone-900, #1a1b17); clip-path: var(--notch);
+}
+.ph-tile:active { background: var(--stone-800); }
+.ph-tile[aria-pressed="true"] { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66); background: var(--stone-800); }
+.ph-tile.more { padding: 0 var(--space-2); color: var(--fire-gold, #ffcc66); }
+.ph-art { display: block; image-rendering: pixelated; pointer-events: none; }
+.ph-none { font: var(--text-title, 400 24px/28px var(--font-ui)); color: var(--ink-muted); }
+.ph-hint { margin: 0; }
+
+.ph-hold { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-3); background: rgba(11, 11, 9, .94); }
+.ph-hold img { max-width: 100%; max-height: 80%; object-fit: contain; image-rendering: pixelated; -webkit-touch-callout: default; user-select: auto; }
+.ph-hold p { margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--fire-light, #ffeba4); text-align: center; }
+
+@media (min-width: 900px) {
+  .ph-body { flex-direction: row; gap: var(--space-3); }
+  .ph-side { width: 400px; overflow-y: auto; padding-right: 2px; }
+  .ph-row { flex-wrap: wrap; overflow-x: visible; }
+}
+
+@media (max-height: 640px) and (max-width: 899px) {
+  .ph-hint { display: none; }
+  .ph-tile { height: 48px; }
+}
+
+/* The camera's flash is over the whole screen, not over a layer (the design's .fl-photo-flash is absolute in the photo layer). */
+.fl-photo-flash { position: fixed; z-index: 90; }
+
+/* The camera button: at the camp's edge, and in the wide screen's corner with the journal and the settings. */
+.pd-camp-icon.photo { --ico: url("/assets/ui/fl-camera.png"); }
+.pd-camp-icon.photo i::before { width: 32px; height: 32px; }
+.pd-mapbtn.photo { --ico: url("/assets/ui/fl-camera.png"); --iw: 16; --ih: 16; }

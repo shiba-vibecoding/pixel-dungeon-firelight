@@ -80,11 +80,12 @@ describe('a scroll of upgrade, on the item chosen (WndBag)', () => {
     expect(hero.weapon!.level).toBe(0);
   });
 
-  it('read unknown, it falls back on the weapon in hand whatever was chosen', () => {
+  it('read unknown, it is learned and the item is asked after, whatever was sent with the read (scroll-read.test.ts)', () => {
     const { world, hero } = reader('warrior', 'scroll.upgrade', false);
     hero.items.push(createItem('potion.healing'));
     expect(act(world, 'p', { type: 'use', item: 0, on: slot(hero, 'potion.healing') }).ok).toBe(true);
-    expect(hero.weapon!.level).toBe(1);
+    expect(hero.weapon!.level).toBe(0);
+    expect(hero.pendingScroll).toMatchObject({ kind: 'scroll.upgrade' });
     expect(world.known).toContain('scroll.upgrade');
   });
 });

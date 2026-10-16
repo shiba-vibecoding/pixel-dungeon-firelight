@@ -31,6 +31,8 @@ interface WebApp {
   CloudStorage?: CloudStorage;
   /** Bot API 7.8: a story with a picture (a public https address). */
   shareToStory?(mediaUrl: string, params?: { text?: string; widget_link?: { url: string; name?: string } }): void;
+  /** Bot API 8.0: the phone or computer saves the file at an https address (a data or blob address is refused). */
+  downloadFile?(params: { url: string; file_name: string }, callback?: (accepted: boolean) => void): void;
   /** Bot API 8.0: sends a message the bot prepared (savePreparedInlineMessage) to a chat the player picks. */
   shareMessage?(id: string, callback?: (sent: boolean) => void): void;
   /** Bot API 6.9: lets the bot write to the player. */
@@ -358,9 +360,31 @@ export const appLink = (start?: string): string => (start ? `${APP_LINK}?startap
 /** Whether this Telegram can post a story from the game. */
 export const canShareStory = (): boolean => at('7.8') && typeof webApp?.shareToStory === 'function';
 
-/** A story with the picture at `url` and a caption (a link in it opens the game). */
-export function shareStory(url: string, text: string): void {
-  webApp?.shareToStory?.(url, { text: text.slice(0, 200) });
+/** A story with the picture at `url` and a caption (a link in it opens the game); `widget` is the link's button on the story (Telegram shows it to Premium senders). */
+export function shareStory(url: string, text: string, widget?: { url: string; name?: string }): void {
+  webApp?.shareToStory?.(url, { text: text.slice(0, 200), ...(widget ? { widget_link: widget } : {}) });
+}
+
+/** Whether this Telegram can save a file the game points it to. */
+export const canDownloadFile = (): boolean => at('8.0') && typeof webApp?.downloadFile === 'function';
+
+/**
+ * Asks Telegram to save the file at `url` (which must be https: Telegram's script refuses any other) as `fileName`. Resolves to whether
+ * the player let it; false where it cannot be asked.
+ */
+export function downloadFile(url: string, fileName: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!webApp?.downloadFile || !canDownloadFile()) {
+      resolve(false);
+      return;
+    }
+    try {
+      webApp.downloadFile({ url, file_name: fileName }, (accepted) => resolve(accepted));
+    } catch {
+      // A popup already open, a refused address: nothing was asked.
+      resolve(false);
+    }
+  });
 }
 
 /** Whether this Telegram can send a message the bot prepared. */

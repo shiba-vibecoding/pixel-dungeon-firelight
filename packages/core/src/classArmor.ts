@@ -1,8 +1,8 @@
 import { type Hero, type HeroClass, heroAttackDelay, isAlive, type Mob } from './actors';
 import { ballistica } from './ai';
 import { attack } from './combat';
-import { canEnter, charAt, type Ctx, enterCell, heroView, isHero, isWater, leaveCell } from './floor';
-import type { ItemKind } from './items';
+import { canEnter, charAt, type Ctx, dispelInvisibility, enterCell, heroView, isHero, isWater, leaveCell } from './floor';
+import type { Item, ItemKind } from './items';
 import { identify } from './ident';
 import { NEIGHBOURS8 } from './level/geometry';
 import { immuneTo, trapAt, triggerTrap } from './traps';
@@ -27,16 +27,20 @@ const ROOTED_TURNS = 3;
 const BURNING_TURNS = 8;
 
 /**
- * ArmorKit.upgrade: the armour worn becomes the class armour, keeping its
- * level, glyph and curse; class armour hides nothing (ClassArmor: levelKnown
- * and cursedKnown).
+ * ArmorKit.upgrade: the armour chosen becomes the class armour, keeping its level, glyph and curse; class armour hides nothing
+ * (ClassArmor: levelKnown and cursedKnown). Worn, it is worn still; from the pack, the class armour goes to the pack in its
+ * place (collected, so last).
  */
-export function applyArmorKit(ctx: Ctx, hero: Hero, index: number): void {
+export function applyArmorKit(ctx: Ctx, hero: Hero, index: number, armor: Item): void {
   hero.items.splice(index, 1);
-  const old = hero.armor;
-  hero.armor = { ...old, kind: CLASS_ARMOR_OF[hero.heroClass], base: old.base ?? old.kind };
-  identify(ctx.world, hero.armor);
-  ctx.effects.push({ type: 'classArmor', hero: hero.id, item: hero.armor });
+  const made: Item = { ...armor, kind: CLASS_ARMOR_OF[hero.heroClass], base: armor.base ?? armor.kind };
+  identify(ctx.world, made);
+  if (armor === hero.armor) hero.armor = made;
+  else {
+    hero.items.splice(hero.items.indexOf(armor), 1);
+    hero.items.push(made);
+  }
+  ctx.effects.push({ type: 'classArmor', hero: hero.id, item: made });
 }
 
 const wearsClassArmor = (hero: Hero): boolean => hero.armor.kind === CLASS_ARMOR_OF[hero.heroClass];
@@ -75,6 +79,7 @@ export function classSpecial(ctx: Ctx, hero: Hero, target: number | undefined): 
       let dest = trace.at(-1)!;
       if (charAt(world, depth, dest) && trace.length > 1) dest = trace[trace.length - 2]!;
       pay();
+      dispelInvisibility(world, hero);
       ctx.effects.push({ type: 'special', hero: hero.id, ability: 'leap', from: hero.pos, to: dest });
       if (dest !== hero.pos) {
         leaveCell(world, level, depth, hero.pos);

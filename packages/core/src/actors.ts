@@ -2,6 +2,7 @@ import { effectiveLevel } from './wear';
 import { armorStats, createItem, type Item, type ItemKind, missileStats, type WeaponStats, weaponStats } from './items';
 import type { Rng } from './rng';
 import type { Action, PlanStep } from './world';
+import type { PendingScroll } from './scrolls';
 import { ipow } from './fmath';
 
 /*
@@ -65,6 +66,11 @@ export interface Hero {
   intent: Action | null;
   /** Live turns (world.live): what the player has told the hero to do, done a turn at a time (see liveTick). */
   plan?: PlanStep[];
+  /**
+   * A scroll of upgrade, enchantment or identify the party did not know, read and now waiting for the item it is read on
+   * (InventoryScroll.doRead opens the selector before anything else can happen): only scrollTarget and scrollCancel are accepted.
+   */
+  pendingScroll?: PendingScroll;
   /** Time spent since the last regenerated hit point. */
   regen: number;
   /** Caustic ooze from Goo: time since it last burned, or -1 when clean. Water washes it off. */
