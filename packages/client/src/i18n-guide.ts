@@ -31,6 +31,11 @@ export const GUIDE_EN = {
   ] as readonly (readonly [string, string])[],
   entries: [
     {
+      id: 'growth',
+      title: 'How the hero grows',
+      text: 'There are no talents here as in Shattered: this is the original Pixel Dungeon. Every new hero level gives +5 health and one more point of accuracy and of evasion. Everything else is found: a Potion of Strength adds 1 strength, to wear heavier weapons and armour; a Scroll of Upgrade raises the level of a weapon, armour, ring or wand. The Tome of Mastery from Tengu on depth 10 lets you choose one of two subclasses, and the armour kit from the dwarf king on depth 20 makes a class armour with its own special ability.',
+    },
+    {
       id: 'hunger',
       title: 'Hunger',
       text: 'Hunger rises by one every turn (for a rogue, every 1.2 turns). At 260 you are hungry; at 360 you are starving: you stop healing and lose health now and then. A ration of food takes away 260, a pasty 360; mystery meat, chargrilled meat, frozen carpaccio and the overpriced food ration 100 each. Everyone starts with a ration, and every floor but the boss floors holds one more ration or pasty. A Ring of Satiety slows hunger.',
