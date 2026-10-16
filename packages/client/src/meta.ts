@@ -193,6 +193,8 @@ export interface SettingsOptions {
   onReset(): void;
   /** The bot's reminders (in Telegram): on now, and the switch; absent elsewhere. */
   reminders?: { on: boolean; set(on: boolean): void };
+  /** «Hide me from the boards» (off by default; absent without the server): the words, how it stands, and the switch. */
+  hideBoards?: { label: string; note: string; on: boolean; set(on: boolean): void };
   /** «What's new», the news of the version again. */
   onNews?(): void;
   /** «Report a problem»; absent without the server. */
@@ -214,6 +216,7 @@ export function showSettings(options: SettingsOptions): void {
     switchRow(t.safe.settings.risky, t.safe.settings.riskyNote, confirmRisky.on, (on) => confirmRisky.set(on)),
     switchRow(t.meta.hints, t.meta.hintsNote, hints.enabled, (on) => hints.setEnabled(on)),
     options.reminders ? switchRow(t.ranked.remindersSwitch, t.ranked.remindersNote, options.reminders.on, (on) => options.reminders!.set(on)) : null,
+    options.hideBoards ? switchRow(options.hideBoards.label, options.hideBoards.note, options.hideBoards.on, (on) => options.hideBoards!.set(on)) : null,
     linkRow(t.meta.hintsAgain, () => {
       hints.reset();
       hints.setEnabled(true);

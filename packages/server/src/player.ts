@@ -4,7 +4,9 @@ import { BOARD_KINDS, type BoardKind, boardName, boardObject, boardOfRun, boards
 import { secretDailySeed } from './daily-seed';
 import { CORS, json, jsonBody } from './http';
 import type { Env } from './index';
-import { BOARD_SIZE, type DailyEntry, publicId } from './leaderboard';
+import { BOARD_SIZE, type DailyEntry, type Passed, publicId } from './leaderboard';
+import type { PutAnswer } from './board-state';
+import { parseSlice } from './slices';
 import { legacyFields, wornByClass, wornOf } from './worn';
 import { claimAll, claimLetter, collectMail, type Lookup, noteEntered, readAll } from './mail';
 import { newsSeenAfter, parseVersion } from './news';
@@ -19,7 +21,10 @@ import { loadPlayer } from './season';
 import { EntryWriter, toEntries } from './run-store';
 import { describe, ended, MAX_SYNC_ACTIONS, parseSlot, PlayerLogic, type RunSlot, type RunSummary, streakNow } from './runs';
 import { notifierStub } from './notifier';
+import { OVERTAKEN_TOP } from './reminders';
 import { verifyInitData, WEEK_SECONDS } from './telegram-auth';
+import { speaksRussian } from './catalogue';
+import { nameOnBoards, setHidden, wornOnBoards } from './privacy';
 
 /*
  * Checked runs over HTTP (runs.ts):
@@ -49,6 +54,8 @@ interface Who {
   /** The account key: tg<Telegram id>, or the development id. */
   key: string;
   name: string;
+  /** The player's Telegram language is Russian (what a name hidden on the boards is called). */
+  ru?: boolean;
 }
 
 /** The player behind a request: Telegram init data; without a bot token (development), the id the client gives. */
@@ -56,7 +63,7 @@ async function who(body: Record<string, unknown>, env: Env): Promise<Who | null>
   if (env.BOT_TOKEN) {
     if (typeof body.initData !== 'string' || !body.initData) return null;
     const user = await verifyInitData(body.initData, env.BOT_TOKEN, WEEK_SECONDS);
-    return user ? { key: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32) } : null;
+    return user ? { key: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32), ru: speaksRussian(user.language_code) } : null;
   }
   const id = typeof body.id === 'string' ? body.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) : '';
   return id ? { key: `dev${id}`, name: (typeof body.name === 'string' && body.name.slice(0, 32)) || 'Hero' } : null;
@@ -92,7 +99,7 @@ export async function meRoute(request: Request, env: Env): Promise<Response> {
   if (!player) return json({ error: 'unauthorized' }, 401);
   const news = parseVersion(body.news);
   const response = await playerStub(env, player.key).fetch('https://player/me', {
-    method: 'POST', body: JSON.stringify({ player, coachDone: body.coachDone === true, ...(news ? { news } : {}) }),
+    method: 'POST', body: JSON.stringify({ player, coachDone: body.coachDone === true, ...(news ? { news } : {}), ...(typeof body.hidden === 'boolean' ? { hidden: body.hidden } : {}) }),
   });
   return withGifts(env, player.key, response);
 }
@@ -167,18 +174,24 @@ export async function problemRoute(request: Request, env: Env): Promise<Response
   return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', ...CORS } });
 }
 
-/** POST /board: a board's best, and (for a known player) their place. */
+/**
+ * POST /board: a board's best, and (for a known player) their place. `metric` (score, speed, depth) and `cls` (a hero) name a slice of it
+ * (slices.ts); `played` is how many players the board has had, `rank` the player's true place on the score list however far down.
+ */
 export async function boardRoute(request: Request, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   const body = await jsonBody(request);
   if (!body) return json({ error: 'bad json' }, 400);
   const kind = (BOARD_KINDS as readonly unknown[]).includes(body.kind) ? (body.kind as BoardKind) : null;
   if (!kind) return json({ error: 'bad board' }, 400);
+  const slice = parseSlice(body.metric, body.cls);
+  if (!slice) return json({ error: 'bad slice' }, 400);
   const name = boardName(kind, Date.now());
   const player = await who(body, env);
   const me = player ? await publicId(boardKey(env), name, player.key) : null;
-  const response = await boardStub(env, name).fetch(`https://board/?name=${encodeURIComponent(name)}${me ? `&me=${me}` : ''}&top=${BOARD_TOP}`);
-  const payload = (await response.json()) as { rank: number | null; top: DailyEntry[]; total?: number; you?: DailyEntry };
+  const sliced = `${slice.metric === 'score' ? '' : `&metric=${slice.metric}`}${slice.cls ? `&cls=${slice.cls}` : ''}`;
+  const response = await boardStub(env, name).fetch(`https://board/?name=${encodeURIComponent(name)}${me ? `&me=${me}` : ''}&top=${BOARD_TOP}${sliced}`);
+  const payload = (await response.json()) as { rank: number | null; top: DailyEntry[]; total?: number; played?: number; you?: DailyEntry };
   return json({ name, ...payload });
 }
 
@@ -274,6 +287,14 @@ export class Player extends DurableObject<Env> {
         }
         return json({ coachDone: true });
       }
+      if (typeof body.hidden === 'boolean') {
+        // «Hide me from the boards»: kept with the profile, and the boards still open take the name now.
+        if (setHidden(logic.profile, body.hidden, body.player.ru)) {
+          await this.persist(new Set(), new Map());
+          await this.worn(logic, body.player, true);
+        }
+        return json({ hidden: logic.profile.hidden === true });
+      }
       if (typeof body.news === 'string') {
         const seen = newsSeenAfter(logic.profile.newsSeen, body.news);
         if (seen !== logic.profile.newsSeen) {
@@ -347,19 +368,22 @@ export class Player extends DurableObject<Env> {
    * show what they wear now. One call to each board they are on (their profile knows which; the wallet is read once, never per row), and
    * none at all when the look is the same as last sent. Finished boards stay as photographs of their day.
    */
-  private async worn(logic: PlayerLogic, player: Who): Promise<{ boards: number }> {
+  private async worn(logic: PlayerLogic, player: Who, force = false): Promise<{ boards: number }> {
     const profile = logic.profile;
     const wallet = await this.wallet(player.key);
-    if (!wallet) return { boards: 0 };
     const now = Date.now();
     const open = [boardName('daily', now), boardName('week', now)].filter((name) => profile.entered.includes(name));
     if (profile.games > 0) open.push(boardName('all', now));
-    const byClass = wornByClass(shopOf(wallet));
-    const signature = JSON.stringify([open, byClass]);
-    if (open.length === 0 || signature === this.lastWorn) return { boards: 0 };
-    const results = await Promise.all(open.map(async (name) => {
+    // What the entries should say: the look of each class (a wallet's word), and the name (the real one, or the alias of a hidden player).
+    if (!wallet && /^tg\d+$/.test(player.key)) return { boards: 0 };
+    const byClass = Object.fromEntries(Object.entries(wallet ? wornByClass(shopOf(wallet)) : {}).map(([heroClass, worn]) => [heroClass, wornOnBoards(profile, worn)]));
+    const name = nameOnBoards(profile);
+    const signature = JSON.stringify([open, byClass, name]);
+    if (open.length === 0 || (signature === this.lastWorn && !force)) return { boards: 0 };
+    const results = await Promise.all(open.map(async (board) => {
       try {
-        const response = await boardStub(this.env, name).fetch(`https://board/worn?name=${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify({ owner: player.key, byClass }) });
+        const id = await publicId(boardKey(this.env), board, player.key);
+        const response = await boardStub(this.env, board).fetch(`https://board/worn?name=${encodeURIComponent(board)}`, { method: 'POST', body: JSON.stringify({ owner: player.key, id, byClass, name }) });
         return response.ok;
       } catch {
         return false;
@@ -376,11 +400,14 @@ export class Player extends DurableObject<Env> {
     const wallet = await this.wallet(player.key);
     const patron = wallet ? isPatron(wallet, now) : false;
     // What the hero wears on the boards (hero card, name colour, title, frame): built here from what the wallet owns and wears; never the device's word.
-    const worn = wallet ? wornOf(shopOf(wallet), summary.heroClass) : undefined;
+    // A player who asked to be hidden is «Hero» there, without the colour and the title that would say who.
+    const profile = this.logic!.profile;
+    const worn = wornOnBoards(profile, wallet ? wornOf(shopOf(wallet), summary.heroClass) : undefined);
+    const shownName = nameOnBoards(profile, player.name);
     for (const kind of boardsFor(summary)) {
       const name = boardOfRun(kind, summary, now);
       const entry: DailyEntry = {
-        id: await publicId(boardKey(this.env), name, player.key), owner: player.key, name: player.name,
+        id: await publicId(boardKey(this.env), name, player.key), owner: player.key, name: shownName,
         heroClass: summary.heroClass, depth: summary.depth, level: summary.level, gold: summary.gold, won: summary.won,
         score: summary.score, turns: summary.turns, kills: summary.kills, at: now, ...(patron ? { patron } : {}),
         ...(worn ? { w: worn, ...legacyFields(worn) } : {}),
@@ -388,12 +415,26 @@ export class Player extends DurableObject<Env> {
       noteEntered(this.logic!.profile, name);
       try {
         const response = await boardStub(this.env, name).fetch(`https://board/put?name=${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify(entry) });
-        places[kind] = ((await response.json()) as { rank: number | null }).rank;
+        const put = (await response.json()) as PutAnswer;
+        places[kind] = put.rank;
+        // The day's board: the player right behind this one now hears of it (if they asked the bot to).
+        if (kind === 'daily' && put.passed) await this.overtaken(put.passed, shownName);
       } catch {
         places[kind] = null;
       }
     }
     return places;
+  }
+
+  /** Tells the bot a player was passed on the day's board: it writes to them only if they asked for reminders, and once a day (reminders.ts). */
+  private async overtaken(passed: Passed, who: string): Promise<void> {
+    const chat = /^tg(\d+)$/.exec(passed.owner)?.[1];
+    if (!chat || passed.rank > OVERTAKEN_TOP) return;
+    try {
+      await notifierStub(this.env).fetch('https://notifier/overtaken', { method: 'POST', body: JSON.stringify({ chat: Number(chat), who, place: passed.rank }) });
+    } catch {
+      // The push is lost; nothing else is.
+    }
   }
 
   /** A Telegram player's wallet (Pixel-Mart): a patron's star by their name on the boards, what they wear for them. Null if it cannot be had. */
@@ -441,10 +482,12 @@ export class Player extends DurableObject<Env> {
     for (const kind of BOARD_KINDS) {
       const name = boardName(kind, now);
       try {
-        const response = await boardStub(this.env, name).fetch(`https://board/?name=${encodeURIComponent(name)}&owner=${encodeURIComponent(player.key)}&top=0`);
-        const answer = (await response.json()) as { owner?: { rank: number }; total?: number };
-        places[kind] = answer.owner?.rank ?? null;
-        totals[kind] = answer.total ?? 0;
+        // By the player's id on this board: their true place, beyond the top 100 too, and how many have played.
+        const id = await publicId(boardKey(this.env), name, player.key);
+        const response = await boardStub(this.env, name).fetch(`https://board/?name=${encodeURIComponent(name)}&me=${id}&top=0`);
+        const answer = (await response.json()) as { rank: number | null; played?: number; total?: number };
+        places[kind] = answer.rank ?? null;
+        totals[kind] = answer.played ?? answer.total ?? 0;
       } catch {
         places[kind] = null;
       }
@@ -459,7 +502,7 @@ export class Player extends DurableObject<Env> {
     return {
       name: p.name, games: p.games, wins: p.wins, deepest: p.deepest, best: p.best, bestByClass: p.bestByClass,
       arenaWaves: p.arenaWaves, arenaBest: p.arenaBest, streak: streakNow(p.streak, today, await outageDays(this.env)), dailyDone: p.dailyDate === today,
-      badges: p.badges, history: p.history, trophies: p.trophies, mail: p.mail, coachDone: p.coachDone, newsSeen: p.newsSeen ?? null, honors: p.honors ?? [], places, totals, runs, today,
+      badges: p.badges, history: p.history, trophies: p.trophies, mail: p.mail, coachDone: p.coachDone, newsSeen: p.newsSeen ?? null, honors: p.honors ?? [], hidden: p.hidden === true, places, totals, runs, today,
     };
   }
 }

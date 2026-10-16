@@ -216,6 +216,11 @@ export function launchedForDaily(): boolean {
   return webApp?.initDataUnsafe.start_param === 'daily' || new URLSearchParams(location.search).has('daily');
 }
 
+/** True when the app was opened from the bot's «you were passed» message: the day's board comes up (`startapp=boards`). */
+export function launchedForBoards(): boolean {
+  return webApp?.initDataUnsafe.start_param === 'boards' || new URLSearchParams(location.search).has('boards');
+}
+
 /** Shares an invitation to a room; resolves to 'copied' when it went to the clipboard instead. */
 export function shareInvite(room: string, text: string): Promise<'shared' | 'copied' | 'failed'> {
   return share(`room_${room}`, { room }, text);

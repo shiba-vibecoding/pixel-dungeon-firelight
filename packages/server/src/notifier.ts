@@ -5,7 +5,7 @@ import { CORS, json, jsonBody } from './http';
 import type { Env } from './index';
 import { botApi } from './payments';
 import { speaksRussian } from './catalogue';
-import { type Job, REMIND_HOUR, streakReminder, subKey, type Subscriber, WEEKLY_HOUR, weeklyResult } from './reminders';
+import { type Job, mayWrite, overtakenJob, REMIND_HOUR, streakReminder, subKey, type Subscriber, WEEKLY_HOUR, weeklyResult } from './reminders';
 import { verifyInitData, WEEK_SECONDS } from './telegram-auth';
 
 /*
@@ -41,9 +41,25 @@ export class Notifier extends DurableObject<Env> {
         // From the player's object when a daily dungeon begins; nothing is kept for those who did not ask.
         if (sub) await this.ctx.storage.put(key, { ...sub, streak: Number(body.streak) || 0, last: typeof body.last === 'string' ? body.last : sub.last, season: SEASON });
         return json({ ok: true });
+      case '/overtaken': {
+        // From the player's object when a result passes someone on the day's board: one message a day at most, to those who asked.
+        const now = Date.now();
+        const job = sub ? overtakenJob(sub, String(body.who ?? ''), Number(body.place), now) : null;
+        if (!sub || !job) return json({ queued: false });
+        await this.ctx.storage.put(key, { ...sub, sent: dayOf(now) });
+        await this.enqueue([job]);
+        return json({ queued: true });
+      }
       default:
         return json({ error: 'not found' }, 404);
     }
+  }
+
+  /** Puts messages in the queue the alarm sends from. */
+  private async enqueue(jobs: Job[]): Promise<void> {
+    const queue = (await this.ctx.storage.get<Job[]>('queue')) ?? [];
+    await this.ctx.storage.put('queue', [...queue, ...jobs]);
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + 1000);
   }
 
   /** The hourly tick (index.ts scheduled): queues what is due now; the alarm sends it. */
@@ -68,15 +84,14 @@ export class Notifier extends DurableObject<Env> {
       const { owners = {}, total = 0 } = (await response.json()) as { owners?: Record<string, number>; total?: number };
       for (const [key, sub] of subs) {
         const place = owners[`tg${sub.chat}`];
-        if (!place || sub.week === week) continue;
+        // Not twice in a day: the bot has written to them already (a pass on the board).
+        if (!place || sub.week === week || !mayWrite(sub, now)) continue;
         jobs.push(weeklyResult(sub, week, place, total));
-        await this.ctx.storage.put(key, { ...sub, week });
+        await this.ctx.storage.put(key, { ...sub, week, sent: dayOf(now) });
       }
     }
     if (jobs.length === 0) return;
-    const queue = (await this.ctx.storage.get<Job[]>('queue')) ?? [];
-    await this.ctx.storage.put('queue', [...queue, ...jobs]);
-    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + 1000);
+    await this.enqueue(jobs);
   }
 
   override async alarm(): Promise<void> {

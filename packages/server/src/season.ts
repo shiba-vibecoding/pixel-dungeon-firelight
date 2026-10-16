@@ -28,6 +28,8 @@ export function startSeason(old: Profile): Profile {
   if (old.newsSeen !== undefined) fresh.newsSeen = old.newsSeen;
   if (old.honors !== undefined) fresh.honors = old.honors;
   if (old.problems !== undefined) fresh.problems = old.problems;
+  if (old.hidden !== undefined) fresh.hidden = old.hidden;
+  if (old.alias !== undefined) fresh.alias = old.alias;
   return fresh;
 }
 

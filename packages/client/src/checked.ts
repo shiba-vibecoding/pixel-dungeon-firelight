@@ -104,6 +104,8 @@ export interface Profile {
   newsSeen?: string | null;
   /** Honours the admin gave: 'bughunter' for a confirmed problem report. */
   honors?: string[];
+  /** «Hide me from the boards» (off by default). */
+  hidden?: boolean;
   places: Partial<Record<BoardKind, number | null>>;
   /** How many players each board holds now. */
   totals?: Partial<Record<BoardKind, number>>;
@@ -121,6 +123,8 @@ export interface BoardEntry {
   gold: number;
   won: boolean;
   kills?: number;
+  /** Turns the run took (speed and depth lists need them); absent from entries before they were kept. */
+  turns?: number;
   patron?: boolean;
   /** What the player wears for the boards (Pixel-Mart's catalogue, by item id): name colour, title, portrait frame. */
   nc?: string;
@@ -140,13 +144,24 @@ export interface BoardWorn {
   fr?: string;
   tt?: string;
   nc?: string;
+  /** The league's step the player stood on, and the armour's tier at the end of the run (the hero card's frame and row). */
+  lg?: string;
+  ar?: number;
+}
+
+/** A slice of a board (the same runs sorted another way): its metric, and the hero it is for (null: all). */
+export interface BoardSlice {
+  metric: 'score' | 'speed' | 'depth';
+  cls: HeroClass | null;
 }
 
 export interface BoardView {
   name: string;
   rank: number | null;
   top: BoardEntry[];
+  /** How many entries the list holds; `played` is how many players the board has had (the top 100 is all the list keeps). */
   total?: number;
+  played?: number;
   you?: BoardEntry;
 }
 
@@ -176,7 +191,9 @@ export interface RunApi {
   news(version: string): Promise<boolean>;
   /** «Report a problem»: true once the server has it; false when it could not be sent (or five went today). */
   problem(report: ProblemReport): Promise<boolean>;
-  board(kind: BoardKind): Promise<BoardView | null>;
+  board(kind: BoardKind, slice?: BoardSlice): Promise<BoardView | null>;
+  /** «Hide me from the boards» on or off: the setting as the server kept it, or null if it could not be told. */
+  hide(on: boolean): Promise<boolean | null>;
 }
 
 /** The server's HTTP address, from its WebSocket one. */
@@ -235,6 +252,7 @@ export function runApi(server: string, identity: () => Identity, development: bo
     },
     challenge: async (text, card, mode) => (await quiet<{ id: string }>('/challenge', { text, card, mode }))?.id ?? null,
     notify: async (on) => (await quiet<{ on: boolean }>('/notify', { on })) !== null,
-    board: (kind) => quiet('/board', { kind }),
+    board: (kind, slice) => quiet('/board', { kind, ...(slice && slice.metric !== 'score' ? { metric: slice.metric } : {}), ...(slice?.cls ? { cls: slice.cls } : {}) }),
+    hide: async (on) => (await quiet<{ hidden: boolean }>('/me', { hidden: on }))?.hidden ?? null,
   };
 }

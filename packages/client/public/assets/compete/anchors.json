@@ -1,0 +1,1782 @@
+{
+ "version": 1,
+ "note": "Art pixels, origin top-left, y down. Every size of the card is the same little scene (the layouts below) drawn at a whole scale with nearest; the order is: background and the fire's light, logs, flame, sparks, shadows, the aura (legendary looks) behind, the hero, the hat over it, the glow mask, the pet.",
+ "hero": {
+  "cell": [
+   12,
+   15
+  ],
+  "feet": [
+   6,
+   15
+  ],
+  "tiers": 7,
+  "tierDefault": 1,
+  "tierNote": "row of the sheet = the armour tier at the end of the run (0 cloth .. 6); a board entry without it uses 1",
+  "idle": {
+   "frames": [
+    0,
+    1
+   ],
+   "seq": [
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    1
+   ],
+   "fps": 1,
+   "note": "PD 1.9 HeroSprite: idle = Animation(1 fps, loop) of frames 0 0 0 1 0 0 1 1"
+  },
+  "facing": "right",
+  "classes": {
+   "warrior": {
+    "sheet": "warrior.png",
+    "looks": "mart/fl/looks/warrior-<look>.png",
+    "legendary": "mart/fl/legendary/warrior-<look>.png",
+    "heads": [
+     {
+      "0": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        1,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        1,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        1,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        1,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        1,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        1,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        1,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     }
+    ],
+    "lookDiffers": []
+   },
+   "mage": {
+    "sheet": "mage.png",
+    "looks": "mart/fl/looks/mage-<look>.png",
+    "legendary": "mart/fl/legendary/mage-<look>.png",
+    "heads": [
+     {
+      "0": {
+       "top": [
+        7.0,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.0,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        7.0,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.0,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        7.0,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.0,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        7.0,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.0,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        7.0,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.0,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        7.0,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.0,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        7.0,
+        0
+       ],
+       "head": [
+        1,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.0,
+        0
+       ],
+       "head": [
+        2,
+        11
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      }
+     }
+    ],
+    "lookDiffers": []
+   },
+   "rogue": {
+    "sheet": "rogue.png",
+    "looks": "mart/fl/looks/rogue-<look>.png",
+    "legendary": "mart/fl/legendary/rogue-<look>.png",
+    "heads": [
+     {
+      "0": {
+       "top": [
+        6.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        6.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      },
+      "1": {
+       "top": [
+        5.5,
+        1
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        8
+       ]
+      }
+     }
+    ],
+    "lookDiffers": []
+   },
+   "ranger": {
+    "sheet": "ranger.png",
+    "looks": "mart/fl/looks/ranger-<look>.png",
+    "legendary": "mart/fl/legendary/ranger-<look>.png",
+    "heads": [
+     {
+      "0": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.5,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        2,
+        10
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        5.5,
+        7
+       ]
+      }
+     },
+     {
+      "0": {
+       "top": [
+        5.5,
+        0
+       ],
+       "head": [
+        1,
+        11
+       ],
+       "eye": [
+        9,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      },
+      "1": {
+       "top": [
+        6.5,
+        0
+       ],
+       "head": [
+        1,
+        11
+       ],
+       "eye": [
+        6,
+        4
+       ],
+       "neck": [
+        6.0,
+        7
+       ]
+      }
+     }
+    ],
+    "lookDiffers": []
+   }
+  }
+ },
+ "hat": {
+  "cell": [
+   16,
+   22
+  ],
+  "heroAt": [
+   2,
+   7
+  ],
+  "rule": "the hat sheet has the hero layout (21 frames x 7 tiers of 16 x 22): take the same frame and tier as the hero and draw the cell at hero origin - heroAt; nothing to compute per class, the head points above are what the hats were fitted to",
+  "glow": "hats with glow have <hat>-glow sheets in the same layout: drawn added, pulsing"
+ },
+ "aura": {
+  "cell": [
+   24,
+   28
+  ],
+  "feet": [
+   12,
+   26
+  ],
+  "frames": 8,
+  "ms": 120,
+  "rule": "legendary looks: aura frame k at hero feet - feet, behind the hero; glow mask over the hero added at catalog glowPulse"
+ },
+ "pet": {
+  "pets": {
+   "firefly": {
+    "sheet": "mart/fl/pets/firefly.png",
+    "cell": [
+     12,
+     12
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "ms": 150,
+    "fly": true,
+    "glow": "mart/fl/pets/firefly-glow.png"
+   },
+   "rat": {
+    "sheet": "mart/fl/pets/rat.png",
+    "cell": [
+     12,
+     12
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "ms": 150,
+    "fly": false,
+    "glow": null
+   },
+   "slime": {
+    "sheet": "mart/fl/pets/slime.png",
+    "cell": [
+     12,
+     12
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "ms": 150,
+    "fly": false,
+    "glow": null
+   },
+   "bat": {
+    "sheet": "mart/fl/pets/bat.png",
+    "cell": [
+     12,
+     12
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "ms": 150,
+    "fly": true,
+    "glow": null
+   },
+   "skull": {
+    "sheet": "mart/fl/pets/skull.png",
+    "cell": [
+     12,
+     12
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "ms": 150,
+    "fly": true,
+    "glow": null
+   },
+   "ember": {
+    "sheet": "mart/fl/pets/ember.png",
+    "cell": [
+     12,
+     12
+    ],
+    "feet": [
+     6,
+     11
+    ],
+    "idle": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "ms": 150,
+    "fly": true,
+    "glow": "mart/fl/pets/ember-glow.png"
+   }
+  },
+  "place": {
+   "dx": 11,
+   "dy": 0,
+   "note": "pet feet = hero feet + (dx, dy); facing the hero: flipped"
+  },
+  "flyLift": 5,
+  "shadow": {
+   "ground": [
+    6,
+    1
+   ],
+   "fly": [
+    4,
+    1
+   ],
+   "alpha": [
+    0.45,
+    0.3
+   ]
+  }
+ },
+ "fire": {
+  "point": "the middle of the logs on the ground",
+  "logsAt": [
+   -8,
+   -4
+  ],
+  "flameAt": [
+   -6,
+   -18
+  ],
+  "flameCell": [
+   13,
+   17
+  ],
+  "sparksAt": [
+   [
+    -3,
+    -22,
+    1
+   ],
+   [
+    2,
+    -26,
+    0
+   ],
+   [
+    4,
+    -20,
+    2
+   ],
+   [
+    -1,
+    -30,
+    3
+   ]
+  ],
+  "light": {
+   "radius": 46,
+   "stops": [
+    [
+     0,
+     "aa"
+    ],
+    [
+     0.5,
+     "33"
+    ],
+    [
+     1,
+     "00"
+    ]
+   ],
+   "note": "a radial light of the style's colour at the fire point - 4 y, added; in small layouts radius = layout.light"
+  },
+  "styles": {
+   "classic": {
+    "flame": {
+     "sheet": "mart/fl/fires/classic-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 100
+    },
+    "logs": "mart/fl/fires/classic-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "mart/fl/fires/classic-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3
+    },
+    "light": "#ff9a3a"
+   },
+   "blue": {
+    "flame": {
+     "sheet": "mart/fl/fires/blue-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 100
+    },
+    "logs": "mart/fl/fires/blue-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "mart/fl/fires/blue-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3
+    },
+    "light": "#4aa8ff"
+   },
+   "green": {
+    "flame": {
+     "sheet": "mart/fl/fires/green-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 100
+    },
+    "logs": "mart/fl/fires/green-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "mart/fl/fires/green-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3
+    },
+    "light": "#72e04a"
+   },
+   "ghost": {
+    "flame": {
+     "sheet": "mart/fl/fires/ghost-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 100
+    },
+    "logs": "mart/fl/fires/ghost-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "mart/fl/fires/ghost-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3
+    },
+    "light": "#92e0dc"
+   },
+   "rainbow": {
+    "flame": {
+     "sheet": "mart/fl/fires/rainbow-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 100
+    },
+    "logs": "mart/fl/fires/rainbow-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "mart/fl/fires/rainbow-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3
+    },
+    "light": "#ff6ad8"
+   },
+   "cursed": {
+    "flame": {
+     "sheet": "mart/fl/fires/cursed-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 100
+    },
+    "logs": "mart/fl/fires/cursed-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "mart/fl/fires/cursed-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3
+    },
+    "light": "#a44aff"
+   },
+   "golden": {
+    "flame": {
+     "sheet": "mart/fl/fires/golden-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 100
+    },
+    "logs": "mart/fl/fires/golden-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "mart/fl/fires/golden-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3
+    },
+    "light": "#ffd040"
+   },
+   "ice": {
+    "flame": {
+     "sheet": "mart/fl/fires/ice-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 100
+    },
+    "logs": "mart/fl/fires/ice-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "mart/fl/fires/ice-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3
+    },
+    "light": "#ace8ff"
+   },
+   "beacon": {
+    "flame": {
+     "sheet": "compete/fires/beacon-flame.png",
+     "frames": 6,
+     "w": 13,
+     "h": 17,
+     "ms": 90
+    },
+    "logs": "compete/fires/beacon-logs.png",
+    "logsAt": [
+     -8,
+     -4
+    ],
+    "sparks": {
+     "sheet": "compete/fires/beacon-sparks.png",
+     "frames": 4,
+     "w": 3,
+     "h": 3,
+     "rise": "straight up in a column, 1 px a frame"
+    },
+    "light": "#ffe9b0",
+    "icon": "compete/fires/icons/beacon.png",
+    "honour": true
+   }
+  }
+ },
+ "layouts": {
+  "row": {
+   "scene": [
+    36,
+    24
+   ],
+   "scale": 2,
+   "fire": [
+    8,
+    21
+   ],
+   "hero": [
+    19,
+    23
+   ],
+   "pet": [
+    30,
+    23
+   ],
+   "light": 26,
+   "frame": {
+    "slice": 4,
+    "scale": 1
+   },
+   "size": [
+    80,
+    56
+   ],
+   "note": "the board row: 56 px high on a phone; a frame of 14 x 14 (slice 4) at x1 round a 72 x 48 stage"
+  },
+  "big": {
+   "scene": [
+    64,
+    44
+   ],
+   "scale": {
+    "phone": 3,
+    "monitor": 3
+   },
+   "fire": [
+    18,
+    39
+   ],
+   "hero": [
+    36,
+    41
+   ],
+   "pet": [
+    50,
+    41
+   ],
+   "light": 40,
+   "frame": {
+    "slice": 4,
+    "scale": 3
+   },
+   "note": "profile and the top 3: 192 x 132 stage in a frame at x3"
+  },
+  "podium": {
+   "scene": [
+    40,
+    40
+   ],
+   "scale": {
+    "phone": 2,
+    "monitor": 2
+   },
+   "fire": [
+    11,
+    35
+   ],
+   "hero": [
+    22,
+    37
+   ],
+   "pet": [
+    33,
+    37
+   ],
+   "light": 30,
+   "frame": {
+    "slice": 4,
+    "scale": 2
+   },
+   "note": "the hall of fame and the season's top 3"
+  },
+  "story": {
+   "canvas": [
+    1080,
+    1920
+   ],
+   "scene": [
+    90,
+    104
+   ],
+   "scale": 12,
+   "at": [
+    0,
+    0
+   ],
+   "bg": {
+    "sheet": "camp/camp-outdoor-summer.png",
+    "crop": [
+     2,
+     36,
+     90,
+     104
+    ],
+    "night": 0.3
+   },
+   "fire": [
+    22,
+    82
+   ],
+   "hero": [
+    44,
+    84
+   ],
+   "pet": [
+    57,
+    85
+   ],
+   "light": 60,
+   "note": "the camp's own picture behind (its fire pit at 24, 118 of the camp)"
+  },
+  "chat": {
+   "canvas": [
+    1280,
+    640
+   ],
+   "scene": [
+    80,
+    64
+   ],
+   "scale": 8,
+   "at": [
+    40,
+    64
+   ],
+   "bg": {
+    "sheet": "camp/camp-outdoor-summer.png",
+    "crop": [
+     0,
+     70,
+     80,
+     64
+    ],
+    "night": 0.3
+   },
+   "fire": [
+    24,
+    48
+   ],
+   "hero": [
+    46,
+    50
+   ],
+   "pet": [
+    59,
+    51
+   ],
+   "light": 50
+  },
+  "notify": {
+   "canvas": [
+    640,
+    360
+   ],
+   "scene": [
+    56,
+    40
+   ],
+   "scale": 6,
+   "at": [
+    0,
+    120
+   ],
+   "fire": [
+    16,
+    36
+   ],
+   "hero": [
+    32,
+    38
+   ],
+   "pet": [
+    46,
+    38
+   ],
+   "light": 36
+  },
+  "notifyCamp": {
+   "canvas": [
+    640,
+    360
+   ],
+   "scene": [
+    64,
+    36
+   ],
+   "scale": 10,
+   "at": [
+    0,
+    0
+   ],
+   "bg": {
+    "sheet": "camp/camp-outdoor-summer.png",
+    "crop": [
+     12,
+     90,
+     64,
+     36
+    ],
+    "night": 0.35
+   },
+   "fire": [
+    12,
+    28
+   ],
+   "hero": [
+    25,
+    30
+   ],
+   "pet": [
+    34,
+    31
+   ],
+   "light": 34
+  }
+ }
+}

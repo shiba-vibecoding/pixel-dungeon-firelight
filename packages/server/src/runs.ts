@@ -104,6 +104,9 @@ export interface Profile {
   newsSeen?: string;
   /** Honours the admin gave: 'bughunter' for a confirmed report (problem.ts). */
   honors?: string[];
+  /** «Hide me from the boards» (privacy.ts; a setting: kept through a season's wipe): the name on the boards is the alias. */
+  hidden?: boolean;
+  alias?: string;
   /** The problem reports sent today, for the daily limit (problem.ts). */
   problems?: { day: string; count: number };
   /** The season pass's XP, from this season's checked runs only (pass.ts); a new season starts it afresh with the rest of the profile. */

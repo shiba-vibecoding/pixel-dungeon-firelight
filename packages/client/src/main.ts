@@ -13,6 +13,7 @@ import './ui.css';
 import './game.css';
 import './fl-mart.css';
 import './fl-mart-ext.css';
+import './fl-compete.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -41,7 +42,12 @@ import {
   askDrink, onWindow, reopenWindow, type WindowState, windowState,
   backpackOpen, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
-import { rankingBlock, showBoards, trophyText } from './rankui';
+import { rankingBlock, trophyText } from './rankui';
+import { showBoards } from './boardsui';
+import { showProfile } from './profileui';
+import { tx } from './compete-ui';
+import { myLook } from './herocard';
+import { chatPicture, savePicture } from './sharecards';
 import { mart } from './mart';
 import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta';
 import { eraseDevice } from './challenge-info';
@@ -80,7 +86,7 @@ import { type BoardKind, type Profile, type RunMeta, type RunSlot, runApi, type 
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForDaily, onLayoutChange, platform,
+  backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForBoards, launchedForDaily, onLayoutChange, platform,
   shareArena, shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen, invitedGift,
 } from './telegram';
@@ -809,11 +815,23 @@ function settings(onClose: () => void): void {
   showSettings({
     onClose, onEffects: () => resize(), onReset: resetDevice,
     ...(api && inTelegram ? { reminders: { on: stored('pd-notify') === 'on', set: (on: boolean) => void setReminders(on) } } : {}),
+    ...(api ? { hideBoards: { label: tx('hideBoards'), note: tx('hideBoardsInfo'), on: profile?.hidden === true, set: (on: boolean) => void hideOnBoards(on) } } : {}),
     onNews: () => showNews({ release: CURRENT, onClose: () => settings(onClose) }),
     ...(api ? { onReport: () => showReport({ api, run: runFacts, onClose: () => settings(onClose) }) } : {}),
     // Outside Telegram the name is not known, and the camp has no field for it.
     ...(!inTelegram ? { name: { value: playerName, set: (value: string) => { playerName = value; store('pd-name', value); } } } : {}),
   });
+}
+
+/** «Hide me from the boards» on or off: the server renames the player on the boards still open, and keeps it for the runs to come. */
+async function hideOnBoards(on: boolean): Promise<void> {
+  const kept = await api!.hide(on);
+  if (kept === null) {
+    toast(tx('shareFailed'));
+    return;
+  }
+  if (profile) profile.hidden = kept;
+  toast(tx(kept ? 'hideBoardsOn' : 'hideBoardsOff'));
 }
 
 /** The bot's reminders on or off: on asks Telegram to let the bot write first; false if it did not come about. */
@@ -873,7 +891,36 @@ let profile: Profile | null = null;
 
 /** The boards window; back to the title when closed. */
 function openBoards(tab?: 'daily' | 'week' | 'arena' | 'all' | 'device'): void {
-  showBoards({ api, device: rankings(), trophies: profile?.trophies, tab, onClose: toTitle });
+  const rules = dailyRulesView();
+  showBoards({
+    api, device: rankings(), trophies: profile?.trophies, profile, heroClass, tab,
+    rules: { hardship: rules.hardship.name, boon: rules.boon.name, info: rules.boon.info },
+    onClose: toTitle,
+    onProfile: openProfile,
+  });
+}
+
+/** The player's own hero as the pictures to send show him (sharecards.ts): the place on the day's board only if he has played it. */
+function myHeroPicture(): import('./sharecards').HeroPicture {
+  return {
+    name: profile?.name || (inTelegram ? telegramName() : playerName.trim()) || t.heroDefault, look: myLook(heroClass), heroClass,
+    place: profile?.dailyDone ? (profile.places.daily ?? null) : null, depth: profile?.deepest ?? 1, streak: profile?.streak.count ?? 0,
+  };
+}
+
+/** The profile window: the hero card, what he has done, his shelf, and the card to send; back to the boards. */
+function openProfile(): void {
+  const picture = (): ShareCard => ({
+    name: myHeroPicture().name, heroClass, level: 1, depth: profile?.deepest ?? 1, score: profile?.best ?? 0, place: myHeroPicture().place, won: false, cause: '', hero: myHeroPicture(),
+  });
+  const place = myHeroPicture().place;
+  showProfile({
+    profile, name: myHeroPicture().name, heroClass,
+    share: shareChoices(async () => picture(), place ? tx('shareText', { n: place }) : tx('shareTextNoPlace'), 'daily'),
+    preview: () => chatPicture(myHeroPicture()),
+    onBack: () => openBoards(),
+    onClose: toTitle,
+  });
 }
 
 /** Today's daily dungeon as the server last told: its attempt open, under way, or played (and its place). */
@@ -3237,6 +3284,11 @@ function tick(now: number): void {
         name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, level: me.lvl, depth: deepestNow, score: scoreNow,
         place: reply?.places?.daily ?? reply?.places?.week ?? null, won: victory, cause: killer ? capitalize(t.killedBy(killer)) : t.soloFell(me.depth),
         title: dailyRun ? undefined : t.gameName,
+        // The pictures of the hero by his fire (sharecards.ts), with the day's place when this was the daily dungeon; never the seed.
+        hero: {
+          name: me.name || playerName || telegramName() || t.heroLabel, look: myLook(me.heroClass), heroClass: me.heroClass,
+          place: dailyRun ? (reply?.places?.daily ?? null) : null, depth: deepestNow, streak: profile?.streak.count ?? 0,
+        },
       };
     }, shareText, 'daily');
     window.setTimeout(() => {
@@ -3457,6 +3509,23 @@ function shareChoices(card: () => Promise<ShareCard>, text: string, start: 'dail
       },
     });
   }
+  // Keeping the picture: Telegram's download from the server's copy, or the browser's.
+  choices.push({
+    label: tx('shareSave'),
+    run: () => {
+      toast(tx('sharePreparing'));
+      void (async () => {
+        const blob = await storyCard(await card(), t.ranked.storyCall);
+        if (!blob) {
+          toast(tx('shareFailed'));
+          return;
+        }
+        const url = api ? await api.card(blob) : null;
+        if (await savePicture(blob, 'pixel-dungeon-firelight.png', url)) toast(tx('saved'));
+        else toast(tx('shareFailed'));
+      })();
+    },
+  });
   choices.push({ label: choices.length > 0 ? t.ranked.shareLink : t.shareResult, run: link });
   return choices;
 }
@@ -3472,6 +3541,8 @@ if (launchedForDaily()) {
   toTitle();
   // Without the server there is no profile to ask: the news are judged by this device alone.
   if (!api) maybeNews(null);
+  // Opened from the bot's «you were passed on the board» message: the day's board.
+  if (api && launchedForBoards()) openBoards('daily');
 }
 
 
