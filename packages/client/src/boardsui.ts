@@ -64,6 +64,8 @@ export interface BoardsOptions {
   onHall?(): void;
   /** The league's window (its button and, on a monitor, the card at the side). */
   onLeague?(): void;
+  /** The circles' window. */
+  onCircles?(): void;
 }
 
 /** The boards window: a tab a board, each loaded when first shown. */
@@ -160,6 +162,7 @@ function build(options: BoardsOptions, shell: ReturnType<typeof competeShell>): 
     const links = el('div', { className: 'fl-board-links' });
     if (options.onProfile && !wide()) links.append(linkButton(tx('profileButton'), options.onProfile));
     if (options.onLeague && !wide()) links.append(linkButton(tx('leagueButton'), options.onLeague));
+    if (options.onCircles) links.append(linkButton(tx('circleButton'), options.onCircles));
     if (tab === 'season') {
       if (options.onSeason) links.append(linkButton(tx('seasonButton'), options.onSeason));
       if (options.onHall) links.append(linkButton(tx('hallButton'), options.onHall));

@@ -57,7 +57,7 @@ export function boardOfRun(kind: BoardKind, summary: RunSummary, now: number): s
 export function boardTtl(name: string): number | null {
   if (name.startsWith('daily:')) return 60 * 86_400_000;
   // (The arena of waves' old weekly boards expire as they always did.)
-  if (name.startsWith('week:') || name.startsWith('arena:')) return 180 * 86_400_000;
+  if (name.startsWith('week:') || name.startsWith('arena:') || name.startsWith('circle:')) return 180 * 86_400_000;
   return null;
 }
 

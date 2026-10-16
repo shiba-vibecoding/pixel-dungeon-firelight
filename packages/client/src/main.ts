@@ -51,10 +51,11 @@ import { showProfile } from './profileui';
 import { lastArmor } from './compete-ui';
 import { showSeason } from './seasonui';
 import { showLeague, showWeek } from './leagueui';
+import { showCircles, showInvite } from './circleui';
 import { showHall } from './hallui';
 import { tx } from './compete-ui';
 import { myLook } from './herocard';
-import { chatPicture, savePicture } from './sharecards';
+import { chatPicture, circlePicture, savePicture } from './sharecards';
 import { mart } from './mart';
 import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta';
 import { eraseDevice } from './challenge-info';
@@ -91,11 +92,11 @@ import { lookIndex, preloadSheets, regionIndex } from './worldsheets';
 import { type ShareCard, shareCard, sharePicture, storyCard } from './share';
 import { rankings, recordRun, runScore } from './rankings';
 import { type CheckOptions, forgetSolo, loadCheck, loadSolo, type Session, soloSession, staleSolo } from './session';
-import { type BoardKind, type Profile, type RunMeta, type RunSlot, runApi, type SyncAnswer } from './checked';
+import { type BoardKind, type CircleBoardView, type Profile, type RunMeta, type RunSlot, runApi, type SyncAnswer } from './checked';
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, guardRun, haptic, initData, initTelegram, inTelegram, launchedForBoards, launchedForDaily, launchedForLeague, onLayoutChange, platform,
+  backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
   shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen, invitedGift,
 } from './telegram';
@@ -902,7 +903,94 @@ function openBoards(tab?: 'daily' | 'week' | 'all' | 'season' | 'device'): void 
     onSeason: openSeason,
     onHall: openHall,
     onLeague: openLeague,
+    onCircles: () => openCircles(),
   });
+}
+
+/** The circles' window: the player's circles (two at most), the week's board of one, the invite and the card for a chat; back to the boards. */
+function openCircles(code?: string): void {
+  showCircles({
+    api, ...(code ? { code } : {}), onBack: () => openBoards(), onClose: toTitle, toast, invite: openInvite,
+    cardShare: (view) => circleCardChoices(view),
+  });
+}
+
+/** The invitation to a circle: its link to copy or to send. */
+function openInvite(code: string, name: string): void {
+  showInvite({
+    code, name, onBack: () => openCircles(code), onClose: toTitle,
+    copy: (link) => {
+      void navigator.clipboard?.writeText(link).then(() => toast(tx('linkCopiedWord')), () => toast(link));
+    },
+    send: () => void shareCircle(code, tx('circleCardText', { c: name })).then((how) => {
+      if (how === 'copied') toast(tx('linkCopiedWord'));
+    }),
+  });
+}
+
+/** The ways to send a circle's card of the week: to a chat Telegram picks (the server keeps the picture and the invite's button), kept as a picture. */
+function circleCardChoices(view: CircleBoardView): ShareChoice[] {
+  const picture = async (): Promise<Blob | null> => circlePicture({ circle: view.circle.name, week: Number(view.week.split('-W')[1] ?? 0), rows: view.board.top, champion: view.circle.champion?.name ?? null });
+  const text = tx('circleCardText', { c: view.circle.name });
+  const choices: ShareChoice[] = [];
+  if (api && canShareMessage()) {
+    choices.push({
+      label: tx('sendChat'),
+      run: () => {
+        toast(tx('sharePreparing'));
+        void (async () => {
+          const blob = await picture();
+          const url = blob && (await api!.card(blob));
+          const id = blob && (await api!.challenge(text, url, view.code));
+          if (id) await shareMessage(id);
+          else toast(tx('shareFailed'));
+        })();
+      },
+    });
+  }
+  choices.push({
+    label: tx('shareSave'),
+    run: () => {
+      toast(tx('sharePreparing'));
+      void (async () => {
+        const blob = await picture();
+        if (!blob) {
+          toast(tx('shareFailed'));
+          return;
+        }
+        const url = api ? await api.card(blob) : null;
+        if (await savePicture(blob, 'pixel-dungeon-circle.png', url)) toast(tx('saved'));
+        else toast(tx('shareFailed'));
+      })();
+    },
+  });
+  return choices;
+}
+
+/**
+ * A circle's invite link opened: asks first (the circle's members will see the player's name and best run), then joins and opens it. A group
+ * chat the game was opened from asks the same for the group's circle, once for each chat.
+ */
+function offerCircles(): void {
+  if (!api || session) return;
+  const code = invitedCircle();
+  const chat = launchedFromGroup();
+  const answer = (outcome: Awaited<ReturnType<NonNullable<typeof api>['circleOp']>>): void => {
+    if ('error' in outcome) {
+      toast(tx(`circleErrors.${outcome.error}`));
+      toTitle(false);
+      return;
+    }
+    const joined = outcome.circles.find((circle) => circle.code === outcome.code) ?? outcome.circles[0];
+    if (joined) toast(tx('circleJoined', { n: joined.name }));
+    openCircles(outcome.code ?? outcome.circles[0]?.code);
+  };
+  if (code) {
+    showConfirm(tx('circleAskTitle'), tx('circleAskText'), tx('circleAskYes'), tx('notNow'), () => void api!.circleOp('join', { code }).then(answer), () => toTitle(false), undefined, { calm: true });
+  } else if (chat && !stored(`pd-circle-asked-${chat.instance}`)) {
+    store(`pd-circle-asked-${chat.instance}`, '1');
+    showConfirm(tx('groupAskTitle'), tx('groupAskText'), tx('circleAskYes'), tx('notNow'), () => void api!.circleOp('join', { group: true }).then(answer), () => toTitle(false), undefined, { calm: true });
+  }
 }
 
 /** The league's window: the step, the room of the week with its zones; back to the boards. */
@@ -3555,6 +3643,8 @@ if (launchedForDaily()) {
   // Opened from the bot's «you were passed on the board» message: the day's board.
   if (api && launchedForBoards()) openBoards('daily');
   if (api && launchedForLeague()) openLeague();
+  // A circle's invite link, or a group chat the game was opened from.
+  offerCircles();
 }
 
 

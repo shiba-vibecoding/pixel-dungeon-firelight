@@ -13,7 +13,8 @@
       { "name": "PLAYER", "class_name": "Player" },
       { "name": "CARD", "class_name": "Card" },
       { "name": "NOTIFIER", "class_name": "Notifier" },
-      { "name": "LEAGUE", "class_name": "League" }
+      { "name": "LEAGUE", "class_name": "League" },
+      { "name": "CIRCLE", "class_name": "Circle" }
     ]
   },
   "migrations": [
@@ -24,7 +25,9 @@
     { "tag": "v5", "new_sqlite_classes": ["Player"] },
     { "tag": "v6", "new_sqlite_classes": ["Card", "Notifier"] },
     // The weekly leagues: desks and rooms of 30 (league.ts).
-    { "tag": "v7", "new_sqlite_classes": ["League"] }
+    { "tag": "v7", "new_sqlite_classes": ["League"] },
+    // Circles: members and weekly champions of friends and of Telegram groups (circle.ts).
+    { "tag": "v8", "new_sqlite_classes": ["Circle"] }
   ],
   // Every hour: the bot's reminders that are due (notifier.ts).
   "triggers": { "crons": ["0 * * * *"] },

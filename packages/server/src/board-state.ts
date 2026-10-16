@@ -32,7 +32,7 @@ export interface PutInput {
 }
 
 /** Boards that are no list of runs (the season's Heat, a hall of fame) have the score list only: no slices of speed, depth or hero. */
-export const sliced = (name: string): boolean => !name.startsWith('season:') && !name.startsWith('hall:');
+export const sliced = (name: string): boolean => !name.startsWith('season:') && !name.startsWith('hall:') && !name.startsWith('circle:');
 
 /** The slices a put reads: those the entry counts for (the score list alone on a board that is not of runs). */
 export const putSlices = (entry: DailyEntry, name = ''): Slice[] => (sliced(name) ? slicesOf(entry) : ALL_SLICES.filter((slice) => isBase(slice)));

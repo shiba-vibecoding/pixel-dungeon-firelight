@@ -5,7 +5,7 @@
 
 interface WebApp {
   initData: string;
-  initDataUnsafe: { start_param?: string; user?: { id: number; first_name?: string; username?: string } };
+  initDataUnsafe: { start_param?: string; user?: { id: number; first_name?: string; username?: string }; chat_instance?: string; chat_type?: string };
   platform: string;
   ready(): void;
   expand(): void;
@@ -226,6 +226,24 @@ export function launchedForBoards(): boolean {
 /** True when the app was opened from the bot's league message: the league's window comes up (`startapp=league`). */
 export function launchedForLeague(): boolean {
   return webApp?.initDataUnsafe.start_param === 'league' || new URLSearchParams(location.search).has('league');
+}
+
+/** A circle to join from the launch: `startapp=c_<code>` in Telegram or `?c=<code>` in a browser (a circle's invite link). */
+export function invitedCircle(): string | null {
+  const start = webApp?.initDataUnsafe.start_param;
+  const code = start?.startsWith('c_') ? start.slice(2) : new URLSearchParams(location.search).get('c');
+  return code && /^[a-z0-9]{10}$/.test(code) ? code : null;
+}
+
+/** The group chat the game was opened from, if it was (the chat's mark comes signed in the init data: the server names the group's circle from it). */
+export function launchedFromGroup(): { instance: string; type: string } | null {
+  const data = webApp?.initDataUnsafe;
+  return data?.chat_instance && data.chat_type && ['group', 'supergroup', 'channel'].includes(data.chat_type) ? { instance: data.chat_instance, type: data.chat_type } : null;
+}
+
+/** Sends a circle's invite link where the player picks (Telegram's share sheet; the clipboard elsewhere). */
+export function shareCircle(code: string, text: string): Promise<'shared' | 'copied' | 'failed'> {
+  return share(`c_${code}`, { c: code }, text);
 }
 
 /** Shares an invitation to a room; resolves to 'copied' when it went to the clipboard instead. */

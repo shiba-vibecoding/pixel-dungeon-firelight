@@ -27,6 +27,8 @@ export interface LeagueState {
   roomTier?: string;
   /** The rank key of the best run put in the room (a run that does not beat it is not sent again). */
   put?: number;
+  /** The week whose room the bot has been told of. */
+  told?: string;
   /** The last week the player had a room in (the weeks since count as weeks away). */
   last?: string;
 }
@@ -93,6 +95,7 @@ export async function settleLeague(profile: LeagueProfile, deps: LeagueDeps, wee
   delete state.room;
   delete state.roomTier;
   delete state.put;
+  delete state.told;
   return true;
 }
 
@@ -111,6 +114,7 @@ export async function syncLeague(profile: LeagueProfile, entry: DailyEntry | nul
     if (room === null) return false;
     Object.assign(state, { tier, week, room, roomTier: tier, best: Math.max(state.best, tierNumber(tier)) });
     delete state.put;
+    delete state.told;
     changed = true;
   }
   const key = rankKey(entry);

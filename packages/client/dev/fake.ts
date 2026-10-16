@@ -1,6 +1,6 @@
 import type { HeroClass } from '@pd/core';
 import { CATALOG, HEROES, type Item } from '../src/catalog';
-import type { BoardEntry, BoardSlice, BoardView, HallView, LeagueResult, LeagueView, Profile } from '../src/checked';
+import type { BoardEntry, BoardSlice, BoardView, CircleBoardView, CircleRef, HallView, LeagueResult, LeagueView, Profile } from '../src/checked';
 
 /*
  * A made-up crowd for looking at the competitions' screens without a server (dev/compete.html): the same shape of data the server sends
@@ -101,6 +101,26 @@ export function weekResult(kind: 'up' | 'stay' | 'down'): LeagueResult {
     : kind === 'stay'
       ? { week: '2026-W42', tier: 'flame', to: 'flame', result: 'stay', place: 14, size: 30, points: 20, mark: false }
       : { week: '2026-W42', tier: 'flame', to: 'coal', result: 'down', place: 28, size: 30, points: 0, mark: false };
+}
+
+/** The player's two circles, and the week's board of one. */
+export function circles(ru: boolean): CircleRef[] {
+  return [
+    { code: 'abcdefghij', name: ru ? 'Ночные спелеологи' : 'Night Delvers', kind: 'group', cap: 200 },
+    { code: 'bcdefghijk', name: ru ? 'Друзья' : 'Friends', kind: 'friends', cap: 50 },
+  ];
+}
+
+export function circleBoard(ru: boolean, code: string): CircleBoardView {
+  const rows = Array.from({ length: 9 }, (_, i) => ({ ...person(i + 900, ru), score: 183380 - i * 9000 }));
+  const me: BoardEntry = { ...board('day', undefined, ru).you!, score: 135000 };
+  rows.splice(2, 1, me);
+  const group = code === 'abcdefghij';
+  return {
+    code, week: '2026-W43', circles: circles(ru),
+    circle: { name: circles(ru).find((c) => c.code === code)!.name, kind: group ? 'group' : 'friends', size: group ? 23 : 9, cap: group ? 200 : 50, champion: { week: '2026-W42', you: true, name: me.name, score: 150000 } },
+    board: { name: 'circle', rank: 3, top: rows, total: rows.length, played: rows.length, you: me },
+  };
 }
 
 /** The hall of fame of season 1: the top ten, written. */

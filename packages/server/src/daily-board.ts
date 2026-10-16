@@ -30,7 +30,8 @@ export class DailyBoard extends DurableObject<Env> {
       board.entries().forEach((entry, i) => {
         if (entry.owner) owners[entry.owner] = i + 1;
       });
-      return json({ owners, total: board.entries().length });
+      const first = board.entries()[0];
+      return json({ owners, total: board.entries().length, first: first?.owner ? { owner: first.owner, name: first.name, score: first.score } : null });
     }
     const slice = parseSlice(url.searchParams.get('metric'), url.searchParams.get('cls'));
     if (!slice) return json({ error: 'bad slice' }, 400);

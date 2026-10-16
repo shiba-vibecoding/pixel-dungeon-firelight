@@ -29,6 +29,9 @@ import { type Heat, heatOf } from './heat';
 import { freezeHall } from './hall';
 import { currentTier, inRoom, type LeagueDeps, settleLeague, syncLeague } from './league-flow';
 import { deskName, leagueStub, roomName } from './league';
+import { capOf, type CircleDeps, codesOf, joined, left, mayJoin, putCircles, settleCircles } from './circle-flow';
+import { circleBoard, circleStub } from './circle';
+import { type CircleKind, cleanName, groupCode, isCode, KINDS, MAX_CIRCLES, newCode } from './circle-rules';
 import { leaguesOpen, OPEN_AT, TIERS, zones } from './league-rules';
 import { closeDueSeasons, putHeat, rollSeason, type SeasonDeps, settleBoard } from './season-flow';
 import { seasonAt, seasonStart } from './season-clock';
@@ -63,6 +66,8 @@ interface Who {
   name: string;
   /** The player's Telegram language is Russian (what a name hidden on the boards is called). */
   ru?: boolean;
+  /** The chat the game was opened from, from the signed init data (a group's circle is made from it). */
+  chat?: { instance: string; type: string };
 }
 
 /** The player behind a request: Telegram init data; without a bot token (development), the id the client gives. */
@@ -70,7 +75,7 @@ async function who(body: Record<string, unknown>, env: Env): Promise<Who | null>
   if (env.BOT_TOKEN) {
     if (typeof body.initData !== 'string' || !body.initData) return null;
     const user = await verifyInitData(body.initData, env.BOT_TOKEN, WEEK_SECONDS);
-    return user ? { key: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32), ru: speaksRussian(user.language_code) } : null;
+    return user ? { key: `tg${user.id}`, name: (user.first_name || user.username || 'Hero').slice(0, 32), ru: speaksRussian(user.language_code), ...(user.chat_instance ? { chat: { instance: user.chat_instance, type: user.chat_type ?? '' } } : {}) } : null;
   }
   const id = typeof body.id === 'string' ? body.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) : '';
   return id ? { key: `dev${id}`, name: (typeof body.name === 'string' && body.name.slice(0, 32)) || 'Hero' } : null;
@@ -219,6 +224,21 @@ export async function leagueRoute(request: Request, env: Env): Promise<Response>
   return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', ...CORS } });
 }
 
+/** POST /circle: a player's circles (list, board, create, join, leave); the player's own object decides. */
+export async function circleRoute(request: Request, env: Env): Promise<Response> {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  const body = await jsonBody(request);
+  if (!body) return json({ error: 'bad json' }, 400);
+  const player = await who(body, env);
+  if (!player) return json({ error: 'unauthorized' }, 401);
+  const ops = ['list', 'board', 'create', 'join', 'leave'];
+  if (body.op !== undefined && !ops.includes(String(body.op))) return json({ error: 'bad op' }, 400);
+  const response = await playerStub(env, player.key).fetch('https://player/circle', {
+    method: 'POST', body: JSON.stringify({ player, op: body.op, code: body.code, name: body.name, kind: body.kind, group: body.group === true }),
+  });
+  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', ...CORS } });
+}
+
 /** Tells a player's object that what they wear changed (equipment, a refund): the boards still open show it (Player.worn). Never fails the caller. */
 export async function patchWorn(env: Env, user: number): Promise<void> {
   const key = `tg${user}`;
@@ -285,6 +305,7 @@ export class Player extends DurableObject<Env> {
     }
     if (url.pathname === '/worn') return json(await this.worn(logic, body.player));
     if (url.pathname === '/league') return json(await this.league(logic, body, now));
+    if (url.pathname === '/circle') return this.circle(logic, body, now);
     if (url.pathname === '/honor') {
       // The admin confirmed a problem report (index.ts adminOps): the badge goes to the profile, once.
       const granted = giveHonor(logic.profile, String(body.honor ?? ''));
@@ -407,6 +428,8 @@ export class Player extends DurableObject<Env> {
     const now = Date.now();
     const open = [boardName('daily', now), boardName('week', now)].filter((name) => profile.entered.includes(name));
     if (profile.games > 0) open.push(boardName('all', now));
+    // The boards of the player's circles of the week.
+    for (const ref of profile.circles ?? []) if (ref.week === weekOf(now)) open.push(circleBoard(ref.code, ref.week));
     // The season's board, where the player's Heat stands.
     if (profile.heat?.sent) open.push(`season:${profile.heat.season}`);
     // What the entries should say: the look of each class (a wallet's word), and the name (the real one, or the alias of a hidden player).
@@ -482,6 +505,8 @@ export class Player extends DurableObject<Env> {
       const inLeague = inRoom(profile, week);
       const best = !inLeague && leaguesOpen(weekPlayed) ? ((await this.weekView(player, now)).entry ?? weekEntry) : weekEntry;
       await this.leagueSync(this.logic!, player, now, best, weekPlayed);
+      // The circles' boards of the week (up to 2): only a run that beats what each has.
+      if ((profile.circles ?? []).length > 0) await putCircles(profile, weekEntry, week, this.circleDeps(player, now));
     }
     return places;
   }
@@ -532,7 +557,6 @@ export class Player extends DurableObject<Env> {
   /** What the league's objects are asked on this player's behalf (league-flow.ts). */
   private leagueDeps(player: Who, now: number): LeagueDeps {
     const key = boardKey(this.env);
-    const chat = /^tg(\d+)$/.exec(player.key)?.[1];
     return {
       now, start: seasonStart(this.env.COMPETE_SEASON_START),
       standing: async (tier, week, room) => {
@@ -548,16 +572,7 @@ export class Player extends DurableObject<Env> {
       join: async (tier, week) => {
         try {
           const answer = (await (await leagueStub(this.env, deskName(tier, week)).fetch('https://league/join', { method: 'POST', body: JSON.stringify({ owner: player.key }) })).json()) as { room?: number };
-          if (!Number.isInteger(answer.room)) return null;
-          // The bot's Monday message says how the week ended in this room (it keeps nothing for a player who did not ask for reminders).
-          if (chat) {
-            try {
-              await notifierStub(this.env).fetch('https://notifier/league', { method: 'POST', body: JSON.stringify({ chat: Number(chat), tier, week, room: answer.room }) });
-            } catch {
-              // The week's result is then the plain place.
-            }
-          }
-          return answer.room as number;
+          return Number.isInteger(answer.room) ? (answer.room as number) : null;
         } catch {
           return null;
         }
@@ -590,6 +605,20 @@ export class Player extends DurableObject<Env> {
     if (await syncLeague(p, entry, leaguesOpen(played), deps, week)) changed = true;
     if (changed && currentTier(p.league, week) !== before) await this.worn(logic, player, true);
     return changed;
+  }
+
+  /** Tells the bot the room of the week (once a week); whether the profile changed. */
+  private async tellLeague(p: PlayerLogic['profile'], player: Who, now: number): Promise<boolean> {
+    const state = p.league;
+    const chat = /^tg(\d+)$/.exec(player.key)?.[1];
+    if (!chat || !state?.week || !state.room || !state.roomTier || state.told === state.week || state.week !== weekOf(now)) return false;
+    try {
+      await notifierStub(this.env).fetch('https://notifier/league', { method: 'POST', body: JSON.stringify({ chat: Number(chat), tier: state.roomTier, week: state.week, room: state.room }) });
+      state.told = state.week;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** The player's own best run of the week and how many have played it (the league's input, from the week's board). */
@@ -636,6 +665,130 @@ export class Player extends DurableObject<Env> {
       open, need: OPEN_AT, played: view.played, week, endsAt: weekEnd(now), tier, best: p.league?.best ?? 0, tiers: TIERS, room,
       ...(p.leagueResult ? { result: p.leagueResult } : {}), seen: p.leagueSeen ?? null,
     };
+  }
+
+  /** What the circles' objects are asked on this player's behalf (circle-flow.ts). */
+  private circleDeps(player: Who, now: number): CircleDeps {
+    const key = boardKey(this.env);
+    return {
+      now, start: seasonStart(this.env.COMPETE_SEASON_START),
+      champion: async (code, week) => {
+        try {
+          const answer = (await (await circleStub(this.env, code).fetch(`https://circle/?me=${encodeURIComponent(player.key)}&code=${code}&settle=${week}`)).json()) as { champion?: { you: boolean } | null; settled?: boolean; error?: string };
+          if (answer.error) return 'error';
+          return { you: answer.champion?.you === true, settled: answer.settled === true };
+        } catch {
+          return 'error';
+        }
+      },
+      put: async (code, week, entry) => {
+        try {
+          const name = circleBoard(code, week);
+          const response = await boardStub(this.env, name).fetch(`https://board/put?name=${encodeURIComponent(name)}`, {
+            method: 'POST', body: JSON.stringify({ ...entry, id: await publicId(key, name, player.key), owner: player.key }),
+          });
+          return response.ok;
+        } catch {
+          return false;
+        }
+      },
+    };
+  }
+
+  /**
+   * The circles' screen and its operations (all of them judged here, from the signed init data and the player's own record):
+   *   list                        the circles the player is in (their record: no call)
+   *   board { code }              a circle of theirs: its name, size and last week's champion, and this week's board
+   *   create { name, kind }       a new circle of friends (or a group), the player its first member
+   *   join { code } | { group }   joins by the invite code, or the group's circle of the chat the game was opened from (made if it is not there)
+   *   leave { code }
+   */
+  private async circle(logic: PlayerLogic, body: Record<string, unknown>, now: number): Promise<Response> {
+    const p = logic.profile;
+    const player = body.player as Who;
+    const week = weekOf(now);
+    const deps = this.circleDeps(player, now);
+    const told = (): Array<Record<string, unknown>> => (p.circles ?? []).map((ref) => ({ code: ref.code, name: ref.name, kind: ref.kind, cap: capOf(ref.kind) }));
+    const op = body.op === undefined ? 'list' : body.op;
+    // The player's best run of the week goes to a circle's board as they come in, so that they stand on it at once.
+    const present = async (): Promise<void> => {
+      const view = await this.weekView(player, now);
+      if (await putCircles(p, view.entry, week, deps)) await this.persist(new Set(), new Map());
+    };
+    if (op === 'list') return json({ circles: told(), max: MAX_CIRCLES });
+    if (op === 'board') {
+      const code = body.code;
+      if (!isCode(code) || !codesOf(p).includes(code)) return json({ error: 'not your circle' }, 403);
+      try {
+        const last = weekOf(now - 7 * 86_400_000);
+        const meta = (await (await circleStub(this.env, code).fetch(`https://circle/?me=${encodeURIComponent(player.key)}&code=${code}&settle=${last}`)).json()) as Record<string, unknown>;
+        if (meta.error || meta.member !== true) {
+          // Gone (or the player is no longer in it): forgotten here.
+          if (left(p, code)) await this.persist(new Set(), new Map());
+          return json({ error: 'no such circle' }, 404);
+        }
+        const name = circleBoard(code, week);
+        const id = await publicId(boardKey(this.env), name, player.key);
+        const board = (await (await boardStub(this.env, name).fetch(`https://board/?name=${encodeURIComponent(name)}&me=${id}&top=50`)).json()) as Record<string, unknown>;
+        return json({ code, circle: meta, week, board: { name, ...board }, circles: told() });
+      } catch {
+        return json({ error: 'circle' }, 502);
+      }
+    }
+    if (op === 'leave') {
+      const code = body.code;
+      if (!isCode(code) || !left(p, code)) return json({ error: 'not your circle' }, 404);
+      await this.persist(new Set(), new Map());
+      try {
+        await circleStub(this.env, code).fetch('https://circle/leave', { method: 'POST', body: JSON.stringify({ owner: player.key }) });
+      } catch {
+        // The circle still lists them; they are out of it here, which is what counts.
+      }
+      return json({ ok: true, circles: told() });
+    }
+    if (op === 'create' || op === 'join') {
+      let code: unknown = body.code;
+      let create: { name: string; kind: CircleKind } | undefined;
+      if (op === 'create') {
+        const name = cleanName(body.name);
+        const kind = (KINDS as readonly unknown[]).includes(body.kind) ? (body.kind as CircleKind) : 'friends';
+        if (!name) return json({ error: 'bad name' }, 400);
+        if (codesOf(p).length >= MAX_CIRCLES) return json({ error: 'limit' }, 409);
+        code = newCode(crypto.getRandomValues(new Uint8Array(10)));
+        create = { name, kind };
+      } else if (body.group === true) {
+        // The group's circle: named by the chat the game was opened from, in the signed init data (never by what a device says).
+        const chat = player.chat;
+        if (!chat || !['group', 'supergroup', 'channel'].includes(chat.type)) return json({ error: 'not from a group' }, 400);
+        code = await groupCode(chat.instance, boardKey(this.env));
+        create = { name: cleanName(body.name) ?? (player.ru ? 'Группа' : 'Group'), kind: 'group' };
+      }
+      if (!isCode(code)) return json({ error: 'bad code' }, 400);
+      let meta: { kind: CircleKind; size: number; name: string } | null = null;
+      if (op === 'join') {
+        try {
+          const found = (await (await circleStub(this.env, code).fetch(`https://circle/?me=${encodeURIComponent(player.key)}`)).json()) as { kind?: CircleKind; size?: number; name?: string; error?: string };
+          if (!found.error && found.kind && typeof found.size === 'number' && found.name) meta = { kind: found.kind, size: found.size, name: found.name };
+        } catch {
+          return json({ error: 'circle' }, 502);
+        }
+      }
+      const verdict = mayJoin(p, code, meta ?? (create ? { kind: create.kind, size: 0 } : null));
+      if (verdict === 'already') return json({ ok: true, kept: true, circles: told() });
+      if (verdict !== 'ok') return json({ error: verdict }, verdict === 'full' || verdict === 'limit' ? 409 : verdict === 'no such circle' ? 404 : 400);
+      try {
+        const response = await circleStub(this.env, code).fetch('https://circle/join', { method: 'POST', body: JSON.stringify({ owner: player.key, ...(create ? { create } : {}) }) });
+        const answer = (await response.json()) as { circle?: { name: string; kind: CircleKind }; error?: string };
+        if (!response.ok || !answer.circle) return json({ error: answer.error ?? 'circle' }, response.status === 409 ? 409 : response.status === 404 ? 404 : 502);
+        joined(p, { code, name: answer.circle.name, kind: answer.circle.kind });
+        await this.persist(new Set(), new Map());
+        await present();
+        return json({ ok: true, code, circles: told() });
+      } catch {
+        return json({ error: 'circle' }, 502);
+      }
+    }
+    return json({ error: 'bad op' }, 400);
   }
 
   /** The player's Heat on the season's board (their best stands); whether the board took it. */
@@ -694,8 +847,13 @@ export class Player extends DurableObject<Env> {
     // The league: last week's room is settled and, the leagues open, this week's joined (its Heat and last week's end go into the season first).
     const week = await this.weekView(player, now);
     if (await this.leagueSync(logic, player, now, week.entry, week.played)) changed = true;
+    // The bot is told once a week which room the player is in (it keeps nothing for a player who did not ask for reminders), so that its
+    // Monday message can say how the week ended there: not at a run's end, where every call counts.
+    if (await this.tellLeague(p, player, now)) changed = true;
     // Boards finished since last asked become letters (mail.ts); the trophies are claimed from them, and the days are counted in Heat.
     if (await collectMail(p, now, this.standing(player.key), (board, standing) => void settleBoard(p, board, standing, deps))) changed = true;
+    // The week that has just ended in each of the player's circles: its champion gets the honour and the Heat.
+    if (await settleCircles(p, this.circleDeps(player, now))) changed = true;
     if (await closeDueSeasons(p, deps)) changed = true;
     if (await putHeat(p, deps)) changed = true;
     if (changed) await this.persist(new Set(), new Map());

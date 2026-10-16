@@ -146,6 +146,28 @@ export interface SeasonInfo {
   started: boolean;
 }
 
+/** A circle the player is in. */
+export interface CircleRef {
+  code: string;
+  name: string;
+  kind: 'friends' | 'group';
+  cap: number;
+}
+
+export interface CirclesView {
+  circles: CircleRef[];
+  max: number;
+}
+
+/** A circle and the week's board of it. */
+export interface CircleBoardView {
+  code: string;
+  week: string;
+  circle: { name: string; kind: 'friends' | 'group'; size: number; cap: number; champion?: { week: string; you: boolean; name: string; score: number } | null };
+  board: BoardView;
+  circles: CircleRef[];
+}
+
 /** What a week in a room came to: the step of the room and the one after it, the place among the room, the Heat it gave. */
 export interface LeagueResult {
   week: string;
@@ -260,7 +282,7 @@ export interface RunApi {
   /** The photo mode's picture (a PNG of up to 1.8 MB) at a public address, kept a day (server photos.ts); null if it cannot be had. */
   photo(png: Blob): Promise<string | null>;
   /** A message with the result the player may send to any chat (WebApp.shareMessage); its id, or null. */
-  challenge(text: string, card: string | null): Promise<string | null>;
+  challenge(text: string, card: string | null, circle?: string): Promise<string | null>;
   /** The bot's reminders on or off; false if the server could not be told. */
   notify(on: boolean): Promise<boolean>;
   start(slot: RunSlot, hero: HeroClass, challenges: number): Promise<{ run: RunMeta; world: World } | Trouble>;
@@ -276,6 +298,11 @@ export interface RunApi {
   /** «Report a problem»: true once the server has it; false when it could not be sent (or five went today). */
   problem(report: ProblemReport): Promise<boolean>;
   board(kind: BoardKind | 'season', slice?: BoardSlice): Promise<BoardView | null>;
+  /** The player's circles (the list needs no call); `board` reads one: its name and size, last week's champion, this week's board. */
+  circles(): Promise<CirclesView | null>;
+  circleBoard(code: string): Promise<CircleBoardView | { error: string }>;
+  /** Makes a circle, joins one by its code, joins the group the game was opened from, or leaves one; its error (limit, full, no such circle ...) if it was refused. */
+  circleOp(op: 'create' | 'join' | 'leave', body: { code?: string; name?: string; kind?: 'friends' | 'group'; group?: boolean }): Promise<{ ok: true; code?: string; circles: CircleRef[] } | { error: string }>;
   /** The player's league: their step and room (the server settles last week and joins a room first). */
   league(): Promise<LeagueView | null>;
   /** The week's result has been seen (kept with the profile, for every device). */
@@ -354,11 +381,17 @@ export function runApi(server: string, identity: () => Identity, development: bo
         return null;
       }
     },
-    challenge: async (text, card) => (await quiet<{ id: string }>('/challenge', { text, card }))?.id ?? null,
+    challenge: async (text, card, circle) => (await quiet<{ id: string }>('/challenge', { text, card, ...(circle ? { circle } : {}) }))?.id ?? null,
     notify: async (on) => (await quiet<{ on: boolean }>('/notify', { on })) !== null,
     board: (kind, slice) => quiet('/board', { kind, ...(slice && slice.metric !== 'score' ? { metric: slice.metric } : {}), ...(slice?.cls ? { cls: slice.cls } : {}) }),
     hall: (season) => quiet('/hall', season ? { season } : {}),
     league: () => quiet('/league', {}),
+    circles: () => quiet('/circle', { op: 'list' }),
+    circleBoard: async (code) => (await post<CircleBoardView | { error: string }>('/circle', { op: 'board', code })) as CircleBoardView | { error: string },
+    circleOp: async (op, body) => {
+      const answer = await post<{ ok: true; code?: string; circles: CircleRef[] } | { error: string }>('/circle', { op, ...body });
+      return typeof answer === 'string' ? { error: answer } : answer;
+    },
     leagueSeen: async (week) => (await quiet<{ seen: string }>('/league', { seen: week })) !== null,
     hide: async (on) => (await quiet<{ hidden: boolean }>('/me', { hidden: on }))?.hidden ?? null,
   };

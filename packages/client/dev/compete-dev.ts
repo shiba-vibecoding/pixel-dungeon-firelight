@@ -5,11 +5,12 @@ import '../src/fl-mart-ext.css';
 import '../src/fl-compete.css';
 import { showBoards } from '../src/boardsui';
 import { showProfile } from '../src/profileui';
-import { chatPicture, storyPicture } from '../src/sharecards';
+import { chatPicture, circlePicture, storyPicture } from '../src/sharecards';
 import { myLook } from '../src/herocard';
 import type { RunApi } from '../src/checked';
 import { lang } from '../src/i18n';
-import { board, hall, league, MY_NAME, profile, seasonBoard, weekResult } from './fake';
+import { board, circleBoard, circles, hall, league, MY_NAME, profile, seasonBoard, weekResult } from './fake';
+import { showCircles, showInvite } from '../src/circleui';
 import { showLeague, showWeek } from '../src/leagueui';
 import { showHall } from '../src/hallui';
 import { showSeason } from '../src/seasonui';
@@ -27,6 +28,9 @@ const api = {
     return kind === 'season' ? seasonBoard(ru) : board(kind, slice, ru, kind === 'week' ? 5732 : kind === 'all' ? 11406 : 1284);
   },
   hall: async (season?: string) => hall(ru, season),
+  circles: async () => ({ circles: circles(ru), max: 2 }),
+  circleBoard: async (code: string) => circleBoard(ru, code),
+  circleOp: async () => ({ ok: true as const, circles: circles(ru) }),
   league: async () => league(ru, q.get('closed') === null, Number(q.get('rank') ?? 7)),
 } as unknown as RunApi;
 
@@ -48,7 +52,7 @@ if (screen === 'boards' || screen === 'runs') {
   showBoards({
     api, device: runs, trophies: profile(ru).trophies, profile: profile(ru), heroClass: 'mage', tab: screen === 'runs' ? 'device' : (q.get('tab') ?? 'day'),
     ...(metric || cls ? { slice: { metric: metric ?? 'score', cls } } : {}),
-    onProfile: () => undefined, onSeason: () => undefined, onHall: () => undefined, onLeague: () => undefined,
+    onProfile: () => undefined, onSeason: () => undefined, onHall: () => undefined, onLeague: () => undefined, onCircles: () => undefined,
     rules: { hardship: ru ? 'Без лечения' : 'No healing', boon: ru ? 'Кошелёк' : 'Purse', info: ru ? '+150 золота на траты' : '+150 gold to spend' },
     onClose: () => undefined,
   });
@@ -56,6 +60,16 @@ if (screen === 'boards' || screen === 'runs') {
 if (screen === 'season') showSeason({ api, profile: profile(ru), onBack: () => undefined, onClose: () => undefined, onHall: () => undefined });
 if (screen === 'league') showLeague({ api, profile: profile(ru), onBack: () => undefined, onClose: () => undefined });
 if (screen === 'week') showWeek({ result: weekResult((q.get('res') ?? 'up') as 'up' | 'stay' | 'down'), profile: profile(ru), heroClass: 'mage', onSeen: () => undefined, share: [{ label: 'x', run: () => undefined }] });
+if (screen === 'circle') showCircles({ api, code: q.get('kind') === 'friends' ? 'bcdefghijk' : 'abcdefghij', onBack: () => undefined, onClose: () => undefined, toast: () => undefined, invite: () => undefined, cardShare: () => [{ label: ru ? 'Отправить в чат' : 'Send to a chat', run: () => undefined }, { label: ru ? 'Сохранить картинку' : 'Save the picture', run: () => undefined }] });
+if (screen === 'invite') showInvite({ code: 'abcdefghij', name: circles(ru)[0]!.name, onBack: () => undefined, onClose: () => undefined, copy: () => undefined, send: () => undefined });
+if (screen === 'circlecard') {
+  const view = circleBoard(ru, 'abcdefghij');
+  void circlePicture({ circle: view.circle.name, week: 43, rows: view.board.top, champion: view.circle.champion?.name ?? null }).then((blob) => {
+    const img = Object.assign(document.createElement('img'), { src: URL.createObjectURL(blob!) });
+    img.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;object-fit:contain;z-index:99;background:#000';
+    document.body.append(img);
+  });
+}
 if (screen === 'hall') showHall({ api, onBack: () => undefined, onClose: () => undefined });
 const me = (): Parameters<typeof storyPicture>[0] => ({
   name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'mage', place: q.get('place') === 'none' ? null : 4, depth: 17, streak: 12,

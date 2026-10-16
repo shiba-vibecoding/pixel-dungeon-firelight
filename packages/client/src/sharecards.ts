@@ -1,5 +1,8 @@
+import type { BoardEntry } from './checked';
+import { lookOfEntry } from './cardlook';
 import type { CardLook } from './cardlook';
-import { artUrl, loadCompete, tierOf } from './compete';
+import { artUrl, compete, loadCompete, tierOf } from './compete';
+import { formatNumber } from './compete-text';
 import { loadFl } from './flart';
 import { canDownloadFile, downloadFile } from './telegram';
 import { drawScene, fireColour, sceneLayout, whenWhole } from './herocard';
@@ -195,6 +198,64 @@ export async function chatPicture(d: HeroPicture): Promise<Blob | null> {
     text(g, tier.name[lang], x + 64, y + 38, 32, tier.color);
   }
   text(g, '@pixel_dungeon_gamebot', W - 40, H - 28, 26, '#7a8173', { align: 'right', small: true, shadow: false });
+  return toBlob(canvas);
+}
+
+/** What the card of a circle's week says: the circle, the week, the first five (as the board has them), and who won last week if known. */
+export interface CirclePicture {
+  circle: string;
+  week: number;
+  rows: readonly BoardEntry[];
+  /** The name of last week's champion of the circle, if there was one: his row carries the title. */
+  champion: string | null;
+}
+
+/** Name colours as the picture paints them (the shop's `fl-name-*` colours, by the key of the item). */
+const NAME_COLOURS: Readonly<Record<string, string>> = {
+  ember: '#ff9a3a', gold: '#ffcc66', frost: '#9fdcff', moss: '#8adc5a', rose: '#ff8aa8', violet: '#b48aff', ash: '#c8c2b8', flame: '#ffcc66',
+};
+
+/** «Circle of the week» for a chat: 1280 x 640, the first five of the circle's board, each a hero card by his fire, the first with the champion's title. No seed, no price. */
+export async function circlePicture(d: CirclePicture): Promise<Blob | null> {
+  await Promise.all([loadCompete(), loadFl(), fontsReady()]);
+  const [canvas, g] = canvasOf(1280, 640);
+  const W = 1280;
+  g.fillStyle = '#0b0b09';
+  g.fillRect(0, 0, W, 640);
+  const glow = g.createRadialGradient(220, 600, 0, 220, 600, 700);
+  glow.addColorStop(0, '#ff9a3a66');
+  glow.addColorStop(0.45, '#ff9a3a22');
+  glow.addColorStop(1, '#ff9a3a00');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, W, 640);
+  text(g, tx('circleCardTitle'), 60, 96, 64, '#ffeba4', { max: 760 });
+  text(g, tx('circleCardSub', { c: d.circle, n: d.week }), 60, 146, 32, '#b0b5a3', { small: true, max: 760 });
+  const lh = await logo(g, W - 340, 40, 280);
+  const top = Math.max(186, 40 + lh + 22);
+  const medal = ['#ffd84a', '#d6dde3', '#e09a5a', '#b0b5a3', '#b0b5a3'];
+  const titleItem = compete()?.titles.find((title) => title.sku === 'title.circle_champion');
+  const titleIcon = titleItem ? await image(titleItem.icon) : null;
+  const rows = d.rows.slice(0, 5);
+  for (let i = 0; i < rows.length; i++) {
+    const entry = rows[i]!;
+    const y = top + i * 86;
+    g.fillStyle = '#0b0b09';
+    g.fillRect(57, y, W - 114, 74);
+    g.fillRect(60, y - 3, W - 120, 80);
+    g.fillStyle = i === 0 ? '#3b2a1c' : '#282a24';
+    g.fillRect(60, y, W - 120, 74);
+    text(g, String(i + 1), 104, y + 52, 40, medal[i]!, { align: 'center' });
+    // The hero by his fire: the row's scene at x3 (no frame), inside its own place.
+    await whenWhole(() => drawScene(g, lookOfEntry({ heroClass: entry.heroClass, ...(entry.w ? { w: entry.w } : {}) }), 'row', 140, y + 1, 3));
+    const key = (entry.w?.nc ?? entry.nc ?? '').replace(/^name\./, '');
+    text(g, entry.name, 272, y + 46, 36, NAME_COLOURS[key] ?? '#e8e2c8', { max: 560 });
+    text(g, tx(`classes.${entry.heroClass}`), 272, y + 68, 22, '#b0b5a3', { small: true, shadow: false });
+    if (d.champion !== null && entry.name === d.champion && titleItem && titleIcon) {
+      g.drawImage(titleIcon, 700, y + 18, 36, 36);
+      text(g, titleItem.name[lang], 750, y + 48, 28, '#ffeba4', { max: 300 });
+    }
+    text(g, formatNumber(entry.score, lang), W - 90, y + 50, 38, i === 0 ? '#ffd84a' : '#e8e2c8', { align: 'right' });
+  }
   return toBlob(canvas);
 }
 
