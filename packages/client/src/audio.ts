@@ -1,7 +1,8 @@
 import { onPause, onResume, paused } from './lifecycle';
 import { MusicPlayer, planLayers, type LayerPlan, SONGS, type SongName, songLength, type StingerName } from './music';
 import { type Place, heard } from './spatial';
-import { hasSfx, makeBuffer, SFX, type SfxName } from './sfx-synth';
+import { startFire } from './fireambience';
+import { makeBuffer, SFX, type SfxName } from './sfx-synth';
 
 /*
  * Sound effects, music and the dungeon's own air.
@@ -71,18 +72,6 @@ interface Air {
   /** Now-and-then sounds: which, how often (ms between), how loud, at what pitches. Each keeps its own time. */
   events: ReadonlyArray<{ sound: Sound; every: readonly [number, number]; volume: number; rate: readonly [number, number] }>;
 }
-
-/** The camp: a fire's body and hiss, crackles and a spark now and then. */
-const CAMP_AIR: Air = {
-  beds: [
-    { type: 'lowpass', hz: 340, q: 0.7, gain: 0.05, sway: 60, flicker: 0.5 },
-    { type: 'bandpass', hz: 2600, q: 0.6, gain: 0.011, flicker: 0.8 },
-  ],
-  events: [
-    { sound: 'crackle', every: [260, 1100], volume: 0.3, rate: [0.8, 1.35] },
-    { sound: 'ember', every: [2500, 6500], volume: 0.12, rate: [0.8, 1.2] },
-  ],
-};
 
 const AIRS: readonly Air[] = [
   // The sewers: water running somewhere, drips from the pipes.
@@ -527,8 +516,14 @@ class Audio {
 
   private startAir(): void {
     const ctx = this.context;
-    const air = this.region === null ? CAMP_AIR : AIRS[this.region];
-    if (!ctx || !this.air || !this.noise || !air || this.playing) return;
+    if (!ctx || !this.air || !this.noise || this.playing) return;
+    // The camp's air is its fire, made fresh and never looped (fireambience.ts).
+    if (this.region === null) {
+      this.playing = startFire(ctx, this.air, this.noise);
+      return;
+    }
+    const air = AIRS[this.region];
+    if (!air) return;
     const gain = ctx.createGain();
     gain.gain.value = 0;
     gain.connect(this.air);
