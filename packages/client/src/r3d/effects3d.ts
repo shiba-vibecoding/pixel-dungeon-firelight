@@ -597,28 +597,7 @@ export class Effects3D {
       else if (g.glow) this.glow.billboard(g.x / TILE, 0.05 + height, g.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, 1 - k);
       else this.soft.billboard(g.x / TILE, 0.04 + height, g.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, 1);
     }
-    // Splats and pools of blood, flat on the floor (the newest, up to a few hundred).
-    const decals = fx.decals;
-    for (let i = Math.max(0, decals.length - STAINS); i < decals.length; i++) {
-      const d = decals[i]!;
-      if (!seen(d.x, d.y)) continue;
-      // A chunk's stain is its colour toward its darker edge (a bright flat card reads as a solid square); a splat is a speck.
-      const rgb = parseCss(d.color);
-      const edge = d.shade ? parseCss(d.shade) : rgb;
-      const mix = d.shade ? 0.5 : 0;
-      const age = now - d.born;
-      const a = age < 14000 ? d.alpha : d.alpha * Math.max(0, 1 - (age - 14000) / 3000);
-      this.soft.flat((d.x + d.w / 2) / TILE, 0.016, (d.y + d.h / 2) / TILE, stainSize(d.w, !!d.shade), stainSize(d.h, !!d.shade), 0, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! + (edge[0]! - rgb[0]!) * mix, rgb[1]! + (edge[1]! - rgb[1]!) * mix, rgb[2]! + (edge[2]! - rgb[2]!) * mix, a);
-    }
-    // The pool that spreads under a body.
-    for (const corpse of fx.corpses) {
-      const pool = corpse.pool;
-      if (!pool || now < pool.start || !seen(pool.cx, pool.cy)) continue;
-      const k = Math.min(1, (now - pool.start) / 1200);
-      const rgb = parseCss(pool.color);
-      const r = (pool.radius / TILE) * (0.3 + 0.7 * k);
-      this.soft.flat(pool.cx / TILE, 0.014, pool.cy / TILE, r * 2, r * 1.6, 0, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], rgb[0]!, rgb[1]!, rgb[2]!, 0.8);
-    }
+    // (Splats, pools and chunks at rest are baked into the level's blood, gorelayer.ts, and stay.)
     // A blow: a streak of white across the floor.
     for (const s of fx.slashes) {
       if (!seen(s.x, s.y)) continue;

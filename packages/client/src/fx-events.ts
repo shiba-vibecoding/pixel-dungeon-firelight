@@ -1,4 +1,4 @@
-import { type Effect, HEIGHT, type ItemKind, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
+import { type Effect, F, HEIGHT, type ItemKind, terrainFlags, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
 import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
@@ -9,6 +9,9 @@ import { fxp } from './fxplayer';
 import { showBossCard } from './bosscard';
 import { addFxLights } from './fxdraw2d';
 import { regionIndex } from './worldsheets';
+import {
+  bloodRgb, FLOOR as FLOOR_LAYER, gore as record, groundCell, levelSpatterMap, NO_BLOOD, NO_BODY, poolSplat, shade as shadeOf, spatterOf, type SpatterMap,
+} from './gore';
 
 /*
  * What the dungeon's events look like beyond the sprites: blood and sparks on
@@ -153,6 +156,28 @@ fxp.sink = {
   reducedMotion: () => quality.reducedMotion,
   light: () => quality.light,
 };
+// Splats and chunks that settle on the floor are baked into the level's blood for good (gore.ts); a cloud of blood in water that has run
+// its course leaves a faint stain in the cells it reached.
+fx.onStain = (x, y, w, h, color, edge) => {
+  if (!color.startsWith('#')) return;
+  record.addSplat({ layer: FLOOR_LAYER, x, y, w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)), rgb: edge ? shadeOf(cssRgb(color), 0.8) : cssRgb(color) });
+};
+fx.onBleedEnd = (b) => {
+  const map = fx.floor;
+  if (!map) return;
+  const reach = b.reach + 0.55;
+  const cx = b.x / TILE;
+  const cz = b.y / TILE;
+  for (let z = Math.max(0, Math.floor(cz - reach)); z <= Math.min(HEIGHT - 1, Math.ceil(cz + reach)); z++) {
+    for (let x = Math.max(0, Math.floor(cx - reach)); x <= Math.min(WIDTH - 1, Math.ceil(cx + reach)); x++) {
+      const cell = z * WIDTH + x;
+      const flags = terrainFlags[map[cell] ?? 0] ?? 0;
+      if ((flags & F.LIQUID) === 0 || (flags & F.PIT) !== 0) continue;
+      const edge = 1 - Math.hypot(x + 0.5 - cx, z + 0.5 - cz) / reach;
+      if (edge > 0) record.settleWater(cell, Math.round(255 * 0.22 * b.power * edge * Math.sqrt(edge)));
+    }
+  }
+};
 fxp.locate = (id, now, out) => {
   const puppet = boundView?.puppets.get(id);
   if (!puppet || !boundView) return false;
@@ -193,6 +218,14 @@ function layBody(view: View, puppet: Puppet, gore: Gore, boss: boolean, now: num
   puppet.laid = true;
   puppet.removeAt = end;
   const at = view.position(puppet, end);
+  // The body stays for good in the 3D view (gore.ts): where it fell, how it faced, and a seed for its look; with its pool of blood.
+  if (!NO_BODY.has(puppet.kind)) {
+    record.addBody({ kind: puppet.kind, cell: puppet.to, flip: puppet.flip, seed: Math.floor(Math.random() * 0x7fffffff), hits: 0, at: end }, now);
+    if (gore.pool) {
+      const radius = Math.max(4, Math.min(10, Math.round(sheet.w * 0.35))) + (boss ? 3 : 0);
+      record.addSplat(poolSplat(at.x + TILE / 2, at.y + TILE - 2, radius, cssRgb(gore.pool.color)));
+    }
+  }
   fx.corpse({
     image: sheet.image, sx: (frame % sheet.cols) * sheet.w, sy: (Math.floor(frame / sheet.cols) + puppet.row) * sheet.h, w: sheet.w, h: sheet.h,
     flip: puppet.flip, x: at.x + (TILE - sheet.w) / 2, y: at.y + TILE - sheet.h, at: end,
@@ -200,6 +233,35 @@ function layBody(view: View, puppet: Puppet, gore: Gore, boss: boolean, now: num
     life: boss ? 3_600_000 : 60_000,
     pool: gore.pool ? { start: now + duration(die) * 0.4, radius: Math.max(4, Math.min(10, Math.round(sheet.w * 0.35))) + (boss ? 3 : 0), ...gore.pool } : undefined,
   });
+}
+
+/** '#rrggbb' as a number. */
+const cssRgb = (css: string): number => parseInt(css.slice(1, 7), 16);
+
+/** The level's map as spatter sees it, made once for each map the effects module is given. */
+let spatterMapFor: ArrayLike<number> | null = null;
+let spatterMap: SpatterMap | null = null;
+
+/**
+ * The blood of a blow, flung about the room (gore.ts): on the floor round the victim, on the faces of the walls within two cells north of
+ * it, on the bodies and the heaps lying near. It is baked into the level's decals, so it costs nothing after, and stays; the amount
+ * follows the damage, and half as much on the light effects quality.
+ */
+function spatter(view: View, world: World, feet: { x: number; y: number }, kind: string, damage: number, ht: number): void {
+  const map = fx.floor;
+  if (!map || NO_BLOOD.has(kind)) return;
+  if (spatterMapFor !== map) {
+    spatterMapFor = map;
+    spatterMap = levelSpatterMap(map);
+  }
+  const heaps = (world.floors[view.depth]?.heaps ?? []).map((h) => h.pos);
+  const out = spatterOf(spatterMap!, { x: feet.x, y: feet.y, kind, damage, ht }, quality.light, Math.random, { bodies: record.bodies, heaps });
+  for (const s of out.splats) record.addSplat(s);
+  for (const s of out.heapSpecks) record.addSplat(s);
+  for (const i of out.bodyHits) {
+    const body = record.bodies[i];
+    if (body && body.hits < 6) body.hits++;
+  }
 }
 
 const cellCentre = (cell: number): { x: number; y: number } => ({ x: (cell % WIDTH) * TILE + TILE / 2, y: Math.trunc(cell / WIDTH) * TILE + TILE / 2 });
@@ -287,6 +349,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
           fx.bleedWater(feet.x, feet.y, now, 0.45 + share * 0.9, 1.1 + share * 1.6);
         }
       }
+      spatter(view, world, feetOf(view, target, now), target.kind, effect.damage, target.ht);
       // A very heavy blow that does not kill still tears a chunk or two off.
       if (!killing && share >= 0.3) throwGibs(feetOf(view, target, now), gore, share >= 0.5 ? 2 : 1, angle, 0.8, now);
       const mine = effect.attacker === myId || effect.target === myId;
@@ -343,6 +406,8 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       // A slaying in water reddens it widely.
       if (gore.pool?.color === MEAT.pool?.color) fx.bleedWater(feet.x, feet.y, now, 1, boss ? 3.2 : 2);
       if (puppet) layBody(view, puppet, gore, boss, now);
+      // The last blow's worth of blood flung about, and the death's: as if the whole of its health were struck.
+      spatter(view, world, feet, kind, boss ? 40 : 14, boss ? 40 : 14);
       // What was alive leaves as a faint wisp (a ghost as nothing else).
       burst(at, now, {
         count: (boss ? 30 : 6) * (gore.wisp ? 3 : 1), colors: gore.wisp ? [...ECTO, '#ffffff'] : ['#ffffff', '#d8e8ff'], glow: true,

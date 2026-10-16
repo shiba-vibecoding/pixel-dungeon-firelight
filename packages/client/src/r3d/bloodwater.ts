@@ -7,11 +7,15 @@
 import { DataTexture, LinearFilter, type MeshStandardMaterial, RedFormat, UnsignedByteType } from 'three';
 import { HEIGHT, LENGTH, WIDTH } from '@pd/core';
 import { fx } from '../fx';
+import { gore } from '../gore';
 
 export class BloodWater {
   readonly texture: DataTexture;
   private readonly bytes = new Uint8Array(LENGTH);
   private dirty = false;
+  /** The gore record the settled stain was last read from (its version), and whether the stain has changed since. */
+  private seen = -1;
+  private stained = true;
 
   constructor() {
     this.texture = new DataTexture(this.bytes, WIDTH, HEIGHT, RedFormat, UnsignedByteType);
@@ -21,18 +25,34 @@ export class BloodWater {
     this.texture.needsUpdate = true;
   }
 
-  /** Brings the texture to `now`. */
+  /** The water has stained a little more. */
+  restain(): void {
+    this.stained = true;
+  }
+
+  /** Puts the permanent stain (gore.ts: what each cloud leaves) under the clouds. */
+  private base(): void {
+    this.bytes.fill(0);
+    for (const [cell, v] of gore.data.water) this.bytes[cell] = v;
+  }
+
+  /** Brings the texture to `now`: the settled stain, and over it the clouds of blood that are still spreading. */
   update(now: number): void {
     const bleeds = fx.bleeds;
+    if (this.seen !== gore.version) {
+      this.seen = gore.version;
+      this.stained = true;
+    }
     if (bleeds.length === 0) {
-      if (this.dirty) {
-        this.bytes.fill(0);
+      if (this.dirty || this.stained) {
+        this.base();
         this.texture.needsUpdate = true;
         this.dirty = false;
+        this.stained = false;
       }
       return;
     }
-    this.bytes.fill(0);
+    this.base();
     for (const b of bleeds) {
       const reach = b.reach + 1;
       const c0 = Math.max(0, Math.floor(b.x / 16 - reach));
@@ -49,6 +69,7 @@ export class BloodWater {
     }
     this.texture.needsUpdate = true;
     this.dirty = true;
+    this.stained = false;
   }
 
   dispose(): void {

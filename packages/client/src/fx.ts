@@ -152,7 +152,7 @@ interface Slash {
 }
 
 /** Blood in water: where it was shed (world pixels), when, how much, and how far the red spreads (cells). */
-interface Bleed {
+export interface Bleed {
   x: number;
   y: number;
   born: number;
@@ -515,8 +515,14 @@ class Fx {
     }
   }
 
+  /** Told of each thing left on the floor (a splat, a chunk at rest): the 3D view bakes it into the floor for good (gore.ts). */
+  onStain: ((x: number, y: number, w: number, h: number, color: string, shade: string | null) => void) | null = null;
+  /** Told when a cloud of blood in water has run its course, with where it was and how far it spread: it leaves a faint stain. */
+  onBleedEnd: ((b: Bleed) => void) | null = null;
+
   /** One thing left on the floor; the oldest goes when there are too many. */
   private stain(x: number, y: number, w: number, h: number, color: string, shade: string | null, alpha: number, now: number): void {
+    this.onStain?.(Math.round(x), Math.round(y), w, h, color, shade);
     this.decals.push({ x: Math.round(x), y: Math.round(y), w, h, color, shade, alpha, born: now });
     const cap = quality.light ? MAX_DECALS_LIGHT : MAX_DECALS;
     if (this.decals.length > cap) this.decals.splice(0, this.decals.length - cap);
@@ -610,7 +616,10 @@ class Fx {
     this.particles.length = n;
     this.updateGibs(now, step);
     n = 0;
-    for (const b of this.bleeds) if (now - b.born < BLEED_MS) this.bleeds[n++] = b;
+    for (const b of this.bleeds) {
+      if (now - b.born < BLEED_MS) this.bleeds[n++] = b;
+      else this.onBleedEnd?.(b);
+    }
     this.bleeds.length = n;
     n = 0;
     for (const w of this.waves) if (now - w.born < w.duration + (w.rings - 1) * w.stagger) this.waves[n++] = w;
@@ -784,6 +793,8 @@ class Fx {
     this.corpses = [];
     this.slashes = [];
     this.waves = [];
+    // (What bled and has not run its course settles into the depth that is being left.)
+    for (const b of this.bleeds) this.onBleedEnd?.(b);
     this.bleeds = [];
     this.flashes = [];
     this.shakeUntil = 0;

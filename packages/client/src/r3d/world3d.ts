@@ -20,7 +20,7 @@ import {
   Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, NoBlending, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
   PlaneGeometry, RepeatWrapping, Scene, SRGBColorSpace, Texture, WebGLRenderer,
 } from 'three';
-import { LENGTH, type Level, WIDTH } from '@pd/core';
+import { LENGTH, type Level, type MobKind, WIDTH } from '@pd/core';
 import { brightness } from '../brightness';
 import { type Assets, frameAt, levelRegion } from '../sprites';
 import { sheet as worldSheet } from '../worldsheets';
@@ -42,6 +42,9 @@ import { PerfOverlay } from './perfoverlay';
 import { canPost, Post } from './post';
 import { blankMirror, makeMirrorUniforms, Mirror, reflects, withMirror } from './mirror';
 import { BloodWater, withBlood } from './bloodwater';
+import { bakeBody } from './bodyart';
+import { GoreLayer } from './gorelayer';
+import { gore } from '../gore';
 import { Grass } from './grass3d';
 import { withGlint } from './ore';
 import { isSoft } from './softalpha';
@@ -259,6 +262,9 @@ export class World3D {
   private clock = 0;
   /** Blood in the water: the red a victim leaves in it (bloodwater.ts). */
   private readonly blood = new BloodWater();
+  /** The blood that stays, on the floor and the faces of the walls (gorelayer.ts), and the baked pictures of the bodies lying about. */
+  private readonly goreLayer: GoreLayer;
+  private readonly bodyPictures = new Map<string, HTMLCanvasElement>();
   private waterScroll: [number, number] = [0, 0.006];
   /** The cells of the level that carry a signpost, and the cut-out of it; the high grass and fungi stand in their own batch (grass3d.ts). */
   private props: number[] = [];
@@ -370,6 +376,9 @@ export class World3D {
     this.scene.add(this.ambient, this.hemi);
     this.rig = new LightRig(this.scene, options.phone);
     this.effects = new Effects3D(this.scene, this.air, this.shared);
+    this.goreLayer = new GoreLayer(this.scene, this.air);
+    gore.onSplat = (s) => this.goreLayer.paint(s);
+    gore.onWater = () => this.blood.restain();
     // What the mirror under the water sees: the lights (a camera's layer filters lights too), the batch of light, the sprites (below).
     for (const light of [this.ambient, this.hemi, ...this.rig.all]) reflects(light);
     reflects(this.effects.glow.mesh);
@@ -616,6 +625,7 @@ export class World3D {
     // Under high grass and a sign, the plain floor of the region: the prop itself is a card standing over it.
     const under = new Map<number, number>([[HIGH_GRASS, region >= 2 ? 1 : 2], [SIGN, 1]]);
     this.geom = new LevelGeom(level.map, 16, 16, this.geomKit(region), under);
+    this.goreLayer.bindLevel(level.map, this.geomKit(region).wall);
     this.makeMeshes();
     this.scanProps(true);
     this.configureMirror();
@@ -1173,6 +1183,9 @@ export class World3D {
     this.shownCount = 0;
     this.bossFound = false;
     this.blood.update(f.now);
+    if (this.goreLayer.version !== gore.version) this.goreLayer.replay(gore.data, gore.version);
+    this.goreLayer.update();
+    gore.sweep(f.now, CORPSE_FADE_MS);
     this.effects.begin();
     f.view.puppets.forEach(this.puppetPass);
     this.addWear(f);
@@ -1359,22 +1372,30 @@ export class World3D {
   }
 
   /**
-   * Bodies left where monsters fell: the last frame of their death as the monster's own sprite, standing in its cell leaned like the
-   * living, lit as they are (no darkening), fading out over a second as the original's dead do; in the batch under the living.
-   * (The canvas keeps the darkened body for a minute; the pools of blood stay in the effects.)
+   * The bodies that lie on this depth (gore.ts keeps them for the run): the monster's own last frame of dying, a little greyed and
+   * darkened with its blood on it, standing in its cell leaned like the living, in the batch under the living. Only on cells the party has
+   * explored (the fog greys what is only remembered); one over the cap dissolves away.
    */
   private addCorpses(f: Frame3D): void {
     this.toDead = true;
-    for (const c of fx.corpses) {
-      const age = f.now - c.at;
-      if (age < 0 || age >= CORPSE_FADE_MS) continue;
-      const { src } = c;
-      const image = src.image as HTMLImageElement;
-      const cell = Math.trunc((c.y + src.h - 2) / TILE) * WIDTH + Math.trunc((c.x + src.w / 2) / TILE);
-      if (!f.visible[cell]) continue;
-      // Dissolving from the first moment, over the three seconds.
-      this.deadFade = Math.max(0, age / CORPSE_FADE_MS);
-      this.sprite(image, src.sx, src.sy, src.w, src.h, src.flip, (c.x + src.w / 2) / TILE, 0, (c.y + src.h - (TILE - FEET_PX)) / TILE, src.w / TILE, src.h / TILE, 1);
+    for (const body of gore.bodies) {
+      if (f.now < (body.at ?? 0) || !f.explored[body.cell]) continue;
+      const fade = body.fadeAt === undefined ? 0 : (f.now - body.fadeAt) / CORPSE_FADE_MS;
+      if (fade >= 1) continue;
+      const art = this.assets.mobs[body.kind as MobKind];
+      if (!art) continue;
+      const { sheet, anims } = art;
+      const die = anims.die;
+      const frame = die.frames[die.frames.length - 1] ?? 0;
+      const key = `${body.kind}|${body.seed}|${body.hits}`;
+      let picture = this.bodyPictures.get(key);
+      if (!picture) {
+        if (!sheet.image.complete) continue;
+        picture = bakeBody(sheet.image, (frame % sheet.cols) * sheet.w, Math.floor(frame / sheet.cols) * sheet.h, sheet.w, sheet.h, body.kind, body.seed, body.hits);
+        this.bodyPictures.set(key, picture);
+      }
+      this.deadFade = fade;
+      this.sprite(picture, 0, 0, sheet.w, sheet.h, body.flip, (body.cell % WIDTH) + 0.5, 0, Math.trunc(body.cell / WIDTH) + FEET_PX / TILE, sheet.w / TILE, sheet.h / TILE, 1);
     }
     this.toDead = false;
   }
@@ -1485,6 +1506,9 @@ export class World3D {
     this.atlas.dispose();
     this.fog.dispose();
     this.blood.dispose();
+    this.goreLayer.dispose();
+    gore.onSplat = null;
+    gore.onWater = null;
     this.effects.dispose(this.scene);
     this.rig.dispose(this.scene);
     this.sprites.geometry.dispose();

@@ -20,6 +20,7 @@ import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickItem, quickRef, quickUse } from './quickslot';
 import { fx } from './fx';
 import { fxp } from './fxplayer';
+import { gore, GoreStore } from './gore';
 import { loadFx, whenFx } from './fxsheet';
 import { hideBossCard } from './bosscard';
 import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
@@ -172,6 +173,16 @@ const progressText = document.createElement('p');
   hint.append(Object.assign(document.createElement('b'), { textContent: t.tip }), ` ${tip}`);
   loading.replaceChildren(logo, sub, progress, progressText, hint);
 }
+// What a fight leaves (bodies, blood) is kept on this device per run and depth, and written out when the page goes away.
+try {
+  gore.setStore(new GoreStore(localStorage));
+} catch {
+  // No storage: it lasts the visit.
+}
+addEventListener('pagehide', () => gore.flush());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') gore.flush();
+});
 // The designer's effects (fx.json and its sheets) come beside the game, never in front of it: until they have, the older ones play.
 void loadFx(`${import.meta.env.BASE_URL}assets/`);
 whenFx(({ lib }) => fxp.use(lib));
@@ -3109,6 +3120,8 @@ function tick(now: number): void {
     fx.reset();
     fxp.clear();
     hideBossCard();
+    // The bodies and blood of this depth come back as they were left (gore.ts): kept per run and depth on this device.
+    gore.bind(runKey(world), me.depth, world.turn === 0);
     heroWasAlive = true;
     walk.reset();
     bakedKey = '';
@@ -3698,5 +3711,5 @@ if (import.meta.env.DEV) {
     }
   };
   Object.assign(window, { __release: { news: () => showNews({ release: CURRENT, onClose: () => toTitle(false) }), report: () => api && showReport({ api, run: runFacts, onClose: () => toTitle(false) }), crash: showCrash } });
-  Object.assign(window, { __pd: { cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
+  Object.assign(window, { __pd: { cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
 }
