@@ -2268,8 +2268,12 @@ function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;
   // A region's intro is read first: the tap that skips it does nothing else.
   if (view.skipIntro(fx.now)) return;
-  const x = Math.floor((camera.x + px / camera.zoom) / TILE);
-  const y = Math.floor((camera.y + py / camera.zoom) / TILE);
+  const wx = camera.x + px / camera.zoom;
+  const wy = camera.y + py / camera.zoom;
+  // In 3D a figure stands up off its cell, drawn over the cells north of it: a tap on its body is a tap on its cell.
+  const figure = figureCellAt(wx, wy);
+  const x = figure >= 0 ? figure % WIDTH : Math.floor(wx / TILE);
+  const y = figure >= 0 ? Math.floor(figure / WIDTH) : Math.floor(wy / TILE);
   // The whole level is on: a tap on the map walks there (below) and takes the view back to the normal zoom, eased.
   if (cam.overview) cam.exitOverview(true);
   if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
@@ -2284,6 +2288,41 @@ function tapAt(px: number, py: number): void {
     if (cam.heroTap(performance.now())) return;
   } else cam.otherTap();
   tapCell(x + y * WIDTH);
+}
+
+/** Figures drawn larger than a cell (the bosses), whose bodies reach further. */
+const BIG_FIGURES: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
+
+/**
+ * The cell of the figure (a monster, a hero) whose standing body is under a point of the ground plane (world pixels), or -1: only
+ * in 3D, where a figure stands up from its feet (FEET_PX into its cell) and covers about its own height of the screen, which on the
+ * ground plane is that height over sin(pitch), mostly the cells north of it. Of two, the one nearer the camera (further south) is
+ * drawn in front, and wins. Only figures in sight count, and never the player's own hero (the cell under the tap stands for it).
+ */
+function figureCellAt(wx: number, wy: number): number {
+  if (!mode3d) return -1;
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return -1;
+  const seen = seenCells(world, me.depth);
+  let best = -1;
+  let bestFeet = -Infinity;
+  const consider = (pos: number, big: boolean): void => {
+    if (!seen[pos]) return;
+    const cx = (pos % WIDTH) * TILE + TILE / 2;
+    const feet = Math.floor(pos / WIDTH) * TILE + FEET_PX;
+    const half = big ? 11 : 7.5;
+    const tall = (big ? 26 : 18) / YS;
+    if (Math.abs(wx - cx) > half || wy > feet + 4 || wy < feet - tall) return;
+    if (feet > bestFeet) {
+      bestFeet = feet;
+      best = pos;
+    }
+  };
+  for (const mob of world.floors[me.depth]?.mobs ?? []) consider(mob.pos, BIG_FIGURES.has(mob.kind));
+  // Not the player's own hero: a tap meant for a monster just north of them must never become a search or a double tap.
+  for (const hero of world.heroes) if (hero.id !== me.id && hero.depth === me.depth && isAlive(hero)) consider(hero.pos, false);
+  return best;
 }
 
 /** The examine tool is on: the next tap on the map tells what is there. */
