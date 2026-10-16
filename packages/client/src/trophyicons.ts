@@ -1,12 +1,11 @@
 /** Ranked-mode sprites from assets/meta/trophies16.png and trophies32.png (Design System «Pixel Dungeon UI», v15). They replace 🔥 ❄ 🏆 🥇 🥈 🥉 🏅 in rankui.ts. */
-export type TrophyKind = 'gold' | 'silver' | 'bronze' | 'week' | 'arena';
+export type TrophyKind = 'gold' | 'silver' | 'bronze' | 'week';
 export type RankIcon = TrophyKind | 'flame' | 'flame-off' | 'frost';
 
-/** The icon of a trophy record: `board` is like "daily:2026-10-12", "week:2026-W41", "arena:2026-W41". */
+/** The icon of a trophy record: `board` is like "daily:2026-10-12", "week:2026-W41". */
 export function trophyKind(board: string, place: number): TrophyKind {
   const kind = board.split(':')[0];
   if (kind === 'week') return 'week';
-  if (kind === 'arena') return 'arena';
   return place === 1 ? 'gold' : place === 2 ? 'silver' : 'bronze';
 }
 

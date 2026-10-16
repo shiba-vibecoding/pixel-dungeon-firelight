@@ -140,10 +140,12 @@ export function weaponProc(ctx: Ctx, hero: Hero, mob: Mob, damage: number, weapo
 
 /** Armor.proc: what the hero's inscribed armour does when a monster's blow lands; returns the damage that gets through. */
 export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): number {
-  const glyph: Glyph | undefined = hero.armor.glyph;
-  if (!glyph) return damage;
+  // Hero.defenseProc: bare of armour, there is nothing to proc.
+  const armor = hero.armor;
+  const glyph: Glyph | undefined = armor?.glyph;
+  if (!armor || !glyph) return damage;
   const { rng, depth, world } = ctx;
-  const level = Math.max(0, effectiveLevel(hero.armor));
+  const level = Math.max(0, effectiveLevel(armor));
   const near = adjacent(mob.pos, hero.pos);
   const shown = (): void => {
     ctx.effects.push({ type: 'glyph', depth, hero: hero.id, glyph });
@@ -237,7 +239,7 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
       // The hero is flung somewhere else in sight.
       if (isBossDepth(depth)) return damage;
       const seen = heroView(world, hero);
-      const tries = (effectiveLevel(hero.armor) < 0 ? 1 : effectiveLevel(hero.armor) + 1) * 5;
+      const tries = (effectiveLevel(armor) < 0 ? 1 : effectiveLevel(armor) + 1) * 5;
       for (let i = 0; i < tries; i++) {
         const pos = rng.int(LENGTH);
         if (!seen[pos] || !isPassable(ctx.level, pos) || charAt(world, depth, pos)) continue;
@@ -261,10 +263,10 @@ export function armorProc(ctx: Ctx, mob: Mob, hero: Hero, damage: number): numbe
       return damage;
     case 'autoRepair': {
       // AutoRepair: the armour mends itself with every blow taken, at a coin per tier.
-      const tier = itemDef(hero.armor.base ?? hero.armor.kind).tier ?? 1;
+      const tier = itemDef(armor.base ?? armor.kind).tier ?? 1;
       if (hero.gold >= tier) {
         hero.gold -= tier;
-        polish(hero.armor);
+        polish(armor);
       }
       return damage;
     }

@@ -1,5 +1,5 @@
 import {
-  act, type Action, addHero, applyBoon, applyEvent, type Bones, type ClientMessage, createWorld, dailyRules, type Effect, fingerprint, type GameMode, giveBones, heroById,
+  act, type Action, addHero, applyBoon, applyEvent, type Bones, type ClientMessage, createWorld, dailyRules, type Effect, fingerprint, giveBones, heroById,
   type HeroClass,
   LIVE_CALM_MS, liveBeatMs, liveReady, liveTick,
   type Look, restartWorld, RULES_VERSION, type ServerMessage, type Signal, type World,
@@ -163,11 +163,10 @@ export function forgetSolo(key: string): void {
  */
 /**
  * @param challenges the challenges of a fresh run (a bit mask; see Challenges in the core)
- * @param mode the dungeon, or the arena of waves (kept in a slot of its own: see main.ts)
  * @param bones a fallen hero's bones for a fresh run to hold (bones.ts), read when the run starts
  */
 export function soloSession(
-  key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0, mode: GameMode = 'dungeon',
+  key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0,
   bones: () => Bones | null = () => null, live = false, checkOptions?: CheckOptions, daily?: string,
 ): Session {
   // A problem report's log is of the run played now.
@@ -175,7 +174,7 @@ export function soloSession(
   const fresh = (): World => {
     // The daily dungeon played without the server keeps the day's rules all the same (daily.ts).
     const rules = daily ? dailyRules(daily) : null;
-    const world = createWorld(newSeed(), rules ? rules.challenge : challenges, mode, live);
+    const world = createWorld(newSeed(), rules ? rules.challenge : challenges, live);
     const hero = addHero(world, { id: 'me', name, heroClass });
     if (rules) applyBoon(world, hero, rules.boon);
     const left = bones();
@@ -447,8 +446,6 @@ export interface OnlineOptions {
   heroClass: HeroClass;
   /** Telegram.WebApp.initData when running inside Telegram. */
   initData?: string;
-  /** The arena of waves: the room is made one if it does not exist yet (whoever comes first). */
-  mode?: GameMode;
   text: { connecting: string; reconnecting: string; replaced: string; full: string; updating: string };
 }
 
@@ -624,7 +621,6 @@ export function onlineSession(options: OnlineOptions): Session {
     const url = new URL(`/room/${encodeURIComponent(options.room)}`, options.server);
     url.searchParams.set('hero', options.heroClass);
     url.searchParams.set('v', String(RULES_VERSION));
-    if (options.mode === 'arena') url.searchParams.set('mode', 'arena');
     if (options.initData) {
       url.searchParams.set('initData', options.initData);
     } else {

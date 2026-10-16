@@ -5,7 +5,7 @@ import { CELLS, LEAN_STRETCH, LEAN, PITCH, TILE_PX, WALL_H, YS, groundToScreen, 
 import { K_FLOOR, K_WALL, LevelGeom, SHAPES, TORCH_SPACING, pickShafts, pickTorches, tileRect } from '../src/r3d/levelgeom';
 import { CAP_FIRST, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from '../src/r3d/tilemap';
 import { Governor, RefreshMeter, TIERS } from '../src/r3d/governor';
-import { covers3D, forgetOld3dChoice } from '../src/r3d/setting';
+import { forgetOld3dChoice } from '../src/r3d/setting';
 
 const COLS = 16;
 /** The sheet as the renderer lays it out: the tiles' own eight rows and eight more for the tiles made from them. */
@@ -396,13 +396,5 @@ describe('the quality tier (3D only, no fall back to 2D)', () => {
     const kept = new Map<string, string>([['pd-3d', 'off'], ['pd-3d-v', '2'], ['pd-3d-fell', '1'], ['pd-brightness', '1.3']]);
     forgetOld3dChoice({ getItem: (k) => kept.get(k) ?? null, removeItem: (k) => void kept.delete(k) });
     expect([...kept.keys()]).toEqual(['pd-brightness']);
-  });
-});
-
-describe('where the 3D view is used', () => {
-  it('covers every depth in the look of its region, and never the arena of waves', () => {
-    for (let depth = 1; depth <= 26; depth++) expect(covers3D(depth, Math.min(4, Math.floor((depth - 1) / 5)), false)).toBe(true);
-    expect(covers3D(2, 0, true)).toBe(false);
-    expect(covers3D(12, 2, true)).toBe(false);
   });
 });

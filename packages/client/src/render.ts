@@ -4,7 +4,7 @@ import { drawVignette } from './vignette';
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
-import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard, waveCard } from './cards';
+import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
 
 import { fx } from './fx';
 import { drawFx2D } from './fxdraw2d';
@@ -788,20 +788,11 @@ function screenLayer(
   const descent = view.depthCard;
   const emblems = sheet('ui-map');
   if (descent && emblems) {
-    const region = descent.region ?? regionIndex(descent.depth);
+    const region = regionIndex(descent.depth);
     const text = descent.intro ? (t.meta.intros[region] ?? '') : '';
-    // The arena's sinking card says the region and «The arena sinks deeper» (its own words).
-    const title = descent.title ?? t.depthTitle(descent.depth);
-    const sub = descent.sub ?? t.regionNames[region] ?? '';
-    if (!depthCard(ctx, title, sub, emblems.image, region, middle, canvas.width, now - descent.start, px, undefined, text)) {
+    if (!depthCard(ctx, t.depthTitle(descent.depth), t.regionNames[region] ?? '', emblems.image, region, middle, canvas.width, now - descent.start, px, undefined, text)) {
       view.depthCard = null;
     }
-  }
-
-  // The arena's wave banner, once its time has come (after the sinking card, if both came at once).
-  const wave = view.waveCard;
-  if (wave && now >= wave.start && !waveCard(ctx, wave.title, wave.sub, wave.kind, middle, canvas.width, now - wave.start, px)) {
-    view.waveCard = null;
   }
 
   // A boss's title card as it notices the party: its name and epithet on a band across the free middle.
