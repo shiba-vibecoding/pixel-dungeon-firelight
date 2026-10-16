@@ -13,6 +13,7 @@ import './ui.css';
 import './game.css';
 import './fl-mart.css';
 import './fl-mart-ext.css';
+import './photo.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -34,7 +35,7 @@ import { bakeLevel, type Camera, patchLevel, render, renderOverlay3D } from './r
 import type { Frame3D, World3D } from './r3d/world3d';
 import { Governor, RefreshMeter } from './r3d/governor';
 import { FEET_PX, setPitchDeg, YS } from './r3d/project';
-import { beta3d, covers3D } from './r3d/setting';
+import { covers3D, forgetOld3dChoice } from './r3d/setting';
 import { brightness } from './brightness';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
@@ -62,6 +63,8 @@ import { watchErrors } from './diag';
 import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { showStore } from './storeui';
+import { flash, sceneShot, setPhotoUpload, type Shot, showPhoto } from './photoui';
+import { P as photoText } from './i18n-photo';
 import { cosmetics } from './cosmetics';
 import { fireArt, loadFl, onFlChange } from './flart';
 import { wornFor } from './wear';
@@ -218,6 +221,7 @@ const hud = new Hud({
     toggleQuickslot(1);
   },
   journal: () => openJournal(),
+  photo: () => openPhoto(),
   settings: () => settings(hideOverlay),
   backpack: () => {
     examining = false;
@@ -496,8 +500,19 @@ brightness.onChange(() => {
 });
 paintBrightness();
 
-/** The 3D view is put away: its memory is given back, and with a message the switch goes off (it was too slow, or would not start). */
-function stop3d(message?: string, quietUnlessChosen = false): void {
+/**
+ * Firelight is drawn in 3D only. A hard failure (the WebGL context lost, the renderer or its chunk or kit that would not start) puts
+ * the view away and it is tried again; only past NO_3D_AFTER failures in one launch, on a device whose WebGL does not work at all,
+ * does the classic view stand in, for that launch only.
+ */
+const NO_3D_AFTER = 3;
+let failures3d = 0;
+/** This floor is to be drawn in 3D (while it is not ready yet, the map is left dark rather than drawn in 2D). */
+let want3d = false;
+forgetOld3dChoice();
+
+/** The 3D view is put away and its memory given back; `failed`: it broke, and counts toward giving up on it for this launch. */
+function stop3d(failed = false): void {
   r3?.dispose();
   r3 = null;
   frame3d = null;
@@ -505,32 +520,28 @@ function stop3d(message?: string, quietUnlessChosen = false): void {
   canvas3d?.remove();
   canvas3d = null;
   setMode3d(false);
-  if (message) {
-    // 3D is on by default: a device that cannot start it at all is not told about a switch it never touched.
-    const tell = !quietUnlessChosen || beta3d.chosen;
-    beta3d.fallBack();
-    if (tell) toast(message, { tone: 'warn' });
-  }
+  if (failed && ++failures3d === NO_3D_AFTER) toast(t.render3dFailed, { tone: 'warn' });
 }
 
 /** Whether this floor is drawn in 3D now (the switch, the sewers, the chunk and the context all there); makes the renderer when it can. */
 function pick3d(level: Level, world: World): boolean {
-  if (!beta3d.on) {
+  want3d = false;
+  if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena)) || failures3d >= NO_3D_AFTER) {
     if (r3) stop3d();
     return false;
   }
-  if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena))) return false;
+  want3d = true;
   const mod = lazy3d.ready();
   if (!mod) {
-    load(lazy3d, () => drawPace.force(), () => stop3d(t.render3dFailed, true));
+    load(lazy3d, () => drawPace.force(), () => stop3d(true));
     return false;
   }
-  // The world kit and the floor's region maps come first (a second or so, the first time): till then the floor is 2D.
+  // The world kit and the floor's region maps come first (a second or so, the first time): till then the map is left dark.
   const base = `${import.meta.env.BASE_URL}assets/`;
   const region = levelRegion(level);
   const state = mod.prepare(base, assets, region);
   if (state === 'failed') {
-    stop3d(t.render3dFailed, true);
+    stop3d(true);
     return false;
   }
   if (state === 'loading') return false;
@@ -543,7 +554,7 @@ function pick3d(level: Level, world: World): boolean {
     canvas3d.id = 'game3d';
     canvas.before(canvas3d);
     const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(t.render3dFailed) });
+    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(true) });
     governor.hold(2500);
     frame3d = {
       now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0, myId: '',
@@ -553,7 +564,7 @@ function pick3d(level: Level, world: World): boolean {
     canvas3d?.remove();
     canvas3d = null;
     r3 = null;
-    stop3d(t.render3dFailed, true);
+    stop3d(true);
     return false;
   }
   return true;
@@ -685,6 +696,9 @@ const api = runApi(
   () => (inTelegram ? { initData: initData() } : { id: playerId(), name: playerName.trim() || t.heroDefault }),
   import.meta.env.DEV,
 );
+
+// The photo mode puts its picture at a public address through the server (a story and Telegram's download take no other).
+setPhotoUpload(api ? (png) => api.photo(png) : null);
 
 /** Each device slot's run on the server. */
 const SLOT_OF: Record<string, RunSlot> = { [SOLO_SLOT]: 'dungeon', [ARENA_SLOT]: 'arena' };
@@ -950,9 +964,9 @@ function maybeNews(answer: Profile | null): boolean {
 }
 
 /** Pixel-Mart's storefront; the first shop (recolours, effects, the patronage) is one button away and comes back to it. */
-function openStore(heroClass: HeroClass, onClose: () => void): void {
+function openStore(heroClass: HeroClass, onClose: () => void, tab?: 'photo'): void {
   const again = (): void => openStore(heroClass, onClose);
-  showStore({ heroClass, onClose, classic: () => showMart({ heroClass, onClose: again }) });
+  showStore({ heroClass, onClose, classic: () => showMart({ heroClass, onClose: again }), ...(tab ? { tab } : {}) });
 }
 
 /** The mail window; back to the camp when closed. */
@@ -1049,6 +1063,7 @@ function toTitle(ask = true): void {
     onPractice: () => startSolo('daily'),
     onRankings: () => openBoards(),
     onMart: () => openStore(heroClass, toTitle),
+    onPhoto: () => campPhoto(),
     onSettings: () => settings(toTitle),
     mail: api && profile?.mail ? { count: unclaimed(profile.mail), onOpen: openMail } : undefined,
     challenges: challengesOpen() ? challenges : 0,
@@ -1108,9 +1123,90 @@ function openMenu(): void {
       }
       : undefined,
     onMart: () => openStore(myClass(), hideOverlay),
+    onPhoto: session?.world ? openPhoto : undefined,
     onTreat: () => showTreat(hideOverlay),
     onExit: toTitle,
   });
+}
+
+/*
+ * The photo mode (photoui.ts). The camera button asks for a snapshot, and the next frame the map is drawn on is drawn clean (without the
+ * marks of a walk) and copied at once: the 3D renderer keeps no picture of its last frame (no preserveDrawingBuffer), so it can be read
+ * only in the task that drew it. Nothing of this costs a frame in ordinary play: it is one flag, read where the frame ends.
+ */
+let shotWanted: ((shot: Shot | null) => void) | null = null;
+let shotTimer = 0;
+
+/** The map as the canvases hold it now (the 3D scene under, what is drawn over it above); the HUD is in the page, not on them, so it is not in the picture. */
+function takeShot(): Shot | null {
+  if (canvas.width < 1 || canvas.height < 1) return null;
+  const out = document.createElement('canvas');
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const g = out.getContext('2d');
+  if (!g) return null;
+  try {
+    if (mode3d && canvas3d) g.drawImage(canvas3d, 0, 0, out.width, out.height);
+    else {
+      g.fillStyle = '#0b0b09';
+      g.fillRect(0, 0, out.width, out.height);
+      // The classic view's brightness is a CSS filter on its canvas: it goes into the picture too, where the webview can draw with one.
+      if (Math.abs(brightness.value - 1) >= 0.01 && 'filter' in g) g.filter = `brightness(${brightness.value})`;
+    }
+    g.drawImage(canvas, 0, 0);
+  } catch {
+    return null;
+  }
+  const world = session?.world;
+  const me = world && session ? heroById(world, session.myId) : undefined;
+  const caption = !me || !world ? '' : world.arena ? t.arena.title : `${t.newDepth(me.depth)} · ${t.regionNames[regionIndex(me.depth)] ?? ''}`;
+  return { canvas: out, pixelArt: false, caption };
+}
+
+/** Asks for a snapshot of the map; `done` has it after the next frame drawn (null if none came in time). */
+function requestShot(done: (shot: Shot | null) => void): void {
+  shotWanted = done;
+  clearTimeout(shotTimer);
+  shotTimer = window.setTimeout(() => {
+    const waiting = shotWanted;
+    shotWanted = null;
+    waiting?.(null);
+  }, 1500);
+  drawPace.force();
+}
+
+/** The camera, in the dungeon: the window is put away, the map photographed, the photo mode opened over it. */
+function openPhoto(): void {
+  if (!session?.world || shotWanted) return;
+  hideOverlay();
+  requestShot((shot) => {
+    if (!shot) {
+      toast(photoText.shotFailed, { tone: 'warn' });
+      return;
+    }
+    flash();
+    showPhoto({ shot, onClose: hideOverlay, onShop: () => openStore(myClass(), hideOverlay, 'photo') });
+  });
+}
+
+/** The camera, at the camp: the scene as it is on the screen, without the cards and the sheet over it. */
+function campPhoto(): void {
+  const scene = activeCamp;
+  let view: DOMRect | null = null;
+  if (scene) {
+    // The screen's part that holds the room: on a wide screen, not the dark sides the filled scene runs out into.
+    const host = scene.host.getBoundingClientRect();
+    const room = scene.roomSpan();
+    const left = Math.max(host.left, room.left);
+    view = new DOMRect(left, host.top, Math.max(1, Math.min(host.right, room.right) - left), host.height);
+  }
+  const shot = scene && sceneShot(scene.canvas, view, photoText.campCaption);
+  if (!shot) {
+    toast(photoText.shotFailed, { tone: 'warn' });
+    return;
+  }
+  flash();
+  showPhoto({ shot, onClose: () => toTitle(false), onShop: () => openStore(heroClass, () => toTitle(false), 'photo') });
 }
 
 /* Walking: a path is sent one step at a time; each waits for the last to be done. */
@@ -2353,6 +2449,8 @@ addEventListener('keydown', (event) => {
     mapControlsActions.whole();
   } else if (event.code === 'KeyJ') {
     openJournal();
+  } else if (event.code === 'KeyP') {
+    openPhoto();
   } else if (event.code === 'Equal' || event.code === 'NumpadAdd') {
     cam.zoomStep(1, null);
   } else if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
@@ -2519,30 +2617,8 @@ let freeDepth = 0;
 /** Where my hero was last frame, for footstep and stairs sounds. */
 let lastPlace = { generation: -1, depth: 0, pos: -1 };
 
-/** The hero's light (#vignette): moved by the compositor to wherever the hero is on screen. */
-const vignette = document.getElementById('vignette');
-let vignetteState = '';
-
-function placeVignette(on: boolean, x = 0, y = 0): void {
-  if (!vignette) return;
-  // Canvas pixels to CSS pixels.
-  const css = (canvas.clientWidth || canvas.width) / canvas.width;
-  const inner = Math.round(TILE * camera.zoom * 3 * css);
-  const outer = Math.round(Math.max(canvas.clientWidth, canvas.clientHeight) * 0.7);
-  const state = on ? `${Math.round(x * css)},${Math.round(y * css)},${inner},${outer}` : 'off';
-  if (state === vignetteState) return;
-  vignetteState = state;
-  vignette.classList.toggle('on', on);
-  if (!on) return;
-  // Its middle sits on the screen's corner (game.css); moved from there onto the hero.
-  vignette.style.transform = `translate(${Math.round(x * css)}px, ${Math.round(y * css)}px)`;
-  vignette.style.setProperty('--inner', `${inner}px`);
-  vignette.style.setProperty('--outer', `${outer}px`);
-}
-
 function drawBackdrop(now: number): void {
   setMode3d(false);
-  placeVignette(false);
   const { level, all } = backdrop;
   const middle = levelMiddle(level);
   camera.x = Math.round(middle.x - canvas.width / camera.zoom / 2 + Math.sin(now / 9000) * 60);
@@ -3010,10 +3086,13 @@ function tick(now: number): void {
     ];
     const webs = (clouds.web ?? []).map(([pos, volume]) => ({ pos, volume }));
     const explored = exploredCells(world, me.depth);
+    // A snapshot has been asked for: this frame is drawn without the marks of a walk and copied when it is done.
+    const forShot = shotWanted !== null;
     const scene = {
       level, baked: baked!, visible, explored, heaps, plants, gas, webs, seeAll: me.mindVision > 0,
         ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
       focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
+      vignette: !quality.light,
       lights: world.arena ? [...lightsFor(level, visible, view, vnow), ...arenaView.lights(level, visible, vnow)] : lightsFor(level, visible, view, vnow),
       heapLook: (pos: number, at: number) => motion.heapLook(pos, at),
       under: (c: CanvasRenderingContext2D) => {
@@ -3025,10 +3104,12 @@ function tick(now: number): void {
         motion.drawOver(c, vnow);
         // QuickSlotButton.crossM: aiming from a slot, the target the slot tapped again fires at is marked on the map.
         feedback.mark(aim?.marked && isAlive(me) ? lastTargetIn(seenEnemies(world, me))?.id ?? null : null);
-        feedback.draw(
-          c, walk.queue, (id) => mobById(world, me.depth, id)?.pos,
-          walk.queue.length === 0 && !walk.chase && !session!.busy, vnow,
-        );
+        if (!forShot) {
+          feedback.draw(
+            c, walk.queue, (id) => mobById(world, me.depth, id)?.pos,
+            walk.queue.length === 0 && !walk.chase && !session!.busy, vnow,
+          );
+        }
       },
       mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
       overview: cam.overviewShown,
@@ -3056,7 +3137,7 @@ function tick(now: number): void {
       r3.hz = refreshMeter.hz;
       const gap = lastDraw3d ? now - lastDraw3d : 0;
       lastDraw3d = now;
-      if (!r3.frame(f, gap)) stop3d(t.render3dFailed);
+      if (!r3.frame(f, gap)) stop3d(true);
       else {
         renderOverlay3D(ctx, scene, view, session.myId, assets, camera, vnow, r3.shown, r3.shownCount);
         // Only frames drawn while something moves say how fast the renderer is (a calm one is on the slow cadence on purpose).
@@ -3066,14 +3147,23 @@ function tick(now: number): void {
           r3.applyTier(governor.tier);
           governor.hold(1500);
           resize();
-        } else if (verdict === 'fallback') stop3d(t.render3dSlow);
+        }
       }
+    } else if (want3d) {
+      // The 3D view is still coming (its chunk, the region's maps): the map stays dark till then, never drawn in 2D.
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
     } else {
       // The arena's wall and stands stand in the light of the crowd's own torches, whatever the party sees.
       render(ctx, world.arena ? { ...scene, visible: arenaView.shown(level, visible) } : scene, view, session.myId, assets, camera, vnow);
       coop.frame(ctx, { session, world, view, camera, free, now: vnow });
     }
-    placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom * ground());
+    if (forShot && shotWanted) {
+      const done = shotWanted;
+      shotWanted = null;
+      clearTimeout(shotTimer);
+      const shot = takeShot();
+      setTimeout(() => done(shot), 0);
+    }
     mapControls.update(
       cam.canZoomIn, cam.canZoomOut, cam.away, cam.overview,
       document.querySelector<HTMLElement>('#ui .pd-log')?.offsetHeight ?? 120,

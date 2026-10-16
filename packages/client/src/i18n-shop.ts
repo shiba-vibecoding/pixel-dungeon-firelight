@@ -71,7 +71,6 @@ interface Words {
   quipNote: string;
   photoNote: string;
   stickerTap: string;
-  photoSoon: string;
   profileCard: (cls: string) => string;
   profileNote: string;
   slotNames: { look: string; hat: string; pet: string; fire: string; trail: string };
@@ -157,7 +156,6 @@ const EN: Words = {
   quipNote: 'Your hero speaks in this voice. The words stay the game’s.',
   stickerTap: 'Tap a sticker to put it on the photo',
   photoNote: 'Stickers go on the photo; the frame is worn from «Photo».',
-  photoSoon: 'The camera of the dungeon is coming: frames and stickers will be ready for it.',
   profileCard: (cls) => `${cls} · best: depth 21`,
   profileNote: 'How others see you: on the boards, in the party and at the camp.',
   slotNames: { look: 'Look', hat: 'Hat', pet: 'Pet', fire: 'Fire', trail: 'Trail' },
@@ -243,7 +241,6 @@ const RU: Words = {
   quipNote: 'Герой говорит этим голосом. Слова — из игры.',
   stickerTap: 'Нажмите на наклейку, чтобы положить её на снимок',
   photoNote: 'Наклейки ложатся на снимок; рамку надевают в «Фото».',
-  photoSoon: 'Камера подземелья на подходе: рамки и наклейки будут ждать её.',
   profileCard: (cls) => `${cls} · рекорд: глубина 21`,
   profileNote: 'Так вас увидят другие: в рекордах, в отряде и на Привале.',
   slotNames: { look: 'Облик', hat: 'Шапка', pet: 'Питомец', fire: 'Костёр', trail: 'След' },

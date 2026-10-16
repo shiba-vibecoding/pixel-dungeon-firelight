@@ -1,0 +1,38 @@
+/* ---------- The hero card (herocard.ts): a player's hero on a board's row and on the profile ----------
+   A canvas of 40 x 28 art pixels at a whole scale; the fire glows behind the hero, the frame is drawn in it. The row is 56 px tall. */
+.pd-card { display: block; flex: none; image-rendering: pixelated; background: var(--stone-900, #14110e); }
+/* a class this build has no art for: the old portrait (avatars.png) */
+.pd-card.fb { background: var(--atlas-heroes) no-repeat; background-size: 96px 30px; background-position: calc(28px - var(--av, 0) * 24px) 13px; }
+
+.pd-ranks.virtual { box-sizing: border-box; }
+.pd-ranks .pd-rank:has(> .pd-rank-card) {
+  grid-template-columns: 26px 80px minmax(0, 1fr) auto; grid-template-rows: 22px 16px 16px; align-content: center;
+  column-gap: 8px; row-gap: 0; box-sizing: border-box; height: 56px; min-height: 56px; padding: 0 8px 0 0; flex: none;
+}
+.pd-rank > .pd-rank-card { grid-column: 2; grid-row: 1 / span 3; align-self: center; display: grid; place-items: center; width: 80px; height: 56px; overflow: hidden; }
+.pd-rank:has(> .pd-rank-card) > .pd-rank-n { grid-column: 1; grid-row: 1 / span 3; align-self: center; }
+.pd-rank:has(> .pd-rank-card) > .pd-rank-name { grid-column: 3; grid-row: 1; display: block; height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--text-body, 400 18px/22px var(--font-ui)); line-height: 22px; }
+.pd-rank:has(> .pd-rank-card) > .pd-rank-score { grid-column: 4; grid-row: 1; line-height: 22px; }
+/* no title: the line under the name is the run's own line, and the pair sits in the middle of the row */
+.pd-rank.no-title:has(> .pd-rank-card) { grid-template-rows: 22px 18px; }
+.pd-rank.no-title:has(> .pd-rank-card) > .pd-rank-n, .pd-rank.no-title > .pd-rank-card { grid-row: 1 / span 2; }
+.pd-rank.no-title:has(> .pd-rank-card) > .pd-rank-detail { grid-row: 2; line-height: 18px; }
+.pd-rank:has(> .pd-rank-card) > .pd-rank-title { grid-column: 3 / 5; grid-row: 2; display: block; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--text-caption, 400 14px/16px var(--font-small)); line-height: 16px; color: var(--ink-muted); }
+.pd-rank:has(> .pd-rank-card) > .pd-rank-detail { grid-column: 3 / 5; grid-row: 3; font-size: 14px; line-height: 16px; }
+/* a title is the plate's own colour for its rarity, so that it reads at a glance */
+.pd-rank-title.rare { color: var(--ink-soft, #8fb4d6); }
+.pd-rank-title.epic { color: #c79bff; }
+.pd-rank-title.legendary { color: var(--gold, #ffd84a); }
+.pd-ranks.mine .pd-rank:has(> .pd-rank-card) { grid-template-columns: 80px minmax(0, 1fr) auto; }
+.pd-ranks.mine .pd-rank > .pd-rank-card { grid-column: 1; }
+.pd-ranks.mine .pd-rank:has(> .pd-rank-card) > :is(.pd-rank-name) { grid-column: 2; }
+.pd-ranks.mine .pd-rank:has(> .pd-rank-card) > .pd-rank-score { grid-column: 3; }
+.pd-ranks.mine .pd-rank:has(> .pd-rank-card) > :is(.pd-rank-title, .pd-rank-detail) { grid-column: 2 / 4; }
+/* the player's own row on a board reads against the stone: the card keeps its own ground */
+.pd-rank.me > .pd-rank-card .pd-card { box-shadow: 0 0 0 1px var(--gold-deep, #8a5a0a); }
+
+/* the profile: the hero card where the portrait was */
+.pd-profile.framed:has(.pd-profile-face.card) { grid-template-columns: 80px minmax(0, 1fr) auto; }
+.pd-profile-face.card { width: 80px; height: 56px; background: none; overflow: visible; display: grid; place-items: center; }
+/* a name colour of the shop is the name's colour here, not its size */
+.pd-rank-name .fl-name, .pd-profile-name.fl-name { font: inherit; line-height: inherit; }

@@ -34,6 +34,7 @@ import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
+import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
 import type { WearQuad } from '../wearfx';
 
@@ -68,6 +69,31 @@ export interface Shown {
 }
 
 const MAX_SPRITES = 360;
+/** The most soft-bodied figures (a ghost, a wraith, bees) drawn at once, in their own blended batch. */
+const MAX_BLENDED = 48;
+/** The cold glow round a ghost. */
+const COLD = new Float32Array([0.45, 0.66, 0.95]);
+
+/** Which sprite sheets have soft pixels (the image, read once). */
+const softSheets = new WeakMap<object, boolean>();
+function hasSoftBody(image: HTMLImageElement | HTMLCanvasElement): boolean {
+  let known = softSheets.get(image);
+  if (known === undefined) {
+    known = false;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const g = canvas.getContext('2d', { willReadFrequently: true })!;
+      g.drawImage(image, 0, 0);
+      known = isSoft(g.getImageData(0, 0, canvas.width, canvas.height).data);
+    } catch {
+      known = false;
+    }
+    softSheets.set(image, known);
+  }
+  return known;
+}
 const BOSS_KINDS: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
 /** Monsters that hover (sprite rules: 0.35 cells up, bobbing, a smaller paler blob): the bat, the eye and the fly-like swarms. */
 const FLYERS: ReadonlySet<string> = new Set(['bat', 'eye', 'bee', 'swarm']);
@@ -203,6 +229,11 @@ export class World3D {
   private readonly spriteRimColor: InstancedBufferAttribute;
   private readonly strong: Strongest = { ux: 0, uz: 0, r: 0, g: 0, b: 0, strength: 0 };
   private spriteCount = 0;
+  /** The blended batch for figures with soft bodies: alpha-blended, no depth written, sorted back to front; drawn only when one is on screen. */
+  private readonly ghosts: InstancedMesh;
+  private readonly ghostUv: InstancedBufferAttribute;
+  private ghostCount = 0;
+  private readonly ghostZ = new Float32Array(MAX_BLENDED);
   /** Drawn this frame, for the marks the 2D layer puts over them. */
   readonly shown: Shown[] = [];
   shownCount = 0;
@@ -285,6 +316,25 @@ export class World3D {
     this.sprites.frustumCulled = false;
     this.sprites.count = 0;
     this.scene.add(this.sprites);
+
+    // The blended batch: the same atlas, the same fog and haze; the picture's own alpha, and a cold light of its own.
+    const softQuad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
+    const softMaterial = new MeshLambertMaterial({
+      map: this.atlas.color, emissive: 0x86aedb, transparent: true, depthWrite: false, alphaTest: 0.02, side: DoubleSide,
+    });
+    withFog(softMaterial, this.air, 'instance');
+    this.ghosts = new InstancedMesh(softQuad, softMaterial, MAX_BLENDED);
+    this.ghosts.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.ghosts.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_BLENDED * 3).fill(1), 3);
+    this.ghosts.instanceColor.setUsage(DynamicDrawUsage);
+    this.ghostUv = new InstancedBufferAttribute(new Float32Array(MAX_BLENDED * 4), 4);
+    this.ghostUv.setUsage(DynamicDrawUsage);
+    softQuad.setAttribute('aUv', this.ghostUv);
+    this.ghosts.frustumCulled = false;
+    this.ghosts.renderOrder = 1;
+    this.ghosts.count = 0;
+    this.ghosts.visible = false;
+    this.scene.add(this.ghosts);
 
     for (let i = 0; i < MAX_SPRITES; i++) this.shown.push({ puppet: undefined as unknown as Puppet, x: 0, y: 0 });
     this.puppetPass = (puppet) => this.addPuppet(puppet);
@@ -537,12 +587,15 @@ export class World3D {
   private sprite(
     image: HTMLImageElement | HTMLCanvasElement, sx: number, sy: number, w: number, h: number, flip: boolean,
     x: number, y: number, z: number, width: number, height: number, tint: number, mode = LEANED, shear = 0, glow?: CanvasImageSource,
+    blend = false,
   ): void {
-    if (this.spriteCount >= MAX_SPRITES) return;
+    if (blend ? this.ghostCount >= MAX_BLENDED : this.spriteCount >= MAX_SPRITES) return;
     const spot = this.atlas.place(image, glow);
     if (!spot) return;
-    const i = this.spriteCount++;
-    const m = this.sprites.instanceMatrix.array as Float32Array;
+    const batch = blend ? this.ghosts : this.sprites;
+    const i = blend ? this.ghostCount++ : this.spriteCount++;
+    if (blend) this.ghostZ[i] = z;
+    const m = batch.instanceMatrix.array as Float32Array;
     const o = i * 16;
     m[o] = width; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
     if (mode === FLAT) {
@@ -560,7 +613,7 @@ export class World3D {
       m[o + 8] = 0; m[o + 9] = 0; m[o + 10] = 1; m[o + 11] = 0;
     }
     m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
-    const uv = this.spriteUv.array as Float32Array;
+    const uv = (blend ? this.ghostUv : this.spriteUv).array as Float32Array;
     const u0 = (spot.x + sx) / ATLAS_W;
     const du = w / ATLAS_W;
     const q = i * 4;
@@ -568,11 +621,29 @@ export class World3D {
     uv[q + 1] = 1 - (spot.y + sy + h) / ATLAS_H;
     uv[q + 2] = flip ? -du : du;
     uv[q + 3] = h / ATLAS_H;
-    const c = this.sprites.instanceColor!.array as Float32Array;
+    const c = batch.instanceColor!.array as Float32Array;
     c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = tint;
+    if (blend) return;
     const r = this.spriteRim.array as Float32Array;
     r[i * 3] = r[i * 3 + 1] = 0;
     r[i * 3 + 2] = 1;
+  }
+
+  /** Puts the blended figures back to front (north to south: the camera is in the south), so soft bodies overlap as they should. */
+  private sortBlended(): void {
+    const n = this.ghostCount;
+    if (n < 2) return;
+    const z = this.ghostZ;
+    const m = this.ghosts.instanceMatrix.array as Float32Array;
+    const uv = this.ghostUv.array as Float32Array;
+    const c = this.ghosts.instanceColor!.array as Float32Array;
+    const swap = (a: number, b: number): void => {
+      for (let k = 0; k < 16; k++) { const t = m[a * 16 + k]!; m[a * 16 + k] = m[b * 16 + k]!; m[b * 16 + k] = t; }
+      for (let k = 0; k < 4; k++) { const t = uv[a * 4 + k]!; uv[a * 4 + k] = uv[b * 4 + k]!; uv[b * 4 + k] = t; }
+      for (let k = 0; k < 3; k++) { const t = c[a * 3 + k]!; c[a * 3 + k] = c[b * 3 + k]!; c[b * 3 + k] = t; }
+      const t = z[a]!; z[a] = z[b]!; z[b] = t;
+    };
+    for (let i = 1; i < n; i++) for (let j = i; j > 0 && z[j - 1]! > z[j]!; j--) swap(j - 1, j);
   }
 
   /** How strongly the sprite just written glows (a legendary look pulses): its emissive map is scaled by this (the shader's `aRim.z`). */
@@ -627,7 +698,12 @@ export class World3D {
     const flyer = FLYERS.has(puppet.kind) && puppet.alive;
     // A flyer hangs 0.35 cells up and bobs at 1.2 Hz (each out of step with the next); a levitating hero floats as before.
     const hover = puppet.levitating && puppet.alive ? 4 + Math.round(Math.sin(now / 320)) : 0;
-    const lift = flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7) : hover / TILE;
+    // The sad ghost floats a little off the floor and bobs gently, slowly, with a cold light round it.
+    const spectral = puppet.kind === 'ghost' && puppet.alive;
+    const lift = flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7)
+      : spectral ? 0.12 + 0.05 * Math.sin(now / 650 + puppet.to * 0.9) : hover / TILE;
+    // A figure whose picture has soft pixels (a ghost, a wraith, bees' wings) is drawn blended, with its own alpha, not cut at one half.
+    const blend = !puppet.isHero && hasSoftBody(sheet.image);
     let tint = 1;
     let scale = 1;
     if (puppet.invisible) tint = 0.45;
@@ -651,10 +727,11 @@ export class World3D {
       const aura = look.aura;
       this.sprite(aura.image, (Math.floor(f.now / aura.ms) % aura.frames) * aura.w, 0, aura.w, aura.h, false, tx, lift - 1 / TILE, tz - 0.02, (aura.w / TILE) * scale, (aura.h / TILE) * scale, tint, LEANED, 0, aura.image);
     }
-    this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, look?.glow);
-    if (look?.glow) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
+    this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, look?.glow, blend);
+    if (spectral) this.effects.halo(tx, 0.55 + lift, tz, COLD, 1.7, 0.2 + 0.05 * Math.sin(now / 520 + puppet.to));
+    if (look?.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
     // The rim of the strongest light on the silhouette (not on the dead: they lie flat), and the shade slipping away from that light.
-    const lit = puppet.alive && this.rimLast(tx, tz, puppet.flip);
+    const lit = puppet.alive && !blend && this.rimLast(tx, tz, puppet.flip);
     // The hat, a second picture by the same frame and armour, the hero's frame at (2, 7) of its cell: standing where he stands.
     const hat = worn?.hat;
     if (hat) {
@@ -665,7 +742,7 @@ export class World3D {
       this.rimLast(tx, tz, puppet.flip);
     }
     if (puppet.alive || !puppet.laid) {
-      const air = flyer || hover > 0;
+      const air = flyer || spectral || hover > 0;
       const size = Math.max(0.35, sk.shadow.width * (sheet.w / TILE)) * (air ? sk.fly.shadowScale : 1) * scale;
       const away = lit ? sk.shadow.offset : 0;
       this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1), sk.shadow.squash);
@@ -735,6 +812,7 @@ export class World3D {
 
     // Sprites: characters, then what lies about, props, bodies, things in the air, sconces. The effects' batches fill alongside.
     this.spriteCount = 0;
+    this.ghostCount = 0;
     this.shownCount = 0;
     this.bossFound = false;
     this.effects.begin();
@@ -766,6 +844,22 @@ export class World3D {
     this.spriteUv.clearUpdateRanges();
     this.spriteUv.addUpdateRange(0, this.spriteCount * 4);
     this.spriteUv.needsUpdate = true;
+    // The blended batch exists for the frame only if a soft-bodied figure is in sight: one more draw then, none otherwise.
+    this.sortBlended();
+    const g = this.ghostCount;
+    this.ghosts.visible = g > 0;
+    if (g > 0) {
+      this.ghosts.count = g;
+      this.ghosts.instanceMatrix.clearUpdateRanges();
+      this.ghosts.instanceMatrix.addUpdateRange(0, g * 16);
+      this.ghosts.instanceMatrix.needsUpdate = true;
+      this.ghosts.instanceColor!.clearUpdateRanges();
+      this.ghosts.instanceColor!.addUpdateRange(0, g * 3);
+      this.ghosts.instanceColor!.needsUpdate = true;
+      this.ghostUv.clearUpdateRanges();
+      this.ghostUv.addUpdateRange(0, g * 4);
+      this.ghostUv.needsUpdate = true;
+    }
     this.atlas.flush();
 
     // Water drifts as the kit says: its texture slides.
@@ -995,6 +1089,9 @@ export class World3D {
     this.sprites.geometry.dispose();
     (this.sprites.material as MeshLambertMaterial).dispose();
     this.sprites.dispose();
+    this.ghosts.geometry.dispose();
+    (this.ghosts.material as MeshLambertMaterial).dispose();
+    this.ghosts.dispose();
     this.renderer.dispose();
     if (!this.lost) this.renderer.forceContextLoss();
     this.geom = null;

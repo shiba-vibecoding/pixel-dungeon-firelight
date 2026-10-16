@@ -77,3 +77,39 @@ describe('Telegram: a run is guarded', () => {
     expect(calls.find((call) => call.startsWith('link '))).not.toContain('fullscreen');
   });
 });
+
+describe('Telegram: the photo mode’s saving and story', () => {
+  it('asks Telegram to download a file only where it can (8.0), and says whether the player let it', async () => {
+    const asked: Array<{ url: string; file_name: string }> = [];
+    const { telegram } = await inside('android', { downloadFile: (params: { url: string; file_name: string }, done: (ok: boolean) => void) => { asked.push(params); done(true); } });
+    expect(telegram.canDownloadFile()).toBe(true);
+    expect(await telegram.downloadFile('https://pd.example/card/a.png', 'photo.png')).toBe(true);
+    expect(asked).toEqual([{ url: 'https://pd.example/card/a.png', file_name: 'photo.png' }]);
+
+    const old = await inside('android', { isVersionAtLeast: (version: string) => Number(version) < 8, downloadFile: () => asked.push({ url: 'x', file_name: 'x' }) });
+    expect(old.telegram.canDownloadFile()).toBe(false);
+    expect(await old.telegram.downloadFile('https://pd.example/a.png', 'a.png')).toBe(false);
+    expect(asked).toHaveLength(1);
+  });
+
+  it('does not throw where Telegram refuses the address or a popup is already open', async () => {
+    const { telegram } = await inside('android', { downloadFile: () => { throw new Error('WebAppDownloadFilePopupOpened'); } });
+    expect(await telegram.downloadFile('https://pd.example/a.png', 'a.png')).toBe(false);
+  });
+
+  it('shares a story with a caption and, when given, the link on it', async () => {
+    const stories: unknown[][] = [];
+    const { telegram } = await inside('android', { shareToStory: (...args: unknown[]) => void stories.push(args) });
+    expect(telegram.canShareStory()).toBe(true);
+    telegram.shareStory('https://pd.example/card/a.png', 'Pixel Dungeon', { url: telegram.appLink(), name: 'Pixel Dungeon' });
+    telegram.shareStory('https://pd.example/card/b.png', 'x'.repeat(300));
+    expect(stories[0]).toEqual(['https://pd.example/card/a.png', { text: 'Pixel Dungeon', widget_link: { url: telegram.appLink(), name: 'Pixel Dungeon' } }]);
+    expect((stories[1]![1] as { text: string; widget_link?: unknown }).text).toHaveLength(200);
+    expect((stories[1]![1] as { widget_link?: unknown }).widget_link).toBeUndefined();
+  });
+
+  it('has no story button on a Telegram older than 7.8', async () => {
+    const { telegram } = await inside('tdesktop', { isVersionAtLeast: (version: string) => Number(version) < 7.8, shareToStory: () => undefined });
+    expect(telegram.canShareStory()).toBe(false);
+  });
+});

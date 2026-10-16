@@ -3,6 +3,7 @@ import { audio } from './audio';
 import { Camp, type CampScene, campClasses, CAMP_ORDER, seasonOf } from './camp';
 import type { Profile } from './checked';
 import { locale, t } from './i18n';
+import { P } from './i18n-photo';
 import { countChallenges } from './challenge-info';
 import { boardCloses, type CardFallback, countdown, profileCard } from './rankui';
 import { button, el, show } from './screens';
@@ -52,6 +53,8 @@ export interface CampScreenOptions {
   onRankings(): void;
   onMart(): void;
   onSettings(): void;
+  /** The camera at the edge: a snapshot of the camp for the photo mode. */
+  onPhoto(): void;
   /** The mail icon: absent without the server's mailbox; its count of letters not claimed. */
   mail?: { count: number; onOpen(): void };
   challenges: number;
@@ -214,7 +217,7 @@ export function showCamp(options: CampScreenOptions): CampScreen {
 
   const card = (): HTMLElement =>
     profileCard({
-      name: options.name, ...portrait(camp.heroClass), ...(options.frame ? { frame: options.frame } : {}), profile: options.profile, fallback: options.fallback, onOpen: options.onRankings,
+      name: options.name, ...portrait(camp.heroClass), heroClass: camp.heroClass, ...(options.frame ? { frame: options.frame } : {}), profile: options.profile, fallback: options.fallback, onOpen: options.onRankings,
     });
   const top = el('div', { className: 'pd-camp-top' });
 
@@ -231,6 +234,7 @@ export function showCamp(options: CampScreenOptions): CampScreen {
       { className: 'pd-camp-edge right' },
       edgeIcon('ranks', t.camp.ranks, options.onRankings),
       edgeIcon('mart', t.camp.mart, options.onMart),
+      edgeIcon('photo', P.camera, options.onPhoto),
       edgeIcon('prefs', t.camp.prefs, options.onSettings),
     ),
   );

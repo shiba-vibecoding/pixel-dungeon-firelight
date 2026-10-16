@@ -29,16 +29,6 @@ canvas#game {
 
 /* The hero's light: the view's edges sink into the dark. A layer over the map that the compositor
    moves with the hero (main.ts), rather than a gradient painted into every frame. */
-#vignette {
-  position: fixed; left: 0; top: 0; z-index: 1;
-  width: 300vmax; height: 300vmax; margin: -150vmax 0 0 -150vmax;
-  pointer-events: none;
-  background: radial-gradient(circle at center, transparent var(--inner, 120px), rgba(0, 0, 0, 0.55) var(--outer, 700px));
-  will-change: transform;
-  opacity: 0;
-  transition: opacity 0.4s;
-}
-#vignette.on { opacity: 1; }
 
 /* HUD, log and toolbar over the map; only their controls take taps. */
 #ui {

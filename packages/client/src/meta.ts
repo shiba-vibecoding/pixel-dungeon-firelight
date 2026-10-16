@@ -6,7 +6,6 @@ import { fx } from './fx';
 import { capitalize, lang, locale, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { smooth } from './pace';
-import { beta3d } from './r3d/setting';
 import { QUIP_MODES, quipMode } from './quips';
 import { type FxMode, quality } from './quality';
 import { el, info, show, sprites, windowOf } from './screens';
@@ -230,7 +229,6 @@ export function showSettings(options: SettingsOptions): void {
       t.meta.brightness, t.meta.brightnessNote,
       { min: BRIGHTNESS_MIN, max: BRIGHTNESS_MAX, step: 0.05, def: BRIGHTNESS_DEFAULT }, () => brightness.value, (v) => brightness.set(v),
     ),
-    switchRow(t.meta.render3d, t.meta.render3dNote, beta3d.on, (on) => beta3d.set(on)),
     el(
       'div',
       { className: 'pd-set-row stack' },

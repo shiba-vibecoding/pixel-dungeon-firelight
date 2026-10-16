@@ -12,6 +12,21 @@ export interface DailyResult {
   won: boolean;
 }
 
+/**
+ * How a player's hero looked on a board (catalogue item ids; absent fields: nothing worn, the classic fire). A snapshot the SERVER builds
+ * from the wallet's owned and worn items (worn.ts), never from a client: `l` the look of the class played, `h` the hat, `p` the pet,
+ * `f` the camp fire, `fr` the profile frame, `tt` the title, `nc` the name colour.
+ */
+export interface Worn {
+  l?: string;
+  h?: string;
+  p?: string;
+  f?: string;
+  fr?: string;
+  tt?: string;
+  nc?: string;
+}
+
 export interface DailyEntry extends DailyResult {
   id: string;
   name: string;
@@ -27,6 +42,8 @@ export interface DailyEntry extends DailyResult {
   nc?: string;
   tt?: string;
   fr?: string;
+  /** The hero as the player wore it (the hero card on the board's row); absent from entries before it, which show the plain class. */
+  w?: Worn;
   /** Who it is, privately: the player's account key, never served (see servedEntry). */
   owner?: string;
 }
@@ -106,6 +123,31 @@ export class Leaderboard {
   ofOwner(owner: string): { rank: number; entry: DailyEntry } | null {
     const index = this.board.findIndex((e) => e.owner === owner);
     return index >= 0 ? { rank: index + 1, entry: this.board[index]! } : null;
+  }
+
+  /**
+   * The player's entry shows what they wear now (equipment changed, a purchase refunded): `byClass` holds the snapshot for each class, and
+   * the entry takes its own class's. Returns whether anything changed (nothing to write otherwise).
+   */
+  patchWorn(owner: string, byClass: Readonly<Record<string, Worn | undefined>>): boolean {
+    let changed = false;
+    for (const entry of this.board) {
+      if (entry.owner !== owner) continue;
+      const worn = byClass[entry.heroClass];
+      // What the entry should say: `w`, and the old per-field values (a client of before `w` reads those).
+      const want = { w: worn, nc: worn?.nc, tt: worn?.tt, fr: worn?.fr };
+      if (JSON.stringify(want) === JSON.stringify({ w: entry.w, nc: entry.nc, tt: entry.tt, fr: entry.fr })) continue;
+      delete entry.w;
+      delete entry.nc;
+      delete entry.tt;
+      delete entry.fr;
+      if (worn) entry.w = worn;
+      if (worn?.nc) entry.nc = worn.nc;
+      if (worn?.tt) entry.tt = worn.tt;
+      if (worn?.fr) entry.fr = worn.fr;
+      changed = true;
+    }
+    return changed;
   }
 
   top(count: number): DailyEntry[] {
