@@ -2505,30 +2505,8 @@ let freeDepth = 0;
 /** Where my hero was last frame, for footstep and stairs sounds. */
 let lastPlace = { generation: -1, depth: 0, pos: -1 };
 
-/** The hero's light (#vignette): moved by the compositor to wherever the hero is on screen. */
-const vignette = document.getElementById('vignette');
-let vignetteState = '';
-
-function placeVignette(on: boolean, x = 0, y = 0): void {
-  if (!vignette) return;
-  // Canvas pixels to CSS pixels.
-  const css = (canvas.clientWidth || canvas.width) / canvas.width;
-  const inner = Math.round(TILE * camera.zoom * 3 * css);
-  const outer = Math.round(Math.max(canvas.clientWidth, canvas.clientHeight) * 0.7);
-  const state = on ? `${Math.round(x * css)},${Math.round(y * css)},${inner},${outer}` : 'off';
-  if (state === vignetteState) return;
-  vignetteState = state;
-  vignette.classList.toggle('on', on);
-  if (!on) return;
-  // Its middle sits on the screen's corner (game.css); moved from there onto the hero.
-  vignette.style.transform = `translate(${Math.round(x * css)}px, ${Math.round(y * css)}px)`;
-  vignette.style.setProperty('--inner', `${inner}px`);
-  vignette.style.setProperty('--outer', `${outer}px`);
-}
-
 function drawBackdrop(now: number): void {
   setMode3d(false);
-  placeVignette(false);
   const { level, all } = backdrop;
   const middle = levelMiddle(level);
   camera.x = Math.round(middle.x - canvas.width / camera.zoom / 2 + Math.sin(now / 9000) * 60);
@@ -2999,6 +2977,7 @@ function tick(now: number): void {
       level, baked: baked!, visible, explored, heaps, plants, gas, webs, seeAll: me.mindVision > 0,
         ...((world.floors[me.depth]?.altar?.volume ?? 0) > 0 ? { altar: world.floors[me.depth]!.altar!.pos } : {}),
       focus: { x: at.x + TILE / 2, y: at.y + TILE / 2 },
+      vignette: !quality.light,
       lights: world.arena ? [...lightsFor(level, visible, view, vnow), ...arenaView.lights(level, visible, vnow)] : lightsFor(level, visible, view, vnow),
       heapLook: (pos: number, at: number) => motion.heapLook(pos, at),
       under: (c: CanvasRenderingContext2D) => {
@@ -3058,7 +3037,6 @@ function tick(now: number): void {
       render(ctx, world.arena ? { ...scene, visible: arenaView.shown(level, visible) } : scene, view, session.myId, assets, camera, vnow);
       coop.frame(ctx, { session, world, view, camera, free, now: vnow });
     }
-    placeVignette(!quality.light, (scene.focus.x - camera.x) * camera.zoom, (scene.focus.y - camera.y) * camera.zoom * ground());
     mapControls.update(
       cam.canZoomIn, cam.canZoomOut, cam.away, cam.overview,
       document.querySelector<HTMLElement>('#ui .pd-log')?.offsetHeight ?? 120,
