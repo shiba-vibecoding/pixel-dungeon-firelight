@@ -158,7 +158,7 @@ function mineRows(records: readonly RunRecord[], trophies: Profile['trophies']):
     const unranked = record.checked ? '' : ` · ${t.ranked.offBoard}`;
     // The device's own runs are this player's: their hero as they wear it now.
     const mine = myLook(record.heroClass);
-    const w: BoardWorn = { ...(mine.l ? { l: mine.l } : {}), ...(mine.h ? { h: mine.h } : {}), ...(mine.p ? { p: mine.p } : {}), ...(mine.f ? { f: mine.f } : {}), ...(mine.fr ? { fr: mine.fr } : {}) };
+    const w: BoardWorn = { ...(record.armor !== undefined ? { a: record.armor } : {}), ...(mine.l ? { l: mine.l } : {}), ...(mine.h ? { h: mine.h } : {}), ...(mine.p ? { p: mine.p } : {}), ...(mine.f ? { f: mine.f } : {}), ...(mine.fr ? { fr: mine.fr } : {}) };
     const mineRow = row(null, { ...record, w: { ...w, ...(cosmetics.nameColor ? { nc: cosmetics.nameColor.id } : {}), ...(cosmetics.title ? { tt: cosmetics.title.id } : {}) } }, [`${shortDate(record.date)} · `, ...detail(record.heroClass, record.lvl, record.depth, record.won), unranked, what], false);
     list.append(mineRow.node);
   }
@@ -267,7 +267,9 @@ export function profileCard(options: CardOptions): HTMLElement {
   const streak = profile?.streak.count ?? 0;
   // The portrait is the hero card: this player's hero in the look, hat, pet and camp fire worn now, in the profile frame, moving.
   const heroClass = options.heroClass ?? (['warrior', 'mage', 'rogue', 'huntress'][options.avatar] ?? 'warrior');
-  const card = heroCard(() => myLook(heroClass), { animate: true, scale: 2, className: 'pd-profile-art' });
+  // He wears the armour of his last run (of this class, else of the last run at all): the tier he died or finished in.
+  const last = profile?.history.find((run) => run.heroClass === heroClass && run.armor !== undefined) ?? profile?.history.find((run) => run.armor !== undefined);
+  const card = heroCard(() => myLook(heroClass, last?.armor), { animate: true, scale: 2, className: 'pd-profile-art' });
   const portrait = el('span', { className: 'pd-profile-face card' }, card.canvas);
   // The name colour and title worn (Pixel-Mart's catalogue).
   const worn = { color: cosmetics.nameColor, title: cosmetics.title };

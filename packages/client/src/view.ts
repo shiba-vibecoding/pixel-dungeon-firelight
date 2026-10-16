@@ -11,6 +11,7 @@ import { type AnimName, type Assets, type CharSprite, duration, heroSprite, look
 import { wornFor, type Worn } from './wear';
 import { type WearQuad, WearFx } from './wearfx';
 import { seenCells } from './sight';
+import { fxp } from './fxplayer';
 import { haptic } from './telegram';
 
 /*
@@ -267,7 +268,7 @@ export class View {
   /** When the "boss slain" banner appeared, or 0. */
   bannerStart = 0;
   /** A boss's title card: who, and when it appeared. */
-  bossIntro: { kind: MobKind; start: number } | null = null;
+  bossIntro: { kind: MobKind; start: number; /** Shown as a page element (bosscard.ts), not on the canvas. */ dom?: boolean } | null = null;
   /** My level-up card: the new level, and when it appeared. */
   levelCard: { lvl: number; start: number } | null = null;
   /** «Depth 4» over the middle of the view on arriving at a floor (render.ts floorTitle). */
@@ -908,12 +909,15 @@ export class View {
           }
           break;
         case 'thrown':
-          if (effect.depth === this.depth) {
+          // The designer's flights (fx.json: boomerang, shuriken, tomahawk, javelin; the stones) take the place of the item in an arc.
+          if (effect.depth === this.depth && !fxp.launch(effect, this.depth, now)) {
             this.shoot(effect.from, effect.to, itemSprite({ kind: effect.item, qty: 1, level: 0 }, world.run.labels), now);
           }
           break;
         case 'zapped':
-          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now, BOLT_COLORS[effect.bolt ?? 'magic'], effect.bolt ?? 'magic');
+          if (effect.depth === this.depth && !fxp.launch(effect, this.depth, now, (cell) => seenCells(world, this.depth)[cell] === true)) {
+            this.shoot(effect.from, effect.to, null, now, BOLT_COLORS[effect.bolt ?? 'magic'], effect.bolt ?? 'magic');
+          }
           audio.play(BOLT_SOUND[effect.bolt ?? 'magic'] ?? 'zap', 1, 1, effect.depth === this.depth ? cellMiddle(effect.from) : undefined);
           break;
         case 'avalanche':
@@ -969,7 +973,7 @@ export class View {
           if (effect.depth === this.depth) this.float(effect.mob, t.baa[Math.floor(Math.random() * t.baa.length)]!, COLORS.default, now);
           break;
         case 'missile':
-          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, effect.sprite, now);
+          if (effect.depth === this.depth && !fxp.launch(effect, this.depth, now)) this.shoot(effect.from, effect.to, effect.sprite, now);
           audio.play('miss', 1.4, 0.6);
           break;
         case 'jumped':
@@ -1109,9 +1113,10 @@ export class View {
           }
           break;
         case 'hunger':
-          if (effect.hero === myId) {
-            this.say(effect.state === 'hungry' ? t.hungry : t.starving, effect.state === 'hungry' ? COLORS.warning : COLORS.negative, now);
-            if (effect.state === 'starving') haptic('error');
+          // Only full starvation is shown over the hero; mere hunger is left to the hunger icon and the log.
+          if (effect.hero === myId && effect.state === 'starving') {
+            this.say(t.starving, COLORS.negative, now);
+            haptic('error');
           }
           break;
         case 'dew':

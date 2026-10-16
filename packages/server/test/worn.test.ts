@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { CATALOG, DEFAULT_OWNED, HEROES, itemById, type Slot, slotOf } from '../../client/src/catalog';
 import { type DailyEntry, Leaderboard, servedEntry, type Worn } from '../src/leaderboard';
 import { applyWalletChange, emptyRecord, ownedItems, shopOf, type WalletRecord } from '../src/wallet';
-import { cleanWorn, legacyFields, wornByClass, wornOf } from '../src/worn';
+import { act, createItem, fingerprint, heroById } from '@pd/core';
+import { armorTierOf, cleanWorn, legacyFields, wornByClass, wornOf } from '../src/worn';
+import { emptyProfile, ME, PlayerLogic } from '../src/runs';
 
 /** A small deterministic random source, so a failure can be replayed. */
 function rng(seed: number): () => number {
@@ -17,7 +19,7 @@ function rng(seed: number): () => number {
 const sellable = CATALOG.filter((entry) => entry.stars > 0 && !entry.earn && !entry.pack);
 
 /** What each field of a Worn is allowed to be, by catalogue category. */
-const CATEGORY: Record<keyof Worn, string> = { l: 'look', h: 'hat', p: 'pet', f: 'campfire', fr: 'frame', tt: 'title', nc: 'namecolor' };
+const CATEGORY: Record<Exclude<keyof Worn, 'a'>, string> = { l: 'look', h: 'hat', p: 'pet', f: 'campfire', fr: 'frame', tt: 'title', nc: 'namecolor' };
 
 /** A wallet that bought a few things at random and put on whatever it could (the wallet refuses what is not owned). */
 function randomWallet(random: () => number): WalletRecord {
@@ -51,7 +53,7 @@ describe('the hero a board shows (worn.ts)', () => {
         const worn = wornOf(shop, heroClass);
         if (!worn) continue;
         shown++;
-        for (const [field, id] of Object.entries(worn) as Array<[keyof Worn, string]>) {
+        for (const [field, id] of Object.entries(worn).filter(([key]) => key !== 'a') as Array<[Exclude<keyof Worn, 'a'>, string]>) {
           expect(owned.has(id), `${id} is owned`).toBe(true);
           expect(itemById(id)?.category, `${id} is a ${CATEGORY[field]}`).toBe(CATEGORY[field]);
         }
@@ -165,3 +167,52 @@ describe('the class snapshots', () => {
     expect(wornByClass(shopOf({ ...emptyRecord().wallet })).mage).toBeUndefined();
   });
 });
+
+describe('the armour worn at the end of the run', () => {
+  it('is the tier of the armour of the hero in the verified final world, kept on the summary of the run', () => {
+    for (const [kind, tier] of [['armor.cloth', 1], ['armor.leather', 2], ['armor.mail', 3], ['armor.scale', 4], ['armor.plate', 5], ['armor.warrior', 6]] as const) {
+      const logic = new PlayerLogic(emptyProfile('Alice'));
+      const run = logic.start({ slot: 'dungeon', heroClass: 'warrior', challenges: 0, name: 'Alice', seed: 7, id: 'r1', now: 0, today: '2026-10-13' });
+      const device = structuredClone(run.world);
+      // The same armour on both copies of the world: the server's word is the world it has.
+      for (const world of [logic.runs.dungeon!.world, device]) heroById(world, ME)!.armor = createItem(kind);
+      let finish;
+      for (let batch = 0; batch < 40 && !finish; batch++) {
+        const from = logic.runs.dungeon!.seq;
+        const actions = [];
+        for (let i = 0; i < 400 && !device.over; i++) if (act(device, ME, { type: 'wait' }).ok) actions.push({ type: 'wait' as const });
+        finish = logic.sync('dungeon', 'r1', from, actions, fingerprint(device), 1000).finish;
+      }
+      expect(finish!.summary.armor).toBe(tier);
+      expect(armorTierOf(heroById(logic.runs.dungeon!.world, ME)!)).toBe(tier);
+      expect(wornOf({ ...emptyShopForTest() }, 'warrior', finish!.summary.armor)).toEqual({ a: tier });
+    }
+  });
+
+  it('goes on the snapshot beside what is worn, and only as a tier the sheet has', () => {
+    let record = wear(pay(emptyRecord(), 'hat.crown', 'c1'), 'hat.crown');
+    expect(wornOf(record.shop!, 'mage', 5)).toEqual({ h: 'hat.crown', a: 5 });
+    expect(wornOf(record.shop!, 'mage', 9)).toEqual({ h: 'hat.crown' });
+    expect(wornOf(record.shop!, 'mage', -1)).toEqual({ h: 'hat.crown' });
+    expect(wornOf(record.shop!, 'mage', 2.5)).toEqual({ h: 'hat.crown' });
+    expect(wornOf(record.shop!, 'mage')).toEqual({ h: 'hat.crown' });
+    record = applyWalletChange(record, { kind: 'refund', charge: 'c1' });
+    expect(wornOf(record.shop!, 'mage', 3)).toEqual({ a: 3 });
+    expect(cleanWorn({ a: 4, h: 'hat.crown' })).toEqual({ h: 'hat.crown', a: 4 });
+    expect(cleanWorn({ a: 99 })).toBeUndefined();
+  });
+
+  it('stays on the entry when the wallet patches it, and an entry without one has none (drawn as cloth)', () => {
+    const entry = (w?: Worn): DailyEntry => ({ id: 'a', owner: 'tgA', name: 'A', heroClass: 'mage', depth: 3, level: 3, gold: 0, won: false, score: 1, at: 1, ...(w ? { w } : {}) });
+    const board = new Leaderboard([entry({ a: 4, h: 'hat.crown' })]);
+    expect(board.patchWorn('tgA', { mage: { p: 'pet.bat' } })).toBe(true);
+    expect(board.entries()[0]!.w).toEqual({ p: 'pet.bat', a: 4 });
+    expect(board.patchWorn('tgA', { mage: undefined })).toBe(true);
+    expect(board.entries()[0]!.w).toEqual({ a: 4 });
+    const old = new Leaderboard([entry()]);
+    expect(old.patchWorn('tgA', { mage: undefined })).toBe(false);
+    expect(old.top(1)[0]!.w).toBeUndefined();
+  });
+});
+
+const emptyShopForTest = () => shopOf({ ...emptyRecord().wallet });
