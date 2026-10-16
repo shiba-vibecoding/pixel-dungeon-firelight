@@ -12,7 +12,7 @@ import { outageDays } from './outages';
 import { giveHonor, MAX_PROBLEM_BYTES, parseProblem, PROBLEMS_PER_DAY, takeProblemSlot } from './problem';
 import { readBody } from './secret';
 import { claimGifts, giftLetters, type Facts } from './shopapi';
-import { shopOf, type WalletView } from './wallet';
+import { emptyShop, shopOf, type WalletView } from './wallet';
 import { walletsOf } from './walletsdo';
 import { sanitizeAction } from './messages';
 import { loadPlayer } from './season';
@@ -376,7 +376,7 @@ export class Player extends DurableObject<Env> {
     const wallet = await this.wallet(player.key);
     const patron = wallet ? isPatron(wallet, now) : false;
     // What the hero wears on the boards (hero card, name colour, title, frame): built here from what the wallet owns and wears; never the device's word.
-    const worn = wallet ? wornOf(shopOf(wallet), summary.heroClass) : undefined;
+    const worn = wornOf(wallet ? shopOf(wallet) : emptyShop(), summary.heroClass, summary.armor);
     for (const kind of boardsFor(summary)) {
       const name = boardOfRun(kind, summary, now);
       const entry: DailyEntry = {

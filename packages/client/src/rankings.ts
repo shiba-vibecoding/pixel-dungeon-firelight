@@ -22,6 +22,8 @@ export interface RunRecord {
   cause: string;
   /** The arena of waves' runs are scored by arenaScore (core arena.ts) and say so in the table. */
   mode: 'solo' | 'daily' | 'coop' | 'arena';
+  /** The tier of the armour the hero wore at the end (the row of his sheet: 1 cloth ... 6 class armour); records from before it was kept draw cloth. */
+  armor?: number;
   /** The server checked the run (checked.ts), so it stands on the boards too; runs of before checked runs have none. */
   checked?: boolean;
   date: number;

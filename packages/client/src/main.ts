@@ -3346,6 +3346,7 @@ function tick(now: number): void {
       const place = recordRun({
         key: `${world.run.seed}:${me.id}:${world.turn}`,
         checked: Boolean(session.checked),
+        armor: armorTier(me),
         score: scoreNow,
         name: me.name || playerName || telegramName() || t.heroLabel,
         heroClass: me.heroClass,
@@ -3468,6 +3469,7 @@ function showArenaRunEnd(world: World, me: Hero, solo: boolean): void {
   const cause = me.killedBy && (t.causes[me.killedBy] ?? t.mobs[me.killedBy as MobKind] ?? t.classes[me.killedBy as HeroClass] ?? me.killedBy);
   recordRun({
     key: `${world.run.seed}:${me.id}:${world.turn}`,
+    armor: armorTier(me),
     score,
     name,
     heroClass: me.heroClass,
