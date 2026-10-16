@@ -1,4 +1,5 @@
 import type { Effect, Hero } from '@pd/core';
+import { audio } from './audio';
 import { lang } from './i18n';
 import { lazy } from './lazy';
 import { FADE_MS, holdFor, LAST_WORDS_HOLD_MS, type Moment, POP_MS, QuipPicker, type QuipClass, quipMode, type QuipData } from './quips';
@@ -120,6 +121,7 @@ class QuipSystem {
     // The pop restarts even if the last bubble was still up.
     void node.offsetWidth;
     node.classList.add('pop');
+    audio.play('quip', 1, 0.5);
   }
 
   private hide(): void {

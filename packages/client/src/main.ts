@@ -585,7 +585,8 @@ function enterGame(next: Session, roomId: string | null, welcome = t.welcome): v
   seenGeneration = -1;
   deathShown = -1;
   walk.reset();
-  audio.playMusic('game');
+  audio.calmDown();
+  audio.playMusic('sewers');
   // Telegram's back button opens the menu, or closes whatever window is open.
   backButton(() => (overlayOpen() ? closeOverlay() : openMenu()));
   hud.show(true);
@@ -954,7 +955,8 @@ function toTitle(ask = true): void {
   aim = null;
   examining = false;
   held.code = '';
-  audio.playMusic('theme');
+  audio.calmDown();
+  audio.playMusic('camp');
   audio.ambience(null);
   audio.muffle(false);
   backButton(null);
@@ -1432,8 +1434,8 @@ function announceBadges(ids: readonly BadgeId[]): void {
   }
 }
 
-/** The region's tune for each region (the sewers keep the original's), and the bosses that have the boss's. */
-const REGION_MUSIC = ['game', 'prison', 'caves', 'city', 'halls'] as const;
+/** The region's tune for each region; a boss fight plays the boss layer of it. */
+const REGION_MUSIC = ['sewers', 'prison', 'caves', 'city', 'halls'] as const;
 const MUSIC_BOSSES: ReadonlySet<string> = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
 /** A boss fight on my depth: from the boss's cry until it falls, or the hero leaves, or the run starts over. */
 let bossFight: { session: Session; generation: number; depth: number } | null = null;
@@ -1456,6 +1458,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'shop' && effect.hero === myId) openShop();
     // The Amulet of Yendor: its question for whoever takes it (once a run); the party hears of it.
     if (effect.type === 'amulet' && world && me) {
+      if (effect.first) audio.play('amulet');
       if (effect.hero === myId) {
         walk.reset();
         if (effect.first) showAmulet(world, me, true, () => send({ type: 'endGame' }, performance.now()), hideOverlay);
@@ -2736,7 +2739,7 @@ function tick(now: number): void {
   // Footsteps, doors and stairs of my own hero.
   if (lastPlace.generation === session.generation && isAlive(me)) {
     if (me.depth !== lastPlace.depth) {
-      audio.play(justFell ? 'falling' : 'descend');
+      audio.play(justFell ? 'falling' : me.depth > lastPlace.depth ? 'descend' : 'ascend');
       // A new depth comes up out of the dark.
       fx.flash('0, 0, 0', 1, 520, vnow);
       // GameScene's greetings: the depth, a new region, and the level's feeling (the arena, sinking, has its own: handleArenaEffects).
@@ -2865,7 +2868,9 @@ function tick(now: number): void {
   if (bossFight && (bossFight.session !== session || bossFight.generation !== session.generation || bossFight.depth !== me.depth)) bossFight = null;
   // A champions' wave in the arena is a boss fight from its first monster to its last.
   const champions = world.arena?.phase === 'fight' && core.isChampionsWave(world.arena.wave);
-  audio.playMusic(bossFight || champions ? 'boss' : REGION_MUSIC[region]!);
+  audio.playMusic(REGION_MUSIC[region]!);
+  // Enemies awake in sight bring the danger layer in, a boss fight the boss layer.
+  audio.situation(threats.size, !!bossFight || champions);
   audio.muffle(overlayOpen() || !isAlive(me));
   const kick = fx.shakeOffset(vnow);
   // The hero stands in the middle of the band the HUD and the toolbar leave free, not of the screen.
@@ -3138,6 +3143,7 @@ function tick(now: number): void {
     if (!victory && solo && !dailyRun && !session.checked) store(BONES_KEY, JSON.stringify(leaveBones(me, Math.floor(Math.random() * 4), Math.random())));
     if (victory) {
       audio.play('levelup');
+      audio.stinger('victory');
       haptic('success');
     }
     // A checked run's end as the server scores it (its places on the boards); none for one played on the device alone.

@@ -809,7 +809,10 @@ function holdButton(label: string, ms: number, done: () => void, className: stri
   const tick = (): void => {
     step++;
     node.style.setProperty('--p', String(step / steps));
-    if (step < steps) return;
+    if (step < steps) {
+      audio.play('tick', 1 + (step / steps) * 0.6, 0.4);
+      return;
+    }
     window.clearInterval(timer);
     finished = true;
     node.classList.remove('holding');
