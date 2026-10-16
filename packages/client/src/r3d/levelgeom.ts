@@ -21,6 +21,7 @@
  */
 import { F, HEIGHT, LENGTH, T, terrainFlags, WIDTH } from '@pd/core';
 import { DOOR_IRON, DOOR_LEAF, DOOR_LEAF_LOCK, DOOR_LOCK_H, DOOR_TOP_H } from './doorart';
+import { PITCH } from './project';
 import { CAP_FIRST, EDGE_LIP, EDGE_ROCK, FACE_DECO, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from './tilemap';
 
 export const K_FLOOR = 0;
@@ -110,9 +111,16 @@ const isStairs = (terrain: number): boolean => isStairsUp(terrain) || isStairsDo
 /** Steps in a flight, and the most quads one needs (treads, risers, sides). */
 const STEPS = 3;
 const STAIR_QUADS = 14;
-/** How bright each tread is (south to north): the way down goes dark, the way up gets a little light from above. */
-const TREAD_DOWN = [1, 0.78, 0.5];
-const TREAD_UP = [0.92, 1.02, 1.14];
+/**
+ * How deep each tread is, in art pixels of the tile, south to north (a cell is 16): the stair tile is cut into these slices, so a tread
+ * shows whole pixel rows of it at the scale it was drawn at, and none is cut through the middle of a row (a sixteenth does not go into thirds).
+ */
+const TREAD_ROWS = [5, 5, 6] as const;
+/** The first row of each tread's slice of the tile, counted from the tile's top (north): the northern tread has the top rows. */
+const TREAD_TOP = [11, 6, 0] as const;
+/** The brightness down the stairwell, from its rim (1) to its far end, and up the entrance (a little light from above). */
+const wellShade = (t: number): number => 1 - 0.7 * t ** 1.1;
+const riseShade = (t: number): number => 0.9 + 0.26 * t;
 
 /** Plain wall: no floor under it, and nothing ever changes it but a rebuild. */
 const isPlainWall = (terrain: number): boolean => terrain === T.WALL || terrain === T.WALL_DECO;
@@ -527,7 +535,8 @@ export class LevelGeom {
       else if (kind === K_WALL && !isGapDoor(this.terrain[i]!) && relevant(this.kinds, i, this.terrain)) this.writeBox(i);
       else if (kind === K_LOW) this.writeBox(i);
       else if (kind === K_CHASM) this.writeEdges(i);
-      if (kind === K_FLOOR || kind === K_LOW) this.writeShadows(i);
+      // (Not on a stairs cell: the decal would lie across the mouth of the stairwell, a band of dark over the steps.)
+      if ((kind === K_FLOOR || kind === K_LOW) && !isStairs(this.terrain[i]!)) this.writeShadows(i);
       if (isStairs(this.terrain[i]!)) this.writeSteps(i);
     }
     this.quads.boxes = this.boxes.verts / 4;
@@ -537,8 +546,30 @@ export class LevelGeom {
   }
 
   /**
+   * The rectangle of a tile that is `w` x `h` art pixels at (`col`, `row`) counted from its top-left corner, in the form `tileRect` gives (the
+   * rect array): a vertical face is foreshortened by the camera, so what it shows of a tile is a few whole rows, and not the whole tile
+   * squeezed into them (which is a handful of stripes).
+   */
+  private pixels(tile: number, col: number, row: number, w: number, h: number): void {
+    tileRect(tile, this.cols, this.rows, rect);
+    const u0 = rect[0]!;
+    const v0 = rect[1]!;
+    const du = rect[2]! - u0;
+    const dv = rect[3]! - v0;
+    rect[0] = u0 + (du * col) / 16;
+    rect[2] = u0 + (du * (col + w)) / 16;
+    rect[3] = v0 + dv * (1 - row / 16);
+    rect[1] = v0 + dv * (1 - (row + h) / 16);
+  }
+
+  /** How many rows of art a vertical face of this height (cells) takes on the screen: its height times the camera's squeeze, at least one. */
+  private static rowsOf(height: number): number {
+    return Math.max(1, Math.round(Math.abs(height) * 16 * Math.cos(PITCH)));
+  }
+
+  /**
    * A flight of three steps on a stairs cell, the way up rising and the way down sinking toward the north (away from the camera), each
-   * tread a third of the cell deep with a third of the region's stair tile on it. Up (the kit's stairs_up, 0.5 high): the risers face
+   * tread about a third of the cell deep (5, 5 and 6 sixteenths) with the matching rows of the region's stair tile on it, at the tile's scale. Up (the kit's stairs_up, 0.5 high): the risers face
    * south, the camera, and the sides are stone; down (stairs_down, 0.5 deep): the camera sees the treads going dark and, at the far end,
    * the rock of the stairwell. The cell's floor quad is the plain floor, or the bottom of the stairwell.
    */
@@ -549,50 +580,75 @@ export class LevelGeom {
     const up = isStairsUp(terrain);
     const total = up ? this.kit.stairsUp : this.kit.stairsDown;
     const b = this.boxes;
-    tileRect(terrain, this.cols, this.rows, rect);
-    const u0 = rect[0]!;
-    const v0 = rect[1]!;
-    const u1 = rect[2]!;
-    const v1 = rect[3]!;
     const east = this.kinds[cell + 1] !== K_WALL;
     const west = this.kinds[cell - 1] !== K_WALL;
+    const shade = up ? riseShade : wellShade;
+    let depth = 0;
     for (let k = 0; k < STEPS; k++) {
-      const south = z + 1 - k / STEPS;
-      const north = z + 1 - (k + 1) / STEPS;
+      const rows = TREAD_ROWS[k]!;
+      const south = z + 1 - depth / 16;
+      const north = z + 1 - (depth + rows) / 16;
       const y = (total * (k + 1)) / STEPS;
       const below = (total * k) / STEPS;
-      const vb = v0 + ((v1 - v0) * k) / STEPS;
-      const vt = v0 + ((v1 - v0) * (k + 1)) / STEPS;
-      shades.fill((up ? TREAD_UP : TREAD_DOWN)[k]!);
-      set12(x, y, south, x + 1, y, south, x + 1, y, north, x, y, north);
-      quad(b, corners, 0, 1, 0, shades, WHITE, u0, vb, u1, vt);
+      // The tread: its slice of the stair tile at the tile's own scale, brightening or darkening smoothly from its south edge to its north.
+      // (Going down, the camera sees no riser: the drop to the next tread is a one-pixel shadow along the tread's far edge, which is what makes a
+      // flight of steps read as steps.)
+      const edge = up ? 0 : 1;
+      this.pixels(terrain, 0, TREAD_TOP[k]! + edge, 16, rows - edge);
+      shades[0] = shades[1] = shade(depth / 16);
+      shades[2] = shades[3] = shade((depth + rows - edge) / 16);
+      set12(x, y, south, x + 1, y, south, x + 1, y, north + edge / 16, x, y, north + edge / 16);
+      quad(b, corners, 0, 1, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+      if (edge) {
+        this.pixels(terrain, 0, TREAD_TOP[k]!, 16, 1);
+        shades.fill(shade((depth + rows) / 16) * 0.5);
+        set12(x, y, north + 1 / 16, x + 1, y, north + 1 / 16, x + 1, y, north, x, y, north);
+        quad(b, corners, 0, 1, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+      }
       if (up) {
-        // The riser under the tread, facing the camera, in the shade of the step's own edge.
-        shades.fill(TREAD_UP[k]! * 0.72);
+        // The riser under the tread, facing the camera: the row of the slice at its front edge, a little darker (it is in the tread's own shade).
+        this.pixels(terrain, 0, TREAD_TOP[k]! + rows - 1, 16, LevelGeom.rowsOf(y - below));
+        shades.fill(shade(depth / 16) * 0.74);
         set12(x, below, south, x + 1, below, south, x + 1, y, south, x, y, south);
-        quad(b, corners, 0, 0, 1, shades, WHITE, u0, vb, u1, vb + (vt - vb) * 0.5);
+        quad(b, corners, 0, 0, 1, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+        // The stone at the sides of the step: the wall's face, as many columns across as the tread is deep, as many rows as it is high.
         shades.fill(0.8);
-        tileRect(FACE_WALL, this.cols, this.rows, rect);
+        const col = Math.round(depth);
         if (east) {
+          this.pixels(FACE_WALL, col, 0, rows, LevelGeom.rowsOf(y));
           set12(x + 1, 0, south, x + 1, 0, north, x + 1, y, north, x + 1, y, south);
           quad(b, corners, 1, 0, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
         }
         if (west) {
+          this.pixels(FACE_WALL, col, 0, rows, LevelGeom.rowsOf(y));
           set12(x, 0, north, x, 0, south, x, y, south, x, y, north);
           quad(b, corners, -1, 0, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
         }
-        tileRect(terrain, this.cols, this.rows, rect);
       }
+      depth += rows;
     }
     if (!up) {
-      // The stairwell's rock: the far end, and each side, from the floor's edge down to where the steps end.
-      tileRect(EDGE_ROCK, this.cols, this.rows, rect);
-      shades.fill(0.5);
+      // The stairwell's rock: the far end and the two sides, from the rim down to where the steps end. A vertical face shows only the rows the
+      // camera lets it have (rowsOf), taken from the middle of the rock tile, and darkens smoothly toward the bottom.
+      const rows = LevelGeom.rowsOf(total);
+      const far = wellShade(1);
+      this.pixels(EDGE_ROCK, 0, 6, 16, rows);
+      shades[0] = shades[1] = far * 0.6;
+      shades[2] = shades[3] = far * 0.9;
       set12(x, total, z, x + 1, total, z, x + 1, 0, z, x, 0, z);
       quad(b, corners, 0, 0, 1, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
-      shades.fill(0.62);
+      // East wall (facing west), then west wall (facing east): south end brighter than the north, the bottom darker than the rim.
+      this.pixels(EDGE_ROCK, 0, 6, 16, rows);
+      shades[0] = far * 0.6;
+      shades[1] = 0.6;
+      shades[2] = 0.95;
+      shades[3] = far * 0.9;
       set12(x + 1, total, z, x + 1, total, z + 1, x + 1, 0, z + 1, x + 1, 0, z);
       quad(b, corners, -1, 0, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+      shades[0] = 0.6;
+      shades[1] = far * 0.6;
+      shades[2] = far * 0.9;
+      shades[3] = 0.95;
       set12(x, total, z + 1, x, total, z, x, 0, z, x, 0, z + 1);
       quad(b, corners, 1, 0, 0, shades, WHITE, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
     }
@@ -609,7 +665,8 @@ export class LevelGeom {
     if (cx < 0 || cz < 0 || cx >= WIDTH || cz >= HEIGHT) return 0;
     const terrain = this.terrain[cx + cz * WIDTH]!;
     if (!isStairs(terrain)) return 0;
-    const step = Math.min(STEPS - 1, Math.max(0, Math.floor((cz + 1 - z) * STEPS)));
+    const into = (cz + 1 - z) * 16;
+    const step = into < TREAD_ROWS[0]! ? 0 : into < TREAD_ROWS[0]! + TREAD_ROWS[1]! ? 1 : 2;
     return ((isStairsUp(terrain) ? this.kit.stairsUp : this.kit.stairsDown) * (step + 1)) / STEPS;
   }
 
