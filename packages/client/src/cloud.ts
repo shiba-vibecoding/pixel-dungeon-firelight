@@ -16,7 +16,7 @@ const JOINED = ['pd-badges', 'pd-rankings'] as const;
 /** Taken from the cloud only where this device has nothing yet. */
 const SETTINGS = [
   'pd-sound', 'pd-sound-volume', 'pd-music-volume', 'pd-haptics', 'pd-fx', 'pd-shake', 'pd-lang', 'pd-hints', 'pd-hints-seen',
-  'pd-intro-seen', 'pd-seen-help', 'pd-moved', 'pd-class', 'pd-name', 'pd-challenges', 'pd-look', 'pd-live-arena',
+  'pd-intro-seen', 'pd-seen-help', 'pd-moved', 'pd-class', 'pd-name', 'pd-challenges', 'pd-look', 'pd-live-arena', 'pd-brightness',
 ] as const;
 const KEYS: readonly string[] = [...JOINED, ...SETTINGS, SEASON_KEY];
 /** CloudStorage keeps up to 4096 characters a value. */

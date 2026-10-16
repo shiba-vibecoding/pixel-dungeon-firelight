@@ -19,6 +19,7 @@ import {
   PlaneGeometry, RepeatWrapping, Scene, SRGBColorSpace, Texture, WebGLRenderer,
 } from 'three';
 import { LENGTH, type Level, WIDTH } from '@pd/core';
+import { brightness } from '../brightness';
 import { type Assets, frameAt, levelRegion } from '../sprites';
 import { sheet as worldSheet } from '../worldsheets';
 import { fx } from '../fx';
@@ -30,7 +31,7 @@ import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
 import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
-import { LightRig, sourcesOf } from './lightrig';
+import { bakePools, LightRig, type Source, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
@@ -70,6 +71,8 @@ const HIGH_GRASS = 15;
 const SIGN = 29;
 /** A prop is drawn only this near the hero, cells. */
 const PROP_REACH = 11;
+/** A torch out of sight keeps its halo this near the hero, cells. */
+const SCONCE_REACH = 14;
 
 /** How the sprite batch stands a picture up: leaned toward the camera (characters, items) or straight up (a sconce on a wall). */
 const LEANED = 0;
@@ -156,6 +159,11 @@ export class World3D {
   private readonly rig: LightRig;
   private readonly ambient = new AmbientLight(0xffffff, 1);
   private readonly hemi = new HemisphereLight(0xffffff, 0x222222, 1);
+  /** The kit's ambient and hemisphere light of this level, before the player's brightness; the brightness applied now. */
+  private lightBase = { ambient: 1, hemi: 1 };
+  private bright = 0;
+  /** The level's fixed fires, whose light is baked into the fog texture. */
+  private fires: Source[] = [];
 
   // Terrain.
   private geom: LevelGeom | null = null;
@@ -347,7 +355,11 @@ export class World3D {
     this.air.uFogColor.value.setHex(hex(a.fog.color));
     this.air.uBg.value.setHex(hex(a.fog.color)).multiplyScalar(0.28);
     this.renderer.setClearColor(this.air.uBg.value, 1);
-    this.rig.configure(L, sourcesOf(this.kit, a.region, this.geom, true), this.tier.shadowLights);
+    this.fires = sourcesOf(this.kit, a.region, this.geom, true);
+    this.rig.configure(L, this.fires, this.tier.shadowLights);
+    this.fog.setPools(bakePools(this.fires, this.geom.kinds));
+    this.lightBase = { ambient: L.ambient.intensity, hemi: L.hemi.intensity };
+    this.bright = 0;
     if (a.accent) this.rig.setAccent(hex(a.accent.color), a.accent.intensity * 2.2);
     else this.rig.setAccent(0xffffff, 0);
     this.accentBase = a.accent ? a.accent.intensity * 2.2 : 0;
@@ -409,7 +421,20 @@ export class World3D {
       this.makeMeshes();
     }
     this.scanProps();
-    if (change !== 'patched') this.rig.shadowsStale = true;
+    if (change !== 'patched') {
+      this.rig.shadowsStale = true;
+      // A wall or a door went: the pools of the fixed fires reach differently.
+      this.fog.setPools(bakePools(this.fires, geom.kinds));
+    }
+  }
+
+  /** The player's brightness: the exposure, and the ambient light more steeply, so the dark outside the lights lifts. */
+  private applyBrightness(b: number): void {
+    this.bright = b;
+    this.renderer.toneMappingExposure = b;
+    const lift = b ** 1.6;
+    this.ambient.intensity = this.lightBase.ambient * lift;
+    this.hemi.intensity = this.lightBase.hemi * lift;
   }
 
   private dropMeshes(): void {
@@ -611,6 +636,8 @@ export class World3D {
       this.persp.updateProjectionMatrix();
     }
 
+    if (brightness.value !== this.bright) this.applyBrightness(brightness.value);
+    this.air.uTime.value = f.now / 1000;
     this.fogMoving = this.fog.step(dt);
     const hx = f.focusX / TILE;
     const hz = f.focusY / TILE;
@@ -789,6 +816,9 @@ export class World3D {
       if (f.visible[cell]) {
         const flicker = 0.38 + 0.16 * Math.sin(f.now / 70 + cell) * Math.sin(f.now / 23 + cell * 3);
         this.effects.halo(x, 1.1, z + 0.3, rgb, 2.4, flicker);
+      } else if (Math.abs(x - this.air.uHero.value.x) < SCONCE_REACH && Math.abs(z - this.air.uHero.value.y) < SCONCE_REACH) {
+        // A torch seen before keeps its soft halo, breathing slowly (the pool of its light is baked into the fog, fogofwar.ts).
+        this.effects.halo(x, 1.1, z + 0.3, rgb, 2.6, 0.42 + 0.06 * Math.sin(f.now / 900 + cell));
       }
     }
   }

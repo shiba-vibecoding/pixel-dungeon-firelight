@@ -33,6 +33,7 @@ import type { Frame3D, World3D } from './r3d/world3d';
 import { Governor, RefreshMeter } from './r3d/governor';
 import { FEET_PX, setPitchDeg, YS } from './r3d/project';
 import { beta3d, covers3D } from './r3d/setting';
+import { brightness } from './brightness';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
   askDrink, onWindow, reopenWindow, type WindowState, windowState,
@@ -476,9 +477,20 @@ function setMode3d(on: boolean): void {
   if (canvas3d) canvas3d.style.display = on ? 'block' : 'none';
   document.body.classList.toggle('pd-3d', on);
   if (!on) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  paintBrightness();
   resize();
   drawPace.force();
 }
+
+/** The brightness setting in the classic view: a filter on the canvas (the 3D view lights itself, r3d/world3d.ts). */
+function paintBrightness(): void {
+  canvas.style.filter = mode3d || Math.abs(brightness.value - 1) < 0.01 ? '' : `brightness(${brightness.value})`;
+}
+brightness.onChange(() => {
+  paintBrightness();
+  drawPace.force();
+});
+paintBrightness();
 
 /** The 3D view is put away: its memory is given back, and with a message the switch goes off (it was too slow, or would not start). */
 function stop3d(message?: string, quietUnlessChosen = false): void {
