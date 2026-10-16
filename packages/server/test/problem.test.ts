@@ -98,6 +98,9 @@ function fakeOps(): AdminOps & { log: string[] } {
       log.push(`hunter ${id}`);
       return id === 'ABC234' ? 'granted' : 'unknown';
     },
+    async reporter(id) {
+      return id === 'ABC234' ? 4242 : id === 'GUEST2' ? 'guest' : 'unknown';
+    },
     async outages(change) {
       if (change) {
         log.push(`outage ${change.op} ${change.day}`);
@@ -121,6 +124,25 @@ describe('the admin’s bot commands', () => {
     expect(parseAdminCommand('/outage')).toEqual({ kind: 'outage', op: 'list' });
     expect(parseAdminCommand('/outage 2026-02-30')).toEqual({ kind: 'usage' });
     expect(parseAdminCommand('/outage tomorrow')).toEqual({ kind: 'usage' });
+  });
+
+  it('answer a report by its code: /reply <report id> <text> goes to whoever sent it', async () => {
+    expect(parseAdminCommand('/reply abc234 Thanks!\nFixed.')).toEqual({ kind: 'answer', id: 'ABC234', text: 'Thanks!\nFixed.' });
+    expect(parseAdminCommand('/reply 42 Hi')).toEqual({ kind: 'reply', user: 42, text: 'Hi' });
+    expect(parseAdminCommand('/reply nonsense!! Hi')).toEqual({ kind: 'usage' });
+    const ops = fakeOps();
+    const bot = fakeApi();
+    await handleUpdate(say(ADMIN, '/reply ABC234 Спасибо, исправили!'), bot.api, wallets, config(ops), 1);
+    expect(bot.calls[0]!.params).toMatchObject({ chat_id: 4242, text: 'Спасибо, исправили!' });
+    expect(String(bot.calls[1]!.params.text)).toContain('Sent to the reporter of ABC234');
+    await handleUpdate(say(ADMIN, '/reply ZZZZZZ Hi'), bot.api, wallets, config(ops), 1);
+    expect(String(bot.calls[2]!.params.text)).toContain('No report');
+    await handleUpdate(say(ADMIN, '/reply GUEST2 Hi'), bot.api, wallets, config(ops), 1);
+    expect(String(bot.calls[3]!.params.text)).toContain('outside Telegram');
+    // Not the admin: nothing is sent.
+    const other = fakeApi();
+    await handleUpdate(say(77, '/reply ABC234 Hi'), other.api, wallets, config(ops), 1);
+    expect(other.calls.every((c) => c.params.chat_id !== 4242)).toBe(true);
   });
 
   it('work from the admin chat only', async () => {

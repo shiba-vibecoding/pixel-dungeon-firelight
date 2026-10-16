@@ -12,6 +12,7 @@ import { recentCharges } from './wallet';
  *   /refund <user_id> <charge_id>   refundStarPayment, then the wallet gives the purchase back
  *   /payments <user_id>             the player's charges, newest first
  *   /reply <user_id> <text>         a message to the player from the bot
+ *   /reply <report id> <text>       the same, to whoever sent that problem report (its code, as the report's message shows it)
  *   /bughunter <report id>          a player's problem report is confirmed: its reporter gets the «Охотник за багами» badge
  *   /outage [<day> | remove <day>]  the days the server was down (YYYY-MM-DD): no streak broken, no freeze spent; no day: the list
  *
@@ -22,13 +23,14 @@ export type AdminCommand =
   | { kind: 'refund'; user: number; charge: string }
   | { kind: 'payments'; user: number }
   | { kind: 'reply'; user: number; text: string }
+  | { kind: 'answer'; id: string; text: string }
   | { kind: 'bughunter'; id: string }
   | { kind: 'outage'; op: 'list' }
   | { kind: 'outage'; op: 'add' | 'remove'; day: string }
   /** An admin command with arguments that do not fit: say how it goes. */
   | { kind: 'usage' };
 
-export const ADMIN_USAGE = '/refund <user_id> <charge_id>\n/payments <user_id>\n/reply <user_id> <text>\n/bughunter <report id>\n/outage [<YYYY-MM-DD> | remove <YYYY-MM-DD>]';
+export const ADMIN_USAGE = '/refund <user_id> <charge_id>\n/payments <user_id>\n/reply <user_id | report id> <text>\n/bughunter <report id>\n/outage [<YYYY-MM-DD> | remove <YYYY-MM-DD>]';
 
 /** What the admin's commands do beyond the bot's own calls: kept by the Worker (index.ts), injected here so that they can be tested. */
 export interface AdminOps {
@@ -36,6 +38,8 @@ export interface AdminOps {
   bugHunter(id: string): Promise<'granted' | 'already' | 'unknown'>;
   /** The outage days after the change (or as they stand, with none). */
   outages(change?: { op: 'add' | 'remove'; day: string }): Promise<string[]>;
+  /** Who sent a problem report: their Telegram user id; 'guest' for one sent outside Telegram, 'unknown' for no such report. */
+  reporter(id: string): Promise<number | 'guest' | 'unknown'>;
 }
 
 /** True only in the admin's chat; with no admin chat set, nobody is one. */
@@ -61,7 +65,11 @@ export function parseAdminCommand(text: string): AdminCommand | null {
   if (command === '/reply') {
     // The text keeps its own spacing and lines: everything after the user id.
     const match = /^\S+\s+(\d{1,15})\s+([\s\S]+)$/.exec(text.trim());
-    return match ? { kind: 'reply', user: Number(match[1]), text: match[2]!.slice(0, 4000) } : { kind: 'usage' };
+    if (match) return { kind: 'reply', user: Number(match[1]), text: match[2]!.slice(0, 4000) };
+    // Or a problem report's code in place of the user id: the answer goes to whoever sent it.
+    const byReport = /^\S+\s+(\S+)\s+([\s\S]+)$/.exec(text.trim());
+    const id = byReport ? parseProblemId(byReport[1]!) : null;
+    return id ? { kind: 'answer', id, text: byReport![2]!.slice(0, 4000) } : { kind: 'usage' };
   }
   if (command === '/bughunter') {
     const id = args.length === 1 ? parseProblemId(args[0]!) : null;
