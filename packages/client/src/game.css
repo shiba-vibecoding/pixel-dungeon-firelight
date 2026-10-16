@@ -794,3 +794,82 @@ body.pd-3d canvas#game { position: relative; z-index: 1; }
 .pd-pass, .pd-pass > * { min-width: 0; }
 .pd-pass-tools .pd-button { flex: 1 1 100%; }
 .pd-store .pd-tabs, .pd-store-top { flex: none; }
+
+/* ===================== Settings: a window with room ===================== */
+/* Full width less a 16 px gutter on a phone, 560-620 px on a desktop; one column of sections (the old two columns never matched in the game's
+   overlay, which is not a container). Each section is a card with a heading; a row is a label on the left and its control on the right. */
+#overlay:has(.pd-window.settings) {
+  padding-left: calc(var(--safe-l, 0px) + 16px);
+  padding-right: calc(var(--safe-r, 0px) + 16px);
+}
+#overlay .pd-window.settings { --window-max: 620px; width: 100%; max-width: var(--window-max); }
+@media (max-width: 640px) { #overlay .pd-window.settings { --window-max: 100%; } }
+#overlay .pd-window.settings > .pd-scroll { margin-right: calc(-1 * var(--space-2)); padding-right: var(--space-2); }
+#overlay .pd-window.settings .pd-settings { display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-2); }
+#overlay .pd-window.settings .pd-settings > .pd-col { display: contents; }
+
+#overlay .pd-window.settings .pd-set-group:not(.danger) {
+  gap: 0; padding: 0 var(--space-3) var(--space-1);
+  background: rgba(11, 11, 9, 0.28); clip-path: var(--notch);
+  box-shadow: inset var(--u) var(--u) 0 rgba(11, 11, 9, 0.5);
+}
+#overlay .pd-window.settings .pd-set-head {
+  margin: 0 calc(-1 * var(--space-3)) var(--space-1); padding: var(--space-2) var(--space-3);
+  font: var(--text-label, 400 18px/22px var(--font-ui)); color: var(--gold); background: rgba(11, 11, 9, 0.35);
+  border-bottom: var(--u) solid var(--stone-600);
+}
+#overlay .pd-window.settings .pd-set-group:not(.danger) > :is(.pd-set-row, .pd-switch, .pd-linkrow) + :is(.pd-set-row, .pd-switch, .pd-linkrow) {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+#overlay .pd-window.settings .pd-set-row,
+#overlay .pd-window.settings .pd-switch { min-height: 52px; padding-top: var(--space-1); padding-bottom: var(--space-1); }
+#overlay .pd-window.settings .pd-linkrow { min-height: 52px; }
+#overlay .pd-window.settings .pd-set-label { flex: 1 1 auto; min-width: 0; }
+#overlay .pd-window.settings .pd-set-label .pd-info { white-space: normal; overflow-wrap: anywhere; }
+#overlay .pd-window.settings .pd-set-value { display: block; }
+
+/* A row of a label and a wide control (the choices, the slider, the name): on a phone the control goes under the label, from 560 px it stands to its right. */
+#overlay .pd-window.settings .pd-set-row.stack { gap: var(--space-1) var(--space-3); }
+@media (min-width: 560px) {
+  #overlay .pd-window.settings .pd-set-row.stack { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); align-items: center; }
+  #overlay .pd-window.settings .pd-set-row.stack > :is(.pd-note, .pd-set-value) { grid-column: 1 / -1; }
+  #overlay .pd-window.settings .pd-set-row.stack > :is(.pd-seg, .pd-input, .pd-range) { grid-column: 2; grid-row: 1; }
+  #overlay .pd-window.settings .pd-set-row.stack > :is(.pd-info, .pd-set-label) { grid-column: 1; grid-row: 1; }
+}
+
+/* The volume steps: five bars, wide enough to hit and to read. */
+#overlay .pd-window.settings .pd-steps { gap: 2px; }
+#overlay .pd-window.settings .pd-step { width: 46px; }
+#overlay .pd-window.settings .pd-step::before { width: calc(8 * var(--u)); }
+@media (max-width: 400px) { #overlay .pd-window.settings .pd-step { width: 40px; } }
+
+/* The slider: a recessed track filling with gold up to the thumb. */
+.pd-set-meter { display: flex; align-items: center; gap: var(--space-2); }
+.pd-mini { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--gold); padding: 0 var(--space-2); min-height: 28px; background: var(--stone-800); clip-path: var(--notch); }
+.pd-mini:active { color: var(--ink); }
+.pd-mini[hidden] { display: none; }
+.pd-range { -webkit-appearance: none; appearance: none; width: 100%; height: var(--tap-min, 44px); margin: 0; padding: 0; background: transparent; cursor: pointer; touch-action: pan-y; }
+.pd-range:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pd-range::-webkit-slider-runnable-track {
+  height: 14px; clip-path: var(--notch);
+  background: linear-gradient(90deg, var(--gold-deep) 0 var(--fill, 50%), var(--stone-900) var(--fill, 50%) 100%);
+  box-shadow: inset var(--u) var(--u) 0 var(--void);
+}
+.pd-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 22px; height: 34px; margin-top: -10px; border: 0; border-radius: 0;
+  background: var(--gold); clip-path: var(--notch); box-shadow: inset 0 calc(-2 * var(--u)) 0 var(--gold-deep);
+}
+.pd-range::-moz-range-track { height: 14px; background: linear-gradient(90deg, var(--gold-deep) 0 var(--fill, 50%), var(--stone-900) var(--fill, 50%) 100%); clip-path: var(--notch); }
+.pd-range::-moz-range-thumb { width: 22px; height: 34px; border: 0; border-radius: 0; background: var(--gold); clip-path: var(--notch); }
+
+/* The reset button sits apart, below the sections. */
+#overlay .pd-window.settings .pd-set-group.danger { margin-top: 0; padding-top: 0; border-top: 0; }
+#overlay .pd-window.settings .pd-switch-box { flex: none; }
+/* A volume row: the label and the steps share a line where they fit, and where they do not (a phone) the steps take the line under it. */
+#overlay .pd-window.settings .pd-set-row:has(> .pd-steps) { flex-wrap: wrap; column-gap: var(--space-3); }
+#overlay .pd-window.settings .pd-set-row:has(> .pd-steps) .pd-set-label { flex: 1 1 120px; }
+#overlay .pd-window.settings .pd-set-row:has(> .pd-steps) .pd-info { overflow: visible; text-overflow: clip; }
+#overlay .pd-window.settings .pd-steps { flex: 1 1 250px; max-width: 300px; margin-left: auto; }
+#overlay .pd-window.settings .pd-step { flex: 1 1 0; width: auto; min-width: 0; }
+#overlay .pd-window.settings .pd-step { padding-bottom: 6px; }
+#overlay .pd-window.settings .pd-step::before { width: min(70%, 30px); height: calc(8px + var(--n, 1) * 5px); }

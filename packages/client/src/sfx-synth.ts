@@ -521,6 +521,18 @@ export const SFX = {
     { wave: 'square', freq: 740, hold: 0.06, decay: 0.01, crush: 6, repeat: [4, 0.16] },
     { wave: 'square', freq: 988, delay: 0.08, hold: 0.06, decay: 0.01, crush: 6, repeat: [4, 0.16] }),
 
+  // The cry of a boss and of champions about to come: a brassy blare falling away over a growl, the hall answering.
+  boss: fx(0.9,
+    { wave: 'saw', freq: 196, slide: -9, vib: [7, 0.4], filter: lp(2200, 600, 1.4), attack: 0.03, hold: 0.28, decay: 0.7, gain: 0.8 },
+    { wave: 'saw', freq: 98, slide: -6, trem: [24, 0.6], filter: lp(900, 400, 2), attack: 0.04, hold: 0.3, decay: 0.7, gain: 0.7 },
+    { wave: 'noise', filter: bp(700, 300, 1.2), attack: 0.05, hold: 0.2, decay: 0.55, gain: 0.45 },
+    { wave: 'sine', freq: 55, attack: 0.04, hold: 0.3, decay: 0.8, gain: 0.7 }),
+  // A badge earned: three bright notes up, a ring after them.
+  badge: fx(0.65,
+    ...run([880, 1108.7, 1318.5], 0.09, { wave: 'square', duty: 0.25, attack: 0.003, decay: 0.12, gain: 0.35 }, 0.25),
+    ...run([1760, 2217.5, 2637], 0.09, { wave: 'sine', attack: 0.003, decay: 0.15, gain: 0.35 }, 0.7),
+    { wave: 'sine', freq: 3520, delay: 0.27, decay: 0.5, gain: 0.12 }),
+
   /* The scrolls' waves. */
   // A roar: a growl in the chest (a saw chopped fast), breath through it, a rumble to close.
   roar: fx(0.95,

@@ -1,5 +1,6 @@
 import { challengeMultiplier, createItem, HEAP_SPRITES, type Hero, type Item, itemDef, type ItemKind, ITEMS, itemSprite, RoomType, T, type World } from '@pd/core';
-import { audio, type SoundSet } from './audio';
+import { audio } from './audio';
+import { BRIGHTNESS_DEFAULT, BRIGHTNESS_MAX, BRIGHTNESS_MIN, brightness } from './brightness';
 import { CHALLENGE_MASKS, countChallenges } from './challenge-info';
 import { fx } from './fx';
 import { capitalize, lang, locale, t } from './i18n';
@@ -147,12 +148,43 @@ function nameRow(name: { value: string; set(value: string): void }): HTMLElement
   return el('div', { className: 'pd-set-row stack' }, el('label', { className: 'pd-info', htmlFor: 'pd-name', textContent: t.nameRow }), input, el('span', { className: 'pd-set-value', textContent: t.nameNote }));
 }
 
+/** A slider with a wide range: its value as a percentage beside the label, and a way back to the default. Applies as it moves. */
+function sliderRow(label: string, note: string | null, range: { min: number; max: number; step: number; def: number }, get: () => number, set: (value: number) => void): HTMLElement {
+  const value = el('span', { className: 'pd-set-value' });
+  const input = el('input', { className: 'pd-range', type: 'range', min: String(range.min * 100), max: String(range.max * 100), step: String(range.step * 100) });
+  input.setAttribute('aria-label', label);
+  const back = el('button', { className: 'pd-mini', textContent: t.meta.byDefault });
+  const paint = (): void => {
+    const v = get();
+    input.value = String(Math.round(v * 100));
+    input.style.setProperty('--fill', `${((v - range.min) / (range.max - range.min)) * 100}%`);
+    input.setAttribute('aria-valuetext', `${Math.round(v * 100)}%`);
+    value.textContent = `${Math.round(v * 100)}%`;
+    back.hidden = Math.abs(v - range.def) < 0.005;
+  };
+  input.oninput = () => {
+    set(Number(input.value) / 100);
+    paint();
+  };
+  back.onclick = () => {
+    click();
+    set(range.def);
+    paint();
+  };
+  paint();
+  return el(
+    'div',
+    { className: 'pd-set-row stack slider' },
+    el('span', { className: 'pd-set-label' }, el('span', { className: 'pd-info', textContent: label }), el('span', { className: 'pd-set-meter' }, value, back)),
+    input,
+    note && el('span', { className: 'pd-set-value', textContent: note }),
+  );
+}
+
 const group = (head: string | null, ...rows: Array<HTMLElement | null | false>): HTMLElement =>
   el('section', { className: 'pd-set-group' }, head && el('h3', { className: 'pd-set-head', textContent: head }), ...rows);
 
 /* Settings */
-
-const SOUND_SETS: readonly SoundSet[] = ['firelight', 'original'];
 
 export interface SettingsOptions {
   onClose(): void;
@@ -172,47 +204,33 @@ export interface SettingsOptions {
 
 /** The settings, from the title's corner or the menu in a run. */
 export function showSettings(options: SettingsOptions): void {
-  // An older «sound off» switch counts as silence here; any step brings the sound back.
-  const level = (volume: number): number => (audio.enabled ? volume : 0);
-  const louder = (set: (volume: number) => void) => (volume: number): void => {
-    if (volume > 0 && !audio.enabled) audio.setEnabled(true);
-    set(volume);
-  };
   const fxNote = info(t.meta.fxNotes[quality.mode], 'pd-note');
-  const sound = group(
-    t.meta.sound,
-    stepsRow(t.musicVolume, () => level(audio.musicVolume), louder((v) => audio.setMusicVolume(v)), () => undefined),
-    stepsRow(t.soundVolume, () => level(audio.soundVolume), louder((v) => audio.setSoundVolume(v)), () => audio.play('coin', 1, 0.6)),
-    el(
-      'div',
-      { className: 'pd-set-row stack' },
-      el('span', { className: 'pd-info', textContent: t.meta.soundSet }),
-      segments(SOUND_SETS.map((s) => [s, t.meta.soundSets[s]] as const), audio.soundSet, (set) => {
-        audio.setSoundSet(set);
-        // A taste of the set chosen.
-        audio.play('hit', 1, 0.8);
-        audio.later(180, 'coin', 1, 0.6);
-      }),
-      info(t.meta.soundSetNote, 'pd-note'),
-    ),
-    switchRow(t.meta.vibration, t.meta.vibrationNote, haptics.on, (on) => haptics.set(on)),
-  );
-  // The three words are of unequal length: the buttons take what they need, not a third each.
-  const quipChoice = segments(QUIP_MODES.map((m) => [m, t.meta.quipModes[m]] as const), quipMode.value, (mode) => quipMode.set(mode));
-  quipChoice.classList.add('fit');
-  const modes: ReadonlyArray<readonly [FxMode, string]> = (['auto', 'full', 'light'] as const).map((m) => [m, t.meta.fxModes[m]] as const);
-  const learning = group(
-    t.meta.learning,
+  const reopen = (): void => showSettings(options);
+
+  // Game: what is asked and told while playing.
+  const game = group(
+    t.meta.game,
+    options.name ? nameRow(options.name) : null,
+    switchRow(t.safe.settings.danger, t.safe.settings.dangerNote, confirmDanger.on, (on) => confirmDanger.set(on)),
+    switchRow(t.safe.settings.risky, t.safe.settings.riskyNote, confirmRisky.on, (on) => confirmRisky.set(on)),
     switchRow(t.meta.hints, t.meta.hintsNote, hints.enabled, (on) => hints.setEnabled(on)),
     options.reminders ? switchRow(t.ranked.remindersSwitch, t.ranked.remindersNote, options.reminders.on, (on) => options.reminders!.set(on)) : null,
     linkRow(t.meta.hintsAgain, () => {
       hints.reset();
       hints.setEnabled(true);
-      showSettings(options);
+      reopen();
     }),
   );
-  const game = group(
-    t.meta.game,
+
+  // Graphics: the picture, and how much it costs.
+  const modes: ReadonlyArray<readonly [FxMode, string]> = (['auto', 'full', 'light'] as const).map((m) => [m, t.meta.fxModes[m]] as const);
+  const graphics = group(
+    t.meta.graphics,
+    sliderRow(
+      t.meta.brightness, t.meta.brightnessNote,
+      { min: BRIGHTNESS_MIN, max: BRIGHTNESS_MAX, step: 0.05, def: BRIGHTNESS_DEFAULT }, () => brightness.value, (v) => brightness.set(v),
+    ),
+    switchRow(t.meta.render3d, t.meta.render3dNote, beta3d.on, (on) => beta3d.set(on)),
     el(
       'div',
       { className: 'pd-set-row stack' },
@@ -224,21 +242,31 @@ export function showSettings(options: SettingsOptions): void {
       }),
       fxNote,
     ),
-    options.name ? nameRow(options.name) : null,
-    el(
-      'div',
-      { className: 'pd-set-row stack' },
-      el('span', { className: 'pd-info', textContent: t.meta.quips }),
-      quipChoice,
-      info(t.meta.quipsNote, 'pd-note'),
-    ),
     switchRow(t.meta.smooth, t.meta.smoothNote, smooth.on, (on) => smooth.set(on)),
-    switchRow(t.meta.render3d, t.meta.render3dNote, beta3d.on, (on) => beta3d.set(on)),
-    // The questions before a trap or gas, and before the unknown (mistap.ts, riskyuse.ts): «don't ask again» lands here too.
-    switchRow(t.safe.settings.danger, t.safe.settings.dangerNote, confirmDanger.on, (on) => confirmDanger.set(on)),
-    switchRow(t.safe.settings.risky, t.safe.settings.riskyNote, confirmRisky.on, (on) => confirmRisky.set(on)),
     stepsRow(t.meta.shake, () => quality.shake, (v) => quality.setShake(v), () => fx.shake(3, 240, fx.now)),
     canFullscreen() && switchRow(t.fullscreen, null, isFullscreen(), (on) => setFullscreen(on)),
+  );
+
+  // Sound: ours only, with the levels and the mute (a level of 0).
+  const level = (volume: number): number => (audio.enabled ? volume : 0);
+  // An older «sound off» switch counts as silence here; any step brings the sound back.
+  const louder = (set: (volume: number) => void) => (volume: number): void => {
+    if (volume > 0 && !audio.enabled) audio.setEnabled(true);
+    set(volume);
+  };
+  const sound = group(
+    t.meta.sound,
+    stepsRow(t.musicVolume, () => level(audio.musicVolume), louder((v) => audio.setMusicVolume(v)), () => undefined),
+    stepsRow(t.soundVolume, () => level(audio.soundVolume), louder((v) => audio.setSoundVolume(v)), () => audio.play('coin', 1, 0.6)),
+    switchRow(t.meta.vibration, t.meta.vibrationNote, haptics.on, (on) => haptics.set(on)),
+  );
+
+  // Language and the hero's words.
+  // The three words are of unequal length: the buttons take what they need, not a third each.
+  const quipChoice = segments(QUIP_MODES.map((m) => [m, t.meta.quipModes[m]] as const), quipMode.value, (mode) => quipMode.set(mode));
+  quipChoice.classList.add('fit');
+  const words = group(
+    t.meta.langQuips,
     el(
       'div',
       { className: 'pd-set-row' },
@@ -254,10 +282,18 @@ export function showSettings(options: SettingsOptions): void {
         location.reload();
       }, true),
     ),
+    el(
+      'div',
+      { className: 'pd-set-row stack' },
+      el('span', { className: 'pd-info', textContent: t.meta.quips }),
+      quipChoice,
+      info(t.meta.quipsNote, 'pd-note'),
+    ),
   );
-  const reopen = (): void => showSettings(options);
-  const more = group(
-    t.meta.more,
+
+  // The account side: the news, the report, the about, the documents, and wiping the device.
+  const account = group(
+    t.meta.account,
     options.onNews ? linkRow(t.news.row, () => options.onNews!()) : null,
     options.onReport ? linkRow(t.report.title, () => options.onReport!()) : null,
     linkRow(t.meta.about, () => showAbout(reopen)),
@@ -272,12 +308,7 @@ export function showSettings(options: SettingsOptions): void {
   show(
     windowOf(
       { title: t.meta.settings, onClose: options.onClose, className: 'settings' },
-      el(
-        'div',
-        { className: 'pd-scroll pd-settings' },
-        el('div', { className: 'pd-col' }, sound, game, learning),
-        el('div', { className: 'pd-col' }, more, reset),
-      ),
+      el('div', { className: 'pd-scroll pd-settings' }, game, graphics, sound, words, account, reset),
     ),
     options.onClose,
   );
