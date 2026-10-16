@@ -1,3 +1,4 @@
+import { MEMORY_DESATURATE } from './r3d/memory';
 import { drawVignette } from './vignette';
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
@@ -73,6 +74,7 @@ function drawIcon(ctx: CanvasRenderingContext2D, assets: Assets, icon: readonly 
 
 /** One texel per cell: the fog's darkness, eased from frame to frame (see drawFog). */
 const fogCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+const memCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
 let fogDark: Float32Array | null = null;
 let fogLevel: Level | null = null;
 let fogTime = 0;
@@ -106,6 +108,20 @@ function drawFog(ctx: CanvasRenderingContext2D, level: Level, visible: readonly 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(fogCanvas, 0, 0, WIDTH, HEIGHT, 0, 0, WIDTH * TILE, HEIGHT * TILE);
+  // What is only remembered is drained of colour (the same share as the 3D view's, r3d/memory.ts), over the same fade at the edge of sight.
+  if (memCanvas) {
+    memCanvas.width = WIDTH;
+    memCanvas.height = HEIGHT;
+    const mem = memCanvas.getContext('2d')!;
+    const grey = mem.createImageData(WIDTH, HEIGHT);
+    for (let i = 0; i < LENGTH; i++) {
+      grey.data[i * 4] = grey.data[i * 4 + 1] = grey.data[i * 4 + 2] = 128;
+      grey.data[i * 4 + 3] = Math.round(255 * MEMORY_DESATURATE * Math.min(1, fogDark![i]! / 0.55));
+    }
+    mem.putImageData(grey, 0, 0);
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.drawImage(memCanvas, 0, 0, WIDTH, HEIGHT, 0, 0, WIDTH * TILE, HEIGHT * TILE);
+  }
   ctx.restore();
 }
 
