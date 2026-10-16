@@ -624,3 +624,85 @@ html.pd-paused *, html.pd-paused *::before, html.pd-paused *::after { animation-
 /* Firelight loader size: 3 on a phone, 6 from 900 px (design part 1). */
 .fl-loader { --fl-s: 3; }
 @media (min-width: 900px) { .fl-loader { --fl-s: 6; } }
+
+/* =====================================================================================================================
+   Firelight (design part 2): the camp, the hero's speech bubble and the backpack's frames, lit by the fire.
+   ===================================================================================================================== */
+/* Camp: the logo heads the screen over the name card; the card, the icons and the sheet take the fire's light. */
+.pd-camp-top { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pd-camp-top::before {
+  content: ""; flex: none; width: calc(89px * var(--fl-logo, 2)); height: calc(32px * var(--fl-logo, 2));
+  background: url("/assets/brand/logo-en.png") center / contain no-repeat; image-rendering: pixelated;
+  filter: drop-shadow(0 0 0 transparent);
+}
+:lang(ru) .pd-camp-top::before { height: calc(45px * var(--fl-logo, 2)); background-image: url("/assets/brand/logo-ru.png"); }
+@media (min-width: 900px) { .pd-camp-top { --fl-logo: 3; } }
+.pd-camp-top > * { align-self: stretch; }
+.pd-camp .pd-profile { background: rgba(26, 20, 14, 0.84); box-shadow: inset 0 0 0 var(--u) var(--lit-dark), inset 0 calc(-2 * var(--u)) 0 var(--glow-1); }
+.pd-camp-icon i { background: rgba(26, 20, 14, 0.78); border-color: var(--lit-lo); box-shadow: inset 0 calc(-2 * var(--u)) 0 var(--glow-1); }
+.pd-camp-icon:active i { background: rgba(74, 52, 36, 0.92); }
+.pd-camp-icon.prefs { --ico: url("/assets/camp/icon-prefs.png"); } .pd-camp-icon.ranks { --ico: url("/assets/camp/icon-ranks.png"); }
+.pd-camp-icon .pd-count { background: var(--fire-coal, #b22a2a); box-shadow: inset 0 2px 0 var(--fire-ember, #e8641f), 0 0 0 2px var(--void); }
+.pd-camp-sheet { box-shadow: inset 0 22px 0 -20px var(--glow-2); }
+.pd-camp-sheet .pd-daily { background: rgba(26, 20, 14, 0.9); box-shadow: inset 0 0 0 var(--u) var(--lit-dark), inset 0 calc(2 * var(--u)) 0 var(--glow-2); }
+.pd-daily-title h3 { color: var(--fire-light, #ffeba4); display: flex; align-items: center; gap: 6px; }
+.pd-daily-title h3::before { content: ""; flex: none; width: 19px; height: 26px; background: url("/assets/brand/mark.png") center / contain no-repeat; image-rendering: pixelated; }
+.pd-daily.compact .pd-daily-title h3::before { width: 14px; height: 19px; }
+.pd-camp-name { color: var(--fire-light, #ffeba4); }
+.pd-camp-arrow:active::before { background: var(--fire-gold, #ffcc66); }
+
+/* The hero's speech bubble: a pixel bubble of warm dark stone with a lit edge (fl-bubble.png, 9-slice) and its tail.
+   Loud (bosses, traps, death — .loud, and .last for the last words): a jagged ember edge, bigger letters, a short shake. */
+.pd-quip-body, .pd-camp-bubble {
+  background: none; clip-path: none; border: calc(5 * var(--u)) solid transparent;
+  border-image: url("/assets/ui/fl-bubble.png") 5 fill / calc(5 * var(--u)) stretch; image-rendering: pixelated;
+  padding: 0 4px; color: var(--ink);
+}
+.pd-camp-bubble { padding: 0 4px; }
+.pd-quip::after, .pd-camp-bubble::after {
+  width: calc(12 * var(--u)); height: calc(7 * var(--u)); margin-left: calc(-6 * var(--u)); bottom: calc(-6 * var(--u));
+  background: url("/assets/ui/fl-bubble-tail.png") center / 100% 100% no-repeat; clip-path: none; image-rendering: pixelated;
+}
+.pd-quip { max-width: min(330px, calc(100% - 16px)); }
+.pd-quip:is(.loud, .last) .pd-quip-body {
+  border-width: calc(4 * var(--u)); border-image: url("/assets/ui/fl-bubble-loud.png") 4 fill / calc(4 * var(--u)) stretch;
+  font: var(--text-body, 400 18px/22px var(--font-ui)); color: var(--fire-light, #ffeba4); padding: 2px 6px;
+}
+.pd-quip:is(.loud, .last)::after { width: calc(12 * var(--u)); height: calc(7 * var(--u)); margin-left: calc(-6 * var(--u)); bottom: calc(-6 * var(--u)); background-image: url("/assets/ui/fl-bubble-loud-tail.png"); }
+@media (prefers-reduced-motion: no-preference) {
+  .pd-quip:is(.loud, .last).pop .pd-quip-body { animation: pd-quip-pop .12s steps(3) both, fl-shake .42s steps(6) .12s both; }
+}
+@keyframes fl-shake { 0%, 100% { translate: 0 0; } 17% { translate: -2px 0; } 33% { translate: 2px -1px; } 50% { translate: -2px 1px; } 67% { translate: 2px 0; } 83% { translate: -1px 0; } }
+
+/* Backpack frames (fl-*.png, 26x26 frames = a 52 px slot): the hold ring fills in 8 steps with a spark at its head; equipping
+   sweeps a band of light and leaves a glint; a place that takes the dragged item breathes with warm corners; «+1» and
+   «identified» float up out of a burst of sparks. */
+.pd-window.bag .pd-slot.charging::after {
+  padding: 0; -webkit-mask: none; mask: none;
+  background: url("/assets/ui/fl-hold-ring.png") 0 0 / 800% 100% no-repeat; image-rendering: pixelated;
+  animation: fl-ring .32s steps(7) .08s both;
+}
+@keyframes fl-ring { from { background-position: 0 0; } to { background-position: 100% 0; } }
+.pd-window.bag .pd-slot.fx-equip::before, .pd-window.bag .pd-slot.fx-plus::before {
+  background: url("/assets/ui/fl-equip-shine.png") 0 0 / 600% 100% no-repeat; image-rendering: pixelated;
+  animation: fl-shine .3s steps(5) both; animation-delay: calc(var(--age, 0) * -1ms);
+}
+@keyframes fl-shine { from { background-position: 0 0; } to { background-position: 100% 0; } }
+.pd-window.bag.dragging .drop-ok:not(.pd-bag-away) {
+  box-shadow: inset 0 0 0 2px var(--fire-gold, #ffcc66), inset 0 0 0 4px var(--void);
+  background-image: url("/assets/ui/fl-drop-glow.png"); background-size: 400% 100%; background-repeat: no-repeat; image-rendering: pixelated;
+  animation: fl-drop .64s steps(4) infinite;
+}
+@keyframes fl-drop { from { background-position: 0 0; } to { background-position: 133.333% 0; } }
+.pd-window.bag .pd-float { color: var(--fire-light, #ffeba4); }
+.pd-window.bag .pd-float::before {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 64px; height: 48px; margin: -24px 0 0 -32px; z-index: -1;
+  background: url("/assets/ui/fl-spark-burst.png") 0 0 / 500% 100% no-repeat; image-rendering: pixelated;
+  animation: fl-burst .35s steps(4) both; animation-delay: calc(var(--age, 0) * -1ms);
+}
+@keyframes fl-burst { from { background-position: 0 0; } to { background-position: 100% 0; } }
+.pd-window.bag.lite .pd-slot.fx-equip::before, .pd-window.bag.lite .pd-slot.fx-plus::before { background: rgba(255, 196, 60, .5); }
+@media (prefers-reduced-motion: reduce) {
+  .pd-window.bag .pd-slot.fx-equip::before, .pd-window.bag .pd-slot.fx-plus::before { background: rgba(255, 196, 60, .35); }
+  .pd-window.bag .pd-float::before { display: none; }
+}
