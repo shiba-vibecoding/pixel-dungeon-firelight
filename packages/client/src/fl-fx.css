@@ -24,3 +24,6 @@
   .fl-boss-sub { font-size: 24px; line-height: 30px; } .fl-boss-plate { gap: 26px; padding-right: 36px; min-width: 520px; } }
 @media (max-width: 420px) { .fl-boss-name { font-size: 26px; line-height: 30px; white-space: normal; text-wrap: balance; } .fl-boss-region { display: none; } .fl-boss-plate { gap: 10px; padding-right: 8px; } .fl-boss-sub { font: var(--text-caption, 400 15px/20px var(--font-small)); } }
 @media (prefers-reduced-motion: reduce) { .fl-boss-card, .fl-boss-face, .fl-boss-depth, .fl-boss-name, .fl-boss-sub { animation: none; } }
+/* The card leaves: faded out over the last 400 ms of its time (fx.json → bossCards.timeline.out). */
+.fl-boss-card.out { opacity: 0; transition: opacity .4s linear; }
+@media (prefers-reduced-motion: reduce) { .fl-boss-card.out { transition: none; } }

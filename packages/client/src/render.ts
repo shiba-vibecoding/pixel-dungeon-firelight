@@ -4,10 +4,12 @@ import { FALL_MS, type Puppet, TILE, type View } from './view';
 import { bossCard, depthCard, floatNumber, floorTitle, levelCard, nameplate, slainCard, waveCard } from './cards';
 
 import { fx } from './fx';
+import { drawFx2D } from './fxdraw2d';
 import { FEET_PX } from './r3d/project';
 import { CHEST_ANIMS, type HeapLook } from './motion';
 import { drawFrame, frameAt as sheetFrame, lookIndex, regionIndex, sheet, tintedImage } from './worldsheets';
 import { quality } from './quality';
+import { BOSS_CARD_MS } from './bosscard';
 import { t } from './i18n';
 
 /* Canvas renderer for the world, using the original 16px tiles and sprites. */
@@ -559,6 +561,8 @@ export function render(
   }
 
   fx.draw(ctx, now, seen);
+  // The designer's effects (fx.json): bolts, waves, clouds, traps, hits.
+  drawFx2D(ctx, now, visible);
 
   screenLayer(ctx, scene, view, camera, now, shown, shown.length);
 }
@@ -691,7 +695,8 @@ function screenLayer(
 
   // A boss's title card as it notices the party: its name and epithet on a band across the free middle.
   const intro = view.bossIntro;
-  if (intro && !bossCard(ctx, t.mobs[intro.kind].toUpperCase(), t.bossEpithets[intro.kind] ?? '', middle, canvas.width, now - intro.start, px)) {
+  // (When the card is a page element, fl-fx.css, the canvas draws nothing and only lets the intro go when the element has.)
+  if (intro && (intro.dom ? now - intro.start >= BOSS_CARD_MS : !bossCard(ctx, t.mobs[intro.kind].toUpperCase(), t.bossEpithets[intro.kind] ?? '', middle, canvas.width, now - intro.start, px))) {
     view.bossIntro = null;
   }
 

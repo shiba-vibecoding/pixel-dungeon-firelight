@@ -14,10 +14,14 @@ import { type Atmosphere, type BoltKit, GLOWING, type Kit, type MistKit, PARTICL
 import { type AirUniforms } from './fogofwar';
 import { K_FLOOR, K_WATER, type LevelGeom } from './levelgeom';
 import { QuadBatch } from './quadbatch';
+import { Fx3D } from './fx3d';
+import { ATLAS } from '../fxsheet';
 import type { SharedImages } from './assets3d';
 
 const TILE = 16;
-const SIZE = 256;
+/** The effects atlas (fxsheet.ts → ATLAS): the old 256 x 256 corner (below) and, round it, the room for the designer's sheets (fx3d.ts). */
+const ATLAS_W = ATLAS.w;
+const ATLAS_H = ATLAS.h;
 
 /** Where each picture is in the effects atlas (256 x 256, pixels). */
 const PARTICLES_AT = [0, 0, 96, 8] as const;
@@ -30,7 +34,7 @@ const MIST_AT = [128, 0, 128, 128] as const;
 /** A rectangle of the atlas as (u, v, du, dv) (flipped texture: v runs up). */
 const rect = (at: readonly [number, number, number, number], i = 0, frames = 1): [number, number, number, number] => {
   const w = at[2] / frames;
-  return [(at[0] + i * w) / SIZE, 1 - (at[1] + at[3]) / SIZE, w / SIZE, at[3] / SIZE];
+  return [(at[0] + i * w) / ATLAS_W, 1 - (at[1] + at[3]) / ATLAS_H, w / ATLAS_W, at[3] / ATLAS_H];
 };
 
 const RIPPLE_UV: Array<[number, number, number, number]> = [0, 1, 2, 3, 4, 5].map((i) => rect(RIPPLE_AT, i, 6));
@@ -42,7 +46,8 @@ const UV_MIST = rect(MIST_AT);
 /** The effects atlas: the kit's particles and ripples, and a few soft shapes drawn here. */
 export function fxTexture(images: SharedImages): CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = SIZE;
+  canvas.width = ATLAS_W;
+  canvas.height = ATLAS_H;
   const g = canvas.getContext('2d')!;
   g.drawImage(images.particles, PARTICLES_AT[0], PARTICLES_AT[1]);
   g.drawImage(images.ripple, RIPPLE_AT[0], RIPPLE_AT[1]);
@@ -169,6 +174,8 @@ export class Effects3D {
   readonly soft: QuadBatch;
   readonly glow: QuadBatch;
   readonly texture: CanvasTexture;
+  /** The designer's effects (fx3d.ts), drawn into the same two batches. */
+  readonly sheets: Fx3D;
   private geom: LevelGeom | null = null;
   private region = 0;
   /** The region's and the arena's particles, with their colours and the rate each is made at. */
@@ -214,8 +221,9 @@ export class Effects3D {
 
   constructor(scene: Scene, air: AirUniforms, images: SharedImages) {
     this.texture = fxTexture(images);
-    this.soft = new QuadBatch({ capacity: 640, texture: this.texture, additive: false, fog: air.tFog, renderOrder: 2 });
-    this.glow = new QuadBatch({ capacity: 420, texture: this.texture, additive: true, fog: air.tFog, renderOrder: 4 });
+    this.soft = new QuadBatch({ capacity: 900, texture: this.texture, additive: false, fog: air.tFog, renderOrder: 2 });
+    this.glow = new QuadBatch({ capacity: 560, texture: this.texture, additive: true, fog: air.tFog, renderOrder: 4 });
+    this.sheets = new Fx3D(this.soft, this.glow, this.texture, { w: ATLAS_W, h: ATLAS_H, regions: ATLAS.free });
     scene.add(this.soft.mesh, this.glow.mesh);
   }
 
@@ -649,7 +657,8 @@ export class Effects3D {
     this.glows(c);
     this.bolts(c, kit);
     this.legacy(c);
-    this.gas(c);
+    // The designer's effects and clouds; until their sheets have come, the older puffs of gas.
+    if (!this.sheets.frame(c, this.dynamic)) this.gas(c);
   }
 
   begin(): void {

@@ -1,10 +1,14 @@
-import { type Effect, HEIGHT, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
+import { type Effect, HEIGHT, type ItemKind, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
 import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
 import { quality } from './quality';
 import { seenCells } from './sight';
 import { duration, levelRegion } from './sprites';
+import { fxp } from './fxplayer';
+import { showBossCard } from './bosscard';
+import { addFxLights } from './fxdraw2d';
+import { regionIndex } from './worldsheets';
 
 /*
  * What the dungeon's events look like beyond the sprites: blood and sparks on
@@ -114,6 +118,50 @@ function goreOf(kind: string): Gore {
 
 const BOSSES = new Set(['goo', 'tengu', 'dm300', 'king', 'yog']);
 
+/*
+ * The designer's effects (fxplayer.ts): the screen takes their shake and flash through the effects module (so the settings' shake and
+ * reduced motion apply), and the player asks the view where a character is. Where it has a look for an event, the older effects of that
+ * event are left out below.
+ */
+let boundView: View | null = null;
+let boundWorld: World | null = null;
+const heroAt = { x: 0, y: 0 };
+const bossAt = { x: 0, z: 0 };
+const env = {
+  depth: 0,
+  myId: '',
+  labels: {} as Readonly<Partial<Record<ItemKind, number>>>,
+  where(id: string, out: { x: number; z: number }): boolean {
+    const puppet = boundView?.puppets.get(id);
+    if (!puppet || !boundView) return false;
+    boundView.positionInto(puppet, fx.now, heroAt);
+    out.x = (heroAt.x + TILE / 2) / TILE;
+    out.z = (heroAt.y + TILE / 2) / TILE;
+    return true;
+  },
+  htOf(id: string): number {
+    return boundView?.puppets.get(id)?.ht ?? 0;
+  },
+  sees(cell: number): boolean {
+    return boundWorld !== null && boundView !== null && seenCells(boundWorld, boundView.depth)[cell] === true;
+  },
+};
+fxp.sink = {
+  shake: (px, ms, now) => fx.shake(px, ms, now),
+  flash: (rgb, alpha, ms, now) => fx.flash(rgb, alpha, ms, now),
+  stain: (x, y, now, color) => fx.splat(x, y, now, [color], 5, 5),
+  reducedMotion: () => quality.reducedMotion,
+  light: () => quality.light,
+};
+fxp.locate = (id, now, out) => {
+  const puppet = boundView?.puppets.get(id);
+  if (!puppet || !boundView) return false;
+  boundView.positionInto(puppet, now, heroAt);
+  out.x = (heroAt.x + TILE / 2) / TILE;
+  out.z = (heroAt.y + TILE / 2) / TILE;
+  return true;
+};
+
 /** The way the last blow on each creature went, so its death can throw it apart that way. */
 const blows = new Map<string, { angle: number; at: number }>();
 /** A blow this recent still counts as the one that killed. */
@@ -177,6 +225,11 @@ const BOLT_GLOW: Readonly<Record<string, readonly string[]>> = {
 /** The look of one effect; called after the view has taken it in. */
 export function effectFx(effect: Effect, view: View, world: World, myId: string, now: number): void {
   const here = (depth: number): boolean => depth === view.depth;
+  boundView = view;
+  boundWorld = world;
+  env.depth = view.depth;
+  env.myId = myId;
+  env.labels = world.run.labels;
   switch (effect.type) {
     case 'attack': {
       if (!here(effect.depth)) return;
@@ -193,8 +246,11 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
           attacker.lungeY = ((to.y - from.y) / len) * 4;
         }
       }
+      // The designer's hit, crit (damage of 30 % of the target's health or more: the core has no flag) and miss. A hit's sparks go on
+      // top of the blood below; a miss's puff takes the place of the older white specks.
+      const own = fxp.onEffect(effect, env, now);
       if (!effect.hit || !to || !target) {
-        if (to) burst(to, now, { count: 3, colors: ['#ffffff', '#d0d0d0'], speed: [20, 40], life: [120, 220], size: [1, 1] });
+        if (to && !own) burst(to, now, { count: 3, colors: ['#ffffff', '#d0d0d0'], speed: [20, 40], life: [120, 220], size: [1, 1] });
         return;
       }
       const share = Math.min(1, effect.damage / Math.max(1, target.ht));
@@ -303,14 +359,18 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       return;
     case 'amulet':
     case 'victory': {
-      // The Amulet of Yendor taken, and the run won: a shower of gold over everything in sight.
+      // The Amulet of Yendor taken, and the run won: a shower of gold over everything in sight. (The Amulet taken for the first time
+      // also hangs over the hero with its light, shake and flash from the data; the gold stays over it.)
       const at = centreOf(view, effect.hero, now);
       if (!at) return;
+      const own = effect.type === 'amulet' && fxp.onEffect(effect, env, now);
       for (let i = 0; i < 6; i++) {
         fx.burst(at.x + (Math.random() - 0.5) * 120, at.y - 60 - Math.random() * 40, now + i * 120, { count: 30, colors: GOLD, glow: true, speed: [10, 50], life: [1200, 2200], gravity: 40, drag: 0.5, size: [1, 2], spread: 30 });
       }
-      fx.flash('255, 240, 160', 0.6, 1200, now);
-      fx.shake(3, 600, now);
+      if (!own) {
+        fx.flash('255, 240, 160', 0.6, 1200, now);
+        fx.shake(3, 600, now);
+      }
       return;
     }
     case 'yell':
@@ -318,32 +378,49 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       if (here(effect.depth) && effect.line === 'notice' && BOSSES.has(effect.kind)) {
         view.bossIntro = { kind: effect.kind, start: now };
         audio.duck(0.3, 2600);
-        fx.shake(4, 700, now);
-        fx.flash('120, 0, 0', 0.35, 700, now, true);
+        // The card is a page element (fl-fx.css) with red light at the boss and a kick of the camera, from the data; without them the
+        // canvas card is drawn and the ground trembles as it always did.
+        const base = `${import.meta.env.BASE_URL}assets/`;
+        if (showBossCard(effect.kind, effect.depth, regionIndex(effect.depth), base)) {
+          view.bossIntro.dom = true;
+          if (env.where(effect.mob, bossAt)) fxp.bossArrives(bossAt.x, bossAt.z, now);
+        } else {
+          fx.shake(4, 700, now);
+          fx.flash('120, 0, 0', 0.35, 700, now, true);
+        }
       }
       return;
     case 'levelUp': {
+      // The pillar of gold light at the feet comes from the data (its flash only for the hero who rose); the gold specks go over it.
+      const own = fxp.onEffect(effect, env, now);
       const at = centreOf(view, effect.hero, now);
       burst(at, now, { count: 46, colors: GOLD, glow: true, speed: [20, 70], life: [700, 1400], rise: 40, drag: 0.4, size: [1, 2], spread: 4 });
       if (effect.hero === myId) {
-        fx.flash('255, 230, 120', 0.25, 500, now);
+        if (!own) fx.flash('255, 230, 120', 0.25, 500, now);
         view.levelCard = { lvl: effect.lvl, start: now };
       }
       return;
     }
+    case 'resurrected':
+      fxp.onEffect(effect, env, now);
+      return;
     case 'scroll': {
       // The shouts and hushes of the scrolls (the others only log a line).
       const at = centreOf(view, effect.hero, now);
       if (!at) return;
       const mine = effect.hero === myId;
-      const calm = quality.reducedMotion;
+      // The designer's rings on the floor, their specks, light, shake and flash (fx.json) take the place of the canvas rings, specks and
+      // flashes below; the sounds stay.
+      const own = fxp.onEffect(effect, env, now);
       switch (effect.kind) {
         case 'challenge': {
           // «Оглушительный рёв»: red-orange shockwaves racing out, the view jolted, the hero's scream in specks.
-          fx.wave(at.x, at.y, now, { colors: ['#e0402a', '#ff7a3a'], rings: 4, tiles: 6, duration: 700, width: 2.5 });
-          burst(at, now, { count: 28, colors: ['#e0402a', '#ff7a3a', '#ffb070'], glow: true, speed: [50, 130], life: [300, 600], drag: 0.08, size: [1, 2], spread: 3 });
+          if (!own) {
+            fx.wave(at.x, at.y, now, { colors: ['#e0402a', '#ff7a3a'], rings: 4, tiles: 6, duration: 700, width: 2.5 });
+            burst(at, now, { count: 28, colors: ['#e0402a', '#ff7a3a', '#ffb070'], glow: true, speed: [50, 130], life: [300, 600], drag: 0.08, size: [1, 2], spread: 3 });
+          }
           audio.play('roar', 1, 0.9, mine ? undefined : at);
-          if (mine) {
+          if (mine && !own) {
             fx.shake(3, 300, now);
             fx.flash('224, 64, 42', 0.3, 500, now, true);
           }
@@ -351,18 +428,24 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
         }
         case 'terror':
           audio.play('wail', 1, 0.8, mine ? undefined : at);
-          fx.wave(at.x, at.y, now, { colors: ['#5a2a8a', '#3a1a60'], rings: 3, tiles: 5, duration: 1100, stagger: 200, width: 2.5 });
-          burst(at, now, { count: 14, colors: VOID, speed: [10, 40], life: [500, 1000], drag: 0.3, size: [1, 2], spread: 4 });
-          if (mine) fx.flash('30, 0, 50', 0.35, 700, now, true);
+          if (!own) {
+            fx.wave(at.x, at.y, now, { colors: ['#5a2a8a', '#3a1a60'], rings: 3, tiles: 5, duration: 1100, stagger: 200, width: 2.5 });
+            burst(at, now, { count: 14, colors: VOID, speed: [10, 40], life: [500, 1000], drag: 0.3, size: [1, 2], spread: 4 });
+            if (mine) fx.flash('30, 0, 50', 0.35, 700, now, true);
+          }
           return;
         case 'lullaby':
           audio.play('lullaby', 1, 0.8, mine ? undefined : at);
-          fx.wave(at.x, at.y, now, { colors: ['#bfe0ff', '#dff0ff'], rings: 3, tiles: 5, duration: 1500, stagger: 260, width: 2 });
-          burst(at, now, { count: 8, colors: ['#dff0ff', '#a8d0ff'], glow: true, speed: [4, 14], life: [900, 1500], rise: 18, drag: 0.4, size: [1, 2], spread: 6 });
+          if (!own) {
+            fx.wave(at.x, at.y, now, { colors: ['#bfe0ff', '#dff0ff'], rings: 3, tiles: 5, duration: 1500, stagger: 260, width: 2 });
+            burst(at, now, { count: 8, colors: ['#dff0ff', '#a8d0ff'], glow: true, speed: [4, 14], life: [900, 1500], rise: 18, drag: 0.4, size: [1, 2], spread: 6 });
+          }
           return;
         case 'psionic':
-          fx.wave(at.x, at.y, now, { colors: '#ffffff', rings: 1, tiles: 8, duration: 350, width: 3 });
-          if (mine && !calm) fx.flash('255, 255, 255', 0.45, 220, now);
+          if (!own) {
+            fx.wave(at.x, at.y, now, { colors: '#ffffff', rings: 1, tiles: 8, duration: 350, width: 3 });
+            if (mine && !quality.reducedMotion) fx.flash('255, 255, 255', 0.45, 220, now);
+          }
           return;
         default:
           return;
@@ -370,7 +453,9 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     }
     case 'healed': case 'dew': case 'vial': {
       const at = centreOf(view, effect.hero, now);
-      if (effect.amount > 0) burst(at, now, { count: 6 + Math.min(20, effect.amount), colors: HEAL, glow: true, speed: [5, 20], life: [500, 1000], rise: 26, drag: 0.4, size: [1, 1], spread: 5 });
+      // Healing: the green crosses rising and the ring at the feet come from the data (a dew drop or a vial keeps the older glow).
+      const own = effect.type === 'healed' && fxp.onEffect(effect, env, now);
+      if (effect.amount > 0 && !own) burst(at, now, { count: 6 + Math.min(20, effect.amount), colors: HEAL, glow: true, speed: [5, 20], life: [500, 1000], rise: 26, drag: 0.4, size: [1, 1], spread: 5 });
       return;
     }
     case 'pickedUp':
@@ -391,12 +476,15 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       const look = o[effect.kind];
       if (!look) return;
       const r = effect.radius;
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          const x = (effect.pos % WIDTH) + dx;
-          const y = Math.trunc(effect.pos / WIDTH) + dy;
-          if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) continue;
-          fx.burst(x * TILE + TILE / 2, y * TILE + TILE / 2, now, look);
+      // Flames, frost and purity are clouds of tiles from the data for as long as the burst lasts; the poisons are real gas on the floor.
+      if (!fxp.onEffect(effect, env, now)) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const x = (effect.pos % WIDTH) + dx;
+            const y = Math.trunc(effect.pos / WIDTH) + dy;
+            if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) continue;
+            fx.burst(x * TILE + TILE / 2, y * TILE + TILE / 2, now, look);
+          }
         }
       }
       if (effect.kind === 'fire') fx.pulse(cellCentre(effect.pos).x, cellCentre(effect.pos).y, now, '255, 130, 50', 4 + r, 520);
@@ -419,6 +507,8 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     }
     case 'zapped': {
       if (!here(effect.depth)) return;
+      // The designer's bolts (view.ts started the flight) bring their own hit, light, shake and flash when they land.
+      if (fxp.owns(effect)) return;
       const at = cellCentre(effect.to);
       const colors = BOLT_GLOW[effect.bolt ?? 'magic'] ?? BOLT_GLOW.magic!;
       fx.burst(at.x, at.y, now, { count: 16, colors, glow: true, speed: [20, 80], life: [250, 600], drag: 0.2, size: [1, 2] });
@@ -435,6 +525,8 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     }
     case 'trap':
       if (!here(effect.depth)) return;
+      // The plate's burst of light, with its light, shake and flash (none when a monster set it off), from the data.
+      if (fxp.onEffect(effect, env, now)) return;
       if (effect.mob) {
         // Under a monster, where the party can see it: the same plate going off, without shaking the screen
         // (LightningTrap: sparks and arcs; the rest a puff of dust off the plate).
@@ -463,14 +555,17 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       fx.shake(3, 260, now);
       return;
     }
-    case 'avalanche':
+    case 'avalanche': {
       if (!here(effect.depth)) return;
+      // The rocks fall from three cells up (from the data); the dust goes up where they land.
+      const late = fxp.onEffect(effect, env, now) ? 380 : 0;
       for (const cell of effect.cells) {
         const at = cellCentre(cell);
-        fx.burst(at.x, at.y - 6, now, { count: 8, colors: DUST, speed: [20, 70], life: [300, 700], gravity: 380, size: [1, 3] });
+        fx.burst(at.x, at.y - 6, now + late, { count: 8, colors: DUST, speed: [20, 70], life: [300, 700], gravity: 380, size: [1, 3] });
       }
-      fx.shake(6, 600, now);
+      fx.shake(6, 600, now + late);
       return;
+    }
     case 'special': {
       const to = cellCentre(effect.to);
       if (effect.ability === 'leap') {
@@ -478,7 +573,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
         fx.shake(5, 350, now + 150);
       } else if (effect.ability === 'smokeBomb') {
         const from = cellCentre(effect.from);
-        fx.burst(from.x, from.y, now, { count: 40, colors: SMOKE, speed: [5, 30], life: [800, 1500], rise: 12, drag: 0.5, size: [2, 4], spread: 8 });
+        if (!fxp.onEffect(effect, env, now)) fx.burst(from.x, from.y, now, { count: 40, colors: SMOKE, speed: [5, 30], life: [800, 1500], rise: 12, drag: 0.5, size: [2, 4], spread: 8 });
       } else if (effect.ability === 'moltenEarth') {
         fx.shake(3, 400, now);
       }
@@ -507,6 +602,8 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     }
     case 'shattered': {
       if (!here(effect.depth)) return;
+      // The splash in the potion's colour, and its puddle among the stains (from the data); the glass flies as before.
+      fxp.onEffect(effect, env, now);
       const at = cellCentre(effect.pos);
       fx.burst(at.x, at.y, now, { count: 14, colors: ['#ffffff', '#cfe8ff', '#a0c8e8'], speed: [30, 90], life: [200, 450], gravity: 260, size: [1, 1] });
       return;
@@ -624,6 +721,8 @@ export function lightsFor(level: Level, visible: readonly boolean[], view: View,
     const { x, y } = view.position(puppet, now);
     lights.push({ x: x + 8, y: y + 8, radius: 34, color: '255, 140, 50', strength: 0.25 * flicker(x + y) });
   }
+  // The designer's effects: a soft disc of each one's colour at intensity / 8.
+  addFxLights(lights, now, visible);
   return lights;
 }
 
