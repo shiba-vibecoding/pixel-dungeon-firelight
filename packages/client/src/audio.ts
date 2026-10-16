@@ -68,6 +68,7 @@ const KEPT: ReadonlySet<string> = new Set(['boss', 'badge']);
 const VARY: Partial<Record<Sound, number>> = {
   click: 0, tick: 0, levelup: 0, boss: 0, badge: 0, descend: 0, secret: 0.02, death: 0.02, quip: 0.03, equip: 0.03, alarm: 0, roar: 0.03,
   step: 0.07, stepGrass: 0.1, stepWood: 0.08, hit: 0.08, thump: 0.08, miss: 0.08, coin: 0.06, rustle: 0.12, drip: 0.15,
+  door_open: 0.1, door_locked: 0.08, door_close: 0.1,
 };
 const DEFAULT_VARY = 0.04;
 /** The fewest milliseconds between two of the same sound, and how many may sound at once. */

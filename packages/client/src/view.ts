@@ -995,7 +995,7 @@ export class View {
         case 'arena':
           if (effect.depth === this.depth && effect.sealed) {
             this.say(effect.depth === 15 ? t.lairSealed : t.arenaSealed, COLORS.warning, now);
-            audio.play(effect.depth === 15 ? 'rocks' : 'door_open', 0.7);
+            audio.play(effect.depth === 15 ? 'rocks' : 'door_close', 0.7);
           }
           break;
         case 'weakened':
