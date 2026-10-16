@@ -165,3 +165,64 @@ describe('the doors of a level', () => {
     expect(m[5]).toBe(0);
   });
 });
+
+describe('a secret door found, a door burnt, a wall mined', () => {
+  const across = (x: number, z: number): boolean => x >= 0 && z >= 0;
+  const open = (x: number, z: number): boolean => x === 20 && z >= 20 && z <= 22;
+  const topAt = (geom: LevelGeom, x: number, z: number): boolean => {
+    const { pos, verts } = geom.boxes;
+    for (let v = 0; v < verts; v += 4) {
+      const ys = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 1]!);
+      if (ys.some((y) => Math.abs(y - 1.5) > 1e-6)) continue;
+      const xs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3]!);
+      const zs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 2]!);
+      if (Math.min(...xs) === x && Math.max(...xs) === x + 1 && Math.min(...zs) === z && Math.max(...zs) === z + 1) return true;
+    }
+    return false;
+  };
+
+  it('has a gap and a leaf on the next frame: the geometry is patched and the doors are collected again', () => {
+    const map = mapOf([[20, 20, T.EMPTY], [20, 21, T.SECRET_DOOR], [20, 22, T.EMPTY]]);
+    const geom = new LevelGeom(map, 16, 16);
+    const swing = new DoorSwing();
+    swing.reset(geom.terrain, across, open);
+    // Hidden, it is a wall: a stone cap, no leaf.
+    expect(topAt(geom, 20, 21)).toBe(true);
+    expect(swing.leaves).toHaveLength(0);
+    // The search finds it (core turns it into a door).
+    map[20 + 21 * WIDTH] = T.DOOR;
+    expect(geom.patch(map)).toBe('solids');
+    expect(topAt(geom, 20, 21)).toBe(false);
+    expect(geom.kinds[20 + 21 * WIDTH]).toBe(K_WALL);
+    expect(swing.refresh(geom.terrain, across, open)).toBe(true);
+    expect(swing.leaves).toHaveLength(1);
+    const leaf = swing.leaves[0]!;
+    expect(leaf.cell).toBe(20 + 21 * WIDTH);
+    expect(leaf.angle).toBe(leaf.closedA);
+    // A second look changes nothing, and keeps the leaf as it is.
+    expect(swing.refresh(geom.terrain, across, open)).toBe(false);
+    expect(swing.leaves[0]).toBe(leaf);
+  });
+
+  it('keeps a swing going when the doors are collected again, and takes a burnt door away', () => {
+    const map = mapOf([[20, 20, T.EMPTY], [20, 21, T.DOOR], [20, 22, T.EMPTY]]);
+    const geom = new LevelGeom(map, 16, 16);
+    const swing = new DoorSwing();
+    swing.reset(geom.terrain, across, open);
+    map[20 + 21 * WIDTH] = T.OPEN_DOOR;
+    geom.patch(map);
+    swing.sync(geom.terrain, () => true, 0);
+    swing.step(80);
+    const leaf = swing.leaves[0]!;
+    expect(leaf.moving).toBe(true);
+    expect(swing.refresh(geom.terrain, across, open)).toBe(false);
+    expect(swing.leaves[0]).toBe(leaf);
+    expect(swing.moving).toBe(1);
+    // The door burns down to embers: no door, no leaf.
+    map[20 + 21 * WIDTH] = T.EMBERS;
+    geom.patch(map);
+    expect(swing.refresh(geom.terrain, across, open)).toBe(true);
+    expect(swing.leaves).toHaveLength(0);
+    expect(swing.moving).toBe(0);
+  });
+});

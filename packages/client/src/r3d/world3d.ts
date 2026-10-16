@@ -733,9 +733,18 @@ export class World3D {
     if (change === 'rebuilt') {
       this.dropMeshes();
       this.makeMeshes();
-    } else if (this.swing.sync(geom.terrain, (cell) => this.options.reveal === true || this.lastVisible[cell] === true, this.clock) > 0) {
-      // A door in sight begins to swing: its shadow is drawn again when it has swung, as well as now.
-      this.rig.shadowsStale = true;
+    } else {
+      // Whatever changed (a secret door found, a door burnt, a wall mined), the doors of the level are collected again, and the leaves
+      // made again if there are more or fewer: the gap and its leaf are there on the next frame.
+      const { across, passable } = this.doorSurroundings();
+      if (this.swing.refresh(geom.terrain, across, passable)) {
+        this.dropLeaves();
+        this.makeLeaves(true);
+      }
+      if (this.swing.sync(geom.terrain, (cell) => this.options.reveal === true || this.lastVisible[cell] === true, this.clock) > 0) {
+        // A door in sight begins to swing: its shadow is drawn again when it has swung, as well as now.
+        this.rig.shadowsStale = true;
+      }
     }
     this.scanProps();
     this.configureMirror();
@@ -763,6 +772,11 @@ export class World3D {
     }
     this.floorMesh = this.boxMesh = this.waterMesh = this.decalMesh = null;
     this.seenFloor = this.seenBox = -1;
+    this.dropLeaves();
+  }
+
+  /** The leaves' meshes are given back (the doors themselves are kept: DoorSwing). */
+  private dropLeaves(): void {
     for (const mesh of [this.leafMesh, this.lockMesh]) {
       if (!mesh) continue;
       this.scene.remove(mesh);
@@ -772,12 +786,21 @@ export class World3D {
     this.leafMesh = this.lockMesh = null;
   }
 
+  /** The level's terrain says which cells hold doors: beside a wall, open ground? */
+  private doorSurroundings(): { across: (x: number, z: number) => boolean; passable: (x: number, z: number) => boolean } {
+    const g = this.geom!;
+    return {
+      across: (x, z) => g.doorAcross(x, z),
+      passable: (x, z) => x >= 0 && z >= 0 && x < WIDTH && z < LENGTH / WIDTH && g.kinds[x + z * WIDTH] !== K_WALL,
+    };
+  }
+
   /** One leaf mesh per kind, an instance for each door of the level (the kind a door is not has its instance scaled to nothing). */
   private makeLeaves(keep: boolean): void {
     const g = this.geom!;
-    const passable = (x: number, z: number): boolean => x >= 0 && z >= 0 && x < WIDTH && z < LENGTH / WIDTH && g.kinds[x + z * WIDTH] !== K_WALL;
+    const { across, passable } = this.doorSurroundings();
     this.swing.reduced = this.options.reduced === true;
-    if (!keep || this.swing.leaves.length === 0) this.swing.reset(g.terrain, (x, z) => g.doorAcross(x, z), passable);
+    if (!keep || this.swing.leaves.length === 0) this.swing.reset(g.terrain, across, passable);
     const n = this.swing.leaves.length;
     if (n === 0 || !this.leafMaterial) return;
     for (const locked of [false, true]) {

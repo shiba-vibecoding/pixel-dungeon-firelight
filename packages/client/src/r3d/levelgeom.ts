@@ -20,7 +20,7 @@
  * and from cell to cell.
  */
 import { F, HEIGHT, LENGTH, T, terrainFlags, WIDTH } from '@pd/core';
-import { DOOR_IRON, DOOR_LEAF, DOOR_LEAF_LOCK, DOOR_TOP_H } from './doorart';
+import { DOOR_IRON, DOOR_LEAF, DOOR_LEAF_LOCK, DOOR_LOCK_H, DOOR_TOP_H } from './doorart';
 import { CAP_FIRST, EDGE_LIP, EDGE_ROCK, FACE_DECO, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from './tilemap';
 
 export const K_FLOOR = 0;
@@ -98,7 +98,9 @@ export const isGapDoor = (terrain: number): boolean => terrain === T.DOOR || ter
 const WOOD_LIT = [1.45, 1.22, 0.98];
 const STEEL_LIT = [1.2, 1.25, 1.4];
 const LEAF_LIT = [1.5, 1.35, 1.2];
-const LEAF_LIT_LOCKED = [1.4, 1.4, 1.45];
+/** A locked door is the same wood as the others, lit the same: its ironwork is dark. */
+const LEAF_LIT_LOCKED = LEAF_LIT;
+const IRON_LIT = [0.45, 0.47, 0.53];
 
 /** The entrance: three steps rising to the north. */
 export const isStairsUp = (terrain: number): boolean => terrain === T.ENTRANCE;
@@ -342,18 +344,19 @@ export function doorLeafBuffers(locked: boolean, cols: number, rows: number, wal
   // Wood only (doorart.ts): the original's door tile has a stone or plaster frame round the planks.
   const tile = locked ? DOOR_LEAF_LOCK : DOOR_LEAF;
   const tint = locked ? LEAF_LIT_LOCKED : LEAF_LIT;
-  const top = locked ? { tile: DOOR_IRON, tint: [0.55, 0.6, 0.7], band: 'z' as const } : { tile: DOOR_TOP_H, tint: WOOD_LIT, band: 'z' as const };
+  // The top edge is planks either way; a locked leaf's is bound with two dark iron straps.
+  const top = { tile: locked ? DOOR_LOCK_H : DOOR_TOP_H, tint: WOOD_LIT, band: 'z' as const };
   const h = LEAF_THICK / 2;
   boxFaces(b, cols, rows, -LEAF_REACH_BACK, 0, -h, LEAF_REACH, wall, h, tile, tint, 15, top);
   if (locked) {
     for (const side of [1, -1]) {
       const z0 = side > 0 ? h : -h - 0.04;
       const z1 = side > 0 ? h + 0.04 : -h;
-      boxFaces(b, cols, rows, -LEAF_REACH_BACK, 0.3, z0, LEAF_REACH, 0.42, z1, DOOR_IRON, STEEL_LIT, 1 | 8);
-      boxFaces(b, cols, rows, -LEAF_REACH_BACK, 1.05, z0, LEAF_REACH, 1.17, z1, DOOR_IRON, STEEL_LIT, 1 | 8);
+      boxFaces(b, cols, rows, -LEAF_REACH_BACK, 0.3, z0, LEAF_REACH, 0.42, z1, DOOR_IRON, IRON_LIT, 1 | 8);
+      boxFaces(b, cols, rows, -LEAF_REACH_BACK, 1.05, z0, LEAF_REACH, 1.17, z1, DOOR_IRON, IRON_LIT, 1 | 8);
       const p0 = side > 0 ? h : -h - 0.08;
       const p1 = side > 0 ? h + 0.08 : -h;
-      boxFaces(b, cols, rows, 0.32, 0.55, p0, 0.6, 0.85, p1, DOOR_IRON, STEEL_LIT, 1 | 8);
+      boxFaces(b, cols, rows, 0.32, 0.55, p0, 0.6, 0.85, p1, DOOR_IRON, IRON_LIT, 1 | 8);
     }
   }
   return b;

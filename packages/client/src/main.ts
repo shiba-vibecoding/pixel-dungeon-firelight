@@ -104,6 +104,7 @@ import { report, startReporting } from './report';
 import { STEP_MS, TILE, View } from './view';
 import { boxOf, CamControl } from './camcontrol';
 import { Pace } from './pace';
+import { Refusals } from './refusal';
 import { forgetSight, seenCells, seenEnemies } from './sight';
 import { interruptWalk, tookDamage, type Vitals, vitalsOf } from './interrupt';
 import { confirmDanger, firstDanger, gasCells, gasKindAt, stepDanger } from './mistap';
@@ -2017,24 +2018,23 @@ function tapCell(cell: number, quiet = false): void {
   // Chasm.heroJump: a chasm right beside the hero asks whether to jump in; floating, one drifts over it.
   if (hasFlag(level.map[cell]!, F.PIT) && !floating) {
     if (adjacent(me.pos, cell)) {
+      // The question is asked once: a key held toward the edge does not ask again at every repeat.
+      held.code = '';
       showConfirm(t.chasm, t.jumpQuestion, t.jumpYes, t.jumpNo, () => send({ type: 'jump', to: cell }, performance.now()), hideOverlay);
     }
     return;
   }
   if (level.map[cell] === T.LOCKED_DOOR && !me.items.some((i) => i.kind === 'key.iron' && i.depth === me.depth)) {
-    view.say(t.locked, '#ff8800');
-    feedback.refuse(cell, vnow);
+    refuse(cell, 'locked', t.locked, vnow);
     return;
   }
   // Hero.handle: the way down from a boss's depth wants its skeleton key.
   if (level.map[cell] === T.LOCKED_EXIT && !me.items.some((i) => i.kind === 'key.skeleton' && i.depth === me.depth)) {
-    view.say(t.exitLocked, '#ff8800');
-    feedback.refuse(cell, vnow);
+    refuse(cell, 'exitLocked', t.exitLocked, vnow);
     return;
   }
   if (level.map[cell] === T.BARRICADE) {
-    view.say(t.barricade, '#ff8800');
-    feedback.refuse(cell, vnow);
+    refuse(cell, 'barricade', t.barricade, vnow);
     return;
   }
   // A tap on a wall (or a statue, a bookshelf: anything solid one cannot walk into) walks to the cell under it, the floor in
@@ -2042,6 +2042,8 @@ function tapCell(cell: number, quiet = false): void {
   if (hasFlag(level.map[cell]!, F.SOLID) && !hasFlag(level.map[cell]!, F.PASSABLE)) {
     const below = cell + WIDTH;
     if (below >= WIDTH * HEIGHT || !explored[below] || !hasFlag(level.map[below]!, F.PASSABLE)) {
+      // A wall with no floor in front of it: nowhere to go, and a held key stops here.
+      held.code = '';
       if (!quiet) feedback.refuse(cell, vnow);
       return;
     }
@@ -2060,7 +2062,8 @@ function tapCell(cell: number, quiet = false): void {
     const trap = risky?.findIndex((c) => c !== cell && hasFlag(level.map[c]!, F.AVOID)) ?? -1;
     if (risky && trap >= 0) {
       walk.queue = risky.slice(0, trap);
-      view.say(t.trapInTheWay, '#ff8800');
+      if (refusals.allow(cell, 'trapInTheWay', vnow)) view.say(t.trapInTheWay, '#ff8800');
+      held.code = '';
       if (!quiet && walk.queue.length > 0) feedback.aim(walk.queue[walk.queue.length - 1]!, false, vnow);
     } else if (!quiet) {
       // No way there: say so where the finger was.
@@ -2092,6 +2095,19 @@ function tapCell(cell: number, quiet = false): void {
   walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && (me.depth > 1 || hasAmulet(me))) walk.stairs = 'ascend';
+}
+
+/** What the game refused to do and said so lately (refusal.ts). */
+const refusals = new Refusals();
+
+/**
+ * A step the game refuses: said once (not at each repeat of a held key), shown where the finger was, and the held key's walk ends:
+ * an arrow held down toward a locked door would otherwise retry the step at every frame, and fill the log.
+ */
+function refuse(cell: number, reason: string, text: string, now: number): void {
+  if (refusals.allow(cell, reason, performance.now())) view.say(text, '#ff8800');
+  feedback.refuse(cell, now);
+  held.code = '';
 }
 
 /** The question before a step into a cloud: the gas's name and what it does (i18n-safety.ts); «Cancel» at the left, «Walk in» at the right. */
