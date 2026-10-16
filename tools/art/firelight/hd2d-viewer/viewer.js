@@ -401,6 +401,84 @@ if (BOSS && boss) {
   scene.add(L);
 }
 
+/* ---------- effects of part 6 (fx/fx.json): a scene of them in the room ---------- */
+const FXS = Q.get('fx');
+const tints = [];
+if (FXS) {
+  const FX = await (await fetch('fx/fx.json')).json();
+  const imgCache = {};
+  const sheetImg = async (src) => imgCache[src] || (imgCache[src] = await loadImg(src));
+  const [hxp, hzp] = hero;
+  /** one frame of an effect at a cell (x, z in cells, may be fractional): flat on the floor or standing, with its light */
+  async function put(id, frame, x, z, o = {}) {
+    const e = FX.fx[id]; const img = await sheetImg(e.sheet);
+    const tex = cellTexture(img, frame * e.w, (o.row ?? e.row) * e.h, e.w, e.h);
+    const sc = o.scale || 1; const w = e.w / 16 * sc, h = e.h / 16 * sc;
+    const add = e.blend === 'add';
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), add
+      ? new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: id.startsWith('gas.') ? new THREE.Color(0.9, 0.9, 0.9) : (e.w >= 48 ? new THREE.Color(1, 1, 1) : new THREE.Color(1.4, 1.4, 1.4)) })
+      : new THREE.MeshStandardMaterial({ map: tex, transparent: true, opacity: id.startsWith('gas.') ? 0.78 : 1, depthWrite: false, roughness: 1, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.25 }));
+    const flat = (o.at || (e.anchor === 'floor' || e.anchor === 'feet-floor' ? 'floor' : 'stand')) === 'floor';
+    if (flat) { m.rotation.x = -Math.PI / 2; m.position.set(x, (e.lift ?? 0.02) + (o.y || 0), z); }
+    else {
+      m.rotation.x = -LEAN; if (o.rot) m.rotation.z = o.rot;
+      const up = e.anchor === 'feet' ? h / 2 + (e.rise || 0) : 0.55 + (o.y || 0);
+      m.position.set(x, up * STRETCH ** (e.anchor === 'feet' ? 1 : 0), z + 0.1); if (e.anchor === 'feet') m.scale.y = STRETCH;
+    }
+    m.renderOrder = 5; scene.add(m);
+    if (o.light !== false && e.light) {
+      const L_ = e.light; const k = o.lk ?? 1;
+      const pl = new THREE.PointLight(L_.color, L_.intensity * k, L_.radius, 1.4); pl.position.set(x, flat ? 0.5 : 0.8, z + 0.2); scene.add(pl);
+    }
+    if (o.tint && e.tint) tints.push(e.tint);
+    return m;
+  }
+  const along = async (id, x0, z, x1, frame0 = 0, o = {}) => { for (let x = x0, i = 0; x < x1; x += 1, i++) await put(id, (frame0 + i) % FX.fx[id].frames, x + 0.5, z, { light: false, ...o }); };
+  const S = {
+    bolts: async () => {    // sewers close: a firebolt at the gnoll, a magic missile, lightning from the hero to the crab and its strike
+      await put('bolt.fire', 1, hxp + 2.3, hzp - 0.6, { rot: 0.45, scale: 1 });
+      await put('bolt.fire.hit', 2, hxp + 1.6 + 1.6, hzp - 1.2, { light: false });
+      await put('bolt.magic', 2, hxp - 1.4, hzp - 1.6, { rot: 2.4 });
+      for (let i = 0; i < 2; i++) await put('bolt.lightning', (i + 1) % 4, hxp - 0.2 - i * 1, hzp + 0.7 + i * 0.25, { rot: -2.9, light: i === 0 });
+      await put('bolt.lightning.strike', 1, hxp - 2.5, hzp + 1.3);
+    },
+    rays: async () => {     // caves close: disintegration across the cave, poison and teleport bolts
+      await put('bolt.beam.start', 1, hxp + 1, hzp + 0.1, { light: false }); await along('bolt.beam', hxp + 1.5, hzp + 0.1, hxp + 4, 0, {});
+      await put('bolt.beam', 0, hxp + 3, hzp + 0.1, { light: true }); await put('bolt.beam.end', 2, hxp + 4.5, hzp + 0.1);
+      await put('bolt.poison', 1, hxp - 1.6, hzp - 1.3, { rot: 2.6 }); await put('bolt.teleport', 2, hxp - 2.2, hzp + 1.1);
+      await put('bolt.regrowth', 1, hxp + 0.4, hzp - 2, { rot: 1.4 });
+    },
+    waves: async () => {    // city: the challenge's roar round the hero, two rings, specks, the red tint
+      await put('wave.challenge', 5, hxp + 0.5, hzp + 0.5, { scale: 3, tint: true }); await put('wave.challenge', 2, hxp + 0.5, hzp + 0.5, { scale: 2, light: false });
+      for (let i = 0; i < 8; i++) await put('wave.challenge.specks', i % 4, hxp + 0.5 + Math.cos(i * 0.8) * 2.4, hzp + 0.5 + Math.sin(i * 0.8) * 2, { light: false });
+    },
+    terror: async () => { await put('wave.terror', 4, hxp + 0.5, hzp + 0.5, { scale: 3, tint: true }); for (let i = 0; i < 6; i++) await put('wave.terror.specks', i % 4, hxp + 0.5 + Math.cos(i) * 2.2, hzp + Math.sin(i) * 1.6, { light: false }); },
+    lullaby: async () => { await put('wave.lullaby', 5, hxp + 0.5, hzp + 0.5, { scale: 3, tint: true }); await put('wave.lullaby', 2, hxp + 0.5, hzp + 0.5, { scale: 2, light: false }); for (let i = 0; i < 6; i++) await put('wave.lullaby.specks', i % 4, hxp + 0.5 + Math.cos(i * 1.1) * 2, hzp + Math.sin(i * 1.1) * 1.6, { light: false }); },
+    psionic: async () => { await put('wave.psionic', 5, hxp + 0.5, hzp + 0.5, { scale: 3, tint: false }); for (let i = 0; i < 8; i++) await put('wave.psionic.specks', i % 4, hxp + 0.5 + Math.cos(i * 0.8) * 2.8, hzp + Math.sin(i * 0.8) * 2.2, { light: false }); },
+    gas: async () => {      // sewers close: a cloud of toxic gas, a paralytic one, a crimson flask broken, flames
+      const cloud = async (id, cx, cz, wdt, hgt) => { for (let z = 0; z < hgt; z++) for (let x = 0; x < wdt; x++) {
+        const d = (x > 0 && x < wdt - 1 && z > 0 && z < hgt - 1) ? 2 : ((x > 0 && x < wdt - 1) || (z > 0 && z < hgt - 1) ? 1 : 0);
+        await put(id, (x + z) % 4, cx + x + 0.5, cz + z + 0.5, { row: d, light: false }); } };
+      await cloud('gas.toxic', hxp + 1, hzp - 2, 4, 3); await cloud('gas.paralytic', hxp - 4, hzp - 1, 3, 3);
+      await put('potion.splash.crimson', 3, hxp - 1.5, hzp + 2, {}); await put('potion.splash.turquoise', 5, hxp + 2.5, hzp + 2.2, { light: false });
+      for (let i = 0; i < 3; i++) await put('gas.fire', i, hxp + 2.5 + i, hzp + 1, { row: 2 - (i % 2), light: i === 1 });
+    },
+    traps: async () => {    // prison: four traps going off along the corridor
+      await put('trap.fire', 2, hxp - 2.5, hzp + 0.5); await put('trap.lightning', 1, hxp + 2.5, hzp + 0.5, { tint: false });
+      await put('trap.summoning', 4, hxp + 0.5, hzp + 2.5); await put('trap.alarm', 1, hxp - 2.5, hzp + 2.5);
+      await put('trap.toxic', 3, hxp + 4.5, hzp + 2.5); await put('trap.poison', 2, hxp + 0.5, hzp - 1.5);
+    },
+    hero: async () => {     // city: a level gained, a critical blow on the monk, a miss, healing
+      await put('hero.levelup', 3, hxp + 0.5, hzp + 0.55, { scale: 1 });
+      await put('hit.crit', 1, hxp + 3.5, hzp - 0.5); await put('hit.miss', 2, hxp + 2.8, hzp - 0.2, { light: false });
+      await put('hit', 1, hxp - 1.5, hzp + 1);
+    },
+    ankh: async () => { await put('hero.ankh', 4, hxp + 0.5, hzp + 0.55, { tint: true }); },
+    amulet: async () => { await put('hero.amulet', 3, hxp + 0.5, hzp + 0.55, { tint: false }); },
+  };
+  await S[FXS]?.();
+}
+
 /* ---------- the rim of the strongest light on each figure ---------- */
 if (RULES && SP.rim.on && !Q.has('norim')) {
   const lights = []; scene.traverse((o) => { if (o.isPointLight || o.isSpotLight) lights.push(o); });
@@ -473,4 +551,5 @@ composer.addPass(new UnrealBloomPass(new THREE.Vector2(vw, vh), bl.strength, bl.
 composer.addPass(new OutputPass());
 composer.render();
 composer.render();
+for (const t of tints) { const d = document.createElement('div'); d.style.cssText = `position:fixed;inset:0;pointer-events:none;background:${t.color};opacity:${t.alpha * 0.6};mix-blend-mode:screen`; document.body.append(d); }
 window.__ready = true;

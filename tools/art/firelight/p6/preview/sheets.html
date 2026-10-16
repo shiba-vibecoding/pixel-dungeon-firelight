@@ -1,0 +1,68 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Firelight effects</title>
+<style>
+@font-face { font-family: G11; src: url(fonts/Galmuri11.woff2); } @font-face { font-family: G9; src: url(fonts/Galmuri9.woff2); }
+:root { --void:#0b0b09; --s9:#1f211c; --s8:#282a24; --s3:#7a8173; --ink:#e8e2c8; --mut:#b0b5a3; --light:#ffeba4; --gold:#ffcc66; --flame:#ff9a3a; --litdark:#4a3424; }
+* { box-sizing: border-box; } html, body { margin: 0; background: var(--void); color: var(--ink); font: 13px/1.35 G9, monospace; -webkit-font-smoothing: none; }
+canvas, img { image-rendering: pixelated; display: block; }
+#app { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-bottom: 2px solid var(--litdark); padding-bottom: 8px; }
+.top h1 { margin: 0; font: 26px/1 G11; color: var(--light); text-shadow: 2px 2px 0 #1a0a06; } .top span { color: var(--mut); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 8px; }
+.fx { background: var(--s9); border: 2px solid var(--s8); border-bottom-color: var(--litdark); padding: 6px 8px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.fx h3 { margin: 0; font: 16px/1.1 G11; color: var(--light); font-weight: 400; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.fx h3 code { font: 11px G9; color: var(--s3); }
+.strip { background: #121310; padding: 4px; overflow: hidden; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--mut); font-size: 12px; }
+.meta b { color: var(--ink); font-weight: 400; }
+.sw { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; vertical-align: -1px; margin-right: 3px; }
+.chip { background: var(--s8); padding: 0 6px; color: var(--gold); }
+.legend { color: var(--mut); font-size: 12px; }
+@media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+</style></head><body><div id="app"></div><script type="module">
+const Q = new URLSearchParams(location.search); const L = Q.get('lang') || 'en', P = Q.get('p') || 'bolts', WIDE = innerWidth >= 900;
+const D = await (await fetch('fx/fx.json')).json(); const FX = D.fx;
+const T = { en: { bolts: 'Wand bolts', thrown: 'Thrown weapons', waves: 'Scroll waves', potions: 'Potion splashes', gas: 'Clouds on the floor', traps: 'Traps going off', combat: 'Hero moments and blows',
+  sub: 'Firelight · effects · part 6 · fx/fx.json', fps: 'fps', light: 'light', shake: 'shake', tint: 'tint', none: 'no light', cells: 'cells', ms: 'ms', loop: 'loop', fly: 'flies', flash: 'flash', beam: 'beam', arc: 'arc', drop: 'drops', wave: 'wave', tile: 'tile', splat: 'splat', hang: 'hangs', particle: 'specks',
+  speed: 'cells/s', hit: 'then', rows: 'rows: thin · mid · thick', legend: 'legend', dirs: '8 directions' },
+  ru: { bolts: 'Заряды палочек', thrown: 'Метательное оружие', waves: 'Волны свитков', potions: 'Брызги зелий', gas: 'Облака на полу', traps: 'Срабатывание ловушек', combat: 'Моменты героя и удары',
+  sub: 'Firelight · эффекты · часть 6 · fx/fx.json', fps: 'к/с', light: 'свет', shake: 'тряска', tint: 'вспышка экрана', none: 'без света', cells: 'кл.', ms: 'мс', loop: 'по кругу', fly: 'летит', flash: 'вспышка', beam: 'луч', arc: 'дуга', drop: 'падает', wave: 'волна', tile: 'клетка', splat: 'лужа', hang: 'висит', particle: 'искры',
+  speed: 'кл./с', hit: 'затем', rows: 'ряды: редко · средне · густо', legend: 'легенда', dirs: '8 направлений' } }[L];
+const CUR = { ru: { flash: 'вспышка', follow: 'следует', along: 'вдоль', pulse: 'пульс', flicker: 'мерцает', steady: 'ровно' } };
+const LEG = { ru: { red: 'красный', orange: 'оранжевый', yellow: 'жёлтый', green: 'зелёный', teal: 'бирюзовый', violet: 'фиолетовый', white: 'белый', grey: 'серый' } };
+const img = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = src; });
+const el = (t, c, ...k) => { const e = document.createElement(t); if (c) e.className = c; for (const x of k) if (x != null) e.append(x); return e; };
+const txt = (t, c, s) => { const e = el(t, c); e.innerHTML = s; return e; };
+const num = (v) => L === 'ru' ? String(v).replace('.', ',') : String(v);
+async function strip(e, scale, rowsAll = false) {
+  const im = await img(e.sheet); const rows = rowsAll ? im.height / e.h : 1; const c = document.createElement('canvas');
+  c.width = im.width * scale; c.height = e.h * rows * scale; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.fillStyle = '#121310'; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(im, 0, rowsAll ? 0 : e.row * e.h, im.width, e.h * rows, 0, 0, c.width, c.height); c.style.width = c.width + 'px'; c.style.maxWidth = '100%'; c.style.height = 'auto'; return c;
+}
+function meta(e) {
+  const m = el('div', 'meta');
+  m.append(txt('span', 'chip', T[e.behaviour] || e.behaviour), txt('span', '', `${e.frames} × ${e.w}×${e.h} · <b>${e.fps}</b> ${T.fps}${e.loop ? ' · ' + T.loop : ''}${e.speed ? ` · ${e.speed} ${T.speed}` : ''}${e.directions ? ' · ' + T.dirs : ''} · ${e.blend}`));
+  if (e.light) m.append(txt('span', '', `<i class="sw" style="background:${e.light.color}"></i>${T.light} ${num(e.light.intensity)} · ${num(e.light.radius)} ${T.cells}${e.light.ms ? ` · ${e.light.ms} ${T.ms}` : ''} · ${(CUR[L] || {})[e.light.curve] || e.light.curve}`));
+  else m.append(txt('span', '', T.none));
+  if (e.shake) m.append(txt('span', '', `${T.shake} ${e.shake.px} px · ${e.shake.ms} ${T.ms}`));
+  if (e.tint) m.append(txt('span', '', `<i class="sw" style="background:${e.tint.color}"></i>${T.tint} ${Math.round(e.tint.alpha * 100)}% · ${e.tint.ms} ${T.ms}`));
+  if (e.hit || e.then) m.append(txt('span', '', `${T.hit} <b>${e.hit || e.then}</b>`));
+  return m;
+}
+async function card(id, scale = WIDE ? 4 : 3, rowsAll = false, extra = []) {
+  const e = FX[id]; const f = el('div', 'fx');
+  f.append(el('h3', '', (e.name ? e.name[L] : id), txt('code', '', id)));
+  const s = el('div', 'strip', await strip(e, scale, rowsAll)); for (const x of extra) s.append(await strip(FX[x], scale)); f.append(s, meta(e)); return f;
+}
+const grid = el('div', 'grid'); const ids = Object.keys(FX);
+if (P === 'bolts') for (const id of ids.filter((k) => k.startsWith('bolt.') && !k.endsWith('.hit') && !k.includes('.start') && !k.includes('.end') && !k.endsWith('.strike')))
+  grid.append(await card(id, WIDE ? 4 : 3, false, [FX[id].start, FX[id].end, FX[id].hit].filter(Boolean)));
+if (P === 'thrown') for (const id of ids.filter((k) => k.startsWith('thrown.'))) grid.append(await card(id, 4));
+if (P === 'waves') for (const id of ids.filter((k) => k.startsWith('wave.') && !k.endsWith('specks'))) grid.append(await card(id, WIDE ? 2 : 1, false, [FX[id].specks.id]));
+if (P === 'potions') for (const id of ids.filter((k) => k.startsWith('potion.'))) grid.append(await card(id, WIDE ? 2 : 2));
+if (P === 'gas') for (const id of ids.filter((k) => k.startsWith('gas.'))) { const c = await card(id, 4, true); c.append(txt('div', 'legend', T.rows)); grid.append(c); }
+if (P === 'traps') for (const id of ids.filter((k) => k.startsWith('trap.'))) { const c = await card(id, WIDE ? 3 : 2); c.querySelector('h3').append(txt('code', '', `${T.legend}: ${(LEG[L] || {})[FX[id].legend] || FX[id].legend}`)); grid.append(c); }
+if (P === 'combat') for (const id of ids.filter((k) => k.startsWith('hero.') || k.startsWith('hit'))) grid.append(await card(id, FX[id].w >= 48 ? (WIDE ? 2 : 1) : (WIDE ? 4 : 3)));
+document.getElementById('app').append(el('div', 'top', txt('h1', '', T[P]), txt('span', '', T.sub)), grid);
+await document.fonts.ready; window.__ready = true;
+</script></body></html>

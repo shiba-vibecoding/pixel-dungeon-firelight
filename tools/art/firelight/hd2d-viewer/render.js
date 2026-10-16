@@ -13,7 +13,9 @@ const { chromium } = require('playwright');
     await p.waitForFunction(() => window.__ready === true, null, { timeout: 120000 });
     await p.waitForTimeout(200);
     const names = ['sewers', 'prison', 'caves', 'city', 'halls'];
-    const f = `${out}/${names[r]}${boss === '1' ? '-boss' : ''}-${w}x${h}.png`;
+    // a scene of part 6 effects (extra fx=<scene>) is named after the scene
+    const fxn = (extra.match(/fx=([a-z]+)/) || [])[1];
+    const f = fxn ? `${out}/${fxn}-${w}x${h}.png` : `${out}/${names[r]}${boss === '1' ? '-boss' : ''}-${w}x${h}.png`;
     await p.screenshot({ path: f });
     console.log(f, Date.now() - t0, 'ms');
     await p.close();

@@ -1,0 +1,2215 @@
+{
+ "version": 1,
+ "tile": 16,
+ "note": "Every sheet is frames in a row (or rows) of w x h, nearest, whole multiples of 16. The same sheets in 2D and 3D.",
+ "blends": {
+  "add": "additive (light, fire, magic): in 3D the added batch, in 2D globalCompositeOperation lighter",
+  "normal": "blended (gas, smoke, glass, liquid, rocks)"
+ },
+ "behaviours": {
+  "fly": "moves from the caster to the target at `speed` cells/s, loops its frames; `orient` turns it along the path (2D rotate, 3D billboard about the view axis); `directions` picks a frame by the 8-way heading instead; on arrival plays `hit`",
+  "drop": "falls onto the target from `fall` cells above (avalanche rocks), then `hit`",
+  "beam": "a straight ray at once: `start` at the caster, the sheet tiled along the path, `end` at the target, for `ms`, then `hit`",
+  "arc": "as beam, but the tiles pick a random frame every step (`reroll`): a crackling lightning; `strike` at the target",
+  "flash": "plays once at a cell; `anchor` center (the cell middle, standing), feet (the figure's feet, standing, leaned like a sprite), floor (flat on the floor)",
+  "splat": "a flash flat on the floor whose `stay.frame` is left for `stay.ms`, fading",
+  "wave": "a ring flat on the floor round the caster, shown at the whole scale step that reaches `radius` cells, `rings` times `stagger` ms apart; throws `specks`; `tint` the screen (only the reader's if tintOnlyForReader) and `shake`",
+  "tile": "one cell of a cloud on the floor, looping; the row by the cell's gas volume (rows / volume); neighbours overlap, frames offset by (x + y)",
+  "hang": "stays over the figure for `hold` ms, looping",
+  "particle": "a speck thrown by a wave: drifts out (and up by `rise` px) for `life` ms"
+ },
+ "light": "PointLight in 3D: color, intensity (r169 physical, the scale of hd2d-kit bolts), radius = distance in cells (decay 1.4), ms = how long, curve: flash (up 15 % then down), follow (with the bolt while it flies), along (the beam: the light at its middle), pulse (1.5 Hz), flicker (fire), steady. 2D: a soft disc of `color` at intensity / 8 alpha",
+ "shake": "px = art pixels of the camera kick (fx.shake strength), ms",
+ "tint": "a flash of the whole screen: color, alpha, ms (fx.flash)",
+ "reducedMotion": "quality.reducedMotion: no shake, every tint at half its alpha",
+ "mobTrap": "a trap set off by a monster: its flash and light, no shake and no tint",
+ "fx": {
+  "bolt.magic": {
+   "sheet": "fx/bolts/magic-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#b8a8ff",
+    "intensity": 3,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Magic Missile",
+    "ru": "Волшебный заряд"
+   },
+   "orient": true,
+   "speed": 14,
+   "hit": "bolt.magic.hit"
+  },
+  "bolt.magic.hit": {
+   "sheet": "fx/bolts/magic-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#b8a8ff",
+    "intensity": 3.5999999999999996,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.fire": {
+   "sheet": "fx/bolts/fire-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#ff7a2a",
+    "intensity": 5,
+    "radius": 4,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Firebolt",
+    "ru": "Огненная стрела"
+   },
+   "orient": true,
+   "speed": 11,
+   "hit": "bolt.fire.hit"
+  },
+  "bolt.fire.hit": {
+   "sheet": "fx/bolts/fire-hit.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ff7a2a",
+    "intensity": 8.0,
+    "radius": 5,
+    "ms": 260,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 2,
+    "ms": 220
+   }
+  },
+  "bolt.poison": {
+   "sheet": "fx/bolts/poison-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#5aff3a",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Poison",
+    "ru": "Яд"
+   },
+   "orient": true,
+   "speed": 10,
+   "hit": "bolt.poison.hit"
+  },
+  "bolt.poison.hit": {
+   "sheet": "fx/bolts/poison-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#5aff3a",
+    "intensity": 2.4,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.slow": {
+   "sheet": "fx/bolts/slow-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#8a6aff",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Slowness",
+    "ru": "Замедление"
+   },
+   "orient": false,
+   "speed": 8,
+   "hit": "bolt.slow.hit"
+  },
+  "bolt.slow.hit": {
+   "sheet": "fx/bolts/slow-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#8a6aff",
+    "intensity": 2.4,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.regrowth": {
+   "sheet": "fx/bolts/regrowth-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#5ac83a",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Regrowth",
+    "ru": "Рост"
+   },
+   "orient": true,
+   "speed": 9,
+   "hit": "bolt.regrowth.hit"
+  },
+  "bolt.regrowth.hit": {
+   "sheet": "fx/bolts/regrowth-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#5ac83a",
+    "intensity": 2.4,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.teleport": {
+   "sheet": "fx/bolts/teleport-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#4ab8ff",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Teleportation",
+    "ru": "Телепортация"
+   },
+   "orient": false,
+   "speed": 16,
+   "hit": "bolt.teleport.hit"
+  },
+  "bolt.teleport.hit": {
+   "sheet": "fx/bolts/teleport-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#4ab8ff",
+    "intensity": 2.4,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.blink": {
+   "sheet": "fx/bolts/blink-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#d8e4ff",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Blink",
+    "ru": "Скачок"
+   },
+   "orient": true,
+   "speed": 22,
+   "hit": "bolt.blink.hit"
+  },
+  "bolt.blink.hit": {
+   "sheet": "fx/bolts/blink-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#d8e4ff",
+    "intensity": 2.4,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.amok": {
+   "sheet": "fx/bolts/amok-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#ff2a2a",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Amok",
+    "ru": "Бешенство"
+   },
+   "orient": true,
+   "speed": 12,
+   "hit": "bolt.amok.hit"
+  },
+  "bolt.amok.hit": {
+   "sheet": "fx/bolts/amok-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ff2a2a",
+    "intensity": 2.4,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.rocks": {
+   "sheet": "fx/bolts/rocks-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "drop",
+   "blend": "normal",
+   "anchor": "head",
+   "name": {
+    "en": "Avalanche",
+    "ru": "Камнепад"
+   },
+   "orient": false,
+   "speed": null,
+   "hit": "bolt.rocks.hit",
+   "from": "above",
+   "fall": 3
+  },
+  "bolt.rocks.hit": {
+   "sheet": "fx/bolts/rocks-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "center"
+  },
+  "bolt.flock": {
+   "sheet": "fx/bolts/flock-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "normal",
+   "anchor": "head",
+   "name": {
+    "en": "Flock",
+    "ru": "Стадо"
+   },
+   "orient": false,
+   "speed": 8,
+   "hit": "bolt.flock.hit"
+  },
+  "bolt.flock.hit": {
+   "sheet": "fx/bolts/flock-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "center"
+  },
+  "bolt.reach": {
+   "sheet": "fx/bolts/reach-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "add",
+   "anchor": "head",
+   "light": {
+    "color": "#8ab8ff",
+    "intensity": 1.5,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Reach",
+    "ru": "Досягаемость"
+   },
+   "orient": false,
+   "speed": 14,
+   "hit": "bolt.reach.hit"
+  },
+  "bolt.reach.hit": {
+   "sheet": "fx/bolts/reach-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#8ab8ff",
+    "intensity": 1.7999999999999998,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.shadow": {
+   "sheet": "fx/bolts/shadow-fly.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "normal",
+   "anchor": "head",
+   "light": {
+    "color": "#7a2aa0",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "follow"
+   },
+   "name": {
+    "en": "Shadow bolt (warlock)",
+    "ru": "Теневой заряд (чернокнижник)"
+   },
+   "orient": true,
+   "speed": 10,
+   "hit": "bolt.shadow.hit"
+  },
+  "bolt.shadow.hit": {
+   "sheet": "fx/bolts/shadow-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#7a2aa0",
+    "intensity": 2.4,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.beam": {
+   "sheet": "fx/bolts/beam-ray.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 20,
+   "loop": true,
+   "behaviour": "beam",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#c83aff",
+    "intensity": 4,
+    "radius": 4,
+    "ms": 420,
+    "curve": "along"
+   },
+   "name": {
+    "en": "Disintegration",
+    "ru": "Распад"
+   },
+   "start": "bolt.beam.start",
+   "end": "bolt.beam.end",
+   "ms": 420,
+   "hit": "bolt.beam.hit"
+  },
+  "bolt.beam.start": {
+   "sheet": "fx/bolts/beam-start.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 20,
+   "loop": true,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center"
+  },
+  "bolt.beam.end": {
+   "sheet": "fx/bolts/beam-end.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 20,
+   "loop": true,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center"
+  },
+  "bolt.beam.hit": {
+   "sheet": "fx/bolts/beam-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#c83aff",
+    "intensity": 4,
+    "radius": 3,
+    "ms": 160,
+    "curve": "flash"
+   }
+  },
+  "bolt.lightning": {
+   "sheet": "fx/bolts/lightning-arc.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 24,
+   "loop": true,
+   "behaviour": "arc",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#9fd8ff",
+    "intensity": 8,
+    "radius": 6,
+    "ms": 80,
+    "curve": "flash"
+   },
+   "tint": {
+    "color": "#e6f0ff",
+    "alpha": 0.35,
+    "ms": 180
+   },
+   "name": {
+    "en": "Lightning",
+    "ru": "Молния"
+   },
+   "ms": 180,
+   "hit": "bolt.lightning.strike",
+   "reroll": true,
+   "note": "the whole room flashes for 0.08 s; shamans throw the same"
+  },
+  "bolt.lightning.strike": {
+   "sheet": "fx/bolts/lightning-strike.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#c0e8ff",
+    "intensity": 6,
+    "radius": 4,
+    "ms": 140,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 3,
+    "ms": 200
+   }
+  },
+  "bolt.lightning.hit": {
+   "sheet": "fx/bolts/lightning-hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 5,
+   "fps": 16,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#c0e8ff",
+    "intensity": 3,
+    "radius": 3,
+    "ms": 120,
+    "curve": "flash"
+   }
+  },
+  "thrown.boomerang": {
+   "sheet": "fx/thrown/boomerang.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 18,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "normal",
+   "anchor": "center",
+   "name": {
+    "en": "Boomerang",
+    "ru": "Бумеранг"
+   },
+   "speed": 12,
+   "returns": true
+  },
+  "thrown.shuriken": {
+   "sheet": "fx/thrown/shuriken.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 16,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "normal",
+   "anchor": "center",
+   "name": {
+    "en": "Shuriken",
+    "ru": "Сюрикен"
+   },
+   "speed": 12
+  },
+  "thrown.tomahawk": {
+   "sheet": "fx/thrown/tomahawk.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 14,
+   "loop": true,
+   "behaviour": "fly",
+   "blend": "normal",
+   "anchor": "center",
+   "name": {
+    "en": "Tomahawk",
+    "ru": "Томагавк"
+   },
+   "speed": 12
+  },
+  "thrown.javelin": {
+   "sheet": "fx/thrown/javelin.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 8,
+   "fps": 1,
+   "loop": false,
+   "behaviour": "fly",
+   "blend": "normal",
+   "anchor": "center",
+   "name": {
+    "en": "Javelin",
+    "ru": "Дротик"
+   },
+   "speed": 12,
+   "directions": [
+    "E",
+    "NE",
+    "N",
+    "NW",
+    "W",
+    "SW",
+    "S",
+    "SE"
+   ]
+  },
+  "thrown.arrow": {
+   "sheet": "fx/thrown/arrow.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 8,
+   "fps": 1,
+   "loop": false,
+   "behaviour": "fly",
+   "blend": "normal",
+   "anchor": "center",
+   "name": {
+    "en": "Arrow / dart",
+    "ru": "Стрела / дротик"
+   },
+   "speed": 12,
+   "directions": [
+    "E",
+    "NE",
+    "N",
+    "NW",
+    "W",
+    "SW",
+    "S",
+    "SE"
+   ]
+  },
+  "wave.challenge": {
+   "sheet": "fx/waves/challenge-ring.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "wave",
+   "blend": "add",
+   "anchor": "feet-floor",
+   "light": {
+    "color": "#ff7a3a",
+    "intensity": 5,
+    "radius": 6,
+    "ms": 700,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 3,
+    "ms": 300
+   },
+   "tint": {
+    "color": "#e0402a",
+    "alpha": 0.3,
+    "ms": 500
+   },
+   "name": {
+    "en": "Challenge",
+    "ru": "Вызов"
+   },
+   "radius": 6,
+   "scaleSteps": [
+    1,
+    2,
+    3
+   ],
+   "rings": 2,
+   "stagger": 120,
+   "specks": {
+    "id": "wave.challenge.specks",
+    "count": 18
+   },
+   "tintOnlyForReader": true
+  },
+  "wave.challenge.specks": {
+   "sheet": "fx/waves/challenge-specks.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 8,
+   "loop": false,
+   "behaviour": "particle",
+   "blend": "add",
+   "anchor": "center",
+   "life": [
+    500,
+    1100
+   ],
+   "rise": 0
+  },
+  "wave.terror": {
+   "sheet": "fx/waves/terror-ring.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 8,
+   "loop": false,
+   "behaviour": "wave",
+   "blend": "add",
+   "anchor": "feet-floor",
+   "light": {
+    "color": "#8a4ac0",
+    "intensity": 3,
+    "radius": 5,
+    "ms": 1100,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 1,
+    "ms": 250
+   },
+   "tint": {
+    "color": "#1e0032",
+    "alpha": 0.35,
+    "ms": 700
+   },
+   "name": {
+    "en": "Terror",
+    "ru": "Ужас"
+   },
+   "radius": 5,
+   "scaleSteps": [
+    1,
+    2,
+    3
+   ],
+   "rings": 2,
+   "stagger": 200,
+   "specks": {
+    "id": "wave.terror.specks",
+    "count": 10
+   },
+   "tintOnlyForReader": true
+  },
+  "wave.terror.specks": {
+   "sheet": "fx/waves/terror-specks.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 8,
+   "loop": false,
+   "behaviour": "particle",
+   "blend": "normal",
+   "anchor": "center",
+   "life": [
+    500,
+    1100
+   ],
+   "rise": 12
+  },
+  "wave.lullaby": {
+   "sheet": "fx/waves/lullaby-ring.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 6,
+   "loop": false,
+   "behaviour": "wave",
+   "blend": "add",
+   "anchor": "feet-floor",
+   "light": {
+    "color": "#bfe0ff",
+    "intensity": 2,
+    "radius": 5,
+    "ms": 1500,
+    "curve": "flash"
+   },
+   "tint": {
+    "color": "#bfe0ff",
+    "alpha": 0.15,
+    "ms": 900
+   },
+   "name": {
+    "en": "Lullaby",
+    "ru": "Колыбельная"
+   },
+   "radius": 5,
+   "scaleSteps": [
+    1,
+    2,
+    3
+   ],
+   "rings": 3,
+   "stagger": 260,
+   "specks": {
+    "id": "wave.lullaby.specks",
+    "count": 8
+   },
+   "tintOnlyForReader": true
+  },
+  "wave.lullaby.specks": {
+   "sheet": "fx/waves/lullaby-specks.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 8,
+   "loop": false,
+   "behaviour": "particle",
+   "blend": "add",
+   "anchor": "center",
+   "life": [
+    500,
+    1100
+   ],
+   "rise": 12
+  },
+  "wave.psionic": {
+   "sheet": "fx/waves/psionic-ring.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 22,
+   "loop": false,
+   "behaviour": "wave",
+   "blend": "add",
+   "anchor": "feet-floor",
+   "light": {
+    "color": "#ffffff",
+    "intensity": 5,
+    "radius": 8,
+    "ms": 350,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 4,
+    "ms": 260
+   },
+   "tint": {
+    "color": "#ffffff",
+    "alpha": 0.55,
+    "ms": 220
+   },
+   "name": {
+    "en": "Psionic Blast",
+    "ru": "Псионика"
+   },
+   "radius": 8,
+   "scaleSteps": [
+    1,
+    2,
+    3
+   ],
+   "rings": 1,
+   "stagger": 0,
+   "specks": {
+    "id": "wave.psionic.specks",
+    "count": 12
+   },
+   "tintOnlyForReader": false
+  },
+  "wave.psionic.specks": {
+   "sheet": "fx/waves/psionic-specks.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 8,
+   "loop": false,
+   "behaviour": "particle",
+   "blend": "add",
+   "anchor": "center",
+   "life": [
+    500,
+    1100
+   ],
+   "rise": 0
+  },
+  "potion.splash.turquoise": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#17c3e6",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "turquoise",
+    "ru": "бирюзовое"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.crimson": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 1,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#ff002a",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "crimson",
+    "ru": "багровое"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.azure": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 2,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#1940ff",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "azure",
+    "ru": "лазурное"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.jade": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 3,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#00b34a",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "jade",
+    "ru": "нефритовое"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.golden": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 4,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#ccaa00",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "golden",
+    "ru": "золотое"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.magenta": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 5,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#cc0098",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "magenta",
+    "ru": "пурпурное"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.charcoal": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 6,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#404040",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "charcoal",
+    "ru": "угольное"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.ivory": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 7,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#f3ebda",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "ivory",
+    "ru": "слоновой кости"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.amber": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 8,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#f38b24",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "amber",
+    "ru": "янтарное"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.bistre": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 9,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#603913",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "bistre",
+    "ru": "бурое"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.indigo": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 10,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#6800b3",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "indigo",
+    "ru": "индиго"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "potion.splash.silver": {
+   "sheet": "fx/potions/splash.png",
+   "w": 32,
+   "h": 32,
+   "row": 11,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#919999",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "silver",
+    "ru": "серебристое"
+   },
+   "stay": {
+    "frame": 5,
+    "ms": 1400
+   }
+  },
+  "gas.toxic": {
+   "sheet": "fx/gas/toxic.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "normal",
+   "anchor": "floor",
+   "name": {
+    "en": "Toxic gas",
+    "ru": "Ядовитый газ"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 1,
+    "thick": 2
+   },
+   "volume": {
+    "thin": [
+     1,
+     5
+    ],
+    "mid": [
+     6,
+     15
+    ],
+    "thick": [
+     16,
+     null
+    ]
+   },
+   "lift": 0.25,
+   "note": "one cell of cloud: drawn flat over the floor at `lift` cells, neighbours overlap 2 px; the frame offset by (x + y) so a cloud never pulses as one"
+  },
+  "gas.paralytic": {
+   "sheet": "fx/gas/paralytic.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "normal",
+   "anchor": "floor",
+   "name": {
+    "en": "Paralytic gas",
+    "ru": "Парализующий газ"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 1,
+    "thick": 2
+   },
+   "volume": {
+    "thin": [
+     1,
+     5
+    ],
+    "mid": [
+     6,
+     15
+    ],
+    "thick": [
+     16,
+     null
+    ]
+   },
+   "lift": 0.25,
+   "note": "one cell of cloud: drawn flat over the floor at `lift` cells, neighbours overlap 2 px; the frame offset by (x + y) so a cloud never pulses as one"
+  },
+  "gas.smoke": {
+   "sheet": "fx/gas/smoke.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "normal",
+   "anchor": "floor",
+   "name": {
+    "en": "Smoke (smoke bomb)",
+    "ru": "Дым (дымовая шашка)"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 1,
+    "thick": 2
+   },
+   "volume": {
+    "thin": [
+     1,
+     5
+    ],
+    "mid": [
+     6,
+     15
+    ],
+    "thick": [
+     16,
+     null
+    ]
+   },
+   "lift": 0.25,
+   "note": "one cell of cloud: drawn flat over the floor at `lift` cells, neighbours overlap 2 px; the frame offset by (x + y) so a cloud never pulses as one"
+  },
+  "gas.frost": {
+   "sheet": "fx/gas/frost.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#ace8ff",
+    "intensity": 1,
+    "radius": 2,
+    "ms": 0,
+    "curve": "steady"
+   },
+   "name": {
+    "en": "Freezing mist",
+    "ru": "Ледяной туман"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 1,
+    "thick": 2
+   },
+   "volume": {
+    "thin": [
+     1,
+     5
+    ],
+    "mid": [
+     6,
+     15
+    ],
+    "thick": [
+     16,
+     null
+    ]
+   },
+   "lift": 0.25,
+   "note": "one cell of cloud: drawn flat over the floor at `lift` cells, neighbours overlap 2 px; the frame offset by (x + y) so a cloud never pulses as one"
+  },
+  "gas.web": {
+   "sheet": "fx/gas/web.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "normal",
+   "anchor": "floor",
+   "name": {
+    "en": "Web",
+    "ru": "Паутина"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 1,
+    "thick": 2
+   },
+   "volume": {
+    "thin": [
+     1,
+     5
+    ],
+    "mid": [
+     6,
+     15
+    ],
+    "thick": [
+     16,
+     null
+    ]
+   },
+   "lift": 0.02,
+   "note": "one cell of cloud: drawn flat over the floor at `lift` cells, neighbours overlap 2 px; the frame offset by (x + y) so a cloud never pulses as one"
+  },
+  "gas.fire": {
+   "sheet": "fx/gas/fire.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "add",
+   "anchor": "floor",
+   "light": {
+    "color": "#ff7a2a",
+    "intensity": 3,
+    "radius": 3,
+    "ms": 0,
+    "curve": "flicker"
+   },
+   "name": {
+    "en": "Fire",
+    "ru": "Огонь"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 1,
+    "thick": 2
+   },
+   "volume": {
+    "thin": [
+     1,
+     5
+    ],
+    "mid": [
+     6,
+     15
+    ],
+    "thick": [
+     16,
+     null
+    ]
+   },
+   "lift": 0.02,
+   "note": "one cell of cloud: drawn flat over the floor at `lift` cells, neighbours overlap 2 px; the frame offset by (x + y) so a cloud never pulses as one"
+  },
+  "gas.purity": {
+   "sheet": "fx/gas/purity.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "add",
+   "anchor": "floor",
+   "light": {
+    "color": "#fff6c8",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 600,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Purity (clears gas)",
+    "ru": "Очищение (снимает газ)"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 1,
+    "thick": 2
+   },
+   "volume": {
+    "thin": [
+     1,
+     5
+    ],
+    "mid": [
+     6,
+     15
+    ],
+    "thick": [
+     16,
+     null
+    ]
+   },
+   "lift": 0.25,
+   "note": "one cell of cloud: drawn flat over the floor at `lift` cells, neighbours overlap 2 px; the frame offset by (x + y) so a cloud never pulses as one"
+  },
+  "trap.alarm": {
+   "sheet": "fx/traps/traps.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "floor",
+   "light": {
+    "color": "#ff5a3a",
+    "intensity": 3,
+    "radius": 5,
+    "ms": 900,
+    "curve": "pulse"
+   },
+   "shake": {
+    "px": 1,
+    "ms": 400
+   },
+   "name": {
+    "en": "Alarm",
+    "ru": "Тревога"
+   },
+   "legend": "red",
+   "then": null
+  },
+  "trap.fire": {
+   "sheet": "fx/traps/traps.png",
+   "w": 32,
+   "h": 32,
+   "row": 1,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "floor",
+   "light": {
+    "color": "#ff7a2a",
+    "intensity": 6,
+    "radius": 4,
+    "ms": 600,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 2,
+    "ms": 220
+   },
+   "name": {
+    "en": "Fire",
+    "ru": "Огонь"
+   },
+   "legend": "orange",
+   "then": "gas.fire"
+  },
+  "trap.paralytic": {
+   "sheet": "fx/traps/traps.png",
+   "w": 32,
+   "h": 32,
+   "row": 2,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#f0e070",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 500,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Paralytic gas",
+    "ru": "Парализующий газ"
+   },
+   "legend": "yellow",
+   "then": "gas.paralytic"
+  },
+  "trap.toxic": {
+   "sheet": "fx/traps/traps.png",
+   "w": 32,
+   "h": 32,
+   "row": 3,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#7fdc4a",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 500,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Toxic gas",
+    "ru": "Ядовитый газ"
+   },
+   "legend": "green",
+   "then": "gas.toxic"
+  },
+  "trap.lightning": {
+   "sheet": "fx/traps/traps.png",
+   "w": 32,
+   "h": 32,
+   "row": 4,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "floor",
+   "light": {
+    "color": "#c0f4ff",
+    "intensity": 8,
+    "radius": 6,
+    "ms": 120,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 4,
+    "ms": 300
+   },
+   "tint": {
+    "color": "#e6f0ff",
+    "alpha": 0.5,
+    "ms": 220
+   },
+   "name": {
+    "en": "Lightning",
+    "ru": "Молния"
+   },
+   "legend": "teal",
+   "then": null
+  },
+  "trap.poison": {
+   "sheet": "fx/traps/traps.png",
+   "w": 32,
+   "h": 32,
+   "row": 5,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "floor",
+   "light": {
+    "color": "#c070ff",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 300,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Poison darts",
+    "ru": "Ядовитые иглы"
+   },
+   "legend": "violet",
+   "then": null
+  },
+  "trap.summoning": {
+   "sheet": "fx/traps/traps.png",
+   "w": 32,
+   "h": 32,
+   "row": 6,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "floor",
+   "light": {
+    "color": "#e8eef8",
+    "intensity": 4,
+    "radius": 4,
+    "ms": 700,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Summoning",
+    "ru": "Призыв"
+   },
+   "legend": "white",
+   "then": null
+  },
+  "trap.gripping": {
+   "sheet": "fx/traps/traps.png",
+   "w": 32,
+   "h": 32,
+   "row": 7,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "floor",
+   "shake": {
+    "px": 2,
+    "ms": 160
+   },
+   "name": {
+    "en": "Gripping",
+    "ru": "Капкан"
+   },
+   "legend": "grey",
+   "then": null
+  },
+  "hero.levelup": {
+   "sheet": "fx/combat/levelup.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 11,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 4,
+    "radius": 4,
+    "ms": 800,
+    "curve": "flash"
+   },
+   "tint": {
+    "color": "#ffcc66",
+    "alpha": 0.12,
+    "ms": 500
+   },
+   "name": {
+    "en": "Level up",
+    "ru": "Новый уровень"
+   }
+  },
+  "hero.ankh": {
+   "sheet": "fx/combat/ankh.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 10,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffeba4",
+    "intensity": 4,
+    "radius": 5,
+    "ms": 1200,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 2,
+    "ms": 300
+   },
+   "tint": {
+    "color": "#fff6c8",
+    "alpha": 0.35,
+    "ms": 900
+   },
+   "name": {
+    "en": "Ankh: back to life",
+    "ru": "Анкх: воскрешение"
+   }
+  },
+  "hero.amulet": {
+   "sheet": "fx/combat/amulet.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 10,
+   "fps": 10,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 4,
+    "radius": 6,
+    "ms": 2400,
+    "curve": "pulse"
+   },
+   "shake": {
+    "px": 3,
+    "ms": 600
+   },
+   "tint": {
+    "color": "#ffcc66",
+    "alpha": 0.25,
+    "ms": 1200
+   },
+   "name": {
+    "en": "The Amulet of Yendor",
+    "ru": "Амулет Йендора"
+   },
+   "rise": 0.3,
+   "hold": 2400,
+   "when": "the first pick-up only (effect.first)"
+  },
+  "hero.heal": {
+   "sheet": "fx/combat/heal.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#80ff80",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 500,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Healing",
+    "ru": "Исцеление"
+   }
+  },
+  "hit": {
+   "sheet": "fx/combat/hit.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 18,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "name": {
+    "en": "Hit",
+    "ru": "Удар"
+   }
+  },
+  "hit.crit": {
+   "sheet": "fx/combat/crit.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 5,
+   "fps": 16,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ffe9a0",
+    "intensity": 3,
+    "radius": 2,
+    "ms": 120,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 3,
+    "ms": 180
+   },
+   "name": {
+    "en": "Critical hit",
+    "ru": "Крит"
+   },
+   "when": "damage >= 30% of the target's max HP"
+  },
+  "hit.miss": {
+   "sheet": "fx/combat/miss.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "center",
+   "name": {
+    "en": "Miss",
+    "ru": "Промах"
+   }
+  }
+ },
+ "bossCards": {
+  "timeline": {
+   "dur": 2600,
+   "band": [
+    0,
+    220
+   ],
+   "portrait": [
+    120,
+    380
+   ],
+   "name": [
+    260,
+    520
+   ],
+   "sub": [
+    480,
+    700
+   ],
+   "hold": [
+    700,
+    2200
+   ],
+   "out": [
+    2200,
+    2600
+   ]
+  },
+  "portraitScale": {
+   "phone": 2,
+   "monitor": 3
+  },
+  "plate": {
+   "sheet": "fx/boss/plate.png",
+   "slice": 10
+  },
+  "light": {
+   "color": "#ff3a2a",
+   "intensity": 4,
+   "radius": 6,
+   "ms": 900,
+   "curve": "flash"
+  },
+  "shake": {
+   "px": 2,
+   "ms": 400
+  },
+  "bosses": {
+   "goo": {
+    "portrait": "fx/boss/portrait-goo.png",
+    "accent": "#7fdc4a",
+    "name": {
+     "en": "Goo",
+     "ru": "Жижа"
+    },
+    "sub": {
+     "en": "master of the sewers",
+     "ru": "владыка сточных вод"
+    },
+    "depth": 5
+   },
+   "tengu": {
+    "portrait": "fx/boss/portrait-tengu.png",
+    "accent": "#d8e4ff",
+    "name": {
+     "en": "Tengu",
+     "ru": "Тенгу"
+    },
+    "sub": {
+     "en": "the assassin of the prison",
+     "ru": "убийца из тюрьмы"
+    },
+    "depth": 10
+   },
+   "dm300": {
+    "portrait": "fx/boss/portrait-dm300.png",
+    "accent": "#ff3a2a",
+    "name": {
+     "en": "DM-300",
+     "ru": "DM-300"
+    },
+    "sub": {
+     "en": "the guardian machine",
+     "ru": "машина-страж"
+    },
+    "depth": 15
+   },
+   "king": {
+    "portrait": "fx/boss/portrait-king.png",
+    "accent": "#ffcc66",
+    "name": {
+     "en": "King of Dwarves",
+     "ru": "Король гномов"
+    },
+    "sub": {
+     "en": "lord of the undead court",
+     "ru": "владыка мёртвого двора"
+    },
+    "depth": 20
+   },
+   "yog": {
+    "portrait": "fx/boss/portrait-yog.png",
+    "accent": "#ff2a4a",
+    "name": {
+     "en": "Yog-Dzewa",
+     "ru": "Йог-Дзева"
+    },
+    "sub": {
+     "en": "the Old God",
+     "ru": "Древний бог"
+    },
+    "depth": 25
+   }
+  }
+ },
+ "events": {
+  "zapped.magic": "bolt.magic",
+  "zapped.fire": "bolt.fire",
+  "zapped.poison": "bolt.poison",
+  "zapped.slow": "bolt.slow",
+  "zapped.teleport": "bolt.teleport",
+  "zapped.blink": "bolt.blink",
+  "zapped.beam": "bolt.beam",
+  "zapped.rocks": "bolt.rocks",
+  "zapped.shadow": "bolt.shadow",
+  "zapped.amok": "bolt.amok",
+  "zapped.reach": "bolt.reach",
+  "zapped.flock": "bolt.flock",
+  "zapped.regrowth": "bolt.regrowth",
+  "zapped.lightning": "bolt.lightning",
+  "thrown.missile.boomerang": "thrown.boomerang",
+  "thrown.missile.shuriken": "thrown.shuriken",
+  "thrown.missile.tomahawk": "thrown.tomahawk",
+  "thrown.missile.javelin": "thrown.javelin",
+  "missile": "thrown.arrow",
+  "scroll.challenge": "wave.challenge",
+  "scroll.terror": "wave.terror",
+  "scroll.lullaby": "wave.lullaby",
+  "scroll.psionic": "wave.psionic",
+  "shattered.turquoise": "potion.splash.turquoise",
+  "shattered.crimson": "potion.splash.crimson",
+  "shattered.azure": "potion.splash.azure",
+  "shattered.jade": "potion.splash.jade",
+  "shattered.golden": "potion.splash.golden",
+  "shattered.magenta": "potion.splash.magenta",
+  "shattered.charcoal": "potion.splash.charcoal",
+  "shattered.ivory": "potion.splash.ivory",
+  "shattered.amber": "potion.splash.amber",
+  "shattered.bistre": "potion.splash.bistre",
+  "shattered.indigo": "potion.splash.indigo",
+  "shattered.silver": "potion.splash.silver",
+  "gas.toxic": "gas.toxic",
+  "gas.paralytic": "gas.paralytic",
+  "gas.web": "gas.web",
+  "burst.fire": "gas.fire",
+  "burst.frost": "gas.frost",
+  "burst.purity": "gas.purity",
+  "special.smokeBomb": "gas.smoke",
+  "trap.alarm": "trap.alarm",
+  "trap.fire": "trap.fire",
+  "trap.paralytic": "trap.paralytic",
+  "trap.toxic": "trap.toxic",
+  "trap.lightning": "trap.lightning",
+  "trap.poison": "trap.poison",
+  "trap.summoning": "trap.summoning",
+  "trap.gripping": "trap.gripping",
+  "yell.notice.goo": "boss.goo",
+  "yell.notice.tengu": "boss.tengu",
+  "yell.notice.dm300": "boss.dm300",
+  "yell.notice.king": "boss.king",
+  "yell.notice.yog": "boss.yog",
+  "levelUp": "hero.levelup",
+  "resurrected": "hero.ankh",
+  "amulet": "hero.amulet",
+  "healed": "hero.heal",
+  "attack.hit": "hit",
+  "attack.crit": "hit.crit",
+  "attack.miss": "hit.miss"
+ }
+}

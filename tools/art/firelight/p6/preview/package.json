@@ -1,0 +1,12 @@
+{
+  "name": "firelight-fx-preview",
+  "private": true,
+  "description": "Firelight part 6: the effect sheets (sheets.html) and the boss cards (boss.html) over the arenas",
+  "scripts": {
+    "link": "ln -sfn ../../../../../packages/client/public/assets/fx fx && ln -sfn ../../../../../packages/client/public/fonts fonts && ln -sfn ../../../../../packages/client/src/fl-fx.css fl-fx.css && ln -sfn ../../../../../docs/design/previews/firelight/fx/arenas bossbg",
+    "serve": "python3 -m http.server 8792 --bind 127.0.0.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  }
+}

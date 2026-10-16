@@ -34,6 +34,7 @@ import { type Buffers, type GeomKit, LevelGeom } from './levelgeom';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
+import { BloodWater, withBlood } from './bloodwater';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
 import type { WearQuad } from '../wearfx';
@@ -69,6 +70,9 @@ export interface Shown {
 }
 
 const MAX_SPRITES = 360;
+const MAX_DEAD = 96;
+/** How long a body lies in the 3D view before it fades away (the original's dead sprite fades out in about this). */
+const CORPSE_FADE_MS = 1000;
 /** The most soft-bodied figures (a ghost, a wraith, bees) drawn at once, in their own blended batch. */
 const MAX_BLENDED = 48;
 /** The cold glow round a ghost. */
@@ -215,6 +219,8 @@ export class World3D {
   private terrainMaterial: MeshStandardMaterial | null = null;
   private decalMaterial: MeshBasicMaterial | null = null;
   private waterMaterial: MeshStandardMaterial | null = null;
+  /** Blood in the water: the red a victim leaves in it (bloodwater.ts). */
+  private readonly blood = new BloodWater();
   private waterScroll: [number, number] = [0, 0.006];
   /** The cells of the level that carry a prop that stands over the floor (high grass, fungi, a signpost), and their cut-outs. */
   private props: number[] = [];
@@ -224,6 +230,18 @@ export class World3D {
   // Characters.
   private readonly sprites: InstancedMesh;
   private readonly spriteUv: InstancedBufferAttribute;
+  /**
+   * The dying and the dead: their own batch (one more draw, only while a body is in sight), drawn after the floor and the blood and
+   * before every living figure, and neither writing depth nor tested against the living: a body is under whoever stands over it,
+   * whatever their rows (as in PD, where the sprite of the dead is put behind).
+   */
+  private readonly deadMesh: InstancedMesh;
+  private readonly deadUv: InstancedBufferAttribute;
+  private deadCount = 0;
+  /** How far the next body written has dissolved (0 whole, 1 gone): a dither over its pixels, not a darkening. */
+  private deadFade = 0;
+  private readonly deadFades: InstancedBufferAttribute;
+  private toDead = false;
   /** Per instance: the rim light's direction (texture axes, -1/0/1) and colour times strength. */
   private readonly spriteRim: InstancedBufferAttribute;
   private readonly spriteRimColor: InstancedBufferAttribute;
@@ -300,8 +318,18 @@ export class World3D {
 
     // The sprite batch: one quad, many instances, one atlas (and the atlas of what glows).
     const quad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
-    const spriteMaterial = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide });
-    withFog(spriteMaterial, this.air, 'instance', { selfLight: this.kit.sprites.selfLight, texel: [this.kit.sprites.rim.px / ATLAS_W, this.kit.sprites.rim.px / ATLAS_H] });
+    const makeMaterial = (): MeshLambertMaterial => {
+      const m = new MeshLambertMaterial({ map: this.atlas.color, emissiveMap: this.atlas.glow, emissive: 0xffffff, alphaTest: 0.5, side: DoubleSide });
+      withFog(m, this.air, 'instance', { selfLight: this.kit.sprites.selfLight, texel: [this.kit.sprites.rim.px / ATLAS_W, this.kit.sprites.rim.px / ATLAS_H] });
+      return m;
+    };
+    const spriteMaterial = makeMaterial();
+    // Both batches go through the transparent queue (the alpha test still cuts them out, and they still write depth): after the floor,
+    // the water and the blood, in an order we choose (renderOrder), not the opaque queue's: the dead (3), then the living (3.5), then the blended soft-bodied (3.7), then
+    // the glow of the effects (4).
+    spriteMaterial.transparent = true;
+    // (A double-sided transparent material is otherwise drawn twice, back faces and front: one pass is all a flat sprite needs.)
+    spriteMaterial.forceSinglePass = true;
     this.sprites = new InstancedMesh(quad, spriteMaterial, MAX_SPRITES);
     this.sprites.instanceMatrix.setUsage(DynamicDrawUsage);
     this.sprites.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_SPRITES * 3).fill(1), 3);
@@ -315,8 +343,40 @@ export class World3D {
     quad.setAttribute('aRimColor', this.spriteRimColor);
     this.sprites.frustumCulled = false;
     this.sprites.count = 0;
+    this.sprites.renderOrder = 3.5;
     this.scene.add(this.sprites);
 
+    const deadMaterial = makeMaterial();
+    deadMaterial.depthWrite = false;
+    deadMaterial.transparent = true;
+    deadMaterial.forceSinglePass = true;
+    const deadQuad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
+    this.deadMesh = new InstancedMesh(deadQuad, deadMaterial, MAX_DEAD);
+    this.deadMesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.deadMesh.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX_DEAD * 3).fill(1), 3).setUsage(DynamicDrawUsage);
+    this.deadUv = new InstancedBufferAttribute(new Float32Array(MAX_DEAD * 4), 4).setUsage(DynamicDrawUsage);
+    deadQuad.setAttribute('aUv', this.deadUv);
+    // (No rim on the dead; their glow is whole.)
+    const deadRim = new Float32Array(MAX_DEAD * 3);
+    for (let i = 0; i < MAX_DEAD; i++) deadRim[i * 3 + 2] = 1;
+    deadQuad.setAttribute('aRim', new InstancedBufferAttribute(deadRim, 3));
+    // (aRimColor, unused for the dead, carries how far each has dissolved, in x.)
+    this.deadFades = new InstancedBufferAttribute(new Float32Array(MAX_DEAD * 3), 3).setUsage(DynamicDrawUsage);
+    deadQuad.setAttribute('aRimColor', this.deadFades);
+    const before = deadMaterial.onBeforeCompile;
+    const key = deadMaterial.customProgramCacheKey;
+    deadMaterial.onBeforeCompile = (shader, renderer) => {
+      before.call(deadMaterial, shader, renderer);
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <alphatest_fragment>',
+        '#include <alphatest_fragment>\n  if (fract(dot(floor(gl_FragCoord.xy * 0.5), vec2(0.7548776662, 0.5698402910))) < vRimColor.x) discard;',
+      );
+    };
+    deadMaterial.customProgramCacheKey = () => `${key.call(deadMaterial)}-dissolve`;
+    this.deadMesh.frustumCulled = false;
+    this.deadMesh.count = 0;
+    this.deadMesh.renderOrder = 3;
+    this.scene.add(this.deadMesh);
     // The blended batch: the same atlas, the same fog and haze; the picture's own alpha, and a cold light of its own.
     const softQuad = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
     const softMaterial = new MeshLambertMaterial({
@@ -331,7 +391,7 @@ export class World3D {
     this.ghostUv.setUsage(DynamicDrawUsage);
     softQuad.setAttribute('aUv', this.ghostUv);
     this.ghosts.frustumCulled = false;
-    this.ghosts.renderOrder = 1;
+    this.ghosts.renderOrder = 3.7;
     this.ghosts.count = 0;
     this.ghosts.visible = false;
     this.scene.add(this.ghosts);
@@ -460,6 +520,7 @@ export class World3D {
     });
     if (!lava) this.waterMaterial.color.multiplyScalar(1.6);
     withFog(this.waterMaterial, this.air, 'attribute');
+    withBlood(this.waterMaterial, this.blood);
   }
 
   /** Cuts the region's props (high grass or fungi, the signpost) out of its tiles, and puts them on the sprite atlas. */
@@ -589,11 +650,13 @@ export class World3D {
     x: number, y: number, z: number, width: number, height: number, tint: number, mode = LEANED, shear = 0, glow?: CanvasImageSource,
     blend = false,
   ): void {
-    if (blend ? this.ghostCount >= MAX_BLENDED : this.spriteCount >= MAX_SPRITES) return;
+    const dead = this.toDead && !blend;
+    if (blend ? this.ghostCount >= MAX_BLENDED : dead ? this.deadCount >= MAX_DEAD : this.spriteCount >= MAX_SPRITES) return;
     const spot = this.atlas.place(image, glow);
     if (!spot) return;
-    const batch = blend ? this.ghosts : this.sprites;
-    const i = blend ? this.ghostCount++ : this.spriteCount++;
+    // Three batches: the living, the dead (under them, dissolving) and the soft-bodied (blended, sorted back to front).
+    const batch = blend ? this.ghosts : dead ? this.deadMesh : this.sprites;
+    const i = blend ? this.ghostCount++ : dead ? this.deadCount++ : this.spriteCount++;
     if (blend) this.ghostZ[i] = z;
     const m = batch.instanceMatrix.array as Float32Array;
     const o = i * 16;
@@ -613,7 +676,7 @@ export class World3D {
       m[o + 8] = 0; m[o + 9] = 0; m[o + 10] = 1; m[o + 11] = 0;
     }
     m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
-    const uv = (blend ? this.ghostUv : this.spriteUv).array as Float32Array;
+    const uv = (blend ? this.ghostUv : dead ? this.deadUv : this.spriteUv).array as Float32Array;
     const u0 = (spot.x + sx) / ATLAS_W;
     const du = w / ATLAS_W;
     const q = i * 4;
@@ -624,6 +687,10 @@ export class World3D {
     const c = batch.instanceColor!.array as Float32Array;
     c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = tint;
     if (blend) return;
+    if (dead) {
+      (this.deadFades.array as Float32Array)[i * 3] = this.deadFade;
+      return;
+    }
     const r = this.spriteRim.array as Float32Array;
     r[i * 3] = r[i * 3 + 1] = 0;
     r[i * 3 + 2] = 1;
@@ -727,7 +794,15 @@ export class World3D {
       const aura = look.aura;
       this.sprite(aura.image, (Math.floor(f.now / aura.ms) % aura.frames) * aura.w, 0, aura.w, aura.h, false, tx, lift - 1 / TILE, tz - 0.02, (aura.w / TILE) * scale, (aura.h / TILE) * scale, tint, LEANED, 0, aura.image);
     }
+    // The dying are in the batch under the living (the hero's own body stays among them); a soft-bodied one keeps its blend.
+    this.toDead = !puppet.alive && !puppet.isHero && !blend;
+    if (this.toDead) {
+      // (A dying body dissolves, as the dead do, rather than darkening.)
+      this.deadFade = tint < 1 ? 1 - tint : 0;
+      if (tint < 1) tint = 1;
+    }
     this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, look?.glow, blend);
+    this.toDead = false;
     if (spectral) this.effects.halo(tx, 0.55 + lift, tz, COLD, 1.7, 0.2 + 0.05 * Math.sin(now / 520 + puppet.to));
     if (look?.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
     // The rim of the strongest light on the silhouette (not on the dead: they lie flat), and the shade slipping away from that light.
@@ -812,9 +887,11 @@ export class World3D {
 
     // Sprites: characters, then what lies about, props, bodies, things in the air, sconces. The effects' batches fill alongside.
     this.spriteCount = 0;
+    this.deadCount = 0;
     this.ghostCount = 0;
     this.shownCount = 0;
     this.bossFound = false;
+    this.blood.update(f.now);
     this.effects.begin();
     f.view.puppets.forEach(this.puppetPass);
     this.addWear(f);
@@ -844,6 +921,23 @@ export class World3D {
     this.spriteUv.clearUpdateRanges();
     this.spriteUv.addUpdateRange(0, this.spriteCount * 4);
     this.spriteUv.needsUpdate = true;
+    const dead = this.deadMesh;
+    dead.count = this.deadCount;
+    dead.visible = this.deadCount > 0;
+    if (this.deadCount > 0) {
+      dead.instanceMatrix.clearUpdateRanges();
+      dead.instanceMatrix.addUpdateRange(0, this.deadCount * 16);
+      dead.instanceMatrix.needsUpdate = true;
+      dead.instanceColor!.clearUpdateRanges();
+      dead.instanceColor!.addUpdateRange(0, this.deadCount * 3);
+      dead.instanceColor!.needsUpdate = true;
+      this.deadUv.clearUpdateRanges();
+      this.deadUv.addUpdateRange(0, this.deadCount * 4);
+      this.deadUv.needsUpdate = true;
+      this.deadFades.clearUpdateRanges();
+      this.deadFades.addUpdateRange(0, this.deadCount * 3);
+      this.deadFades.needsUpdate = true;
+    }
     // The blended batch exists for the frame only if a soft-bodied figure is in sight: one more draw then, none otherwise.
     this.sortBlended();
     const g = this.ghostCount;
@@ -975,16 +1069,25 @@ export class World3D {
     }
   }
 
-  /** Bodies left where monsters fell: the last frame of their death, lying, fading out. */
+  /**
+   * Bodies left where monsters fell: the last frame of their death as the monster's own sprite, standing in its cell leaned like the
+   * living, lit as they are (no darkening), fading out over a second as the original's dead do; in the batch under the living.
+   * (The canvas keeps the darkened body for a minute; the pools of blood stay in the effects.)
+   */
   private addCorpses(f: Frame3D): void {
+    this.toDead = true;
     for (const c of fx.corpses) {
-      if (f.now < c.at) continue;
-      const cell = Math.trunc((c.y + c.image.height - 2) / TILE) * WIDTH + Math.trunc((c.x + c.image.width / 2) / TILE);
+      const age = f.now - c.at;
+      if (age < 0 || age >= CORPSE_FADE_MS) continue;
+      const { src } = c;
+      const image = src.image as HTMLImageElement;
+      const cell = Math.trunc((c.y + src.h - 2) / TILE) * WIDTH + Math.trunc((c.x + src.w / 2) / TILE);
       if (!f.visible[cell]) continue;
-      const fade = fx.corpseFade(c, f.now);
-      if (fade <= 0) continue;
-      this.sprite(c.image, 0, 0, c.image.width, c.image.height, false, (c.x + c.image.width / 2) / TILE, 0.01, (c.y + c.image.height - (TILE - FEET_PX)) / TILE, c.image.width / TILE, c.image.height / TILE, 0.7 * fade);
+      // Whole for the first part of its second, then dissolving.
+      this.deadFade = Math.max(0, (age / CORPSE_FADE_MS - 0.3) / 0.7);
+      this.sprite(image, src.sx, src.sy, src.w, src.h, src.flip, (c.x + src.w / 2) / TILE, 0, (c.y + src.h - (TILE - FEET_PX)) / TILE, src.w / TILE, src.h / TILE, 1);
     }
+    this.toDead = false;
   }
 
   /** What is thrown flies in an arc, higher the farther it goes, its shade running along the floor. */
@@ -1084,11 +1187,15 @@ export class World3D {
     this.waterTex?.dispose();
     this.atlas.dispose();
     this.fog.dispose();
+    this.blood.dispose();
     this.effects.dispose(this.scene);
     this.rig.dispose(this.scene);
     this.sprites.geometry.dispose();
     (this.sprites.material as MeshLambertMaterial).dispose();
     this.sprites.dispose();
+    this.deadMesh.geometry.dispose();
+    (this.deadMesh.material as MeshLambertMaterial).dispose();
+    this.deadMesh.dispose();
     this.ghosts.geometry.dispose();
     (this.ghosts.material as MeshLambertMaterial).dispose();
     this.ghosts.dispose();

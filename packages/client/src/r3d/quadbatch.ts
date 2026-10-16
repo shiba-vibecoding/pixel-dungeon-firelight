@@ -9,7 +9,7 @@ import {
   AdditiveBlending, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, NormalBlending, PlaneGeometry, ShaderMaterial, type Texture,
 } from 'three';
 import { HEIGHT, WIDTH } from '@pd/core';
-import { PITCH } from './project';
+import { LEAN, PITCH } from './project';
 
 const VERTEX = `
 attribute vec4 aUv;
@@ -130,6 +130,26 @@ export class QuadBatch {
     m[o] = w * c; m[o + 1] = 0; m[o + 2] = -w * s; m[o + 3] = 0;
     m[o + 4] = -d * s; m[o + 5] = 0; m[o + 6] = -d * c; m[o + 7] = 0;
     m[o + 8] = 0; m[o + 9] = 1; m[o + 10] = 0; m[o + 11] = 0;
+    m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
+    this.colour(i, u, v, du, dv, r, g, b, a);
+  }
+
+  /**
+   * A quad standing leaned back toward the camera, as the sprites do: its middle at (x, y, z), `w` wide and `h` tall (the caller has made
+   * it as tall as it should look), turned `rot` radians in its own plane (an effect flying along a path).
+   */
+  leaned(x: number, y: number, z: number, w: number, h: number, rot: number, u: number, v: number, du: number, dv: number, r: number, g: number, b: number, a: number): void {
+    const i = this.slot();
+    if (i < 0) return;
+    const m = this.m;
+    const o = i * 16;
+    const sl = Math.sin(LEAN);
+    const cl = Math.cos(LEAN);
+    const s = Math.sin(rot);
+    const c = Math.cos(rot);
+    m[o] = w * c; m[o + 1] = w * s * cl; m[o + 2] = -w * s * sl; m[o + 3] = 0;
+    m[o + 4] = -h * s; m[o + 5] = h * c * cl; m[o + 6] = -h * c * sl; m[o + 7] = 0;
+    m[o + 8] = 0; m[o + 9] = sl; m[o + 10] = cl; m[o + 11] = 0;
     m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
     this.colour(i, u, v, du, dv, r, g, b, a);
   }

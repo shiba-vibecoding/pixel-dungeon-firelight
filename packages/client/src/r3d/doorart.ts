@@ -111,7 +111,8 @@ export function paintDoorTiles(color: CanvasRenderingContext2D, glow: CanvasRend
   probe.height = 16;
   const pg = probe.getContext('2d', { willReadFrequently: true })!;
   pg.drawImage(tiles, 5 * 16, 0, 16, 16, 0, 0, 16, 16);
-  const wood = woodOf(pg.getImageData(0, 0, 16, 16).data);
+  // The planks only (the middle of the tile), not the frame round them, which may be plaster or iron.
+  const wood = woodOf(pg.getImageData(4, 3, 8, 10).data);
   const warm: Rgb = [92, 52, 20];
   const transposed = (draw: (paint: Painter) => void) => (paint: Painter): void => draw((x, y, c) => paint(y, x, c));
   const seed = Math.round(luma(wood.mid));
