@@ -3,7 +3,6 @@ import { randomRespawnCell } from './ai';
 import { charAt, type Char, type Ctx, dropItem, enterCell, heroesOn, isHero, leaveCell } from './floor';
 import { createItem, ItemGenerator, type ItemKind } from './items';
 import { distance, LENGTH } from './level/geometry';
-import { T } from './level/terrain';
 import { burst } from './traps';
 import { chillPack, freezeHeaps } from './cooking';
 
@@ -38,13 +37,41 @@ export const PLANT_KINDS: readonly PlantKind[] = [
 const FROZEN_TURNS = 5;
 const DIZZY_TURNS = 10;
 
-/** Level.plant: a new plant replaces whatever grew there, and bare ground turns to grass. */
-export function plant(ctx: Ctx, pos: number, kind: PlantKind): void {
-  const { floor, level } = ctx;
-  floor.plants = (floor.plants ?? []).filter((p) => p.pos !== pos);
-  floor.plants.push({ pos, kind });
-  const terrain = level.map[pos];
-  if (terrain === T.EMPTY || terrain === T.EMBERS || terrain === T.EMPTY_DECO || terrain === T.HIGH_GRASS) level.map[pos] = T.GRASS;
+/**
+ * Plant.wither's leavings: a warden (Dungeon.hero's) gets, now and then, a seed or a dewdrop from a plant that goes (Random.Int(5) each).
+ */
+function witherDrops(ctx: Ctx, pos: number, hero: Hero | null): void {
+  if (hero?.subclass !== 'warden') return;
+  const { rng, depth } = ctx;
+  if (rng.int(5) === 0) dropItem(ctx.floor, pos, new ItemGenerator(rng, depth).of('seed'));
+  if (rng.int(5) === 0) dropItem(ctx.floor, pos, createItem('dew'));
+}
+
+/**
+ * Plant.wither asks Dungeon.hero, the player at the game, whoever set the plant off: so a monster treading on a plant, or an item
+ * landing on one, brings a warden his leavings all the same. Here: the hero who stepped on it, if a hero did; else (a party has
+ * no single Dungeon.hero) the warden on the depth nearest the plant, the first of them on a tie, and the one roll is his alone.
+ */
+function whoseGarden(ctx: Ctx, who: Char | null, pos: number): Hero | null {
+  if (who && isHero(who)) return who;
+  let best: Hero | null = null;
+  for (const hero of heroesOn(ctx.world, ctx.depth)) {
+    if (hero.subclass === 'warden' && (!best || distance(hero.pos, pos) < distance(best.pos, pos))) best = hero;
+  }
+  return best;
+}
+
+/**
+ * Level.plant: a new plant takes the place of what grew there, which withers (Plant.wither); no terrain changes, whatever the cell is.
+ * `hero`: whose subclass matters to the withering plant.
+ */
+export function plant(ctx: Ctx, pos: number, kind: PlantKind, hero: Hero | null = null): void {
+  const { floor } = ctx;
+  if (floor.plants?.some((p) => p.pos === pos)) {
+    floor.plants = floor.plants.filter((p) => p.pos !== pos);
+    witherDrops(ctx, pos, hero);
+  }
+  (floor.plants ??= []).push({ pos, kind });
   ctx.effects.push({ type: 'planted', depth: ctx.depth, pos, kind });
 }
 
@@ -63,11 +90,8 @@ export function stepOnPlant(ctx: Ctx, who: Char | null, pos: number): void {
   ctx.effects.push({ type: 'plantTriggered', depth: ctx.depth, pos, kind: found.kind, who: who?.id ?? '' });
   const { world, depth, level, rng } = ctx;
   // Plant.activate and wither: a warden draws bark from it, and now and then a seed or a dewdrop.
-  if (who && isHero(who) && who.subclass === 'warden') {
-    who.barkskin = Math.max(who.barkskin, Math.trunc(who.ht / 3));
-    if (rng.int(5) === 0) dropItem(ctx.floor, pos, new ItemGenerator(rng, depth).of('seed'));
-    if (rng.int(5) === 0) dropItem(ctx.floor, pos, createItem('dew'));
-  }
+  if (who && isHero(who) && who.subclass === 'warden') who.barkskin = Math.max(who.barkskin, Math.trunc(who.ht / 3));
+  witherDrops(ctx, pos, whoseGarden(ctx, who, pos));
   switch (found.kind) {
     case 'firebloom':
       burst(ctx, pos, 'fire', 0);

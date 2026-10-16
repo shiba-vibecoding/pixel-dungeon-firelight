@@ -73,3 +73,36 @@ export function resolveDrop<T>(places: ReadonlyMap<string, T>, place: string | u
 
 /** How long (ms) an item flies back to its slot after a drop that was not taken. */
 export const SNAP_BACK_MS = 180;
+
+/** Something in the backpack by where it is: a pack slot, the weapon in hand or the armour worn, a ring worn (by place). */
+export type Place = { index: number } | { worn: 'weapon' | 'armor' } | { ring: number };
+
+/**
+ * Dragging gear: what letting go of `from` does on the places among the worn things and on the pack (keyed as the backpack's
+ * places are: 'pack' for the empty part and a pack slot's number, 'weapon', 'armor', 'ring0', 'ring1'). Anything worn goes
+ * back into the pack by the action that takes that off (the weapon, the armour or a ring, each with its own); a weapon, armour
+ * or ring from the pack goes onto its own place (both ring places take a ring).
+ */
+export function gearDrops(hero: Pick<Hero, 'items'>, from: Place, item: { kind: ItemKind }): Map<string, Action> {
+  const drops = new Map<string, Action>();
+  if (!('index' in from)) {
+    const off: Action = 'ring' in from ? { type: 'remove', ring: from.ring } : from.worn === 'weapon' ? { type: 'unequip' } : { type: 'unequip', slot: 'armor' };
+    drops.set('pack', off);
+    hero.items.forEach((_, i) => drops.set(String(i), off));
+    // EquipableItem.doDrop: worn, it comes off and is dropped.
+    drops.set('away', { type: 'drop', item: 'ring' in from ? (from.ring === 0 ? 'ring0' : 'ring1') : from.worn });
+    return drops;
+  }
+  const equip: Action = { type: 'equip', item: from.index };
+  const category = itemDef(item.kind).category;
+  if (category === 'weapon') drops.set('weapon', equip);
+  if (category === 'armor') drops.set('armor', equip);
+  // Both ring places take a ring; dropped on one, with both hands full, that is the ring that comes off.
+  if (category === 'ring') {
+    drops.set('ring0', { ...equip, replace: 0 });
+    drops.set('ring1', { ...equip, replace: 1 });
+  }
+  // A thrown weapon held as a melee weapon is a weapon to the hand (a huntress or a rogue: the core says no to anyone else).
+  if (category === 'missile') drops.set('weapon', equip);
+  return drops;
+}

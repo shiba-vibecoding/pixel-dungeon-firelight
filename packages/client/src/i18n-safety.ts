@@ -24,6 +24,14 @@ export const SAFETY_EN = {
     drinkTitle: (name: string) => `Drink ${name}?`,
     drinkText: 'An enemy is in sight, and this potion is unknown. Some potions harm: toxic or paralytic gas, flames. Thrown, a harmful one hits where it lands instead of you.',
     throwInstead: 'Throw it instead',
+    // Ring.doEquip's WndOptions, with both hands full.
+    ringTitle: 'Unequip one ring',
+    ringText: 'You can only wear two rings at a time. Unequip one of your equipped rings.',
+    // MissileWeapon.doEquip's WndOptions.
+    missileTitle: 'Missile weapon',
+    missileText: 'Do you really want to equip it as a melee weapon?',
+    missileYes: 'Yes, I know what I’m doing',
+    missileNo: 'No, I changed my mind',
   },
   target: {
     upgrade: 'Upgrade',

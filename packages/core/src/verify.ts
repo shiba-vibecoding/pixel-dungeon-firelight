@@ -1,5 +1,4 @@
 import type { Hero } from './actors';
-import { arenaScore, wavesCleared } from './arena';
 import { challengeMultiplier } from './daily';
 import type { World } from './world';
 
@@ -99,10 +98,9 @@ export const dungeonScore = (gold: number, lvl: number, depth: number, won: bool
 
 /** How a finished run (or one under way) stands: what the boards and the end screen show. */
 export interface RunOutcome {
-  mode: 'dungeon' | 'arena';
   heroClass: Hero['heroClass'];
   score: number;
-  /** The deepest depth reached; in the arena, the waves held. */
+  /** The deepest depth reached. */
   depth: number;
   level: number;
   gold: number;
@@ -119,13 +117,10 @@ export function runOutcome(world: World, hero: Hero): RunOutcome {
   const base = {
     heroClass: hero.heroClass, level: hero.lvl, gold, kills: hero.kills, killedBy: hero.killedBy, turns: world.turn, challenges: world.challenges ?? 0,
   };
-  if (world.arena) {
-    return { ...base, mode: 'arena', score: arenaScore(world, hero.id), depth: wavesCleared(world.arena), won: false };
-  }
   const depth = deepestDepth(world);
   // Challenges raise the score (daily.ts challengeMultiplier): the way up for a hero who has won.
   const score = Math.round(dungeonScore(gold, hero.lvl, depth, world.victory) * challengeMultiplier(world.challenges ?? 0));
-  return { ...base, mode: 'dungeon', score, depth, won: world.victory };
+  return { ...base, score, depth, won: world.victory };
 }
 
 /**

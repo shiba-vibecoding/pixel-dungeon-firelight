@@ -45,12 +45,6 @@ export function sanitizeAction(raw: unknown): Action | null {
     case 'buy':
     case 'mine':
       return { type: a.type };
-    case 'arenaReady':
-      // «To battle!», or, pressed again, not after all.
-      return a.cancel === true ? { type: 'arenaReady', cancel: true } : { type: 'arenaReady' };
-    case 'arenaPick':
-      // One of the three rewards after a wave.
-      return isInt(a.choice, 0, 2) ? { type: 'arenaPick', choice: a.choice } : null;
     case 'open': {
       const at = cell(a.cell);
       return at === null ? null : { type: 'open', cell: at };
@@ -100,20 +94,38 @@ export function sanitizeAction(raw: unknown): Action | null {
     // ...or the scroll given up.
     case 'scrollCancel':
       return { type: 'scrollCancel' };
-    case 'equip':
-    case 'drop':
+    case 'equip': {
+      const item = slot(a.item);
+      if (item === null) return null;
+      if (a.replace === undefined) return { type: 'equip', item };
+      // Which ring comes off when two are worn (Ring.doEquip's WndOptions).
+      return a.replace === 0 || a.replace === 1 ? { type: 'equip', item, replace: a.replace } : null;
+    }
+    case 'drop': {
+      // From the pack, or something worn (EquipableItem.doDrop takes it off first).
+      const item = itemRef(a.item);
+      return item === null ? null : { type: 'drop', item };
+    }
     case 'sell': {
       const item = slot(a.item);
-      return item === null ? null : { type: a.type, item };
+      return item === null ? null : { type: 'sell', item };
     }
-    case 'throw':
+    case 'throw': {
+      // Anything in the pack, or something worn (EquipableItem.cast takes it off first).
+      const item = itemRef(a.item);
+      const target = cell(a.target);
+      return item === null || target === null ? null : { type: 'throw', item, target };
+    }
     case 'zap': {
       const item = slot(a.item);
       const target = cell(a.target);
-      return item === null || target === null ? null : { type: a.type, item, target };
+      return item === null || target === null ? null : { type: 'zap', item, target };
     }
-    case 'unequip':
-      return { type: 'unequip' };
+    case 'unequip': {
+      if (a.slot === undefined) return { type: 'unequip' };
+      const worn = oneOf(a.slot, ['weapon', 'armor'] as const);
+      return worn ? { type: 'unequip', slot: worn } : null;
+    }
     case 'remove': {
       const ring = slot(a.ring);
       return ring === null ? null : { type: 'remove', ring };

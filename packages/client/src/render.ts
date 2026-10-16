@@ -1,8 +1,11 @@
+import { MEMORY_DESATURATE } from './r3d/memory';
+import { heapDrawn } from './heapsight';
 import { drawVignette } from './vignette';
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
-import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard, waveCard } from './cards';
+import { puppetAlpha } from './puppetfade';
+import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
 
 import { fx } from './fx';
 import { drawFx2D } from './fxdraw2d';
@@ -73,6 +76,7 @@ function drawIcon(ctx: CanvasRenderingContext2D, assets: Assets, icon: readonly 
 
 /** One texel per cell: the fog's darkness, eased from frame to frame (see drawFog). */
 const fogCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+const memCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
 let fogDark: Float32Array | null = null;
 let fogLevel: Level | null = null;
 let fogTime = 0;
@@ -106,6 +110,20 @@ function drawFog(ctx: CanvasRenderingContext2D, level: Level, visible: readonly 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(fogCanvas, 0, 0, WIDTH, HEIGHT, 0, 0, WIDTH * TILE, HEIGHT * TILE);
+  // What is only remembered is drained of colour (the same share as the 3D view's, r3d/memory.ts), over the same fade at the edge of sight.
+  if (memCanvas) {
+    memCanvas.width = WIDTH;
+    memCanvas.height = HEIGHT;
+    const mem = memCanvas.getContext('2d')!;
+    const grey = mem.createImageData(WIDTH, HEIGHT);
+    for (let i = 0; i < LENGTH; i++) {
+      grey.data[i * 4] = grey.data[i * 4 + 1] = grey.data[i * 4 + 2] = 128;
+      grey.data[i * 4 + 3] = Math.round(255 * MEMORY_DESATURATE * Math.min(1, fogDark![i]! / 0.55));
+    }
+    mem.putImageData(grey, 0, 0);
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.drawImage(memCanvas, 0, 0, WIDTH, HEIGHT, 0, 0, WIDTH * TILE, HEIGHT * TILE);
+  }
   ctx.restore();
 }
 
@@ -200,9 +218,11 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
       ctx.globalAlpha = 0.75;
     } else if (!puppet.laid) {
       const left = puppet.removeAt - now;
-      ctx.globalAlpha = Math.max(0, Math.min(1, left / 700));
+      ctx.globalAlpha = Math.max(0, Math.min(1, left / (puppet.fadeMs ?? 700)));
     }
   }
+  // AlphaTweener: a wraith rising, a ghost turning into its curse and back.
+  if (puppet.fade) ctx.globalAlpha *= puppetAlpha(puppet, now, false);
   if (puppet.flip) {
     ctx.translate(dx + sheet.w, dy);
     ctx.scale(-1, 1);
@@ -388,9 +408,9 @@ export function render(
   }
   ctx.drawImage(baked, 0, 0);
 
-  // Items on the floor, remembered (and dimmed by the fog) once seen.
+  // Plants and items on the floor are drawn where they are in sight (heapsight.ts), not in the rooms remembered.
   for (const plant of scene.plants ?? []) {
-    if (!explored[plant.pos]) continue;
+    if (!heapDrawn(visible, plant.pos)) continue;
     ctx.drawImage(assets.plants, plant.index * 16, 0, 16, 16, (plant.pos % WIDTH) * TILE, Math.trunc(plant.pos / WIDTH) * TILE, 16, 16);
   }
   // What fights left on the floor (blood, chunks, bodies), under what lies there: remembered
@@ -399,7 +419,7 @@ export function render(
   fx.drawDecals(ctx, now, (x, y) => explored[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true);
   scene.under?.(ctx);
   for (const heap of scene.heaps) {
-    if (!explored[heap.pos]) continue;
+    if (!heapDrawn(visible, heap.pos)) continue;
     const look = visible[heap.pos] ? scene.heapLook?.(heap.pos, now) : undefined;
     if (look?.hidden) continue;
     const x = (heap.pos % WIDTH) * TILE;
@@ -771,20 +791,11 @@ function screenLayer(
   const descent = view.depthCard;
   const emblems = sheet('ui-map');
   if (descent && emblems) {
-    const region = descent.region ?? regionIndex(descent.depth);
+    const region = regionIndex(descent.depth);
     const text = descent.intro ? (t.meta.intros[region] ?? '') : '';
-    // The arena's sinking card says the region and «The arena sinks deeper» (its own words).
-    const title = descent.title ?? t.depthTitle(descent.depth);
-    const sub = descent.sub ?? t.regionNames[region] ?? '';
-    if (!depthCard(ctx, title, sub, emblems.image, region, middle, canvas.width, now - descent.start, px, undefined, text)) {
+    if (!depthCard(ctx, t.depthTitle(descent.depth), t.regionNames[region] ?? '', emblems.image, region, middle, canvas.width, now - descent.start, px, undefined, text)) {
       view.depthCard = null;
     }
-  }
-
-  // The arena's wave banner, once its time has come (after the sinking card, if both came at once).
-  const wave = view.waveCard;
-  if (wave && now >= wave.start && !waveCard(ctx, wave.title, wave.sub, wave.kind, middle, canvas.width, now - wave.start, px)) {
-    view.waveCard = null;
   }
 
   // A boss's title card as it notices the party: its name and epithet on a band across the free middle.

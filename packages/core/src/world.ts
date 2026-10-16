@@ -34,7 +34,6 @@ import { discover, F, hasFlag, T } from './level/terrain';
 import { deriveSeed, Rng, seedRng, Stream } from './rng';
 import { createRun, type RunState } from './run';
 import { isChallenged, NO_HERBALISM, underChallenges } from './challenges';
-import { arenaJoined, arenaLevelAt, arenaPick, arenaProblem, arenaReady, type ArenaState, arenaTurn, newArena } from './arena';
 import { ipow } from './fmath';
 
 /*
@@ -75,12 +74,6 @@ export type Action =
   | { type: 'plan'; steps: PlanStep[] }
   /** Lloyd's beacon: set it where the hero stands, or return to where it was set. */
   | { type: 'beacon'; item: number; mode: 'set' | 'return' }
-  /**
-   * The arena of waves: «To battle!» once the party has rested (or, `cancel`, not ready after all), and
-   * one of the three rewards after a wave.
-   */
-  | { type: 'arenaReady'; cancel?: boolean }
-  | { type: 'arenaPick'; choice: number }
   | InventoryAction;
 
 export type ActionResult = { ok: true; effects: Effect[] } | { ok: false; reason: string };
@@ -105,7 +98,7 @@ export interface World {
   /** The party has won: a hero with the Amulet of Yendor called it a day, or carried it out to the surface. */
   victory: boolean;
   /**
-   * Live turns (co-op and the arena): the world goes on by a clock (liveTick, a turn a tick) instead of waiting
+   * Live turns (co-op): the world goes on by a clock (liveTick, a turn a tick) instead of waiting
    * for each player's move, and a player's action is a standing order (Hero.plan). Absent: classic turns.
    */
   live?: boolean;
@@ -129,14 +122,7 @@ export interface World {
   impQuest?: ImpQuest | null;
   /** The troll blacksmith's errand, once his forge is found (absent in older saves). */
   smithQuest?: SmithQuest | null;
-  /** What kind of run this is: the arena of waves (arena.ts); absent, the dungeon. */
-  mode?: 'arena';
-  /** The arena of waves' state, in an arena run. */
-  arena?: ArenaState;
 }
-
-/** The kinds of run: down the dungeon, or the arena of waves. */
-export type GameMode = 'dungeon' | 'arena';
 
 /** The Amulet's hall (LastLevel), the bottom of the dungeon: no chasm opens onto it, and nothing lies below. */
 export const DEEPEST_AVAILABLE = 26;
@@ -158,15 +144,11 @@ const BONES_STREAM = 5;
 /** Sub-streams of a depth's streams for a hero joining the party, by party size. */
 const JOIN_STREAM = 100;
 
-/**
- * A new run; `challenges` is a bitmask of CHALLENGES (Dungeon.challenges), 0 for none; `mode`
- * makes it the arena of waves rather than the dungeon.
- */
-export function createWorld(seed: number, challenges = 0, mode: GameMode = 'dungeon', live = false): World {
+/** A new run; `challenges` is a bitmask of CHALLENGES (Dungeon.challenges), 0 for none. */
+export function createWorld(seed: number, challenges = 0, live = false): World {
   return {
     run: createRun(seed), levels: {}, floors: {}, heroes: [], explored: {}, turn: 0, nextId: 0, over: false, victory: false,
     challenges, known: [], quest: null, wandQuest: null, impQuest: null, smithQuest: null,
-    ...(mode === 'arena' ? { mode, arena: newArena() } : {}),
     ...(live ? { live } : {}),
   };
 }
@@ -174,10 +156,9 @@ export function createWorld(seed: number, challenges = 0, mode: GameMode = 'dung
 /** Starts a new run in place for the same party, under the same challenges. */
 export function restartWorld(world: World, seed: number): void {
   const party = world.heroes.map(({ id, name, heroClass }) => ({ id, name, heroClass }));
-  const mode = world.mode ?? 'dungeon';
   const live = world.live ?? false;
-  for (const key of ['mode', 'arena', 'live'] as const) delete world[key];
-  Object.assign(world, createWorld(seed, world.challenges ?? 0, mode, live));
+  delete world.live;
+  Object.assign(world, createWorld(seed, world.challenges ?? 0, live));
   for (const player of party) addHero(world, player);
 }
 
@@ -189,7 +170,6 @@ export function giveBones(world: World, bones: Bones): void {
 }
 
 export function levelAt(world: World, depth: number): Level {
-  if (world.mode === 'arena') return arenaLevelAt(world, depth);
   for (let d = 1; d <= depth; d++) {
     if (!world.levels[d]) {
       // A party's depths spread wider, with more rooms (party.ts); boss levels keep their layout.
@@ -268,14 +248,11 @@ function welcome(world: World): void {
 }
 
 export function addHero(world: World, player: PlayerInfo): Hero {
-  // In the arena, heroes come in on the dais of wherever it stands now.
-  const depth = world.arena?.depth ?? 1;
+  const depth = 1;
   const level = levelAt(world, depth);
   const hero = createHero(player, depth, freeCellNear(world, level, depth, level.entrance), floorAt(world, depth).now);
   world.heroes.push(hero);
-  // The arena's waves are made for whoever is there when they come; nothing lies about to share.
-  if (world.arena) arenaJoined(world, hero, new Rng(floorAt(world, depth).rng));
-  else if (world.heroes.length > 1) welcome(world);
+  if (world.heroes.length > 1) welcome(world);
   // Heroes know what they set out with, and each class one kind more (HeroClass.initHero).
   for (const kind of [...hero.items, ...hero.rings].map((item) => item.kind).concat(CLASS_KNOWLEDGE[hero.heroClass])) {
     if (!world.known.includes(kind)) world.known.push(kind);
@@ -353,8 +330,6 @@ function problemWith(world: World, hero: Hero, action: Action): string | null {
   // A scroll read and waiting for its item (InventoryScroll's selector): nothing else happens until it is answered.
   if (hero.pendingScroll && action.type !== 'scrollTarget' && action.type !== 'scrollCancel') return 'choose what to read the scroll on';
   if (isInventoryAction(action)) return inventoryProblem(world, hero, action);
-  const inArena = arenaProblem(world, hero, action);
-  if (inArena !== undefined) return inArena;
   const level = levelAt(world, hero.depth);
   switch (action.type) {
     case 'wait':
@@ -438,15 +413,7 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
     world.turn++;
     return { ok: true, effects };
   }
-  // Live turns: the order stands until done or replaced; the clock (liveTick) carries it out. Choices
-  // that take no time (the arena's «To battle!» and its rewards) are made at once.
-  if (world.live && (action.type === 'arenaReady' || action.type === 'arenaPick')) {
-    const floor = floorAt(world, hero.depth);
-    const effects: Effect[] = [];
-    perform({ world, depth: hero.depth, level: levelAt(world, hero.depth), floor, rng: new Rng(floor.rng), effects }, hero, action);
-    world.turn++;
-    return { ok: true, effects };
-  }
+  // Live turns: the order stands until done or replaced; the clock (liveTick) carries it out.
   if (world.live) {
     hero.plan = action.type === 'plan' ? action.steps.slice(0, MAX_PLAN) : [action];
     hero.intent = null;
@@ -463,10 +430,10 @@ export function act(world: World, heroId: string, action: Action): ActionResult 
 /* Scheduling */
 
 /*
- * Live turns (world.live: co-op and the arena), the tactical way. Each depth is either calm
+ * Live turns (world.live: co-op), the tactical way. Each depth is either calm
  * or in a fight. Calm, nobody is held up: heroes with orders (Hero.plan) carry them out a step
  * a beat, the others simply wait, and time stands still while nobody has anything to do. In a
- * fight (a hero on the depth in danger, or the arena's wave on) it is the original's turns:
+ * fight (a hero on the depth in danger) it is the original's turns:
  * time goes on only once every hero due to act has said what to do — a backpack open, a potion
  * being chosen, and the monsters wait too — and then all those moves play out together in one
  * beat, not one after another. An order that lasts (a walk) counts as said. A tap on a monster
@@ -493,9 +460,8 @@ export const LIVE_FIGHT_MS = 220;
 /** Resting or searching, turns go by quickly: nothing moves on screen. */
 export const LIVE_REST_MS = 40;
 
-/** Whether a depth is in a fight: a hero there is in danger, or the arena's wave is on. */
+/** Whether a depth is in a fight: a hero there is in danger. */
 export function inFight(world: World, depth: number): boolean {
-  if (world.arena?.phase === 'fight' && world.arena.depth === depth) return true;
   return world.heroes.some((hero) => hero.depth === depth && isAlive(hero) && !isSafe(world, hero));
 }
 
@@ -504,10 +470,10 @@ const hasOrders = (hero: Hero): boolean => (hero.plan?.length ?? 0) > 0;
 
 /**
  * Whether a fight waits for this hero's move: they are in danger (a monster in sight is after them,
- * or near), or the arena's wave is on round them. A companion off exploring is not held to turns.
+ * or near). A companion off exploring is not held to turns.
  */
 function heldToTurns(world: World, hero: Hero): boolean {
-  return (world.arena?.phase === 'fight' && world.arena.depth === hero.depth) || !isSafe(world, hero);
+  return !isSafe(world, hero);
 }
 
 /** Where a depth's beat ends: the one under way if a fight held it up, else the next. */
@@ -567,7 +533,6 @@ function turnTime(world: World, floor: Floor, turn: Turn): number {
     case 'hero': return turn.hero.time;
     case 'mob': return turn.mob.time;
     case 'respawn': return floor.respawn;
-    case 'arena': return world.arena!.tick;
     case 'gas': return floor.gasAt!;
   }
 }
@@ -691,7 +656,7 @@ function stepTowards(world: World, hero: Hero, to: number): number | null {
   return path && path.length > 0 ? path[0]! : null;
 }
 
-type Turn = { kind: 'hero'; hero: Hero } | { kind: 'mob'; mob: Mob } | { kind: 'respawn' } | { kind: 'gas' } | { kind: 'arena' };
+type Turn = { kind: 'hero'; hero: Hero } | { kind: 'mob'; mob: Mob } | { kind: 'respawn' } | { kind: 'gas' };
 
 /** Who is due next on a depth; nothing happens on a depth without living heroes. */
 function nextTurn(world: World, depth: number): Turn | undefined {
@@ -708,9 +673,6 @@ function nextTurn(world: World, depth: number): Turn | undefined {
     if (mob.time < time) [turn, time] = [{ kind: 'mob', mob }, mob.time];
   }
   if (floor.respawn >= 0 && floor.respawn < time) [turn, time] = [{ kind: 'respawn' }, floor.respawn];
-  // The arena of waves, while a wave is on: monsters come in, and the wave may be over.
-  const arena = world.arena;
-  if (arena?.phase === 'fight' && arena.depth === depth && arena.tick < time) [turn, time] = [{ kind: 'arena' }, arena.tick];
   // Clouds of gas spread a turn at a time (Blob.act).
   if (floor.gasAt !== undefined && floor.gasAt < time) turn = { kind: 'gas' };
   return turn;
@@ -803,7 +765,7 @@ function advance(world: World, depth: number, effects: Effect[]): void {
   }
 }
 
-/** A turn that is not a hero's: a monster's, the respawner's, the arena's, the gas spreading. */
+/** A turn that is not a hero's: a monster's, the respawner's, the gas spreading. */
 function playTurn(ctx: Ctx, turn: Exclude<Turn, { kind: 'hero' }>): void {
   const { world, floor } = ctx;
   switch (turn.kind) {
@@ -814,10 +776,6 @@ function playTurn(ctx: Ctx, turn: Exclude<Turn, { kind: 'hero' }>): void {
     case 'respawn':
       floor.now = Math.max(floor.now, floor.respawn);
       respawn(ctx);
-      return;
-    case 'arena':
-      floor.now = Math.max(floor.now, world.arena!.tick);
-      arenaTurn(ctx);
       return;
     case 'gas':
       floor.now = Math.max(floor.now, floor.gasAt!);
@@ -1058,28 +1016,20 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         else talkToGhost(ctx, hero);
         break;
       }
+      // Hero.actAttack: the delay is the weapon's as it is raised (a dart used up in the blow still took its time).
+      let delay = heroAttackDelay(hero);
       attack(ctx, hero, mob);
       // A berserker strikes faster the more foes surround him.
-      let delay = heroAttackDelay(hero);
       if (hero.subclass === 'berserker') {
         const around = NEIGHBOURS8.filter((n) => charAt(world, hero.depth, hero.pos + n)).length;
         if (around > 1) delay *= 1 - around / 16;
       }
-      spend(ctx, hero, delay);
+      spend(ctx, hero, delay + (ctx.extraTime ?? 0));
       break;
     }
 
     case 'reward':
       rewardFromGhost(ctx, hero, action.choice);
-      break;
-
-    // Choosing takes no time: the party is resting.
-    case 'arenaReady':
-      arenaReady(ctx, hero, action.cancel === true);
-      break;
-
-    case 'arenaPick':
-      arenaPick(ctx, hero, action.choice);
       break;
 
     case 'wandReward':

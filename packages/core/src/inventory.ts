@@ -1,7 +1,7 @@
 import { mend, wear } from './wear';
 import { chargesKnown, identify, isIdentified, learn, WAND_USAGES_TO_KNOW } from './ident';
 import {
-  BACKPACK_SIZE, beckon, createMob, isShopkeeper, statsOf, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
+  BACKPACK_SIZE, beckon, createMob, heroSpeed, isShopkeeper, statsOf, type Hero, heroRangedSkill, isAlive, maxExp, type Mob, mobStats, STARVING, type SubClass,
   SUBCLASSES,
 } from './actors';
 import { ballistica, randomRespawnCell } from './ai';
@@ -59,10 +59,19 @@ export type InventoryAction =
   | { type: 'scrollTarget'; on: ItemRef }
   /** The same, given up: «Are you sure? The scroll will be wasted» answered with a yes. The scroll is lost and the reading takes its time. */
   | { type: 'scrollCancel' }
-  | { type: 'equip'; item: number }
-  | { type: 'drop'; item: number }
-  /** Throw a dart, the boomerang or a potion at a cell; it flies until it hits someone or something. */
-  | { type: 'throw'; item: number; target: number }
+  /**
+   * Put on, or take up, something from the pack. With two rings worn already a third asks which of them comes off (Ring.doEquip's
+   * WndOptions): `replace`, 0 or 1 for the ring worn in that place, is then required, and the new ring takes its place.
+   */
+  | { type: 'equip'; item: number; replace?: 0 | 1 }
+  /** Drop something from the pack, or something worn (EquipableItem.doDrop: taken off first, a cursed one will not). */
+  | { type: 'drop'; item: ItemRef }
+  /**
+   * Throw a dart, the boomerang, a potion or any other thing at a cell; it flies until it hits someone or something.
+   * `item` may name something worn ('weapon', 'armor', 'ring0', 'ring1'): EquipableItem.cast takes it off first (a cursed one
+   * will not come off, and is not thrown), which costs the time of taking it off, and then it flies like anything else.
+   */
+  | { type: 'throw'; item: ItemRef; target: number }
   /** Zap a wand at a cell. */
   | { type: 'zap'; item: number; target: number }
   /** Buy the shop's ware the hero stands on. */
@@ -71,8 +80,11 @@ export type InventoryAction =
   | { type: 'sell'; item: number }
   /** Take off a worn ring, back into the pack. */
   | { type: 'remove'; ring: number }
-  /** Put the weapon in hand away (KindOfWeapon's UNEQUIP), into the pack or, with no room there, at the hero's feet. */
-  | { type: 'unequip' }
+  /**
+   * Take the weapon in hand (the default) or the armour worn off (EquipableItem's UNEQUIP), into the pack or, with no room there,
+   * at the hero's feet. Armour takes two turns over it (Armor.time2equip), a weapon one.
+   */
+  | { type: 'unequip'; slot?: 'weapon' | 'armor' }
   /** Read the Tome of Mastery and master one of the two ways of the hero's class. */
   | { type: 'master'; item: number; subclass: SubClass }
   /** Mine the vein of dark gold next to the hero with the blacksmith's pickaxe. */
@@ -100,6 +112,8 @@ const TIME_TO_USE = 1;
 const TIME_TO_EQUIP = 1;
 const TIME_TO_DROP = 1;
 const TIME_TO_THROW = 1;
+/** Plant.Seed.TIME_TO_PLANT. */
+const TIME_TO_PLANT = 1;
 const TIME_TO_ZAP = 1;
 const TIME_TO_EAT = 3;
 /** PhantomFish.TIME_TO_EAT. */
@@ -152,14 +166,17 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
   if (action.type === 'mine') return mineProblem(world, hero);
   if (action.type === 'special') return specialProblem(world, hero, action.target);
   if (action.type === 'unequip') {
-    if (!hero.weapon) return 'nothing in hand';
-    // EquipableItem.doUnequip: a cursed weapon will not leave the hand.
-    return hero.weapon.cursed ? CURSED : null;
+    if (action.slot !== undefined && action.slot !== 'weapon' && action.slot !== 'armor') return 'bad slot';
+    const slot = action.slot ?? 'weapon';
+    const worn = hero[slot];
+    if (!worn) return slot === 'weapon' ? 'nothing in hand' : 'you wear no armour';
+    // EquipableItem.doUnequip: a cursed weapon will not leave the hand, nor cursed armour the body.
+    return worn.cursed ? CURSED : null;
   }
   if (action.type === 'remove') {
     if (!Number.isInteger(action.ring) || !hero.rings[action.ring]) return 'no such ring';
-    if (hero.rings[action.ring]!.cursed) return CURSED;
-    return hasRoom(hero, hero.rings[action.ring]!) ? null : 'your pack is full';
+    // EquipableItem.doUnequip: a cursed ring stays; with no room in the pack, the ring falls at the hero's feet.
+    return hero.rings[action.ring]!.cursed ? CURSED : null;
   }
   if (action.type === 'buy') {
     const heap = heapAt(world, hero);
@@ -168,12 +185,15 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
     if (hero.gold < buyPrice(ware, hero.depth, world.known.includes(ware.kind), haggles(hero))) return 'not enough gold';
     return hasRoom(hero, ware) ? null : 'your pack is full';
   }
-  const item = Number.isInteger(action.item) ? hero.items[action.item] : undefined;
+  // A throw may name something worn, too (EquipableItem.cast).
+  const item = action.type === 'throw' || action.type === 'drop'
+    ? (isItemRef(action.item) ? itemAt(hero, action.item) : undefined)
+    : Number.isInteger(action.item) ? hero.items[action.item] : undefined;
   if (!item) return 'no such item';
   const category = itemDef(item.kind).category;
   switch (action.type) {
     case 'use':
-      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial', 'wipeout'].includes(category) && item.kind !== 'quest.fish') {
+      if (!['potion', 'scroll', 'food', 'torch', 'kit', 'honeypot', 'vial', 'wipeout', 'seed'].includes(category) && item.kind !== 'quest.fish') {
         return 'that cannot be used';
       }
       if (category === 'vial' && !item.volume) return 'your dew vial is empty';
@@ -183,15 +203,23 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       if (category === 'kit') return kitProblem(hero, action);
       return isTargetedScroll(item.kind) ? scrollTargetProblem(world, hero, item.kind, action) : null;
     case 'equip': {
-      if (category !== 'weapon' && category !== 'armor' && category !== 'ring') return 'that cannot be equipped';
+      if (category !== 'weapon' && category !== 'armor' && category !== 'ring' && category !== 'missile') return 'that cannot be equipped';
+      // MissileWeapon.actions: only a huntress and a rogue may hold the thrown ones in their hands.
+      if (category === 'missile' && hero.heroClass !== 'huntress' && hero.heroClass !== 'rogue') return 'that cannot be equipped';
       // A cursed item, once worn, will not come off (EquipableItem.doUnequip).
-      if (category === 'ring') return hero.rings.length >= 2 && hero.rings.every((ring) => ring.cursed) ? CURSED : null;
+      if (category === 'ring') {
+        if (hero.rings.length < 2) return null;
+        // Ring.doEquip: both hands full, one of the two rings must be chosen to come off.
+        if (action.replace !== 0 && action.replace !== 1) return 'choose the ring to take off';
+        return hero.rings[action.replace]!.cursed ? CURSED : null;
+      }
       // ClassArmor.doEquip: class armour is for its own class only.
       if (CLASS_ARMOR.includes(item.kind) && item.kind !== CLASS_ARMOR_OF[hero.heroClass]) return 'that armour is not made for you';
-      return hero[category]?.cursed ? CURSED : null;
+      return hero[category === 'armor' ? 'armor' : 'weapon']?.cursed ? CURSED : null;
     }
     case 'drop':
-      return null;
+      // EquipableItem.doDrop: something worn must first come off, and a cursed one will not.
+      return isWornRef(action.item) && item.cursed ? CURSED : null;
     case 'balance': {
       if (category !== 'weightstone') return 'that is no weightstone';
       if (action.imbue !== 'speed' && action.imbue !== 'accuracy') return 'bad choice';
@@ -211,6 +239,9 @@ export function inventoryProblem(world: World, hero: Hero, action: InventoryActi
       // Item.AC_THROW: anything in the pack may be thrown (a bag would scatter what it holds: not that).
       const fits = action.type === 'throw' ? category !== 'bag' : category === 'wand';
       if (!fits) return `that cannot be ${action.type === 'throw' ? 'thrown' : 'zapped'}`;
+      // EquipableItem.cast: worn, it must first come off, and a cursed one will not.
+      // (A worn stack of darts is not taken off: only the last one is.)
+      if (action.type === 'throw' && isWornRef(action.item) && item.qty === 1 && item.cursed) return CURSED;
       if (!Number.isInteger(action.target) || action.target < 0 || action.target >= LENGTH || action.target === hero.pos) {
         return 'bad target';
       }
@@ -287,6 +318,13 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
         drinkFromVial(ctx, hero, hero.items[action.item]!);
         return TIME_TO_USE;
       }
+      if (itemDef(hero.items[action.item]!.kind).category === 'seed') {
+        // Plant.Seed.execute, AC_PLANT: one seed, planted (or let fall) at the hero's feet.
+        const seed = hero.items[action.item]!;
+        if (--seed.qty <= 0) hero.items.splice(action.item, 1);
+        seedLands(ctx, hero, seed.kind, hero.pos);
+        return TIME_TO_PLANT;
+      }
       if (itemDef(hero.items[action.item]!.kind).category === 'honeypot') {
         // Honeypot.execute: shattered right where the hero stands.
         const pot = hero.items[action.item]!;
@@ -315,91 +353,84 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
       ctx.effects.push({ type: 'mastered', hero: hero.id, subclass: action.subclass });
       return TIME_TO_READ_TOME;
     case 'unequip': {
-      const weapon = hero.weapon!;
-      hero.weapon = null;
-      if (hasRoom(hero, weapon)) hero.items.push(weapon);
-      else dropItem(ctx.floor, hero.pos, weapon);
-      ctx.effects.push({ type: 'dropped', hero: hero.id, item: weapon });
-      return TIME_TO_EQUIP;
+      // EquipableItem.doUnequip with `collect`: into the pack or, with no room there, down at the hero's feet.
+      const slot = action.slot ?? 'weapon';
+      const time = timeToUnequip(hero, slot);
+      takeOff(ctx, hero, slot);
+      return time;
     }
-    case 'remove': {
-      const ring = hero.rings.splice(action.ring, 1)[0]!;
-      hero.items.push(ring);
-      ctx.effects.push({ type: 'dropped', hero: hero.id, item: ring });
+    case 'remove':
+      // The same, for a ring (Ring.doUnequip).
+      takeOff(ctx, hero, action.ring === 0 ? 'ring0' : 'ring1');
       return TIME_TO_EQUIP;
-    }
     case 'equip': {
       const item = hero.items[action.item]!;
-      if (itemDef(item.kind).category === 'ring') {
-        // Two rings at most: a third takes the place of the first that is not cursed.
-        hero.items.splice(action.item, 1);
-        if (hero.rings.length >= 2) hero.items.push(hero.rings.splice(hero.rings.findIndex((ring) => !ring.cursed), 1)[0]!);
-        hero.rings.push(item);
+      const category = itemDef(item.kind).category;
+      // Item.detach, and later the old one is collected (Item.collect: the end of the pack, or onto a stack of its kind).
+      hero.items.splice(action.item, 1);
+      if (category === 'ring') {
+        // Ring.doEquip: with two on, the one chosen comes off first (a turn: Ring.doUnequip's spend), and the new one takes its place.
+        let time = TIME_TO_EQUIP;
+        let at = hero.rings.length;
+        if (hero.rings.length >= 2) {
+          at = action.replace!;
+          time += TIME_TO_EQUIP;
+          takeOff(ctx, hero, at === 0 ? 'ring0' : 'ring1');
+        }
+        hero.rings.splice(at, 0, item);
         ctx.effects.push({ type: 'equipped', hero: hero.id, item });
         // Ring.doEquip: put on, a ring's curse is known (it binds itself at once, if it is cursed).
         delete item.curseUnknown;
         if (item.cursed) ctx.effects.push({ type: 'cursedEquip', hero: hero.id, item });
         // RingBuff.attachTo: a rogue knows a ring for what it is the moment it is on.
         if (hero.heroClass === 'rogue' && learn(ctx.world, item.kind)) ctx.effects.push({ type: 'identified', hero: hero.id, kind: item.kind });
-        return TIME_TO_EQUIP;
+        return time;
       }
-      const slot = itemDef(item.kind).category as 'weapon' | 'armor';
-      // Bare-handed, nothing goes back into the pack.
-      const old = hero[slot];
-      if (old) hero.items[action.item] = old;
-      else hero.items.splice(action.item, 1);
+      // A thrown weapon in the hand (a huntress's or a rogue's) is a weapon here too.
+      const slot = category === 'armor' ? 'armor' : 'weapon';
+      // The one worn comes off first: a turn (a weapon), two over their speed (armour, still worn as it is taken off).
+      let time = 0;
+      if (hero[slot]) {
+        time += timeToUnequip(hero, slot);
+        takeOff(ctx, hero, slot);
+      }
       hero[slot] = item;
       ctx.effects.push({ type: 'equipped', hero: hero.id, item });
       // KindOfWeapon.doEquip and Armor.doEquip: in hand or worn, its curse is known.
       delete item.curseUnknown;
       if (item.cursed) ctx.effects.push({ type: 'cursedEquip', hero: hero.id, item });
-      return TIME_TO_EQUIP;
+      // Armor.doEquip: spendAndNext(time2equip), now with the new armour on.
+      return time + timeToUnequip(hero, slot);
     }
     case 'drop': {
-      // Level.drop: what the challenges forbid on the floor turns to gold as it leaves the hand, before any well sees it.
-      const item = underChallenges(ctx.world, hero.items.splice(action.item, 1)[0]!);
-      // Into a well of transmutation, it comes out as something else, and the well runs dry.
-      const well = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'transmutation');
-      const changed = well >= 0 && ctx.level.map[hero.pos] === T.WELL ? transmute(item, ctx.rng, ctx.depth) : null;
-      if (changed) {
-        ctx.level.wells.splice(well, 1);
-        ctx.level.map[hero.pos] = T.EMPTY_WELL;
-        dropItem(ctx.floor, hero.pos, changed);
-        ctx.effects.push({ type: 'transmuted', hero: hero.id, from: item, to: changed });
-        return TIME_TO_DROP;
-      }
-      // DewVial into a well of health (WaterOfHealth.affectItem): it comes out full, and the well runs dry.
-      const healing = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'health');
-      if (item.kind === 'vial' && (item.volume ?? 0) < DEW_VIAL_VOLUME && healing >= 0 && ctx.level.map[hero.pos] === T.WELL) {
-        item.volume = DEW_VIAL_VOLUME;
-        ctx.level.wells.splice(healing, 1);
-        ctx.level.map[hero.pos] = T.EMPTY_WELL;
-        dropItem(ctx.floor, hero.pos, item);
-        ctx.effects.push({ type: 'dewCollected', hero: hero.id, full: true });
-        return TIME_TO_DROP;
-      }
-      // Into a well of awareness, something not yet identified is revealed, and the well runs dry (WaterOfAwareness.affectItem).
-      const awareness = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'awareness');
-      if (awareness >= 0 && ctx.level.map[hero.pos] === T.WELL && !isIdentified(ctx.world, item)) {
-        identify(ctx.world, item);
-        ctx.level.wells.splice(awareness, 1);
-        ctx.level.map[hero.pos] = T.EMPTY_WELL;
-        dropItem(ctx.floor, hero.pos, item);
-        ctx.effects.push({ type: 'revealed', hero: hero.id, item });
-        return TIME_TO_DROP;
-      }
-      // Floating over a chasm, it falls through.
-      landItem(ctx, hero.pos, item);
-      ctx.effects.push({ type: 'dropped', hero: hero.id, item });
-      if (ctx.level.map[hero.pos] === T.ALCHEMY) brew(ctx, hero.pos, hero);
-      return TIME_TO_DROP;
+      // EquipableItem.doDrop: something worn is taken off first (`hero.spend(time2equip)`), then dropped as anything is.
+      if (!isWornRef(action.item)) return dropFromPack(ctx, hero, action.item);
+      const undressing = timeToUnequip(hero, action.item);
+      hero.items.push(unwear(hero, action.item));
+      return undressing + dropFromPack(ctx, hero, hero.items.length - 1);
     }
     case 'throw': {
+      // EquipableItem.cast: something worn comes off first (`hero.spend(time2equip)`, no turn ends there), then it flies as any item
+      // does. A worn stack of darts is not taken off, one flies out of the hand (`quantity == 1 &&`).
+      let index = isWornRef(action.item) ? -1 : action.item;
+      const thrown = isWornRef(action.item) ? itemAt(hero, action.item)! : hero.items[index]!;
+      let undressing = 0;
+      // Boomerang.cast: thrown from the hand, it circles back into the hand (circleBack: `spend(-TIME_TO_EQUIP)`).
+      const returning = isWornRef(action.item) && thrown.qty === 1 && thrown.kind === 'missile.boomerang';
+      if (isWornRef(action.item) && thrown.qty === 1) {
+        undressing = timeToUnequip(hero, action.item);
+        hero.items.push(unwear(hero, action.item));
+        index = hero.items.length - 1;
+      }
       // Shuriken fly twice as fast as anything else (Shuriken.DLY).
-      const thrown = hero.items[action.item]!;
       const delay = itemDef(thrown.kind).category === 'missile' ? missileStats(thrown).delay : 1;
-      throwItem(ctx, hero, action.item, action.target);
-      return TIME_TO_THROW * delay;
+      throwItem(ctx, hero, thrown, index, action.target);
+      if (returning) {
+        hero.items.splice(hero.items.indexOf(thrown), 1);
+        hero.weapon = thrown;
+        undressing -= TIME_TO_EQUIP;
+      }
+      return undressing + TIME_TO_THROW * delay;
     }
     case 'zap':
       zap(ctx, hero, action.item, action.target);
@@ -426,6 +457,70 @@ export function performInventory(ctx: Ctx, hero: Hero, action: InventoryAction):
   }
 }
 
+/** Item.doDrop: the pack's item at `index` goes down where the hero stands, and says how long that took. */
+function dropFromPack(ctx: Ctx, hero: Hero, index: number): number {
+  // Level.drop: what the challenges forbid on the floor turns to gold as it leaves the hand, before any well sees it.
+  const item = underChallenges(ctx.world, hero.items.splice(index, 1)[0]!);
+  // Into a well of transmutation, it comes out as something else, and the well runs dry.
+  const well = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'transmutation');
+  const changed = well >= 0 && ctx.level.map[hero.pos] === T.WELL ? transmute(item, ctx.rng, ctx.depth) : null;
+  if (changed) {
+    ctx.level.wells.splice(well, 1);
+    ctx.level.map[hero.pos] = T.EMPTY_WELL;
+    dropItem(ctx.floor, hero.pos, changed);
+    ctx.effects.push({ type: 'transmuted', hero: hero.id, from: item, to: changed });
+    return TIME_TO_DROP;
+  }
+  // DewVial into a well of health (WaterOfHealth.affectItem): it comes out full, and the well runs dry.
+  const healing = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'health');
+  if (item.kind === 'vial' && (item.volume ?? 0) < DEW_VIAL_VOLUME && healing >= 0 && ctx.level.map[hero.pos] === T.WELL) {
+    item.volume = DEW_VIAL_VOLUME;
+    ctx.level.wells.splice(healing, 1);
+    ctx.level.map[hero.pos] = T.EMPTY_WELL;
+    dropItem(ctx.floor, hero.pos, item);
+    ctx.effects.push({ type: 'dewCollected', hero: hero.id, full: true });
+    return TIME_TO_DROP;
+  }
+  // Into a well of awareness, something not yet identified is revealed, and the well runs dry (WaterOfAwareness.affectItem).
+  const awareness = ctx.level.wells.findIndex((w) => w.pos === hero.pos && w.water === 'awareness');
+  if (awareness >= 0 && ctx.level.map[hero.pos] === T.WELL && !isIdentified(ctx.world, item)) {
+    identify(ctx.world, item);
+    ctx.level.wells.splice(awareness, 1);
+    ctx.level.map[hero.pos] = T.EMPTY_WELL;
+    dropItem(ctx.floor, hero.pos, item);
+    ctx.effects.push({ type: 'revealed', hero: hero.id, item });
+    return TIME_TO_DROP;
+  }
+  // Floating over a chasm, it falls through.
+  landItem(ctx, hero.pos, item);
+  ctx.effects.push({ type: 'dropped', hero: hero.id, item });
+  if (ctx.level.map[hero.pos] === T.ALCHEMY) brew(ctx, hero.pos, hero);
+  return TIME_TO_DROP;
+}
+
+type WornRef = 'weapon' | 'armor' | 'ring0' | 'ring1';
+const isWornRef = (ref: ItemRef): ref is WornRef => typeof ref === 'string';
+
+/** EquipableItem.time2equip: a turn, but armour takes two (Armor.time2equip: `2 / hero.speed()`, the armour still on). */
+const timeToUnequip = (hero: Hero, slot: WornRef): number => (slot === 'armor' ? 2 / heroSpeed(hero) : TIME_TO_EQUIP);
+
+/** What EquipableItem.doUnequip leaves of the slot: the hero no longer wears the thing, which is returned. */
+function unwear(hero: Hero, slot: WornRef): Item {
+  const worn = itemAt(hero, slot)!;
+  if (slot === 'weapon') hero.weapon = null;
+  else if (slot === 'armor') hero.armor = null;
+  else hero.rings.splice(slot === 'ring0' ? 0 : 1, 1);
+  return worn;
+}
+
+/** EquipableItem.doUnequip with `collect`: what was worn goes into the pack, or, with no room there, down at the hero's feet. */
+function takeOff(ctx: Ctx, hero: Hero, slot: WornRef): Item {
+  const worn = unwear(hero, slot);
+  if (!collect(hero, worn)) dropItem(ctx.floor, hero.pos, worn);
+  ctx.effects.push({ type: 'dropped', hero: hero.id, item: worn });
+  return worn;
+}
+
 /** Wearing a ring of haggler, shops ask half. */
 const haggles = (hero: Hero): boolean => hero.rings.some((ring) => ring.kind === 'ring.haggler');
 
@@ -434,9 +529,23 @@ export function shopkeeperBeside(world: World, hero: Hero): boolean {
   return (world.floors[hero.depth]?.mobs ?? []).some((mob) => isShopkeeper(mob) && adjacent(mob.pos, hero.pos));
 }
 
+/**
+ * Plant.Seed.onThrow: into an alchemy pot it goes into the brew instead, over a chasm it falls through; anywhere else it is
+ * planted there and then (Level.plant: whatever grew in the cell is replaced).
+ */
+function seedLands(ctx: Ctx, hero: Hero, kind: ItemKind, cell: number): void {
+  if (ctx.level.map[cell] === T.ALCHEMY) {
+    dropItem(ctx.floor, cell, createItem(kind));
+    brew(ctx, cell, hero);
+  } else if (hasFlag(ctx.level.map[cell]!, F.PIT)) {
+    landItem(ctx, cell, createItem(kind));
+  } else {
+    plant(ctx, cell, SEED_PLANTS[kind]!, hero);
+  }
+}
+
 /** MissileWeapon.onThrow: a hit uses the dart up, a miss leaves it on the floor; the boomerang returns. */
-function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
-  const item = hero.items[index]!;
+function throwItem(ctx: Ctx, hero: Hero, item: Item, index: number, target: number): void {
   if (itemDef(item.kind).category === 'potion') {
     throwPotion(ctx, hero, index, target);
     return;
@@ -460,15 +569,7 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
     if (--item.qty <= 0) hero.items.splice(index, 1);
     const end = ballistica(ctx, hero.pos, target, false, true).at(-1)!;
     ctx.effects.push({ type: 'thrown', depth: ctx.depth, from: hero.pos, to: end, item: kind });
-    // Into an alchemy pot, it goes into the brew instead; into a chasm, it falls.
-    if (ctx.level.map[end] === T.ALCHEMY) {
-      dropItem(ctx.floor, end, createItem(kind));
-      brew(ctx, end, hero);
-    } else if (hasFlag(ctx.level.map[end]!, F.PIT)) {
-      landItem(ctx, end, createItem(kind));
-    } else {
-      plant(ctx, end, SEED_PLANTS[kind]!);
-    }
+    seedLands(ctx, hero, kind, end);
     return;
   }
   if (itemDef(item.kind).category !== 'missile') {
@@ -491,7 +592,9 @@ function throwItem(ctx: Ctx, hero: Hero, index: number, target: number): void {
   if (!boomerang) {
     if (item.qty > 1) {
       item.qty--;
-      thrown = { kind: item.kind, qty: 1, level: item.level };
+      // Item.detach: one of a stack leaves as a new instance of its class (`getClass().newInstance()`): none of 1.9.2a's thrown weapons
+      // is ever upgraded, so what leaves is a plain one.
+      thrown = createItem(item.kind);
     } else {
       hero.items.splice(index, 1);
     }

@@ -13,7 +13,6 @@ import { type WearQuad, WearFx } from './wearfx';
 import { seenCells } from './sight';
 import { fxp } from './fxplayer';
 import { haptic } from './telegram';
-import { DEPTH_CARD_MS } from './cards';
 
 /*
  * What the player sees, as opposed to what the world is: characters slide
@@ -119,6 +118,15 @@ export interface Puppet {
   knockY?: number;
   /** Slain and leaving a body: its sprite stays whole to the end of its death, then lies as a corpse (fx.ts). */
   laid?: boolean;
+  /**
+   * AlphaTweener: its alpha goes from `from` to `to` over `ms` from `start` (a wraith rising, a ghost turning into the curse that binds
+   * it and back). One that fades out is a copy of the figure that was, kept only while it does.
+   */
+  fade?: { start: number; ms: number; from: number; to: number };
+  /** How long the dead sprite takes to fade away after its death (MobSprite.FADE_TIME is 3 s for the soft-bodied; 0.7 s otherwise here). */
+  fadeMs?: number;
+  /** Its arrival (the cloud of curse) has been shown. */
+  arrived?: boolean;
   /** Burning or poisoned: embers or bubbles rise off it. */
   burning?: boolean;
   poisoned?: boolean;
@@ -249,8 +257,21 @@ function firstVisit(region: number): boolean {
   }
 }
 
+/** The kinds that rise out of nothing (Wraith.spawnAt, Ghost.replace), and the two figures of the sad ghost's cell. */
+const SPAWNED: ReadonlySet<string> = new Set(['wraith', 'curse']);
+const TURNED: ReadonlySet<string> = new Set(['ghost', 'curse']);
+/** AlphaTweener's half a second, and how soon after the event a new figure of these kinds counts as having risen from it. */
+const FADE_IN_MS = 500;
+const RISING_MS = 1500;
+/** MobSprite.FADE_TIME. */
+const DEAD_FADE_MS = 3000;
+
 export class View {
   readonly puppets = new Map<string, Puppet>();
+  /** Until when a figure of the kinds that rise is taken to have risen from an event just seen. */
+  private risingUntil = 0;
+  /** The sad ghost taking its leave: where, and when (fx-events.ts shows the shaft of light). */
+  departing: { x: number; y: number; start: number } | null = null;
   /** How long a step takes on screen (ms): STEP_MS, or under live turns the room's beat, so walks never pause. */
   stepMs = STEP_MS;
   /** While a step just taken is being shown (main.ts): walkers set off this many ms before `now`, so it is already under way on the first frame. */
@@ -263,8 +284,6 @@ export class View {
   looks: Record<string, Look> = {};
   /** What my hero's cosmetics put on the floor: footprints, the effects of a kill and a fall, the pet. */
   readonly wearFx = new WearFx();
-  /** Who last struck each foe (a kill's effect is played for my own kills only). */
-  private readonly struck = new Map<string, string>();
   depth = 0;
   /** When the "boss slain" banner appeared, or 0. */
   bannerStart = 0;
@@ -276,9 +295,7 @@ export class View {
   floorTitle: { text: string; start: number } | null = null;
   /** A new region's card on the way down: the depth, and when it appeared. */
   /** The descent's card; `intro` on a region's first visit on this device, with its few lines of text. */
-  depthCard: { depth: number; start: number; intro: boolean; title?: string; sub?: string; region?: number } | null = null;
-  /** The arena's wave banner: its words, its kind, and when it shows (after a sinking card, if one is up). */
-  waveCard: { title: string; sub: string; kind: '' | 'champions' | 'boss'; start: number } | null = null;
+  depthCard: { depth: number; start: number; intro: boolean } | null = null;
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
   projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string; bolt?: string }> = [];
 
@@ -288,7 +305,6 @@ export class View {
   reset(depth: number): void {
     this.depth = depth;
     this.puppets.clear();
-    this.struck.clear();
     this.wearFx.reset();
     this.floaters = [];
     this.flashes = [];
@@ -307,9 +323,10 @@ export class View {
     if (
       this.floaters.length > 0 || this.flashes.length > 0 || this.projectiles.length > 0 ||
       this.bossIntro !== null || this.levelCard !== null || this.floorTitle !== null || this.depthCard !== null ||
-      this.waveCard !== null || this.bannerStart > 0
+      this.bannerStart > 0
     ) return true;
     if (this.wearFx.busy(now)) return true;
+    for (const p of this.puppets.values()) if (p.fade) return true;
     for (const p of this.puppets.values()) {
       if (!p.alive) {
         if (!p.laid && now < p.removeAt + 100) return true;
@@ -328,18 +345,6 @@ export class View {
   /** Coming into a region (or setting out): its card, over the band in the middle. */
   enterRegion(depth: number, now: number): void {
     this.depthCard = { depth, start: now, intro: firstVisit(Math.floor((depth - 1) / 5)) };
-  }
-
-  /** The arena sinks to a region: its card, «Prison» and «The arena sinks deeper». */
-  arenaSinks(region: number, title: string, sub: string, now: number): void {
-    this.depthCard = { depth: region * 5 + 1, start: now, intro: false, title, sub, region };
-  }
-
-  /** A wave begins: its banner, after the sinking card if that is still up. */
-  waveBanner(title: string, sub: string, kind: '' | 'champions' | 'boss', now: number): void {
-    const card = this.depthCard;
-    const after = card && !card.intro ? card.start + DEPTH_CARD_MS : now;
-    this.waveCard = { title, sub, kind, start: Math.max(now, after) };
   }
 
   /** A tap skips a region's intro to its fading; true if there was one to skip. */
@@ -390,7 +395,20 @@ export class View {
           puppet.anim = 'die';
           puppet.animStart = -1e9;
         }
+        // Wraith.spawnAt: it fades in over half a second where it rises (the cloud of curse is shown with it, fx-events.ts).
+        if (!isHero && now < this.risingUntil && SPAWNED.has(kind)) puppet.fade = { start: now, ms: FADE_IN_MS, from: 0, to: 1 };
+        else puppet.arrived = true;
         this.puppets.set(id, puppet);
+      } else if (!isHero && puppet.kind !== kind && TURNED.has(kind) && TURNED.has(puppet.kind)) {
+        // Ghost.replace: the ghost and the curse that binds it (and back) are one cell's two figures: the old fades out as the new fades in.
+        const was: Puppet = { ...puppet, id: `${id}~was`, fade: { start: now, ms: FADE_IN_MS, from: 1, to: 0 }, queue: undefined };
+        this.puppets.set(was.id, was);
+        puppet.kind = kind;
+        puppet.sprite = sprite;
+        puppet.fade = { start: now, ms: FADE_IN_MS, from: 0, to: 1 };
+        puppet.arrived = kind !== 'curse';
+        puppet.anim = 'idle';
+        puppet.animStart = now;
       } else if (puppet.to !== pos) {
         const map = world.levels[this.depth]?.map;
         // Where the walker will stand once what is on screen has played out.
@@ -458,7 +476,7 @@ export class View {
         puppet.burning = hero.burning > 0;
         puppet.poisoned = hero.poison > 0;
         puppet.levitating = (hero.levitating ?? 0) > 0;
-        puppet.row = itemDef(hero.armor.kind).tier ?? 0;
+        puppet.row = hero.armor ? itemDef(hero.armor.kind).tier ?? 0 : 0;
         puppet.label = hero.id === myId ? '' : hero.name;
       }
     }
@@ -468,7 +486,7 @@ export class View {
       if (twin) {
         place(mob.id, 'mirror', this.assets.heroes[twin.heroClass], false, mob.pos, mob.hp, mob.ht, false, false, true);
         this.puppets.get(mob.id)!.sprite = heroSprite(this.assets, twin.heroClass, this.looks[twin.id]?.skin);
-        this.puppets.get(mob.id)!.row = itemDef(twin.armor.kind).tier ?? 0;
+        this.puppets.get(mob.id)!.row = twin.armor ? itemDef(twin.armor.kind).tier ?? 0 : 0;
         continue;
       }
       place(mob.id, mob.kind, this.assets.mobs[mob.kind], false, mob.pos, mob.hp, mob.ht,
@@ -479,7 +497,11 @@ export class View {
       puppet.poisoned = (mob.poison ?? 0) > 0;
     }
     for (const [id, puppet] of this.puppets) {
-      if (!seen.has(id) && (puppet.alive || now >= puppet.removeAt)) this.puppets.delete(id);
+      if (seen.has(id)) {
+        if (puppet.fade && puppet.fade.to === 1 && now >= puppet.fade.start + puppet.fade.ms) puppet.fade = undefined;
+      } else if (puppet.fade?.to === 0) {
+        if (now >= puppet.fade.start + puppet.fade.ms) this.puppets.delete(id);
+      } else if (puppet.alive || now >= puppet.removeAt) this.puppets.delete(id);
     }
     for (const puppet of this.puppets.values()) advance(puppet, now, this.stepMs);
 
@@ -611,7 +633,6 @@ export class View {
           }
           if (effect.hit) {
             if (target) target.flashUntil = now + 160;
-            if (effect.target.startsWith('#')) this.struck.set(effect.target, effect.attacker);
             const toHero = !effect.target.startsWith('#');
             this.float(effect.target, String(effect.damage), toHero ? COLORS.negative : COLORS.warning, now);
             audio.play(blowSound(world, effect.attacker, this.puppets.get(effect.attacker)?.kind), 0.8 + Math.random() * 0.45, 1, this.placeOf(effect.target, now));
@@ -636,17 +657,23 @@ export class View {
               puppet.alive = false;
               puppet.anim = 'die';
               puppet.animStart = now;
-              puppet.removeAt = puppet.isHero ? Infinity : now + duration(puppet.sprite.anims.die) + 700;
+              // The soft-bodied (the original's MobSprite fades every dead sprite over 3 s) take their time; the rest are quick.
+              puppet.fadeMs = SPAWNED.has(puppet.kind) || puppet.kind === 'ghost' ? DEAD_FADE_MS : 700;
+              puppet.removeAt = puppet.isHero ? Infinity : now + duration(puppet.sprite.anims.die) + puppet.fadeMs;
             }
           }
           if (effect.who.startsWith('#')) {
             const kind = this.puppets.get(effect.who)?.kind as MobKind | undefined;
             if (kind && effect.depth === this.depth) this.say(t.killed(t.mobs[kind]), COLORS.neutral, now);
-            // My own kill: the effect of the one I wear, where the foe stood.
-            const fallen = this.puppets.get(effect.who);
-            if (fallen && effect.depth === this.depth && this.struck.get(effect.who) === myId) {
-              const at = this.position(fallen, now);
-              this.wearFx.kill(Math.round(at.x), Math.round(at.y), now);
+            // Every kill I cause plays the effect of the one I wear, where the foe stood: the core's `died` says which hero slew it (`by`),
+            // whether by a blow, a wand's bolt, a thrown weapon, a bomb or an enchantment's strike. A death by fire, poison, bleeding, a trap or
+            // gas names nobody (the core keeps no account of who set it), and a monster's or an ally's kill has no hero in it: those play nothing.
+            if (effect.by === myId && effect.depth === this.depth && seen(effect.pos)) {
+              const fallen = this.puppets.get(effect.who);
+              const at = fallen ? this.position(fallen, now) : { x: cellX(effect.pos) * TILE, y: cellY(effect.pos) * TILE };
+              // A bolt or a missile in flight to that cell lands first.
+              const flight = this.projectiles.find((p) => p.to === effect.pos && p.start === now);
+              this.wearFx.kill(Math.round(at.x), Math.round(at.y), flight ? flight.start + flight.duration : now);
             }
           } else {
             if (effect.who === myId && effect.depth === this.depth) {
@@ -740,6 +767,8 @@ export class View {
           haptic('success');
           break;
         case 'opened':
+          // Heap.open on a tomb or on remains: what rises from it (wraiths, Wraith.spawnAt) fades in.
+          if (effect.depth === this.depth && (effect.heap === 'tomb' || effect.heap === 'skeleton')) this.risingUntil = now + RISING_MS;
           audio.play('item', 0.8);
           break;
         case 'pickedUp': {
@@ -1189,7 +1218,23 @@ export class View {
             audio.play('bee');
           }
           break;
+        case 'ghost':
+          // WndSadGhost: «Farewell, adventurer!» and Ghost.die: its die frame, a shaft of light and specks (fx-events.ts), and the
+          // sprite fades away over three seconds.
+          if (effect.line === 'farewell') {
+            for (const puppet of this.puppets.values()) {
+              if (puppet.kind !== 'ghost' || !puppet.alive || puppet.id.endsWith('~was')) continue;
+              puppet.alive = false;
+              puppet.anim = 'die';
+              puppet.animStart = now;
+              puppet.fadeMs = DEAD_FADE_MS;
+              puppet.removeAt = now + duration(puppet.sprite.anims.die) + DEAD_FADE_MS;
+              this.departing = { x: this.position(puppet, now).x + TILE / 2, y: this.position(puppet, now).y + TILE / 2, start: now };
+            }
+          }
+          break;
         case 'wraiths':
+          this.risingUntil = now + RISING_MS;
           audio.play('cursed');
           if (effect.depth === this.depth) {
             this.flashes.push({ cell: effect.pos, start: now, duration: 500 });
@@ -1197,6 +1242,7 @@ export class View {
           }
           break;
         case 'cursed':
+          this.risingUntil = now + RISING_MS;
           audio.play('ghost');
           if (effect.depth === this.depth) this.say(t.cursed, COLORS.negative, now);
           break;

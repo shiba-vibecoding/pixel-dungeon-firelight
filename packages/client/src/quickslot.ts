@@ -1,4 +1,4 @@
-import { type Hero, type ItemKind, itemDef } from '@pd/core';
+import { type Hero, type Item, type ItemKind, itemAt, itemDef } from '@pd/core';
 
 /*
  * The quick slots (QuickSlot): the items the player keeps one tap away. The
@@ -58,4 +58,28 @@ export function quickIndex(hero: Hero, slot = 0): number {
     const category = itemDef(item.kind).category;
     return i !== other && (category === 'missile' || category === 'wand');
   });
+}
+
+/** Something worn that a quick slot may hold. */
+export type WornSlot = 'weapon' | 'armor' | 'ring0' | 'ring1';
+
+/**
+ * Where what a quick slot holds is: a pack slot, or something worn (QuickSlot.select: Belongings.getItem walks what is worn first, then
+ * the pack, so a stack of darts in the hand shows in the slot, and throws from it); -1 when there is none. A slot not chosen yet keeps
+ * to the pack, as quickIndex has it.
+ */
+export function quickRef(hero: Hero, slot = 0): number | WornSlot {
+  const kind = chosen[slot];
+  if (kind) {
+    const worn: Array<[WornSlot, Item | null | undefined]> = [['weapon', hero.weapon], ['armor', hero.armor], ['ring0', hero.rings[0]], ['ring1', hero.rings[1]]];
+    const held = worn.find(([, item]) => item?.kind === kind);
+    if (held) return held[0];
+  }
+  return quickIndex(hero, slot);
+}
+
+/** The item in a quick slot, worn or in the pack. */
+export function quickItem(hero: Hero, slot = 0): Item | undefined {
+  const ref = quickRef(hero, slot);
+  return typeof ref === 'number' && ref < 0 ? undefined : itemAt(hero, ref);
 }

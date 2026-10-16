@@ -22,7 +22,6 @@ import { F, hasFlag, T } from './level/terrain';
 import { mobPress } from './traps';
 import { isBossDepth } from './level/builder';
 import { underChallenges } from './challenges';
-import { arenaKill } from './arena';
 
 /*
  * Melee combat as in Char.attack: an accuracy roll against an evasion roll,
@@ -143,6 +142,16 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     if (!thrown && attacker.weapon) {
       familiarise(ctx, attacker, attacker.weapon, WEAPON_HITS_TO_KNOW);
       wear(ctx, attacker, attacker.weapon);
+      // MissileWeapon.proc: a thrown weapon used in the hand is spent: one of a stack goes, the last one is let go of (`doUnequip`,
+      // which takes its turn) and is gone. The boomerang is not a stack, and keeps.
+      const held = attacker.weapon;
+      if (itemDef(held.kind).category === 'missile' && held.kind !== 'missile.boomerang') {
+        if (held.qty > 1) held.qty--;
+        else {
+          attacker.weapon = null;
+          ctx.extraTime = (ctx.extraTime ?? 0) + 1;
+        }
+      }
     }
   }
 
@@ -150,8 +159,10 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     const mark = ctx.effects.length;
     damage = armorProc(ctx, attacker, defender, damage);
     // Armor.proc: and every blow taken makes the armour better known, and wears it.
-    familiarise(ctx, defender, defender.armor, ARMOR_HITS_TO_KNOW);
-    wear(ctx, defender, defender.armor);
+    if (defender.armor) {
+      familiarise(ctx, defender, defender.armor, ARMOR_HITS_TO_KNOW);
+      wear(ctx, defender, defender.armor);
+    }
     // The glyph's backlash may have felled its wearer, or an ankh raised them anew: the blow is spent.
     if (!isAlive(defender) || ctx.effects.slice(mark).some((e) => e.type === 'resurrected')) return true;
   }
@@ -364,7 +375,6 @@ function mobDied(ctx: Ctx, mob: Mob, by?: string): void {
     return;
   }
   sacrifice(ctx, mob);
-  arenaKill(ctx, mob);
 
   // Everyone fighting on the depth learns from the kill, not just the killer.
   const stats = mobStats(mob);
@@ -413,8 +423,7 @@ function mobDied(ctx: Ctx, mob: Mob, by?: string): void {
     // Goo, Tengu, DM-300 and the King drop a skeleton key for the locked way down; Yog's fall opens it.
     if (mob.kind === 'yog') {
       if (level.map[level.exit] === T.LOCKED_EXIT) level.map[level.exit] = T.UNLOCKED_EXIT;
-    } else if (!ctx.world.arena) {
-      // (The arena has no locked way down for it to open.)
+    } else {
       dropItem(ctx.floor, mob.pos, { ...createItem('key.skeleton'), depth: ctx.depth });
     }
     ctx.effects.push({ type: 'yell', depth: ctx.depth, mob: mob.id, kind: mob.kind, line: 'death' });

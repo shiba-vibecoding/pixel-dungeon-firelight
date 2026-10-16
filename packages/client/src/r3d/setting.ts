@@ -26,11 +26,3 @@ function defaultStorage(): Storage3D | null {
     return null;
   }
 }
-
-/**
- * Whether a floor is drawn in 3D: every depth, in the look of its region (the world kit has all five and the five boss arenas);
- * the arena of waves, which dresses its own sand and stands, is still drawn by the classic renderer.
- */
-export function covers3D(_depth: number, _region: number, arena: boolean): boolean {
-  return !arena;
-}

@@ -1,0 +1,90 @@
+{
+ "template": {
+  "keys": [
+   "#e0e0e0",
+   "#a0a0a0",
+   "#606060",
+   "#303030"
+  ],
+  "cup": "compete/season/cup-template.png",
+  "frame": {
+   "sprite": "compete/season/frame-template.png",
+   "slice": 4
+  },
+  "note": "replace each key grey by the palette shade of the same index; other colours stay"
+ },
+ "seasons": [
+  {
+   "id": "s1",
+   "name": {
+    "en": "Embers of the Deep",
+    "ru": "Угли глубин"
+   },
+   "palette": [
+    "#ffd08a",
+    "#ff9a3a",
+    "#c8501a",
+    "#6e1e10"
+   ],
+   "cup": "compete/season/cup-s1.png",
+   "frame": {
+    "sprite": "compete/season/frame-s1.png",
+    "slice": 4
+   }
+  },
+  {
+   "id": "s2",
+   "name": {
+    "en": "Frost of the Caves",
+    "ru": "Иней пещер"
+   },
+   "palette": [
+    "#e4f8ff",
+    "#8ad0f0",
+    "#3a86c0",
+    "#1a3a6a"
+   ],
+   "cup": "compete/season/cup-s2.png",
+   "frame": {
+    "sprite": "compete/season/frame-s2.png",
+    "slice": 4
+   }
+  },
+  {
+   "id": "s3",
+   "name": {
+    "en": "Moss of the Sewers",
+    "ru": "Мох стоков"
+   },
+   "palette": [
+    "#d8f8a0",
+    "#8adc5a",
+    "#3a8a3a",
+    "#163a1a"
+   ],
+   "cup": "compete/season/cup-s3.png",
+   "frame": {
+    "sprite": "compete/season/frame-s3.png",
+    "slice": 4
+   }
+  },
+  {
+   "id": "s4",
+   "name": {
+    "en": "Shadow of the Halls",
+    "ru": "Тень залов"
+   },
+   "palette": [
+    "#ecd4ff",
+    "#b48aff",
+    "#6a3ab8",
+    "#2a1250"
+   ],
+   "cup": "compete/season/cup-s4.png",
+   "frame": {
+    "sprite": "compete/season/frame-s4.png",
+    "slice": 4
+   }
+  }
+ ]
+}

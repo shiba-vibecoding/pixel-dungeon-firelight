@@ -179,8 +179,6 @@
   --spr-check: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAICAYAAAArzdW1AAAATklEQVR4nH2PMQ6AMAwDr9mq8CHE2q8jPkTFGKaiyEBvPjsOTHCvAWAzYT033GtYTqgwsJxQ4Vh2er/Kc26IKgCUr/osvIa2aKH7fl9WbvTuKFw/d5jFAAAAAElFTkSuQmCC");
   --atlas-troph16: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAAQCAYAAADeWHeIAAAFIklEQVR4nO1ZQUgcVxj+RnLZnW0uVbsiXRUvVYqi66HgFjE5hbKwGDYXa3KQJVCPSalIzbJpEKXmUhJCEQ9G9hJRFpYgLcRiWSG0rmmCbOxBEkfEja6HNDO7vU0P7hvfzL4382YLMSn9Ljuz//ve23nf997/z1sJ/xHIsken7zWtJL3N+PuKM/SN9SF54D38afM/7v0OgU+6sTb7BZPXO/wQytYGdtfGmfFvPmxCKFCL8JMsM57uCiKjFDB1tCPyMyHLHv00jSIyvkQ3VlUFKPxkbrHzq+n23p0lfL2gMVeIqhaxvfvK1H4zt2W6T6VSWJj/kc3/fQ6vfvvZ1D73h4W/rmD2ySHTBLLs0WkTkDay7NFp8e0MSJuA5tPii4gqyx5d3ZuDr/FK1bvFWOKaPhG/XRVXlj16br+I9gav7fg1pHE1A7CuT4NPoGklaXdtHMrWBnqHH0KWPbqo+IQ/dbSDjFJAuito8N2KT0NNB6t6vmrEdxqHFa+RZY+urg65/X1QV4eMCUouLrvmJxeXTyY4FnTNT8fYE2s1gaj4NJ82QTXik9WPjR+YMZE+JuK3pbHENWHjkBXP658XN9UAFdu/S1i3f7ewbv/VgDzg7to4dtcqY04iEv7U0U5Frhflq3tzxv3rlAI1HYQvnNUBGNciZiImENkJNK0ktTd49URaQbSnVm9v8Bqxnb90fWG9wEwHJgP4mmNQX85wByH5n4fOthY8ff6CGyf5n4fWkSS27w7y+eX8z4NTHVIenzv5TnVIeXyxwo5a/ZQJHGk03KYBTStJ18/VIS579ERaAQAk0optHVCjaSXJ1zcPZhqwFIAE6uoQfH3z0LSSpGklafDiBbDSgLUAJEguLmPw4gWDH57JgpUGrAUgQToWRHgma3oonvg0IpEIokNXmdskT3wTvyeA4a46222W3vpfpxQjVo0JRMUnqVSWPfr0yiHZBQAA0Z5aJNIKplcOdbod4Z4Bjp3j65u3zTf37iwZ10R8cl82gS0/lUoZ10R8mh+eydrz108m0yo+AS3+rYlJUywSidh1D+AkBV2+8QD3b14yxSaXnmF0oMOxDwIi/kamCADoDnmr3gnsQHI7C4EPAOUNTsxAtWtv8OqaVpKMFEAm1Ncc03lpgPX6Z+V3trXovDTAev2z8ltHkjovDfBe/1j4dmzUuLaawQn3b14ymUBEfHr1W8V3C15xy2pLcj+5J1t/tKcWypvj7xbWCwCAeDhQ0Z+5CCwHrCbgvfvzfpDVBLx3fx7fagK7d38n3JqYFFr9VhATAHC18gmI+P3Zx/gl+Bk2MkV0h7wOrGPx+86HAAB+fz3y+QMAwOqjDLf2oL+/fq6cosppYGG9gHg4wK8BeB36mmMA3IlP8zvbWgC4E5/mt44kj/n/QnxeDfK20J99bPp0AhHf76/HV3//aYr1nQ8JvedPrxzquf2isdrj4QBy+0WjBrBymAZ4H0GbbjO3hc3cFlKplGn125mRNt1Hn9bg8o0HGB3owOhAByaXnqH/y3ZbM2paSfI1XnH8nb4wu36hkc8fYKn5c+TzB/D76x37BE5qgXg4gKazkqn/prOSRIxgNQHzOFV9OSN8BMziP33+QvgImMXfvjvo6gjYyo8OXWXGRMcf7qpjxkTH3xuuq8j/3SEvGmfF+CQF0Fh9lBHi0sfX1qNg1jlGxXn891HZbgxbE9hNPoGdCHaTTyAqAut7Nyd57xrfbQoU/S/A9i9PHt7VfwP/hxkiJ5f/AKHM8x06YYlyAAAAAElFTkSuQmCC");
   --atlas-troph32: url("data:image/png;base64,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");
-  --spr-arena: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABE0lEQVR4nJWSoW4CQRCGv2uC2MwDYBAkDUlrTlTWVWJ4gD4AoqaiSUWDqW0KSc1KsLwBsgmiQZCKMxWkCSEIgr8gEFPT3S7hjr2Om+x8//zzZwEQMbpZzXQ0tipilJISMToaW92sZsdzMZGTcEykElwmEoOTMpHvr3cmH58AtK+vOL+8Ic93hfNHcJntSvZ13j2wHZ7j3iqJuM0ukzL4rEikP5hS3w59X98O6Q+m0fMRMfp6e+E367zrN4dvhaCI0afnBxUxansdtb2OB8PezTihRMTo/eMdAI39gjRtnnSZZUvWtRYAby/2L4MqMECaNmnsF74vDPE/5QXWtRZZtowC4Qnw+5VdIGEWRRXeDpDnu+QHDeTTb5r9qUYAAAAASUVORK5CYII=");
-  --atlas-arena: url("data:image/png;base64,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");
   --spr-resume: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAS0lEQVR4nGNgoBv4/3rJf2LEmUjVxIRPEps4hgZCmrBq4FFIxSbMwKOQimkDj0Iqw9ev3xkJiv9/veQ/NzcnhlNwiTNgFcQjTjsAAFaVMA2T6ca3AAAAAElFTkSuQmCC");
 }
 
@@ -1005,7 +1003,7 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 
 /* ---------- Тосты находок ----------
    Справа сверху под HUD, короткие, складываются в стопку при серии: новые сверху, старше трёх — уходят. */
-.pd-finds { position: absolute; z-index: var(--z-toast, 30); right: calc(var(--safe-r) + var(--space-2)); top: calc(var(--safe-t) + var(--hud-h, 200px)); display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
+.pd-finds { position: absolute; z-index: var(--z-toast, 30); right: calc(var(--safe-r) + var(--space-2) + var(--tap-min, 44px) + 8px); top: calc(var(--safe-t) + var(--hud-h, 200px)); display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
 .pd-find {
   display: flex; align-items: center; gap: 6px; max-width: 220px;
   padding: 2px 10px 2px 4px; min-height: 36px;
@@ -1388,86 +1386,13 @@ button.pd-slot:active, .pd-slot.pressed { background: var(--stone-900); }
 @keyframes pd-spot { 50% { box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void) !important; } }
 @media (prefers-reduced-motion: reduce) { .pd-spot { animation: none; } }
 
-/* ---------- Арена волн ---------- */
-/* вход на титуле: широкая кнопка с иконкой режима и рекордом, под «Играть с друзьями» */
-.pd-mode-btn { justify-content: flex-start; gap: var(--space-3); text-align: left; padding-left: var(--space-2); min-height: 56px; white-space: normal; }
-.pd-mode-ico { flex: none; width: 32px; height: 32px; background: var(--spr-arena) center / contain no-repeat; image-rendering: pixelated; }
-.pd-mode-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.pd-mode-text small { font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink-muted); }
-.pd-mode-text small b { font-weight: 400; color: var(--gold); }
-/* окно выбора: одному или с друзьями */
-.pd-arena-pick { display: flex; flex-direction: column; gap: var(--space-3); }
-.pd-arena-pick .pd-arena-art { display: flex; justify-content: center; gap: 4px; padding: var(--space-2) 0; background: var(--stone-800); clip-path: var(--notch); }
-.pd-arena-pick .pd-arena-art i { width: 32px; height: 32px; background: var(--atlas-arena) no-repeat; background-size: 192px 160px; image-rendering: pixelated; }
-.pd-arena-rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
-.pd-arena-rules li::before { content: "· "; color: var(--gold-deep); }
-.pd-record { display: inline-flex; align-items: center; gap: 6px; align-self: center; padding: 2px 10px; font: var(--text-label, 400 18px/22px var(--font-ui)); color: var(--gold); background: var(--stone-800); clip-path: var(--notch); }
-.pd-record::before { content: ""; width: 16px; height: 16px; background: var(--spr-arena) center / contain no-repeat; image-rendering: pixelated; }
-.pd-record.new { color: var(--void); background: var(--gold-deep); }
-.pd-record.new::before { filter: brightness(0); opacity: .7; }
-
-/* табло арены: вместо глубины — «Волна 7 · осталось 5» и ступенчатая полоска волны */
-.pd-waveboard { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 10px 4px 6px; background: rgba(11, 11, 9, 0.78); clip-path: var(--notch); box-shadow: inset 0 0 0 var(--u) var(--stone-500); }
-.pd-waveboard::before { content: ""; flex: none; width: 24px; height: 24px; background: var(--spr-arena) center / contain no-repeat; image-rendering: pixelated; }
-.pd-wave-n { flex: none; font: var(--text-hud, 400 20px/20px var(--font-small)); color: var(--gold); white-space: nowrap; }
-.pd-wave-left { flex: none; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); white-space: nowrap; }
-.pd-wave-left b { font-weight: 400; color: var(--bad); }
-.pd-waveboard .pd-bar { flex: 1; min-width: 40px; height: 8px; border-width: 1px; box-shadow: none; }
-.pd-waveboard .pd-bar::before { background: var(--bad); }
-.pd-waveboard.rest .pd-wave-n { color: var(--good); }
-.pd-waveboard.rest .pd-bar { display: none; }
-.pd-wave-ready { margin-left: auto; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ready, var(--good)); white-space: nowrap; }
-.pd-waveboard.champions { box-shadow: inset 0 0 0 var(--u) var(--fx-boss); }
-.pd-waveboard.champions .pd-wave-n::after { content: " ★"; color: var(--fx-boss); }
-
-/* «К бою!» — большая главная кнопка в передышке, над логом (на мониторе — над островами) */
-.pd-fight { position: absolute; z-index: var(--z-hud, 10); left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + var(--tool-h, 56px) + var(--space-2) * 2 + var(--log-h, 120px) + 12px); display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.pd-fight .pd-button.primary { min-width: 220px; min-height: 56px; font: var(--text-title, 400 24px/28px var(--font-ui)); }
-.pd-fight .pd-button.primary.waiting { --b-bg: var(--stone-600); --b-hi: var(--stone-300); --b-lo: var(--stone-500); --b-ink: var(--ink); }
-.pd-fight-note { padding: 0 8px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); text-shadow: var(--text-outline); }
-.pd-fight-note b { font-weight: 400; color: var(--ally); }
-.pd-wide .pd-fight { bottom: calc(var(--gap, 12px) + var(--tool-h, 56px) + 8px + 20px); }
-.pd-ui .pd-waveboard.top { position: absolute; left: 50%; top: var(--gap, 12px); transform: translateX(-50%); }
-
-/* готовность в отряде: зелёная галочка в углу карточки */
-:is(.pd-mate, .pd-pcard).ready { position: relative; border-color: var(--ready, var(--good)); }
-:is(.pd-mate, .pd-pcard).ready::after { content: ""; position: absolute; right: 3px; top: 3px; width: 18px; height: 16px; background: var(--spr-check) center / contain no-repeat; image-rendering: pixelated; }
-.pd-pcard.ready .pd-pstate { color: var(--ready, var(--good)); }
-.pd-pcard.ready .pd-mate-depth { visibility: hidden; }
-
-/* награда за волну: три карточки, выбрать одну */
-.pd-loot3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
-.pd-loot { --rar: var(--rarity-common, var(--stone-200)); position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px 8px; min-height: 150px; background: var(--stone-800); clip-path: var(--notch); box-shadow: inset 0 calc(3 * var(--u)) 0 var(--rar), inset 0 0 0 var(--u) var(--stone-600); text-align: center; }
-.pd-loot.rare { --rar: var(--rarity-rare, #7cc4ff); }
-.pd-loot.legend { --rar: var(--rarity-legend, var(--gold-deep)); }
-.pd-loot .pd-slot { --slot: 56px; }
-.pd-loot .pd-slot .pd-item { --u: 3px; }
-.pd-loot-name { font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--ink); overflow-wrap: break-word; }
-.pd-rarity { font: var(--text-caption, 400 15px/18px var(--font-small)); color: var(--rar); }
-.pd-loot.legend::before { content: ""; position: absolute; left: 8px; top: 12px; width: 4px; height: 4px; background: var(--gold); box-shadow: 44px 6px 0 var(--gold-deep), 10px 30px 0 var(--gold); animation: pd-blink 1.2s steps(2) infinite; }
-.pd-loot[aria-checked="true"] { background: var(--stone-700); box-shadow: inset 0 calc(3 * var(--u)) 0 var(--rar), inset 0 0 0 2px var(--gold), inset 0 0 0 4px var(--void); }
-.pd-loot:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus), inset 0 0 0 4px var(--void); }
-@media (prefers-reduced-motion: reduce) { .pd-loot.legend::before { animation: none; } }
-.pd-loot-note { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); text-align: center; }
-
-/* итоги арены: как конец забега, плюс рекорд и строки отряда */
-.pd-runend.arena .pd-display { color: var(--gold); }
-.pd-arena-party { display: flex; flex-direction: column; gap: 2px; text-align: left; }
-.pd-arena-party div { display: grid; grid-template-columns: 24px 1fr auto auto; gap: 8px; align-items: center; min-height: 32px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); border-bottom: var(--u) solid var(--stone-600); }
-.pd-arena-party i { width: 24px; height: 30px; background: var(--atlas-heroes) no-repeat; background-size: 96px 30px; background-position: calc(var(--av, 0) * -24px) 0; image-rendering: pixelated; transform: scale(.8); }
-.pd-arena-party span:nth-child(2) { color: var(--ally); }
-.pd-arena-party .me span:nth-child(2) { color: var(--gold); }
-.pd-arena-party .head { min-height: 20px; color: var(--ink-muted); border-bottom: 0; }
-.pd-arena-party .head span { color: var(--ink-muted) !important; }
-.pd-arena-party div > span:nth-child(n+3) { text-align: right; min-width: 44px; }
-
 /* ---------- Рейтинги: значки 16×16 и 32×32 ----------
-   trophies16.png: 0 кубок дня золото, 1 серебро, 2 бронза, 3 медаль недели, 4 медаль арены, 5 огонёк горит, 6 огонёк погас, 7 заморозка.
+   trophies16.png: 0 кубок дня золото, 1 серебро, 2 бронза, 3 медаль недели, 4 (не используется), 5 огонёк горит, 6 огонёк погас, 7 заморозка.
    trophies32.png: 0–4 те же трофеи крупно. */
 .pd-tro { --t: 0; flex: none; display: inline-block; vertical-align: middle; width: calc(16 * var(--u)); height: calc(16 * var(--u)); background: var(--atlas-troph16) no-repeat; background-size: calc(128 * var(--u)) calc(16 * var(--u)); background-position: calc(var(--t) * -16 * var(--u)) 0; image-rendering: pixelated; }
 .pd-tro.x1 { --u: 1px; }
 .pd-tro.big { width: calc(32 * var(--u)); height: calc(32 * var(--u)); background-image: var(--atlas-troph32); background-size: calc(160 * var(--u)) calc(32 * var(--u)); background-position: calc(var(--t) * -32 * var(--u)) 0; }
-.pd-tro.gold { --t: 0; } .pd-tro.silver { --t: 1; } .pd-tro.bronze { --t: 2; } .pd-tro.week { --t: 3; } .pd-tro.arena { --t: 4; } .pd-tro.flame { --t: 5; } .pd-tro.flame-off { --t: 6; } .pd-tro.frost { --t: 7; }
+.pd-tro.gold { --t: 0; } .pd-tro.silver { --t: 1; } .pd-tro.bronze { --t: 2; } .pd-tro.week { --t: 3; } .pd-tro.flame { --t: 5; } .pd-tro.flame-off { --t: 6; } .pd-tro.frost { --t: 7; }
 
 /* ---------- Карточка игрока над окном титула ----------
    Огонёк серии с числом дней, строка «12 дней подряд», под ней «Рекорд · Забегов · Сегодня #N»; справа заморозки и трофеи. Тап — «Рейтинг», вкладка «Мои». */

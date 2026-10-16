@@ -6,8 +6,7 @@ import type { RunSummary } from './runs';
  * after what it ranks and when:
  *   daily:YYYY-MM-DD   the daily dungeon, the day's first run of each player
  *   week:YYYY-Www      the week's best dungeon run of each player (any checked run)
- *   arena:YYYY-Www     the week's best arena run
- *   all, arena-all     the best ever
+ *   all                the best ever
  * A player's best run stands on each; a finished day or week gives its best trophies.
  *
  * Seasons: Firelight started the world afresh. Every board lives in a Durable Object named
@@ -19,11 +18,18 @@ import type { RunSummary } from './runs';
 /** The world's season: 1 before Firelight, 2 from it. Raised for the next fresh start. */
 export const SEASON = 3;
 
+/** A board of the arena of waves, which the game no longer has: what it holds is kept, never shown. */
+export const isArenaBoard = (board: string): boolean => board.startsWith('arena');
+
 /** The Durable Object name of a board, in this season. */
 export const boardObject = (name: string, season: number = SEASON): string => `s${season}:${name}`;
 
-export type BoardKind = 'daily' | 'week' | 'arena' | 'all' | 'arenaAll';
-export const BOARD_KINDS: readonly BoardKind[] = ['daily', 'week', 'arena', 'all', 'arenaAll'];
+/*
+ * The arena of waves had boards of its own (arena:YYYY-Www, arena-all). They are no longer offered, asked for, written to or read; what
+ * they hold in their Durable Objects stays as it is, unserved.
+ */
+export type BoardKind = 'daily' | 'week' | 'all';
+export const BOARD_KINDS: readonly BoardKind[] = ['daily', 'week', 'all'];
 
 export function boardName(kind: BoardKind, now: number): string {
   switch (kind) {
@@ -31,19 +37,14 @@ export function boardName(kind: BoardKind, now: number): string {
       return `daily:${dayOf(now)}`;
     case 'week':
       return `week:${weekOf(now)}`;
-    case 'arena':
-      return `arena:${weekOf(now)}`;
     case 'all':
       return 'all';
-    case 'arenaAll':
-      return 'arena-all';
   }
 }
 
 /** The boards a finished run goes on. A daily dungeon played again the same day is practice: none. */
 export function boardsFor(summary: RunSummary): BoardKind[] {
   if (!summary.ranked) return [];
-  if (summary.mode === 'arena') return ['arena', 'arenaAll'];
   return summary.slot === 'daily' ? ['daily', 'week', 'all'] : ['week', 'all'];
 }
 
@@ -55,7 +56,8 @@ export function boardOfRun(kind: BoardKind, summary: RunSummary, now: number): s
 /** How long after its day or week a board is kept (ms); null: for ever. */
 export function boardTtl(name: string): number | null {
   if (name.startsWith('daily:')) return 60 * 86_400_000;
-  if (name.startsWith('week:') || name.startsWith('arena:')) return 180 * 86_400_000;
+  // (The arena of waves' old weekly boards expire as they always did.)
+  if (name.startsWith('week:') || name.startsWith('arena:') || name.startsWith('circle:')) return 180 * 86_400_000;
   return null;
 }
 
@@ -68,5 +70,5 @@ export function trophyPlaces(name: string): number {
 export function finishedBoards(now: number): string[] {
   const yesterday = now - 86_400_000;
   const lastWeek = now - 7 * 86_400_000;
-  return [`daily:${dayOf(yesterday)}`, `week:${weekOf(lastWeek)}`, `arena:${weekOf(lastWeek)}`];
+  return [`daily:${dayOf(yesterday)}`, `week:${weekOf(lastWeek)}`];
 }

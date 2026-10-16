@@ -4,7 +4,12 @@ import {
 } from '@pd/core';
 import { awardRun, type PassProgress } from '../../client/src/pass';
 import { SEASON } from './boards';
+import type { Heat } from './heat';
+import { armorTierOf } from './worn';
 import type { Letter } from './mail';
+import type { CircleRef } from './circle-flow';
+import type { LeagueResult, LeagueState } from './league-flow';
+import type { SeasonResult } from './season-flow';
 
 /*
  * A player's checked runs and what they add up to. The device plays a run at once, with no
@@ -17,8 +22,13 @@ import type { Letter } from './mail';
  * Pure logic, kept by the player's Durable Object (Player, index.ts).
  */
 
-export type RunSlot = 'dungeon' | 'arena' | 'daily';
-export const RUN_SLOTS: readonly RunSlot[] = ['dungeon', 'arena', 'daily'];
+/*
+ * The arena of waves had a slot of its own ('arena'). It has none now: a player's stored arena run (run-store.ts) is left in the
+ * storage as it is and never loaded, served or played, and its results (the profile's arenaWaves and arenaBest, the history's
+ * entries, the old boards) stay stored and unserved.
+ */
+export type RunSlot = 'dungeon' | 'daily';
+export const RUN_SLOTS: readonly RunSlot[] = ['dungeon', 'daily'];
 
 /** The hero's id in a player's own run. */
 export const ME = 'me';
@@ -49,6 +59,8 @@ export interface Run {
 
 /** A finished run, as the player's history keeps it. */
 export interface RunSummary extends RunOutcome {
+  /** The tier of the armour the hero wore at the end (the row of the hero's sheet: 1 cloth ... 5 plate, 6 the class armour), from the final world; absent from runs before it was kept. */
+  armor?: number;
   slot: RunSlot;
   ranked: boolean;
   at: number;
@@ -79,9 +91,6 @@ export interface Profile {
   /** The best checked score in the dungeon, and by class. */
   best: number;
   bestByClass: Partial<Record<HeroClass, number>>;
-  /** The arena of waves: most waves held, and the best score. */
-  arenaWaves: number;
-  arenaBest: number;
   streak: Streak;
   /** The season the profile is of (boards.ts SEASON; absent: season 1, before Firelight): see season.ts. */
   season?: number;
@@ -104,6 +113,20 @@ export interface Profile {
   newsSeen?: string;
   /** Honours the admin gave: 'bughunter' for a confirmed report (problem.ts). */
   honors?: string[];
+  /** «Hide me from the boards» (privacy.ts; a setting: kept through a season's wipe): the name on the boards is the alias. */
+  hidden?: boolean;
+  alias?: string;
+  /** The competitions' season (heat.ts, season-flow.ts): the Heat of the season now, the one just over while its hall of fame is awaited, the seasons closed, and what has been won (honours.ts). */
+  heat?: Heat;
+  heatPrev?: Heat;
+  seasons?: SeasonResult[];
+  honour?: string[];
+  /** The weekly leagues (league-flow.ts): the step and the room of the week, the result of the last week, and the week whose result the player has seen. */
+  league?: LeagueState;
+  leagueResult?: LeagueResult;
+  leagueSeen?: string;
+  /** The circles the player is in (circle-flow.ts): at most 2. */
+  circles?: CircleRef[];
   /** The problem reports sent today, for the daily limit (problem.ts). */
   problems?: { day: string; count: number };
   /** The season pass's XP, from this season's checked runs only (pass.ts); a new season starts it afresh with the rest of the profile. */
@@ -115,7 +138,7 @@ const HISTORY = 20;
 
 export function emptyProfile(name = 'Hero'): Profile {
   return {
-    name, games: 0, wins: 0, deepest: 0, best: 0, bestByClass: {}, arenaWaves: 0, arenaBest: 0,
+    name, games: 0, wins: 0, deepest: 0, best: 0, bestByClass: {},
     streak: { last: null, count: 0, best: 0, freezes: 0 }, dailyDate: null, badges: emptyBadgeProgress(), bones: null, history: [], trophies: [], claimed: [], entered: [], mail: [], coachDone: false,
   };
 }
@@ -223,7 +246,7 @@ export interface SyncResult {
 /** What the boards and the profile hear when a run ends. */
 export interface Finish {
   summary: RunSummary;
-  /** A new best of the player's (dungeon score, or arena waves). */
+  /** A new best of the player's (the dungeon score). */
   record: boolean;
 }
 
@@ -246,7 +269,7 @@ export class PlayerLogic {
     const seed = daily ? (options.dailySeed ?? options.seed) : options.seed;
     // The daily dungeon has its own rules (daily.ts): the day's hardship, and its boon once the hero is there.
     const rules = daily ? dailyRules(today) : null;
-    const world = createWorld(seed, rules ? rules.challenge : slot === 'arena' ? 0 : options.challenges, slot === 'arena' ? 'arena' : 'dungeon');
+    const world = createWorld(seed, rules ? rules.challenge : options.challenges);
     const hero = addHero(world, { id: ME, name: options.name, heroClass: options.heroClass });
     if (rules) applyBoon(world, hero, rules.boon);
     // Bones.java: a fallen hero's bones wait in ordinary runs, never in the daily dungeon (the same for everyone).
@@ -310,23 +333,17 @@ export class PlayerLogic {
     const me = heroById(run.world, ME)!;
     const outcome = runOutcome(run.world, me);
     run.finished = outcome;
-    const summary: RunSummary = { ...outcome, slot: run.slot, ranked: run.ranked, at: now, ...(run.date ? { date: run.date } : {}) };
+    const summary: RunSummary = { ...outcome, armor: armorTierOf(me), slot: run.slot, ranked: run.ranked, at: now, ...(run.date ? { date: run.date } : {}) };
     run.summary = summary;
     const p = this.profile;
     let record = false;
-    if (outcome.mode === 'arena') {
-      record = outcome.depth > p.arenaWaves;
-      p.arenaWaves = Math.max(p.arenaWaves, outcome.depth);
-      p.arenaBest = Math.max(p.arenaBest, outcome.score);
-    } else {
-      record = run.ranked && outcome.score > p.best;
-      if (run.ranked) {
-        p.best = Math.max(p.best, outcome.score);
-        p.bestByClass[outcome.heroClass] = Math.max(p.bestByClass[outcome.heroClass] ?? 0, outcome.score);
-      }
-      p.deepest = Math.max(p.deepest, outcome.depth);
-      if (outcome.won) p.wins++;
+    record = run.ranked && outcome.score > p.best;
+    if (run.ranked) {
+      p.best = Math.max(p.best, outcome.score);
+      p.bestByClass[outcome.heroClass] = Math.max(p.bestByClass[outcome.heroClass] ?? 0, outcome.score);
     }
+    p.deepest = Math.max(p.deepest, outcome.depth);
+    if (outcome.won) p.wins++;
     if (run.slot === 'dungeon' && !outcome.won) {
       // Bones.leave, with its dice from the run's own seed.
       const rng = Rng.seeded(deriveSeed(run.seed, 0xb0e5));
@@ -335,7 +352,7 @@ export class PlayerLogic {
     p.history = [summary, ...p.history].slice(0, HISTORY);
     // Pass XP for the run, once (pass.ts): from the server's own copy of the run, so nothing a device says can add to it.
     p.pass = awardRun(p.pass, SEASON, {
-      id: run.id, mode: outcome.mode, daily: run.slot === 'daily', ranked: run.ranked, depth: outcome.depth, kills: outcome.kills, won: outcome.won,
+      id: run.id, daily: run.slot === 'daily', ranked: run.ranked, depth: outcome.depth, kills: outcome.kills, won: outcome.won,
     }, dayOf(now)).progress;
     run.record = record;
     return { summary, record };

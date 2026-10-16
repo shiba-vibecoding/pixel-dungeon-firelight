@@ -38,7 +38,10 @@ function words(letter: Letter): HTMLElement {
   if (letter.kind === 'gift') {
     const given = letter.gifts[0];
     const item = given?.type === 'item' ? itemById(canonical(given.sku)) : undefined;
-    return el('p', { className: 'pd-letter-text' }, S.giftLetterText(given?.type === 'item' ? given.name : undefined, item ? item.name[L] : '…'));
+    const text = el('p', { className: 'pd-letter-text' }, S.giftLetterText(given?.type === 'item' ? given.name : undefined, item ? item.name[L] : '…'));
+    // The giver's note, as plain text between quotes (a note is never read as markup).
+    if (given?.type === 'item' && given.note) text.append(el('span', { className: 'pd-letter-note', textContent: `«${given.note}»` }));
+    return text;
   }
   const [, when = ''] = letter.board.split(':');
   const text = letter.kind === 'cup'

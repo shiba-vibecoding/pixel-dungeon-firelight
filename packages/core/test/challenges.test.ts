@@ -76,7 +76,7 @@ describe('challenges', () => {
       expect(world.quest.armor).toMatchObject({ kind: 'armor.cloth', level: -1 });
     }
     expect(ghosts).toBeGreaterThan(0);
-    expect(heroById(solo(NO_ARMOR), 'p')!.armor.kind).toBe('armor.cloth');
+    expect(heroById(solo(NO_ARMOR), 'p')!.armor!.kind).toBe('armor.cloth');
   });
 
   it('pharmacophobia: no potion of healing on the floor or in the shops; other potions still', () => {

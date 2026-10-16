@@ -1,0 +1,815 @@
+{
+ "version": 1,
+ "honourOnly": true,
+ "note": "Competitions are looks and honour only (MONETIZATION.md): nothing here has a price, a place or a tier cannot be bought, and paid looks give no advantage.",
+ "card": {
+  "anchors": "compete/anchors.json",
+  "animate": [
+   "top1",
+   "top2",
+   "top3",
+   "me"
+  ],
+  "states": [
+   "me",
+   "friend",
+   "top1",
+   "top2",
+   "top3",
+   "plain",
+   "bare"
+  ],
+  "worn": {
+   "skin": "sk",
+   "hat": "ht",
+   "pet": "pt",
+   "fire": "fi",
+   "frame": "fr",
+   "name": "nc",
+   "title": "tt",
+   "tier": "ar",
+   "league": "lg"
+  },
+  "fallback": {
+   "skin": null,
+   "hat": null,
+   "pet": null,
+   "fire": "classic",
+   "frame": "league",
+   "note": "nothing worn: the class sheet, no hat or pet, the classic fire, the league frame"
+  }
+ },
+ "boards": {
+  "tabs": [
+   "day",
+   "week",
+   "all",
+   "season"
+  ],
+  "metrics": [
+   "score",
+   "speed",
+   "depth"
+  ],
+  "classes": [
+   "all",
+   "warrior",
+   "mage",
+   "rogue",
+   "huntress"
+  ],
+  "speed": {
+   "minDepth": 5,
+   "value": "turns / depth",
+   "order": "asc"
+  },
+  "depth": {
+   "value": "depth",
+   "tie": "turns asc"
+  },
+  "top": 3,
+  "rows": 50,
+  "pinMe": true,
+  "counter": {
+   "day": "players",
+   "week": "playersWeek",
+   "all": null,
+   "season": "playersSeason"
+  }
+ },
+ "leagues": {
+  "tiers": [
+   {
+    "key": "spark",
+    "tier": 1,
+    "name": {
+     "en": "Spark",
+     "ru": "Искра"
+    },
+    "color": "#7e796e",
+    "accent": "#ffb02e",
+    "frame": {
+     "sprite": "compete/league/frame-spark.png",
+     "slice": 4
+    },
+    "badge": "compete/league/badge-spark.png",
+    "mini": "compete/league/mini-spark.png"
+   },
+   {
+    "key": "coal",
+    "tier": 2,
+    "name": {
+     "en": "Coal",
+     "ru": "Уголь"
+    },
+    "color": "#33282a",
+    "accent": "#e8441f",
+    "frame": {
+     "sprite": "compete/league/frame-coal.png",
+     "slice": 4
+    },
+    "badge": "compete/league/badge-coal.png",
+    "mini": "compete/league/mini-coal.png"
+   },
+   {
+    "key": "flame",
+    "tier": 3,
+    "name": {
+     "en": "Flame",
+     "ru": "Пламя"
+    },
+    "color": "#e8641f",
+    "accent": "#ff9a3a",
+    "frame": {
+     "sprite": "compete/league/frame-flame.png",
+     "slice": 4
+    },
+    "badge": "compete/league/badge-flame.png",
+    "mini": "compete/league/mini-flame.png"
+   },
+   {
+    "key": "bonfire",
+    "tier": 4,
+    "name": {
+     "en": "Bonfire",
+     "ru": "Костёр"
+    },
+    "color": "#ffb02e",
+    "accent": "#ffcc66",
+    "frame": {
+     "sprite": "compete/league/frame-bonfire.png",
+     "slice": 4
+    },
+    "badge": "compete/league/badge-bonfire.png",
+    "mini": "compete/league/mini-bonfire.png"
+   },
+   {
+    "key": "beacon",
+    "tier": 5,
+    "name": {
+     "en": "Beacon",
+     "ru": "Маяк"
+    },
+    "color": "#e8c870",
+    "accent": "#bff4ff",
+    "frame": {
+     "sprite": "compete/league/frame-beacon.png",
+     "slice": 4,
+     "anim": {
+      "sheet": "compete/league/frame-beacon-anim.png",
+      "frames": 4,
+      "ms": 160
+     }
+    },
+    "badge": "compete/league/badge-beacon.png",
+    "mini": "compete/league/mini-beacon.png"
+   }
+  ],
+  "room": 30,
+  "promote": 5,
+  "demote": 5,
+  "week": "weekOf (UTC, Monday 00:00)",
+  "start": "spark",
+  "rules": [
+   "a room is 30 players of one tier who played this week, by the week's best run",
+   "the first 5 go up, the last 5 go down; no one leaves the Beacon upwards or the Spark downwards",
+   "a week not played: the tier stays; two in a row: one tier down",
+   "the top 5 of the Beacon get the week's Beacon mark on their profile"
+  ],
+  "beaconWeekMark": "compete/league/badge-beacon.png"
+ },
+ "circles": {
+  "kinds": [
+   "friends",
+   "group"
+  ],
+  "size": {
+   "friends": 50,
+   "group": 200
+  },
+  "board": "week",
+  "invite": "https://t.me/pixel_dungeon_gamebot?startapp=c_<code>",
+  "group": "the bot added to a Telegram group: the chat is one circle; members join by opening the game from it",
+  "champion": "title.circle_champion"
+ },
+ "season": {
+  "template": {
+   "keys": [
+    "#e0e0e0",
+    "#a0a0a0",
+    "#606060",
+    "#303030"
+   ],
+   "cup": "compete/season/cup-template.png",
+   "frame": {
+    "sprite": "compete/season/frame-template.png",
+    "slice": 4
+   },
+   "note": "replace each key grey by the palette shade of the same index; other colours stay"
+  },
+  "seasons": [
+   {
+    "id": "s1",
+    "name": {
+     "en": "Embers of the Deep",
+     "ru": "Угли глубин"
+    },
+    "palette": [
+     "#ffd08a",
+     "#ff9a3a",
+     "#c8501a",
+     "#6e1e10"
+    ],
+    "cup": "compete/season/cup-s1.png",
+    "frame": {
+     "sprite": "compete/season/frame-s1.png",
+     "slice": 4
+    }
+   },
+   {
+    "id": "s2",
+    "name": {
+     "en": "Frost of the Caves",
+     "ru": "Иней пещер"
+    },
+    "palette": [
+     "#e4f8ff",
+     "#8ad0f0",
+     "#3a86c0",
+     "#1a3a6a"
+    ],
+    "cup": "compete/season/cup-s2.png",
+    "frame": {
+     "sprite": "compete/season/frame-s2.png",
+     "slice": 4
+    }
+   },
+   {
+    "id": "s3",
+    "name": {
+     "en": "Moss of the Sewers",
+     "ru": "Мох стоков"
+    },
+    "palette": [
+     "#d8f8a0",
+     "#8adc5a",
+     "#3a8a3a",
+     "#163a1a"
+    ],
+    "cup": "compete/season/cup-s3.png",
+    "frame": {
+     "sprite": "compete/season/frame-s3.png",
+     "slice": 4
+    }
+   },
+   {
+    "id": "s4",
+    "name": {
+     "en": "Shadow of the Halls",
+     "ru": "Тень залов"
+    },
+    "palette": [
+     "#ecd4ff",
+     "#b48aff",
+     "#6a3ab8",
+     "#2a1250"
+    ],
+    "cup": "compete/season/cup-s4.png",
+    "frame": {
+     "sprite": "compete/season/frame-s4.png",
+     "slice": 4
+    }
+   }
+  ],
+  "current": "s1",
+  "weeks": 8,
+  "heat": {
+   "daily": 10,
+   "dayTop50": 10,
+   "dayTop10": 25,
+   "dayTop1": 50,
+   "leagueUp": 60,
+   "leagueStay": 20,
+   "leagueBeacon": 100,
+   "circleChampion": 30
+  },
+  "honours": [
+   {
+    "kind": "cup",
+    "who": "top 3 by heat",
+    "art": "season.cup"
+   },
+   {
+    "kind": "frame",
+    "who": "top 100 by heat",
+    "art": "season.frame"
+   },
+   {
+    "kind": "fire",
+    "who": "the Beacon league at the season's end",
+    "art": "fire.beacon"
+   },
+   {
+    "kind": "title",
+    "who": "the Beacon league at the end, or the top 10 by heat",
+    "art": "title.season_beacon"
+   }
+  ],
+  "hallOfFame": {
+   "top": 10,
+   "keep": "for ever, one page a season"
+  }
+ },
+ "fire": {
+  "beacon": {
+   "sku": "fire.beacon",
+   "kind": "fire",
+   "fire": "beacon",
+   "name": {
+    "en": "Beacon",
+    "ru": "Маяк"
+   },
+   "flame": {
+    "sheet": "compete/fires/beacon-flame.png",
+    "frames": 6,
+    "w": 13,
+    "h": 17,
+    "ms": 90
+   },
+   "logs": "compete/fires/beacon-logs.png",
+   "logsAt": [
+    -8,
+    -4
+   ],
+   "sparks": {
+    "sheet": "compete/fires/beacon-sparks.png",
+    "frames": 4,
+    "w": 3,
+    "h": 3,
+    "rise": "straight up in a column, 1 px a frame"
+   },
+   "light": "#ffe9b0",
+   "icon": "compete/fires/icons/beacon.png",
+   "honour": true
+  }
+ },
+ "titles": [
+  {
+   "sku": "title.circle_champion",
+   "kind": "title",
+   "title": "circle_champion",
+   "rarity": "honour",
+   "honour": true,
+   "name": {
+    "en": "Circle Champion",
+    "ru": "Чемпион круга"
+   },
+   "how": "first in one of your circles at the end of a week",
+   "icon": "compete/titles/title-circle_champion.png",
+   "plate": "compete/titles/title-plate-honour.png"
+  },
+  {
+   "sku": "title.swift",
+   "kind": "title",
+   "title": "swift",
+   "rarity": "honour",
+   "honour": true,
+   "name": {
+    "en": "Swift",
+    "ru": "Скоростной"
+   },
+   "how": "top 10 of a day on the speed board",
+   "icon": "compete/titles/title-swift.png",
+   "plate": "compete/titles/title-plate-honour.png"
+  },
+  {
+   "sku": "title.deep",
+   "kind": "title",
+   "title": "deep",
+   "rarity": "honour",
+   "honour": true,
+   "name": {
+    "en": "Deep Delver",
+    "ru": "Глубинный"
+   },
+   "how": "top 10 of a day on the depth board",
+   "icon": "compete/titles/title-deep.png",
+   "plate": "compete/titles/title-plate-honour.png"
+  },
+  {
+   "sku": "title.duelist",
+   "kind": "title",
+   "title": "duelist",
+   "rarity": "honour",
+   "honour": true,
+   "name": {
+    "en": "Duelist",
+    "ru": "Дуэлянт"
+   },
+   "how": "ten duels won on one seed (when duels open)",
+   "icon": "compete/titles/title-duelist.png",
+   "plate": "compete/titles/title-plate-honour.png"
+  },
+  {
+   "sku": "title.season_beacon",
+   "kind": "title",
+   "title": "season_beacon",
+   "rarity": "legend",
+   "honour": true,
+   "name": {
+    "en": "Beacon of the Season",
+    "ru": "Маяк сезона"
+   },
+   "how": "the Beacon league at the season's end, or the season's top 10 by Heat",
+   "icon": "compete/titles/title-season_beacon.png",
+   "plate": "mart/fl/profile/title-plate-legend.png"
+  }
+ ],
+ "share": {
+  "story": {
+   "size": [
+    1080,
+    1920
+   ]
+  },
+  "chat": {
+   "size": [
+    1280,
+    640
+   ]
+  },
+  "circle": {
+   "size": [
+    1280,
+    640
+   ]
+  },
+  "noSeed": true,
+  "note": "the hero by his own fire, the place, the streak, the class and the depth; never the seed (it would spoil the daily dungeon)"
+ },
+ "notify": {
+  "image": [
+   640,
+   360
+  ],
+  "kinds": [
+   "overtaken",
+   "league",
+   "streak"
+  ],
+  "once": "at most one message a day from the bot in all; «overtaken» only while the player is in the day's top 50",
+  "when": {
+   "overtaken": "when someone passes the player on the day's board and the player is in the top 50",
+   "league": "Monday 08:00 UTC",
+   "streak": "17:00 UTC when the streak would break"
+  }
+ },
+ "plural": {
+  "en": "[one, other]: n == 1 ? one : other",
+  "ru": "[one, few, many] by the Russian rule (n % 10 == 1 && n % 100 != 11: one; 2-4 but not 12-14: few; else many)"
+ },
+ "strings": {
+  "en": {
+   "boards": "Boards",
+   "tabs": {
+    "day": "Day",
+    "week": "Week",
+    "all": "All time",
+    "season": "Season"
+   },
+   "tabInfo": {
+    "day": "One dungeon for all, one try counts. The top 3 get the day's cup.",
+    "week": "The best run of the week. Your league is ranked by it.",
+    "all": "The best runs ever.",
+    "season": "Heat earned this season: days, places, leagues, circles."
+   },
+   "metric": {
+    "score": "Score",
+    "speed": "Speed",
+    "depth": "Depth"
+   },
+   "metricInfo": {
+    "score": "gold + level × depth × 100, doubled for a win",
+    "speed": "fewest turns per depth, runs from depth 5",
+    "depth": "deepest depth; a tie goes to fewer turns"
+   },
+   "classAll": "All",
+   "classes": {
+    "warrior": "Warrior",
+    "mage": "Mage",
+    "rogue": "Rogue",
+    "huntress": "Huntress"
+   },
+   "players": [
+    "{n} player went down today",
+    "{n} players went down today"
+   ],
+   "playersWeek": [
+    "{n} player this week",
+    "{n} players this week"
+   ],
+   "playersSeason": [
+    "{n} player this season",
+    "{n} players this season"
+   ],
+   "closes": "Closes in {t}",
+   "you": "You",
+   "placeOf": "Your place: {n} of {m}",
+   "notYet": "You are not on this board yet.",
+   "friend": "friend",
+   "turns": [
+    "{n} turn",
+    "{n} turns"
+   ],
+   "perDepth": [
+    "{n} turn a depth",
+    "{n} turns a depth"
+   ],
+   "depthN": "depth {n}",
+   "depthShort": "depth {n}",
+   "perTurn": "turns a depth",
+   "heat": "heat {n}",
+   "lv": "lv.",
+   "noLook": "no look worn: the class as it is",
+   "league": "League",
+   "leagueOf": "League «{t}»",
+   "week": "Week {n}",
+   "endsIn": "Ends in {t}",
+   "room": "A room of {n} players by this week's best run",
+   "promote": "Promotion zone",
+   "demote": "Demotion zone",
+   "promoteTo": "Top {n} go up to «{t}»",
+   "demoteTo": "The last {n} go down to «{t}»",
+   "topTier": "The highest league: no one goes up, the top 5 get the week's Beacon mark",
+   "bottomTier": "The first league: no one goes down",
+   "safe": "Safe",
+   "resultsTitle": "The week is over",
+   "up": "Up to «{t}»!",
+   "stay": "You stay in «{t}»",
+   "down": "Down to «{t}»",
+   "place": "Place {n} of {m}",
+   "upText": "Top {n} of your room. A new room is waiting, with stronger players.",
+   "stayText": "A strong week. Next week, top {n} goes up.",
+   "downText": "It happens to everyone. The top {n} of «{t}» go back up next week.",
+   "newWeek": "To the new week",
+   "share": "Share",
+   "circles": "Circles",
+   "friends": "Friends",
+   "group": "Group",
+   "members": "{n} in the circle",
+   "circleWeek": "Circle of the week",
+   "invite": "Invite",
+   "inviteTitle": "Invite to the circle",
+   "inviteText": "The link opens the game and adds them to this circle. Groups: add the bot to the chat, the whole chat is one circle.",
+   "copy": "Copy link",
+   "copied": "Copied",
+   "sendChat": "Send to a chat",
+   "inviteFriends": "Friends who play",
+   "addCircle": "New circle",
+   "yourCircles": "Your circles",
+   "weekCard": "Card for the chat",
+   "champion": "Circle champion",
+   "seasonN": "Season {n}",
+   "daysLeft": "{n} days left",
+   "heatRating": "Heat",
+   "heatHow": "How Heat is earned",
+   "heatRules": [
+    "the daily dungeon played: +10",
+    "the day's top 50 %: +10, top 10 %: +25, top 1 %: +50",
+    "league: up +60, stayed +20, in the Beacon +100",
+    "circle champion of the week: +30"
+   ],
+   "honours": "Honours of the season",
+   "cup": "Season cup",
+   "cupFor": "top 3 by Heat",
+   "seasonFrame": "Season frame",
+   "seasonFrameFor": "top 100 by Heat",
+   "beaconFire": "Beacon campfire",
+   "beaconFireFor": "finish the season in the Beacon league",
+   "titleFor": "title",
+   "hall": "Hall of fame",
+   "hallOf": "Hall of fame · season {n}",
+   "honourOnly": "Honour only: nothing in competitions is sold, no place can be bought.",
+   "profile": "Profile",
+   "bestPlace": "Best place",
+   "streak": [
+    "{n} day in a row",
+    "{n} days in a row"
+   ],
+   "trophies": "Trophies",
+   "duelSoon": "Duel on one seed: soon",
+   "story": "Story",
+   "chat": "Chat",
+   "descend": "Descend",
+   "deeperQ": "Will you go deeper?",
+   "storyPlace": "#{n} of the day",
+   "storyStreak": "{n}-day streak",
+   "storyDepth": "Depth {n}",
+   "circleCardTitle": "Circle of the week",
+   "circleCardSub": "{c} · week {n}",
+   "notify": "Notifications",
+   "notifyNote": "From the bot, at most once a day; switched off in the settings.",
+   "n_overtaken": {
+    "title": "You were overtaken",
+    "text": "{who} passed you on today's board: you are #{n} now. The day closes in {t}; tomorrow brings a new dungeon.",
+    "button": "See the board"
+   },
+   "n_league": {
+    "title": "League results",
+    "text": "Week {w} is over: place {n} of {m} in «{t}». {res} The new week has begun.",
+    "button": "My league",
+    "up": "You go up to «{t2}»!",
+    "stay": "You stay.",
+    "down": "You go down to «{t2}»."
+   },
+   "n_streak": {
+    "title": "Streak in danger",
+    "text": "Your {n}-day streak breaks at midnight UTC. Today's dungeon is waiting!",
+    "button": "Descend"
+   },
+   "cardStates": {
+    "me": "me",
+    "friend": "friend",
+    "top1": "top 1",
+    "top2": "top 2",
+    "top3": "top 3",
+    "plain": "others",
+    "bare": "no look"
+   }
+  },
+  "ru": {
+   "boards": "Доски",
+   "tabs": {
+    "day": "День",
+    "week": "Неделя",
+    "all": "Всё время",
+    "season": "Сезон"
+   },
+   "tabInfo": {
+    "day": "У всех одно подземелье, засчитывается одна попытка. Тройка лучших получает кубок дня.",
+    "week": "Лучший забег недели. По нему считается ваша лига.",
+    "all": "Лучшие забеги за всё время.",
+    "season": "Жар этого сезона: дни, места, лиги, круги."
+   },
+   "metric": {
+    "score": "Очки",
+    "speed": "Скорость",
+    "depth": "Глубина"
+   },
+   "metricInfo": {
+    "score": "золото + уровень × глубина × 100, за победу вдвое",
+    "speed": "меньше ходов на глубину, забеги от 5-й глубины",
+    "depth": "самая большая глубина; при равной — меньше ходов"
+   },
+   "classAll": "Все",
+   "classes": {
+    "warrior": "Воин",
+    "mage": "Маг",
+    "rogue": "Разбойник",
+    "huntress": "Охотница"
+   },
+   "players": [
+    "Сегодня спустился {n} игрок",
+    "Сегодня спустились {n} игрока",
+    "Сегодня спустились {n} игроков"
+   ],
+   "playersWeek": [
+    "{n} игрок за неделю",
+    "{n} игрока за неделю",
+    "{n} игроков за неделю"
+   ],
+   "playersSeason": [
+    "{n} игрок в сезоне",
+    "{n} игрока в сезоне",
+    "{n} игроков в сезоне"
+   ],
+   "closes": "До конца {t}",
+   "you": "Вы",
+   "placeOf": "Ваше место: {n} из {m}",
+   "notYet": "Вас пока нет на этой доске.",
+   "friend": "друг",
+   "turns": [
+    "{n} ход",
+    "{n} хода",
+    "{n} ходов"
+   ],
+   "perDepth": [
+    "{n} ход на глубину",
+    "{n} хода на глубину",
+    "{n} ходов на глубину"
+   ],
+   "depthN": "глубина {n}",
+   "depthShort": "гл. {n}",
+   "perTurn": "ходов на гл.",
+   "heat": "жар {n}",
+   "lv": "ур.",
+   "noLook": "облика нет: класс как есть",
+   "league": "Лига",
+   "leagueOf": "Лига «{t}»",
+   "week": "Неделя {n}",
+   "endsIn": "До конца {t}",
+   "room": "Комната из {n} игроков по лучшему забегу недели",
+   "promote": "Зона повышения",
+   "demote": "Зона понижения",
+   "promoteTo": "Первые {n} поднимутся в «{t}»",
+   "demoteTo": "Последние {n} спустятся в «{t}»",
+   "topTier": "Высшая лига: выше некуда, пятёрка лучших получает знак Маяка недели",
+   "bottomTier": "Первая лига: ниже не спускаются",
+   "safe": "Без изменений",
+   "resultsTitle": "Неделя закрылась",
+   "up": "Вы поднялись в «{t}»!",
+   "stay": "Вы остаётесь в «{t}»",
+   "down": "Вы спустились в «{t}»",
+   "place": "Место {n} из {m}",
+   "upText": "Первые {n} в комнате. Новая комната ждёт — там игроки сильнее.",
+   "stayText": "Хорошая неделя. В следующей первые {n} поднимутся.",
+   "downText": "Так бывает у всех. Первые {n} в «{t}» поднимутся уже через неделю.",
+   "newWeek": "К новой неделе",
+   "share": "Поделиться",
+   "circles": "Круги",
+   "friends": "Друзья",
+   "group": "Группа",
+   "members": "{n} в круге",
+   "circleWeek": "Круг недели",
+   "invite": "Пригласить",
+   "inviteTitle": "Позвать в круг",
+   "inviteText": "Ссылка откроет игру и добавит в этот круг. Группа: добавьте бота в чат — весь чат станет одним кругом.",
+   "copy": "Скопировать ссылку",
+   "copied": "Скопировано",
+   "sendChat": "Отправить в чат",
+   "inviteFriends": "Друзья, которые играют",
+   "addCircle": "Новый круг",
+   "yourCircles": "Ваши круги",
+   "weekCard": "Карточка для чата",
+   "champion": "Чемпион круга",
+   "seasonN": "Сезон {n}",
+   "daysLeft": "Осталось {n} дн.",
+   "heatRating": "Жар",
+   "heatHow": "Как набирается жар",
+   "heatRules": [
+    "сыграно подземелье дня: +10",
+    "лучшие 50 % дня: +10, 10 %: +25, 1 %: +50",
+    "лига: повышение +60, остались +20, в Маяке +100",
+    "чемпион круга за неделю: +30"
+   ],
+   "honours": "Награды сезона",
+   "cup": "Кубок сезона",
+   "cupFor": "тройка лучших по жару",
+   "seasonFrame": "Рамка сезона",
+   "seasonFrameFor": "первые 100 по жару",
+   "beaconFire": "Костёр «Маяк»",
+   "beaconFireFor": "закончить сезон в лиге «Маяк»",
+   "titleFor": "титул",
+   "hall": "Зал славы",
+   "hallOf": "Зал славы · сезон {n}",
+   "honourOnly": "Только честь: в соревнованиях ничего не продаётся, место не купить.",
+   "profile": "Профиль",
+   "bestPlace": "Лучшее место",
+   "streak": [
+    "{n} день подряд",
+    "{n} дня подряд",
+    "{n} дней подряд"
+   ],
+   "trophies": "Трофеи",
+   "duelSoon": "Дуэль на одном сиде: скоро",
+   "story": "Сторис",
+   "chat": "Чат",
+   "descend": "Спуститься",
+   "deeperQ": "Спустишься глубже?",
+   "storyPlace": "#{n} дня",
+   "storyStreak": "Серия {n} дн.",
+   "storyDepth": "Глубина {n}",
+   "circleCardTitle": "Круг недели",
+   "circleCardSub": "{c} · неделя {n}",
+   "notify": "Уведомления",
+   "notifyNote": "От бота, не чаще раза в день; отключаются в настройках.",
+   "n_overtaken": {
+    "title": "Вас обогнали",
+    "text": "{who} обогнал(а) вас на доске дня: теперь вы #{n}. День закроется через {t} — завтра новое подземелье.",
+    "button": "К доске"
+   },
+   "n_league": {
+    "title": "Итоги лиги",
+    "text": "Неделя {w} закрылась: место {n} из {m} в «{t}». {res} Новая неделя уже идёт.",
+    "button": "Моя лига",
+    "up": "Вы поднимаетесь в «{t2}»!",
+    "stay": "Вы остаётесь.",
+    "down": "Вы спускаетесь в «{t2}»."
+   },
+   "n_streak": {
+    "title": "Серия под угрозой",
+    "text": "Ваша серия — {n} {days} подряд — сгорит в полночь по UTC. Подземелье дня ждёт!",
+    "button": "Спуститься"
+   },
+   "cardStates": {
+    "me": "я",
+    "friend": "друг",
+    "top1": "топ-1",
+    "top2": "топ-2",
+    "top3": "топ-3",
+    "plain": "остальные",
+    "bare": "без облика"
+   }
+  }
+ }
+}

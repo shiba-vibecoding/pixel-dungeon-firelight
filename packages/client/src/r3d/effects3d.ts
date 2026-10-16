@@ -15,6 +15,7 @@ import { type AirUniforms } from './fogofwar';
 import { K_FLOOR, K_WATER, type LevelGeom } from './levelgeom';
 import { QuadBatch } from './quadbatch';
 import { Fx3D } from './fx3d';
+import { chunkSize, SPECK_GROW, stainSize } from './bloodsize';
 import { ATLAS } from '../fxsheet';
 import type { SharedImages } from './assets3d';
 
@@ -26,8 +27,8 @@ const ATLAS_H = ATLAS.h;
 /** Where each picture is in the effects atlas (256 x 256, pixels). */
 const PARTICLES_AT = [0, 0, 96, 8] as const;
 const RIPPLE_AT = [0, 8, 96, 16] as const;
-const SOLID_AT = [0, 24, 8, 8] as const;
-const DOT_AT = [16, 24, 32, 32] as const;
+export const SOLID_AT = [0, 24, 8, 8] as const;
+export const DOT_AT = [16, 24, 32, 32] as const;
 const RING_AT = [0, 64, 64, 64] as const;
 const MIST_AT = [128, 0, 128, 128] as const;
 
@@ -38,8 +39,8 @@ const rect = (at: readonly [number, number, number, number], i = 0, frames = 1):
 };
 
 const RIPPLE_UV: Array<[number, number, number, number]> = [0, 1, 2, 3, 4, 5].map((i) => rect(RIPPLE_AT, i, 6));
-const UV_SOLID = rect(SOLID_AT);
-const UV_DOT = rect(DOT_AT);
+export const UV_SOLID = rect(SOLID_AT);
+export const UV_DOT = rect(DOT_AT);
 const UV_RING = rect(RING_AT);
 const UV_MIST = rect(MIST_AT);
 
@@ -579,7 +580,7 @@ export class Effects3D {
       if (k < 0 || k >= 1) continue;
       const rgb = parseCss(p.color);
       // (Blood and dust are drawn bigger than their art pixel: seen from above and far away a single pixel is lost.)
-      const size = Math.max(0.1, (p.size / TILE) * (p.glow ? 1.5 : 2.2));
+      const size = Math.max(0.1, (p.size / TILE) * (p.glow ? 1.5 : SPECK_GROW));
       const a = rgb[3]! * (1 - k);
       if (p.glow) this.glow.billboard(p.x / TILE, 0.3 + 0.5 * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, a);
       else this.soft.billboard(p.x / TILE, 0.3 + 0.35 * k, p.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
@@ -588,10 +589,12 @@ export class Effects3D {
     for (const g of fx.gibs) {
       if (!seen(g.x, g.y)) continue;
       const rgb = parseCss(g.color);
-      const size = Math.max(0.1, (Math.max(g.w, g.h) / TILE) * 1.4);
+      const size = chunkSize(g.w, g.h);
       const k = Number.isFinite(g.life) ? (now - g.born) / g.life : 0;
       const height = g.z / TILE;
-      if (g.glow) this.glow.billboard(g.x / TILE, 0.05 + height, g.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, 1 - k);
+      // A chunk that has come down lies on the floor, a few art pixels across, and is not a card standing up.
+      if (!g.glow && height < 0.04) this.soft.flat(g.x / TILE, 0.017, g.y / TILE, size, size, 0, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 0.8, rgb[1]! * 0.8, rgb[2]! * 0.8, 1);
+      else if (g.glow) this.glow.billboard(g.x / TILE, 0.05 + height, g.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! * 2, rgb[1]! * 2, rgb[2]! * 2, 1 - k);
       else this.soft.billboard(g.x / TILE, 0.04 + height, g.y / TILE, size, size, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, 1);
     }
     // Splats and pools of blood, flat on the floor (the newest, up to a few hundred).
@@ -599,10 +602,13 @@ export class Effects3D {
     for (let i = Math.max(0, decals.length - STAINS); i < decals.length; i++) {
       const d = decals[i]!;
       if (!seen(d.x, d.y)) continue;
+      // A chunk's stain is its colour toward its darker edge (a bright flat card reads as a solid square); a splat is a speck.
       const rgb = parseCss(d.color);
+      const edge = d.shade ? parseCss(d.shade) : rgb;
+      const mix = d.shade ? 0.5 : 0;
       const age = now - d.born;
       const a = age < 14000 ? d.alpha : d.alpha * Math.max(0, 1 - (age - 14000) / 3000);
-      this.soft.flat((d.x + d.w / 2) / TILE, 0.016, (d.y + d.h / 2) / TILE, Math.max(0.11, (d.w / TILE) * 1.8), Math.max(0.11, (d.h / TILE) * 1.8), 0, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]!, rgb[1]!, rgb[2]!, a);
+      this.soft.flat((d.x + d.w / 2) / TILE, 0.016, (d.y + d.h / 2) / TILE, stainSize(d.w, !!d.shade), stainSize(d.h, !!d.shade), 0, UV_SOLID[0], UV_SOLID[1], UV_SOLID[2], UV_SOLID[3], rgb[0]! + (edge[0]! - rgb[0]!) * mix, rgb[1]! + (edge[1]! - rgb[1]!) * mix, rgb[2]! + (edge[2]! - rgb[2]!) * mix, a);
     }
     // The pool that spreads under a body.
     for (const corpse of fx.corpses) {

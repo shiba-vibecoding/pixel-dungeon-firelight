@@ -74,7 +74,7 @@ export function boardEnd(board: string): number | null {
     const day = Date.parse(`${when}T00:00:00Z`);
     return Number.isFinite(day) ? day + DAY_MS : null;
   }
-  if (kind === 'week' || kind === 'arena') {
+  if (kind === 'week') {
     const match = /^(\d{4})-W(\d{2})$/.exec(when);
     if (!match) return null;
     const year = Number(match[1]);
@@ -93,7 +93,7 @@ export function mailable(board: string, now: number): boolean {
   return end !== null && end <= now && end + MAIL_KEPT_MS > now;
 }
 
-/** The letter's kind: a cup for the day, a medal for the week. The arena's boards are not offered, so write no letters. */
+/** The letter's kind: a cup for the day, a medal for the week. */
 export function letterKind(board: string): LetterKind | null {
   const kind = board.split(':')[0];
   return kind === 'daily' ? 'cup' : kind === 'week' ? 'medal' : null;
@@ -125,8 +125,11 @@ export function pruneMail(profile: MailProfile, now: number): boolean {
   return changed;
 }
 
-/** What a board says of a player: their place and how many were on it; null if they are not on it (or it is gone). */
-export type Standing = { rank: number; total?: number } | null;
+/**
+ * What a board says of a player: their place and how many were on it (`played`: how many ever played it, the list holds fewer); null if
+ * they are not on it (or it is gone). A finished day's board also says where they stood on its speed and depth lists.
+ */
+export type Standing = { rank: number; total?: number; played?: number; speed?: number | null; depth?: number | null } | null;
 /** 'error': the board could not be asked; try again next time. */
 export type Lookup = (board: string) => Promise<Standing | 'error'>;
 
@@ -149,12 +152,17 @@ export function addLetter(profile: MailProfile, board: string, standing: NonNull
  * letters. A board that cannot be asked is left for next time; one that is gone or never held
  * the player gives no letter, and no error. True if the profile changed.
  */
-export async function collectMail(profile: MailProfile, now: number, lookup: Lookup): Promise<boolean> {
+export async function collectMail(
+  profile: MailProfile, now: number, lookup: Lookup, onStanding?: (board: string, standing: NonNullable<Standing>) => void,
+): Promise<boolean> {
   let changed = pruneMail(profile, now);
   for (const board of boardsToCheck(profile, now)) {
     const standing = await lookup(board);
     if (standing === 'error') continue;
-    if (standing) addLetter(profile, board, standing);
+    if (standing) {
+      addLetter(profile, board, standing);
+      onStanding?.(board, standing);
+    }
     profile.claimed = [board, ...profile.claimed].slice(0, BOOKS_MAX);
     changed = true;
   }

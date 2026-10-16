@@ -39,9 +39,6 @@ canvas#game {
 }
 #ui[hidden], #toast[hidden], .pd-log[hidden], .pd-mates[hidden] { display: none; }
 #ui .pd-toolbar, #ui .pd-mapctl .pd-mapbtn { pointer-events: auto; }
-/* The arena's «To battle!» takes taps; its note lets them through. The board on a monitor is only words. */
-#ui .pd-fight .pd-button { pointer-events: auto; }
-#ui .pd-fight[hidden], #ui .pd-waveboard[hidden] { display: none; }
 
 /* The log lets taps through to the map; only «History» is a button. */
 .pd-log { pointer-events: none; }
@@ -258,11 +255,6 @@ body:has(#ui.pd-wide) #game { cursor: var(--spr-cursor) 0 0, default; }
 /* The windows float on a layer of their own, so the map moving beneath never repaints them. */
 #overlay.open { will-change: transform; }
 
-/* The arena of waves' badges (Волна 5 / 10 / 20): a sheet of their own, one row of three (badges.ts ARENA_BADGES). */
-.pd-badge.arena { background-image: url("/assets/meta/badges-arena.png"); background-size: calc(48 * var(--u)) calc(16 * var(--u)); }
-.pd-badge.big.arena { background-size: calc(72 * var(--u)) calc(24 * var(--u)); }
-.pd-slot .pd-badge.arena { background-image: url("/assets/meta/badges-arena.png"); }
-
 /* Checked runs: the window shown while a new run comes from the server. */
 .pd-waiting { text-align: center; padding: var(--space-4, 16px); }
 /* A window over the map hides the map's own buttons (they sit above the scrim otherwise). */
@@ -458,6 +450,7 @@ body:has(#overlay.open) .pd-mapctl { visibility: hidden; }
 .pd-letter-head time { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); white-space: nowrap; }
 .pd-letter-text { grid-area: text; margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
 .pd-letter-text em { font-style: normal; color: var(--ink); }
+.pd-letter-note { display: block; margin-top: 4px; padding: 4px 8px; font: var(--text-body, 400 16px/20px var(--font-small)); color: var(--ink); background: var(--stone-900); box-shadow: inset 2px 0 0 var(--fire-gold, #ffcc66); overflow-wrap: anywhere; }
 .pd-letter-act { grid-area: act; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; margin-top: 4px; }
 .pd-letter-gifts { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .pd-letter-act > .pd-button, .pd-letter-act > .pd-letter-done { flex: none; margin-left: auto; }

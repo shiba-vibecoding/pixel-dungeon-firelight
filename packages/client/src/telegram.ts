@@ -5,7 +5,7 @@
 
 interface WebApp {
   initData: string;
-  initDataUnsafe: { start_param?: string; user?: { id: number; first_name?: string; username?: string } };
+  initDataUnsafe: { start_param?: string; user?: { id: number; first_name?: string; username?: string }; chat_instance?: string; chat_type?: string };
   platform: string;
   ready(): void;
   expand(): void;
@@ -215,7 +215,57 @@ export function invitedGift(): string | null {
 
 /** True when the app was opened to play the daily dungeon (a shared result's link). */
 export function launchedForDaily(): boolean {
-  return webApp?.initDataUnsafe.start_param === 'daily' || new URLSearchParams(location.search).has('daily');
+  return /^daily(_r\d{1,15})?$/.test(webApp?.initDataUnsafe.start_param ?? '') || new URLSearchParams(location.search).has('daily');
+}
+
+/**
+ * The player's own id, which a link they share carries so the one who opens it knows who invited them (the server then makes the two
+ * friends who play, server/src/friends.ts); Telegram only. Not a secret: it is in every link the bot sends.
+ */
+const ownId = (): number | undefined => {
+  const id = webApp?.initDataUnsafe.user?.id;
+  return Number.isSafeInteger(id) && id! > 0 ? id : undefined;
+};
+
+/** The start parameter of a link the player shares: `daily` or (nothing) a plain invitation, with the player's id in it. */
+export function inviteStart(kind?: 'daily'): string | undefined {
+  const id = ownId();
+  if (kind) return id ? `${kind}_r${id}` : kind;
+  return id ? `ref_${id}` : undefined;
+}
+
+/** The invite a launch came from (`ref_<id>`, `daily_r<id>`), for the server to read; null for a launch from anywhere else. */
+export function launchedByInvite(): string | null {
+  const start = webApp?.initDataUnsafe.start_param ?? '';
+  return /^(ref_|daily_r)\d{1,15}$/.test(start) ? start : null;
+}
+
+/** True when the app was opened from the bot's «you were passed» message: the day's board comes up (`startapp=boards`). */
+export function launchedForBoards(): boolean {
+  return webApp?.initDataUnsafe.start_param === 'boards' || new URLSearchParams(location.search).has('boards');
+}
+
+/** True when the app was opened from the bot's league message: the league's window comes up (`startapp=league`). */
+export function launchedForLeague(): boolean {
+  return webApp?.initDataUnsafe.start_param === 'league' || new URLSearchParams(location.search).has('league');
+}
+
+/** A circle to join from the launch: `startapp=c_<code>` in Telegram or `?c=<code>` in a browser (a circle's invite link). */
+export function invitedCircle(): string | null {
+  const start = webApp?.initDataUnsafe.start_param;
+  const code = start?.startsWith('c_') ? start.slice(2) : new URLSearchParams(location.search).get('c');
+  return code && /^[a-z0-9]{10}$/.test(code) ? code : null;
+}
+
+/** The group chat the game was opened from, if it was (the chat's mark comes signed in the init data: the server names the group's circle from it). */
+export function launchedFromGroup(): { instance: string; type: string } | null {
+  const data = webApp?.initDataUnsafe;
+  return data?.chat_instance && data.chat_type && ['group', 'supergroup', 'channel'].includes(data.chat_type) ? { instance: data.chat_instance, type: data.chat_type } : null;
+}
+
+/** Sends a circle's invite link where the player picks (Telegram's share sheet; the clipboard elsewhere). */
+export function shareCircle(code: string, text: string): Promise<'shared' | 'copied' | 'failed'> {
+  return share(`c_${code}`, { c: code }, text);
 }
 
 /** Shares an invitation to a room; resolves to 'copied' when it went to the clipboard instead. */
@@ -223,19 +273,9 @@ export function shareInvite(room: string, text: string): Promise<'shared' | 'cop
   return share(`room_${room}`, { room }, text);
 }
 
-/** True when the app was opened from a shared arena result: the arena's window comes up. */
-export function launchedForArena(): boolean {
-  return webApp?.initDataUnsafe.start_param === 'arena' || new URLSearchParams(location.search).has('arena');
-}
-
-/** Shares an arena result with a link that opens the arena. */
-export function shareArena(text: string): Promise<'shared' | 'copied' | 'failed'> {
-  return share('arena', { arena: '' }, text);
-}
-
 /** Shares a daily dungeon result with a link that opens today's dungeon. */
 export function shareDaily(text: string): Promise<'shared' | 'copied' | 'failed'> {
-  return share('daily', { daily: '' }, text);
+  return share(inviteStart('daily')!, { daily: '' }, text);
 }
 
 async function share(
@@ -349,7 +389,7 @@ export function openLink(url: string): void {
 
 const at = (version: string): boolean => inTelegram && (webApp?.isVersionAtLeast?.(version) ?? false);
 
-/** The game's t.me link, opening at `start` (daily, arena) or at the title. */
+/** The game's t.me link, opening at `start` (daily) or at the title. */
 export const appLink = (start?: string): string => (start ? `${APP_LINK}?startapp=${encodeURIComponent(start)}` : APP_LINK);
 
 /** Whether this Telegram can post a story from the game. */

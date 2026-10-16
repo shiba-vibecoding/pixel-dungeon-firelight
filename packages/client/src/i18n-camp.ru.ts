@@ -38,6 +38,7 @@ export const CAMP_RU: typeof CAMP_EN = {
     dailyResets: (time) => `Новые правила в ${time} по вашему времени`,
     attemptHint: 'Попытка тратится, когда забег начался.',
     rulesMore: 'Правила дня: подробнее',
+    rulesTitle: 'Правила дня',
     units: { d: 'дн', h: 'ч', m: 'мин', soon: 'мгновение' },
   },
   mail: {

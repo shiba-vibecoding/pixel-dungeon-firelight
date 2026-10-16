@@ -31,7 +31,7 @@ export function itemAt(hero: Hero, ref: ItemRef): Item | undefined {
     case 'weapon':
       return hero.weapon ?? undefined;
     case 'armor':
-      return hero.armor;
+      return hero.armor ?? undefined;
     case 'ring0':
       return hero.rings[0];
     case 'ring1':
@@ -44,7 +44,7 @@ export function itemAt(hero: Hero, ref: ItemRef): Item | undefined {
 /** Everything the hero has, worn first (as WndBag lists the equipped items above the pack). */
 export function heldRefs(hero: Hero): ItemRef[] {
   const worn: ItemRef[] = [
-    ...(hero.weapon ? ['weapon' as const] : []), 'armor', ...hero.rings.map((_, i) => (i === 0 ? 'ring0' as const : 'ring1' as const)),
+    ...(hero.weapon ? ['weapon' as const] : []), ...(hero.armor ? ['armor' as const] : []), ...hero.rings.map((_, i) => (i === 0 ? 'ring0' as const : 'ring1' as const)),
   ];
   return [...worn, ...hero.items.map((_, i) => i)];
 }

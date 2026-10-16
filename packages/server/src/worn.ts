@@ -1,5 +1,8 @@
+import type { Hero } from '@pd/core';
+import { itemDef } from '@pd/core';
 import { cleanEquipped, DEFAULT_OWNED, HEROES, type Slot } from '../../client/src/catalog';
 import type { Worn } from './leaderboard';
+import { TIERS as LEAGUE_KEYS } from './league-rules';
 import { ownedItems, type ShopState } from './wallet';
 
 /*
@@ -10,7 +13,7 @@ import { ownedItems, type ShopState } from './wallet';
  */
 
 /** The wallet's slot of each field of a Worn (the look is `look.<class>`). */
-const FIELDS: ReadonlyArray<readonly [field: Exclude<keyof Worn, 'l'>, slot: Slot]> = [
+const FIELDS: ReadonlyArray<readonly [field: Exclude<keyof Worn, 'l' | 'a' | 'lg'>, slot: Slot]> = [
   ['h', 'hat'], ['p', 'pet'], ['f', 'campfire'], ['fr', 'frame'], ['tt', 'title'], ['nc', 'namecolor'],
 ];
 
@@ -18,7 +21,7 @@ const FIELDS: ReadonlyArray<readonly [field: Exclude<keyof Worn, 'l'>, slot: Slo
 const CLASSIC = 'fire.classic';
 
 /** What a player's hero of `heroClass` wears on a board: only owned things in their own slots; undefined if nothing is worn. */
-export function wornOf(shop: ShopState, heroClass: string): Worn | undefined {
+export function wornOf(shop: ShopState, heroClass: string, armor?: number, league?: string): Worn | undefined {
   const slots = cleanEquipped(shop.equipped).slots;
   const owned = ownedItems(shop);
   const has = (id: string | undefined): id is string => id !== undefined && (owned.has(id) || DEFAULT_OWNED.includes(id));
@@ -30,12 +33,23 @@ export function wornOf(shop: ShopState, heroClass: string): Worn | undefined {
     if (!has(id) || (field === 'f' && id === CLASSIC)) continue;
     worn[field] = id;
   }
+  if (armor !== undefined && Number.isInteger(armor) && armor >= 0 && armor <= ARMOR_TIERS) worn.a = armor;
+  // The step of the league (a player's record, league-flow.ts), never a device's word.
+  if (league !== undefined && LEAGUE_KEYS.includes(league)) worn.lg = league;
   return Object.keys(worn).length > 0 ? worn : undefined;
 }
 
+/** The rows of a hero's sheet: 0 no armour, 1 cloth, 2 leather, 3 mail, 4 scale, 5 plate, 6 the class armour. */
+export const ARMOR_TIERS = 6;
+
+/** The armour a hero wears, as the row of the hero's sheet: from the (verified) world's hero, never from a device. */
+export function armorTierOf(hero: Pick<Hero, 'armor'>): number {
+  return Math.max(0, Math.min(ARMOR_TIERS, (hero.armor ? itemDef(hero.armor.kind) : { tier: 0 }).tier ?? 0));
+}
+
 /** The snapshot for each class a player may have played: what a patch of the open boards carries (the board picks by the entry's class). */
-export function wornByClass(shop: ShopState): Record<string, Worn | undefined> {
-  return Object.fromEntries(HEROES.map((heroClass) => [heroClass, wornOf(shop, heroClass)]));
+export function wornByClass(shop: ShopState, league?: string): Record<string, Worn | undefined> {
+  return Object.fromEntries(HEROES.map((heroClass) => [heroClass, wornOf(shop, heroClass, undefined, league)]));
 }
 
 /** The old per-field entry values (name colour, title, frame) a Worn stands for; kept on entries so a client of before `w` still shows them. */
@@ -43,7 +57,7 @@ export function legacyFields(worn: Worn | undefined): Pick<Worn, 'nc' | 'tt' | '
   return { ...(worn?.nc ? { nc: worn.nc } : {}), ...(worn?.tt ? { tt: worn.tt } : {}), ...(worn?.fr ? { fr: worn.fr } : {}) };
 }
 
-const WORN_KEYS: ReadonlyArray<keyof Worn> = ['l', 'h', 'p', 'f', 'fr', 'tt', 'nc'];
+const WORN_KEYS: ReadonlyArray<Exclude<keyof Worn, 'a'>> = ['l', 'h', 'p', 'f', 'fr', 'tt', 'nc', 'lg'];
 
 /** A Worn as it came between the objects (a patch): only the known fields, as short strings; undefined if none. */
 export function cleanWorn(raw: unknown): Worn | undefined {
@@ -53,5 +67,7 @@ export function cleanWorn(raw: unknown): Worn | undefined {
     const value = (raw as Record<string, unknown>)[key];
     if (typeof value === 'string' && value.length > 0 && value.length <= 48) out[key] = value;
   }
+  const armor = (raw as Record<string, unknown>).a;
+  if (typeof armor === 'number' && Number.isInteger(armor) && armor >= 0 && armor <= ARMOR_TIERS) out.a = armor;
   return Object.keys(out).length > 0 ? out : undefined;
 }

@@ -12,7 +12,7 @@ function veteran() {
   const logic = new PlayerLogic(emptyProfile('Alice'));
   logic.start({ slot: 'dungeon', heroClass: 'warrior', challenges: 0, name: 'Alice', seed: 7, id: 'r1', now: 0, today: '2026-10-13' });
   const p = logic.profile;
-  Object.assign(p, { games: 40, wins: 3, deepest: 14, best: 9000, arenaWaves: 12, arenaBest: 700, dailyDate: '2026-10-14' });
+  Object.assign(p, { games: 40, wins: 3, deepest: 14, best: 9000, dailyDate: '2026-10-14' });
   p.bestByClass = { warrior: 9000 };
   p.streak = { last: '2026-10-14', count: 20, best: 20, freezes: 2 };
   p.trophies = [{ board: 'week:2026-W41', place: 1, at: 5 }];

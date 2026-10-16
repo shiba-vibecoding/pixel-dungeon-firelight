@@ -23,3 +23,15 @@
 .fl-card.starter { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66); }
 .fl-bundle.starter { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66), inset 0 calc(-10 * var(--u)) 0 var(--glow-3, rgba(255, 154, 58, .035)); }
 .fl-mart-main .pd-note.center { text-align: center; }
+
+/* The gift screen: the note and the friends who play (storeui.ts giftScreen) */
+.fl-mart textarea.fl-note { display: block; width: 100%; box-sizing: border-box; border: 0; resize: none; outline: none; color: var(--ink); font: var(--text-body); }
+.fl-mart textarea.fl-note::placeholder { color: var(--ink-muted); }
+.fl-mart textarea.fl-note:focus-visible { box-shadow: inset 0 0 0 2px var(--focus, #ffcc66); }
+.fl-note-count { display: block; text-align: right; font: var(--text-caption); color: var(--ink-muted); margin-top: 2px; }
+.fl-friend { cursor: pointer; }
+.fl-friend:focus-visible { outline: 2px solid var(--fire-gold, #ffcc66); outline-offset: -2px; }
+.fl-friend .fl-face-av { flex: none; }
+.fl-gift-buy { display: flex; flex-direction: column; gap: 8px; margin-top: var(--space-3, 12px); }
+.fl-gift-buy .pd-button { width: 100%; }
+.fl-friends > .pd-button { margin-top: 6px; align-self: flex-start; }

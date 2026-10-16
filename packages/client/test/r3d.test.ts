@@ -5,7 +5,7 @@ import { CELLS, LEAN_STRETCH, LEAN, PITCH, TILE_PX, WALL_H, YS, groundToScreen, 
 import { K_FLOOR, K_WALL, LevelGeom, SHAPES, TORCH_SPACING, pickShafts, pickTorches, tileRect } from '../src/r3d/levelgeom';
 import { CAP_FIRST, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from '../src/r3d/tilemap';
 import { Governor, RefreshMeter, TIERS } from '../src/r3d/governor';
-import { covers3D, forgetOld3dChoice } from '../src/r3d/setting';
+import { forgetOld3dChoice } from '../src/r3d/setting';
 
 const COLS = 16;
 /** The sheet as the renderer lays it out: the tiles' own eight rows and eight more for the tiles made from them. */
@@ -27,19 +27,6 @@ function hasTop(geom: LevelGeom, x: number, z: number, h = WALL_H): boolean {
     const xs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3]!);
     const zs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 2]!);
     if (Math.min(...xs) === x && Math.max(...xs) === x + 1 && Math.min(...zs) === z && Math.max(...zs) === z + 1) return true;
-  }
-  return false;
-}
-
-/** Whether the box buffer holds the thin top edge of a door's panel across cell (x, z): as wide as the cell, 0.18 deep, at the wall's height. */
-function hasStrip(geom: LevelGeom, x: number, z: number): boolean {
-  const { pos, verts } = geom.boxes;
-  for (let v = 0; v < verts; v += 4) {
-    const ys = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 1]!);
-    if (ys.some((y) => Math.abs(y - WALL_H) > 1e-6)) continue;
-    const xs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3]!);
-    const zs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 2]!);
-    if (Math.min(...xs) === x && Math.max(...xs) === x + 1 && Math.abs(Math.max(...zs) - Math.min(...zs) - 0.18) < 1e-6 && Math.min(...zs) > z && Math.max(...zs) < z + 1) return true;
   }
   return false;
 }
@@ -165,29 +152,27 @@ describe('a level as geometry', () => {
     const carve: Array<[number, number, number]> = [[20, 20, T.EMPTY], [20, 21, T.DOOR], [20, 22, T.EMPTY]];
     const map = mapOf(carve);
     const geom = new LevelGeom(map, COLS, ROWS);
-    // A closed door is a gap in the wall line with a thin panel in it: no stone cap, a wooden edge across at the wall's height.
+    // A closed door is a gap in the wall line: no stone cap and no box (its leaf is a mesh of its own, doorLeafBuffers).
     expect(hasTop(geom, 20, 21)).toBe(false);
-    expect(hasStrip(geom, 20, 21)).toBe(true);
     const before = geom.quads.boxes;
     const floor = geom.floor;
     const versionBefore = geom.floorVersion;
     map[20 + 21 * WIDTH] = T.OPEN_DOOR;
     expect(geom.patch(map)).toBe('solids');
     expect(hasTop(geom, 20, 21)).toBe(false);
-    expect(hasStrip(geom, 20, 21)).toBe(false);
     // The floor buffers were patched where they are (no new arrays), and flagged for upload.
     expect(geom.floor).toBe(floor);
     expect(geom.floorVersion).toBeGreaterThan(versionBefore);
     const slot = geom.slot[20 + 21 * WIDTH]!;
     expect(slot).toBeGreaterThanOrEqual(0);
     const u0 = geom.floor.uv[slot * 8]!;
-    // The tile of an open door is column 6 of 16.
-    expect(u0).toBeGreaterThan(6 / 16);
-    expect(u0).toBeLessThan(7 / 16);
+    // The floor of an open door is the plain floor (column 1 of 16), not the original's picture of a frame (column 6): a gap in the wall.
+    expect(u0).toBeGreaterThan(1 / 16);
+    expect(u0).toBeLessThan(2 / 16);
     // And closing it again puts the box back.
     map[20 + 21 * WIDTH] = T.DOOR;
     expect(geom.patch(map)).toBe('solids');
-    expect(hasStrip(geom, 20, 21)).toBe(true);
+    expect(hasTop(geom, 20, 21)).toBe(false);
     expect(geom.quads.boxes).toBe(before);
   });
 
@@ -411,13 +396,5 @@ describe('the quality tier (3D only, no fall back to 2D)', () => {
     const kept = new Map<string, string>([['pd-3d', 'off'], ['pd-3d-v', '2'], ['pd-3d-fell', '1'], ['pd-brightness', '1.3']]);
     forgetOld3dChoice({ getItem: (k) => kept.get(k) ?? null, removeItem: (k) => void kept.delete(k) });
     expect([...kept.keys()]).toEqual(['pd-brightness']);
-  });
-});
-
-describe('where the 3D view is used', () => {
-  it('covers every depth in the look of its region, and never the arena of waves', () => {
-    for (let depth = 1; depth <= 26; depth++) expect(covers3D(depth, Math.min(4, Math.floor((depth - 1) / 5)), false)).toBe(true);
-    expect(covers3D(2, 0, true)).toBe(false);
-    expect(covers3D(12, 2, true)).toBe(false);
   });
 });

@@ -1,25 +1,29 @@
 import { DurableObject } from 'cloudflare:workers';
 import {
-  allowedLook, type ClientMessage, emptyWallet, type GameMode, type HeroClass, isPatron, type Look, type PlayerInfo, RULES_VERSION, type Wallet,
+  allowedLook, type ClientMessage, emptyWallet, type HeroClass, isPatron, type Look, type PlayerInfo, RULES_VERSION, type Wallet,
 } from '@pd/core';
 import { botApi, type BotConfig, handleUpdate, type TelegramUpdate } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { guestId } from './guest';
-import { type DailyEntry, isPublicId, Leaderboard, publicId, servedEntry } from './leaderboard';
+import { DailyBoard } from './daily-board';
+import { type DailyEntry, isPublicId, publicId } from './leaderboard';
 import { CLOSE_TOO_BIG, MAX_MESSAGE_BYTES, MessageLimiter, messageBytes, WindowLimiter } from './limits';
 import { parseClientMessage } from './messages';
 import { type Delivery, RoomLogic, type RoomState } from './room-logic';
 import {
   ADDRESS_HEADER, addReport, MAX_REPORT_BYTES, parseReport, type Report, REPORT_WINDOW_MS, REPORTS_PER_WINDOW,
 } from './reports';
-import { boardObject, boardTtl } from './boards';
+import { boardObject } from './boards';
 import { CORS, json, jsonBody } from './http';
-import { boardRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRoute } from './player';
+import { boardRoute, circleRoute, leagueRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRoute } from './player';
 import type { AdminOps } from './admin';
 import { changeOutages, normalizeDays } from './outages';
 import { adminNotice, KEEP_PROBLEMS, newId, type Problem, type StoredProblem } from './problem';
 import { photoRoute } from './photos';
 import { Card, cardRoute, challengeRoute } from './sharing';
+import { freezeDueHall, hallRoute } from './hall';
+import { Circle } from './circle';
+import { League } from './league';
 import { Notifier, notifierStub, notifyRoute } from './notifier';
 import { readBody, sameSecret } from './secret';
 import { SignalLimiter, validSignal } from './signals';
@@ -27,7 +31,8 @@ import { DAY_SECONDS, type TelegramUser, verifyInitData, WEEK_SECONDS } from './
 import { applyWalletChange, emptyRecord, parseWalletChange, type WalletRecord, walletView } from './wallet';
 import { walletsOf } from './walletsdo';
 import { cleanWorn } from './worn';
-import { acceptGift, claimPass, equip, type Facts, giftInvoice, invoice, noFacts, type Reply, shopState } from './shopapi';
+import { acceptGift, claimPass, connectByRef, equip, type Facts, friendsOf, giftInvoice, invoice, noFacts, type Reply, shopState } from './shopapi';
+import { type PlayerCard, refOfStart } from './friends';
 import { SEASON } from './boards';
 
 /*
@@ -56,6 +61,10 @@ export interface Env {
   CARD: DurableObjectNamespace<Card>;
   /** The bot's reminders (notifier.ts). */
   NOTIFIER: DurableObjectNamespace<Notifier>;
+  /** The weekly leagues' desks and rooms (league.ts). */
+  LEAGUE: DurableObjectNamespace<League>;
+  /** The circles: who is in each, and who won each week (circle.ts). */
+  CIRCLE: DurableObjectNamespace<Circle>;
   /** The secret Telegram sends with every webhook call (setWebhook's secret_token). */
   WEBHOOK_SECRET?: string;
   /** The Mini App's t.me link, for the bot's play button. */
@@ -74,6 +83,8 @@ export interface Env {
   REPORT_KEY?: string;
   /** Days the server was down (YYYY-MM-DD, separated by commas): streaks take them as played (outages.ts). */
   OUTAGE_DAYS?: string;
+  /** The first competition season's first day, YYYY-MM-DD (a Monday; season-clock.ts): set to the day Firelight opens. */
+  COMPETE_SEASON_START?: string;
   /**
    * Secret the daily dungeon's seed is derived from (daily-seed.ts); `npx wrangler secret put DAILY_SECRET`.
    * Without it (wrangler dev, tests) a fixed development value is used, which is public: set it in production.
@@ -330,10 +341,10 @@ export class Room extends DurableObject<Env> {
     return ws.deserializeAttachment() as Seat;
   }
 
-  /** The room, loaded or made; a new one is of the kind its creator asked for (`mode`), the dungeon by default. */
-  private async room(mode: GameMode = 'dungeon'): Promise<RoomLogic> {
+  /** The room, loaded or made. */
+  private async room(): Promise<RoomLogic> {
     if (!this.logic) {
-      this.logic = RoomLogic.restore(await this.load(), Math.floor(Math.random() * 2 ** 31), mode);
+      this.logic = RoomLogic.restore(await this.load(), Math.floor(Math.random() * 2 ** 31));
       this.logic.restoreOnline(this.ctx.getWebSockets().map((ws) => this.playerOf(ws).id));
     }
     return this.logic;
@@ -499,8 +510,7 @@ export class Room extends DurableObject<Env> {
       server.close(4002, 'the game has been updated');
       return new Response(null, { status: 101, webSocket: client });
     }
-    // The creator's link says what kind of room it is (only a room that does not exist yet listens).
-    const room = await this.room(params.get('mode') === 'arena' ? 'arena' : 'dungeon');
+    const room = await this.room();
     const heroId = room.seatFor(player.id, Date.now());
     if (heroId === null) {
       // Remember since when the absent have been away, so their seats can be freed in time.
@@ -713,10 +723,16 @@ async function playerFacts(env: Env, user: number): Promise<Facts> {
   return response.ok ? ((await response.json()) as Facts) : noFacts();
 }
 
+/** What a player's own object tells a friend of them: their name and the class of their latest run; null if they have never played (player.ts /card). */
+async function playerCard(env: Env, user: number): Promise<PlayerCard | null> {
+  const response = await env.PLAYER.get(env.PLAYER.idFromName(`tg${user}`)).fetch('https://player/card', { method: 'POST', body: '{}' });
+  return response.ok ? ((await response.json()) as PlayerCard | null) : null;
+}
+
 /** A fresh code for a share link: the giver's id, then eight random bytes (shopapi.ts acceptGift reads it back). */
 const shareCode = (user: number): string => `${user}_${[...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 
-const SHOP_ROUTES = ['me', 'invoice', 'equip', 'gift', 'accept', 'claim'] as const;
+const SHOP_ROUTES = ['me', 'invoice', 'equip', 'gift', 'accept', 'claim', 'friends', 'ref'] as const;
 type ShopRoute = (typeof SHOP_ROUTES)[number];
 
 async function shop(request: Request, env: Env, ctx: ExecutionContext, route: ShopRoute): Promise<Response> {
@@ -726,11 +742,11 @@ async function shop(request: Request, env: Env, ctx: ExecutionContext, route: Sh
   const body = await jsonBody(request);
   if (!body) return json({ error: 'bad json' }, 400);
   // Looking at one's wallet and wearing what one has are harmless, and the Mini App may stay open for days; buying and claiming take fresh init data.
-  const harmless = route === 'me' || route === 'equip';
+  const harmless = route === 'me' || route === 'equip' || route === 'friends';
   const user = await telegramUser(body, env, harmless ? WEEK_SECONDS : DAY_SECONDS);
   if (user === null) return json({ error: 'unauthorized' }, 401);
   const deps = {
-    wallets: walletsOf(env, (id) => ctx.waitUntil(patchWorn(env, id))), api: botApi(env.BOT_TOKEN), config: botConfig(env), facts: (id: number) => playerFacts(env, id), now: Date.now(), season: SEASON, code: shareCode,
+    wallets: walletsOf(env, (id) => ctx.waitUntil(patchWorn(env, id))), api: botApi(env.BOT_TOKEN), config: botConfig(env), facts: (id: number) => playerFacts(env, id), now: Date.now(), season: SEASON, code: shareCode, card: (id: number) => playerCard(env, id),
   };
   let reply: Reply;
   switch (route) {
@@ -745,6 +761,12 @@ async function shop(request: Request, env: Env, ctx: ExecutionContext, route: Sh
       break;
     case 'accept':
       reply = await acceptGift(deps, user.id, typeof body.code === 'string' ? body.code.slice(0, 64) : '');
+      break;
+    case 'friends':
+      reply = await friendsOf(deps, user.id);
+      break;
+    case 'ref':
+      reply = await connectByRef(deps, user.id, refOfStart(body.start));
       break;
     case 'claim':
       reply = await claimPass(deps, user.id, body.track === 'paid' ? 'paid' : 'free');
@@ -791,70 +813,6 @@ async function webhook(request: Request, env: Env, ctx: ExecutionContext): Promi
   return new Response('ok');
 }
 
-/**
- * One board (boards.ts names them): a day's daily dungeon, a week's best, the best ever.
- * Entries are by public id (leaderboard.ts publicId); each knows its owner privately.
- *
- *   GET  ?name=&me=<public id>|owner=<account>&top=<n>   the best n, and that player's place
- *   POST /put?name=   an entry of a checked run (from the player's object only)
- *   POST /worn?name=  what a player wears now: their entries show it (from the player's object only)
- *
- * Boards named by a bare date are the daily boards of before checked runs, read as they were.
- */
-export class DailyBoard extends DurableObject<Env> {
-  override async fetch(request: Request): Promise<Response> {
-    const board = new Leaderboard((await this.ctx.storage.get<DailyEntry[]>('board')) ?? []);
-    const url = new URL(request.url);
-    const name = url.searchParams.get('name') ?? url.searchParams.get('date') ?? '';
-    if (request.method === 'POST' && url.pathname === '/put') {
-      const entry = (await request.json()) as DailyEntry;
-      const rank = board.put(entry);
-      await this.ctx.storage.put('board', board.entries());
-      await this.expireAfter(name);
-      return json({ rank, total: board.entries().length });
-    }
-    if (request.method === 'POST' && url.pathname === '/worn') {
-      // The player's equipment changed (player.ts Player.worn): their entries on this board show the look of their class as worn now.
-      const patch = (await request.json()) as { owner?: unknown; byClass?: unknown };
-      if (typeof patch.owner !== 'string' || typeof patch.byClass !== 'object' || patch.byClass === null) return json({ error: 'bad patch' }, 400);
-      const byClass = Object.fromEntries(Object.entries(patch.byClass).map(([heroClass, worn]) => [heroClass, cleanWorn(worn)]));
-      const changed = board.patchWorn(patch.owner, byClass);
-      if (changed) await this.ctx.storage.put('board', board.entries());
-      return json({ changed });
-    }
-    if (request.method === 'POST') return json({ error: 'results come from checked runs only' }, 410);
-    // Every player's place, by account (the reminders' weekly results); never served outside.
-    if (url.searchParams.get('owners') === '1') {
-      const owners: Record<string, number> = {};
-      board.entries().forEach((entry, i) => {
-        if (entry.owner) owners[entry.owner] = i + 1;
-      });
-      return json({ owners, total: board.entries().length });
-    }
-    const me = url.searchParams.get('me');
-    const owner = url.searchParams.get('owner');
-    const count = Math.min(100, Math.max(0, Number(url.searchParams.get('top') ?? 20) || 0));
-    const mine = owner ? board.ofOwner(owner) : null;
-    const rank = me ? board.rank(me) : (mine?.rank ?? null);
-    const you = me && rank !== null ? board.entries()[rank - 1] : undefined;
-    return json({
-      rank, top: board.top(count), total: board.entries().length,
-      ...(you ? { you: servedEntry(you) } : {}), ...(mine ? { owner: { rank: mine.rank } } : {}),
-    });
-  }
-
-  /** Sets the board's deletion some time after its day or week (boards.ts boardTtl); the best ever are kept. */
-  private async expireAfter(name: string): Promise<void> {
-    const ttl = boardTtl(name);
-    if (ttl === null || (await this.ctx.storage.getAlarm()) !== null) return;
-    await this.ctx.storage.setAlarm(Date.now() + ttl);
-  }
-
-  override async alarm(): Promise<void> {
-    await this.ctx.storage.deleteAll();
-  }
-}
-
 /** Only today's board (UTC, give or take a day for time zones) takes results. */
 function isCurrentDay(date: string, now: number): boolean {
   const day = Date.parse(`${date}T00:00:00Z`);
@@ -885,7 +843,7 @@ async function daily(request: Request, env: Env, date: string): Promise<Response
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
-    const shopRoute = /^\/shop\/(me|invoice|equip|gift|accept|claim)$/.exec(url.pathname);
+    const shopRoute = /^\/shop\/(me|invoice|equip|gift|accept|claim|friends|ref)$/.exec(url.pathname);
     if (shopRoute) return shop(request, env, ctx, shopRoute[1] as ShopRoute);
     if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env, ctx);
     if (url.pathname === '/report' || url.pathname === '/reports') return reports(request, env);
@@ -898,6 +856,9 @@ export default {
     if (url.pathname === '/photo') return photoRoute(request, env, url);
     if (url.pathname === '/challenge') return challengeRoute(request, env);
     if (url.pathname === '/notify') return notifyRoute(request, env);
+    if (url.pathname === '/hall') return hallRoute(request, env);
+    if (url.pathname === '/league') return leagueRoute(request, env);
+    if (url.pathname === '/circle') return circleRoute(request, env);
     const day = /^\/daily\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
     if (day) return daily(request, env, day[1]!);
 
@@ -918,7 +879,13 @@ export default {
     } catch (error) {
       await keepReport(env, serverReport(error, 'reminders'));
     }
+    // The season that has ended gets its hall of fame once its grace days are over (hall.ts).
+    try {
+      await freezeDueHall(env, controller.scheduledTime);
+    } catch (error) {
+      await keepReport(env, serverReport(error, 'hall of fame'));
+    }
   },
 } satisfies ExportedHandler<Env>;
 
-export { Card, Notifier, Player };
+export { Card, Circle, DailyBoard, League, Notifier, Player };

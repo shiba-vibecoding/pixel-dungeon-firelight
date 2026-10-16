@@ -1,0 +1,72 @@
+[
+ {
+  "sku": "title.circle_champion",
+  "kind": "title",
+  "title": "circle_champion",
+  "rarity": "honour",
+  "honour": true,
+  "name": {
+   "en": "Circle Champion",
+   "ru": "Чемпион круга"
+  },
+  "how": "first in one of your circles at the end of a week",
+  "icon": "compete/titles/title-circle_champion.png",
+  "plate": "compete/titles/title-plate-honour.png"
+ },
+ {
+  "sku": "title.swift",
+  "kind": "title",
+  "title": "swift",
+  "rarity": "honour",
+  "honour": true,
+  "name": {
+   "en": "Swift",
+   "ru": "Скоростной"
+  },
+  "how": "top 10 of a day on the speed board",
+  "icon": "compete/titles/title-swift.png",
+  "plate": "compete/titles/title-plate-honour.png"
+ },
+ {
+  "sku": "title.deep",
+  "kind": "title",
+  "title": "deep",
+  "rarity": "honour",
+  "honour": true,
+  "name": {
+   "en": "Deep Delver",
+   "ru": "Глубинный"
+  },
+  "how": "top 10 of a day on the depth board",
+  "icon": "compete/titles/title-deep.png",
+  "plate": "compete/titles/title-plate-honour.png"
+ },
+ {
+  "sku": "title.duelist",
+  "kind": "title",
+  "title": "duelist",
+  "rarity": "honour",
+  "honour": true,
+  "name": {
+   "en": "Duelist",
+   "ru": "Дуэлянт"
+  },
+  "how": "ten duels won on one seed (when duels open)",
+  "icon": "compete/titles/title-duelist.png",
+  "plate": "compete/titles/title-plate-honour.png"
+ },
+ {
+  "sku": "title.season_beacon",
+  "kind": "title",
+  "title": "season_beacon",
+  "rarity": "legend",
+  "honour": true,
+  "name": {
+   "en": "Beacon of the Season",
+   "ru": "Маяк сезона"
+  },
+  "how": "the Beacon league at the season's end, or the season's top 10 by Heat",
+  "icon": "compete/titles/title-season_beacon.png",
+  "plate": "mart/fl/profile/title-plate-legend.png"
+ }
+]

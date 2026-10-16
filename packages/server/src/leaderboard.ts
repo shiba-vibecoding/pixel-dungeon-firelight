@@ -25,6 +25,10 @@ export interface Worn {
   fr?: string;
   tt?: string;
   nc?: string;
+  /** The tier of the armour worn at the end of the run (the row of the hero's sheet: 1 cloth ... 6 the class armour), from the verified final world. Absent: cloth. */
+  a?: number;
+  /** The step of the weekly league the player stood on (league-rules.ts): the hero card's frame when no other is worn. Absent: the first league's. */
+  lg?: string;
 }
 
 export interface DailyEntry extends DailyResult {
@@ -84,8 +88,20 @@ export function compareEntries(a: DailyEntry, b: DailyEntry): number {
   return b.score - a.score || (a.turns ?? Infinity) - (b.turns ?? Infinity) || a.at - b.at;
 }
 
+/** Who a put passed on the board: the player right behind the new entry now (they were just above it before), and the place they hold. */
+export interface Passed {
+  owner: string;
+  name: string;
+  rank: number;
+}
+
 export class Leaderboard {
-  constructor(private readonly board: DailyEntry[] = []) {}
+  /** `order` ranks the list (the score list's by default; slices.ts has the others), `size` is how many it keeps. */
+  constructor(
+    private readonly board: DailyEntry[] = [],
+    private readonly order: (a: DailyEntry, b: DailyEntry) => number = compareEntries,
+    private readonly size: number = BOARD_SIZE,
+  ) {}
 
   entries(): DailyEntry[] {
     return this.board;
@@ -98,20 +114,31 @@ export class Leaderboard {
 
   /** Records an entry scored already (a checked run) if it beats the player's best; returns the player's place or null. */
   put(entry: DailyEntry): number | null {
+    return this.place(entry).rank;
+  }
+
+  /**
+   * Like put, and says who the entry passed: the player now directly behind it, when the entry came in or moved up (the one who was just
+   * above it). `changed`: whether the list is different (nothing to write otherwise).
+   */
+  place(entry: DailyEntry): { rank: number | null; changed: boolean; passed?: Passed } {
     const id = entry.id;
     const previous = this.board.findIndex((e) => e.id === id);
     if (previous >= 0) {
-      // A player's best run stands: a higher score, or the same score in fewer turns.
-      const better = entry.score > this.board[previous]!.score
-        || (entry.score === this.board[previous]!.score && (entry.turns ?? Infinity) < (this.board[previous]!.turns ?? Infinity));
-      if (!better) return this.rank(id);
+      // A player's best run stands: the better by this list's order.
+      if (this.order(entry, this.board[previous]!) >= 0) return { rank: this.rank(id), changed: false };
       this.board.splice(previous, 1);
     }
     this.board.push(entry);
-    // Higher scores first; equal scores by fewer turns, and only then the earlier run.
-    this.board.sort(compareEntries);
-    this.board.length = Math.min(this.board.length, BOARD_SIZE);
-    return this.rank(id);
+    this.board.sort(this.order);
+    this.board.length = Math.min(this.board.length, this.size);
+    const index = this.board.findIndex((e) => e.id === id);
+    const rank = index >= 0 ? index + 1 : null;
+    const behind = index >= 0 ? this.board[index + 1] : undefined;
+    // Passed only if the entry moved up (or came in) past someone who was above it: the one behind it now was ahead of it before.
+    const moved = previous < 0 || index < previous;
+    const passed = moved && behind?.owner && behind.owner !== entry.owner ? { owner: behind.owner, name: entry.name, rank: index + 2 } : undefined;
+    return { rank, changed: true, ...(passed ? { passed } : {}) };
   }
 
   rank(id: string): number | null {
@@ -133,7 +160,10 @@ export class Leaderboard {
     let changed = false;
     for (const entry of this.board) {
       if (entry.owner !== owner) continue;
-      const worn = byClass[entry.heroClass];
+      // The armour is the run's own (the final world), not the wallet's: it stays.
+      const armor = entry.w?.a;
+      const base = byClass[entry.heroClass];
+      const worn: Worn | undefined = base || armor !== undefined ? { ...base, ...(armor !== undefined ? { a: armor } : {}) } : undefined;
       // What the entry should say: `w`, and the old per-field values (a client of before `w` reads those).
       const want = { w: worn, nc: worn?.nc, tt: worn?.tt, fr: worn?.fr };
       if (JSON.stringify(want) === JSON.stringify({ w: entry.w, nc: entry.nc, tt: entry.tt, fr: entry.fr })) continue;
@@ -146,6 +176,18 @@ export class Leaderboard {
       if (worn?.tt) entry.tt = worn.tt;
       if (worn?.fr) entry.fr = worn.fr;
       changed = true;
+    }
+    return changed;
+  }
+
+  /** The player's entries carry this name (they chose to be hidden on the boards, or came out of hiding). Returns whether anything changed. */
+  patchName(owner: string, name: string): boolean {
+    let changed = false;
+    for (const entry of this.board) {
+      if (entry.owner === owner && entry.name !== name) {
+        entry.name = name;
+        changed = true;
+      }
     }
     return changed;
   }

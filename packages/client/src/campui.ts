@@ -162,6 +162,8 @@ function dailyBlock(options: CampScreenOptions): HTMLElement {
     boon.dataset.i = String(rules.boon.sprite);
     rulesNode.ariaLabel = `${t.camp.today} ${rules.hardship.name}, ${rules.boon.name} — ${rules.boon.info}`;
     rulesNode.append(
+      // The day's hardship and boon are the day's rules, the same for everyone: said so on the card (and on the boards).
+      el('em', { className: 'pd-rules-title', textContent: t.camp.rulesTitle }),
       el('span', { className: 'bad' }, hardship, rules.hardship.name),
       el('span', { className: 'boon', title: rules.boon.info }, boon, rules.boon.name),
     );
