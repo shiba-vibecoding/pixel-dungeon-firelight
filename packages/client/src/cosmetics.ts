@@ -1,6 +1,5 @@
-import type { HeroClass } from '@pd/core';
 import {
-  cleanEquipped, DECOR_MAX, type Equipped, emptyEquipped, grantedBy, isPassSku, type Item, itemById, passSku, type Slot, slotOf,
+  canonical, cleanEquipped, DECOR_MAX, DEFAULT_OWNED, type Equipped, emptyEquipped, grantedBy, type Item, itemById, passSku, type Slot, slotOf,
 } from './catalog';
 import { levelProgress, PASS_LEVELS, rewardAt, type Track } from './pass';
 import { SEASON } from './season';
@@ -11,8 +10,7 @@ import { initData, inTelegram, openInvoice } from './telegram';
  * kept on the device so that it still shows while the server cannot be reached. Wearing is the server's too: it refuses what is not
  * owned (server wallet.ts). Nothing here changes the game: it is all looks (MONETIZATION.md).
  *
- * The readers at the foot are the renderer's hooks: the camp reads `fire` and `tint` now; the dungeon's renderer will read `trail`,
- * `hat`, `pet`, `killFx`, `deathFx` and `numbers` when their art arrives (TODO, listed with the catalogue in docs/telegram or the commit).
+ * The readers at the foot say what is worn in each slot; the art of each (flart.ts, wear.ts) is drawn by the renderers and the camp.
  *
  * Outside Telegram nothing can be bought; a development build fakes the shop on the device instead, to try it out.
  */
@@ -47,6 +45,8 @@ interface Saved {
   pass?: PassView;
   /** A development build's pretend XP. */
   devXp?: number;
+  /** The once-only offers bought (the starter kit). */
+  taken?: string[];
 }
 
 export type BuyStatus = 'paid' | 'cancelled' | 'failed' | 'pending' | 'expired' | 'owned';
@@ -56,7 +56,7 @@ function load(key: string): Saved {
     const raw = localStorage.getItem(key);
     if (raw) {
       const saved = JSON.parse(raw) as Partial<Saved>;
-      return { items: Array.isArray(saved.items) ? saved.items.filter((id): id is string => typeof id === 'string') : [], equipped: cleanEquipped(saved.equipped), ...(saved.pass ? { pass: saved.pass } : {}), ...(saved.devXp ? { devXp: saved.devXp } : {}) };
+      return { items: Array.isArray(saved.items) ? saved.items.filter((id): id is string => typeof id === 'string').map(canonical) : [], equipped: cleanEquipped(saved.equipped), ...(saved.pass ? { pass: saved.pass } : {}), ...(saved.devXp ? { devXp: saved.devXp } : {}), ...(Array.isArray(saved.taken) ? { taken: saved.taken.filter((id): id is string => typeof id === 'string') } : {}) };
     }
   } catch {
     // Nothing kept.
@@ -74,19 +74,27 @@ class Cosmetics {
   private gifts: GiftNote[] = [];
   private listeners: Array<() => void> = [];
   private server = '';
+  private tookOnce = new Set<string>(this.saved.taken ?? []);
+  /** Counts every change of what is owned or worn, so what is made from it (the hero's art) is made again. */
+  revision = 0;
 
   /** Payments go through the co-op server in Telegram; a development build pretends. */
   get open(): boolean {
     return (Boolean(this.server) && inTelegram) || DEV;
   }
 
-  onChange(listener: () => void): void {
+  onChange(listener: () => void): () => void {
     this.listeners.push(listener);
+    return () => {
+      const at = this.listeners.indexOf(listener);
+      if (at >= 0) this.listeners.splice(at, 1);
+    };
   }
 
   private changed(): void {
+    this.revision++;
     try {
-      localStorage.setItem(DEV ? DEV_KEY : CACHE_KEY, JSON.stringify({ items: [...this.items], equipped: this.worn, pass: this.passView, ...(this.saved.devXp ? { devXp: this.saved.devXp } : {}) } satisfies Saved));
+      localStorage.setItem(DEV ? DEV_KEY : CACHE_KEY, JSON.stringify({ items: [...this.items], equipped: this.worn, pass: this.passView, taken: [...this.tookOnce], ...(this.saved.devXp ? { devXp: this.saved.devXp } : {}) } satisfies Saved));
     } catch {
       // Kept for this session only.
     }
@@ -117,9 +125,10 @@ class Cosmetics {
       return;
     }
     if (!server || !inTelegram) return;
-    const answer = await this.post<{ items: string[]; equipped: Equipped; pass: PassView; gifts: GiftNote[] }>('me', {});
+    const answer = await this.post<{ items: string[]; equipped: Equipped; pass: PassView; gifts: GiftNote[]; taken?: string[] }>('me', {});
     if (!answer.body) return;
     this.items = new Set(answer.body.items);
+    this.tookOnce = new Set(answer.body.taken ?? []);
     this.worn = cleanEquipped(answer.body.equipped);
     this.passView = answer.body.pass;
     this.gifts = answer.body.gifts;
@@ -128,14 +137,19 @@ class Cosmetics {
 
   /* ---- Owning ---- */
 
-  /** Whether an item is this player's. A bundle is: when all its parts are. */
+  /** Whether an item is this player's. A bundle is: when all its parts are. What everyone has (the classic fire) is. */
   owns(item: Item): boolean {
-    if (item.items) return item.items.every((id) => this.items.has(id));
-    return this.items.has(item.id);
+    if (item.items) return item.items.every((id) => this.ownsId(id));
+    return this.ownsId(item.id);
   }
 
   ownsId(id: string): boolean {
-    return this.items.has(id);
+    return this.items.has(id) || DEFAULT_OWNED.includes(id);
+  }
+
+  /** Whether this account has bought a once-only offer (the starter kit) already: the shop hides it then. */
+  tookOffer(group: string): boolean {
+    return this.tookOnce.has(group);
   }
 
   get owned(): ReadonlySet<string> {
@@ -167,12 +181,12 @@ class Cosmetics {
   inSlot(slot: Slot): Item | undefined {
     const id = this.worn.slots[slot];
     const item = id ? itemById(id) : undefined;
-    return item && this.items.has(item.id) ? item : undefined;
+    return item && this.ownsId(item.id) ? item : undefined;
   }
 
   /** Puts an item on, or (`on` false) takes it off. Optimistic: the server's answer settles it. */
   async wear(item: Item, on = true): Promise<boolean> {
-    if (!this.items.has(item.id) && on) return false;
+    if (!this.ownsId(item.id) && on) return false;
     const before = this.worn;
     let body: Record<string, unknown>;
     if (item.category === 'decor') {
@@ -211,15 +225,17 @@ class Cosmetics {
   async buy(item: Item): Promise<BuyStatus> {
     if (DEV) {
       this.grant(grantedBy(item.id));
+      if (item.once) this.tookOnce.add(item.once);
+      this.changed();
       return 'paid';
     }
     if (!this.open) return 'failed';
-    if (this.owns(item)) return 'owned';
+    if (this.owns(item) || (item.once !== undefined && this.tookOnce.has(item.once))) return 'owned';
     const answer = await this.post<{ link?: string }>('invoice', { sku: item.id });
     if (answer.status === 401) return 'expired';
     if (answer.status === 409) return 'owned';
     if (!answer.body?.link) return 'failed';
-    return this.afterInvoice(answer.body.link, () => this.owns(item));
+    return this.afterInvoice(answer.body.link, () => this.owns(item) || (item.once !== undefined && this.tookOnce.has(item.once)));
   }
 
   /** Buys an item as a gift: for a friend by Telegram id, or behind a share link the bot sends on once it is paid. */
@@ -298,35 +314,19 @@ class Cosmetics {
     this.changed();
   }
 
-  /* ---- The renderer's hooks (a slot's item, when worn and owned) ---- */
+  /* ---- What is worn, by slot (the art of each is flart.ts and wear.ts) ---- */
 
-  /** TODO(art): the dungeon's renderer draws footprints in the trail's tones behind the hero. */
   get trail(): Item | undefined { return this.inSlot('trail'); }
-  /** TODO(art): a hat on the hero's head, in the dungeon and in the camp. */
   get hat(): Item | undefined { return this.inSlot('hat'); }
-  /** TODO(art): a pet that follows the hero. */
   get pet(): Item | undefined { return this.inSlot('pet'); }
-  /** TODO(art): an effect where the hero slays a foe. */
   get killFx(): Item | undefined { return this.inSlot('killfx'); }
-  /** TODO(art): an effect where the hero falls. */
   get deathFx(): Item | undefined { return this.inSlot('deathfx'); }
-  /** TODO(art): the damage numbers' colour and style (view.ts floating numbers). */
   get numbers(): Item | undefined { return this.inSlot('numbers'); }
-  /** TODO(art): the decorations round the camp fire. */
-  get decor(): Item[] { return this.worn.decor.map((id) => itemById(id)).filter((item): item is Item => item !== undefined && this.items.has(item.id)); }
-
-  /** The campfire style worn: flame tint, then the sparks' colours (camp.ts CampDress.fire). */
-  get fire(): readonly [string, string, string, string] | null {
-    const tones = this.inSlot('campfire')?.tones;
-    return tones && tones.length >= 4 ? [tones[0]!, tones[1]!, tones[2]!, tones[3]!] : null;
-  }
-
-  /** The tint of the look a class wears (camp.ts CampDress.tint), a placeholder until the recoloured sheets are drawn. */
-  tint(heroClass: HeroClass): { color: string; strength: number } | undefined {
-    const look = this.inSlot(`look.${heroClass}`);
-    const color = look?.tones?.[0];
-    return look && color ? { color, strength: look.legendary ? 0.58 : 0.42 } : undefined;
-  }
+  /** The decorations that stand in the camp, owned and worn. */
+  get decor(): Item[] { return this.worn.decor.map((id) => itemById(id)).filter((item): item is Item => item !== undefined && this.ownsId(item.id)); }
+  /** The campfire style worn (the classic one when nothing else is). */
+  get fire(): Item | undefined { return this.inSlot('campfire'); }
+  get photoFrame(): Item | undefined { return this.inSlot('photoframe'); }
 
   /** The quip pack worn: the id (quip-packs.ts), or null. */
   get quipPack(): string | null {

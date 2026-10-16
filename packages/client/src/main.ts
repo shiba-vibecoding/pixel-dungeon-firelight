@@ -11,6 +11,8 @@ import {
 import * as core from '@pd/core';
 import './ui.css';
 import './game.css';
+import './fl-mart.css';
+import './fl-mart-ext.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -60,6 +62,8 @@ import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { showStore } from './storeui';
 import { cosmetics } from './cosmetics';
+import { fireArt, loadFl, onFlChange } from './flart';
+import { wornFor } from './wear';
 import { S as shopText } from './i18n-shop';
 import { quality } from './quality';
 import { type Launch, Motion } from './motion';
@@ -528,7 +532,7 @@ function pick3d(level: Level, world: World): boolean {
     r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(t.render3dFailed) });
     governor.hold(2500);
     frame3d = {
-      now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0,
+      now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0, myId: '',
     };
     r3.resize(canvas.width, canvas.height);
   } catch {
@@ -1050,12 +1054,19 @@ function toTitle(ask = true): void {
   activeCamp.dress(homeDress());
 }
 
-/** What the camp wears from the catalogue: the campfire's style and the looks' tints. The rest waits for its art (cosmetics.ts hooks). */
+/** What the camp wears from the catalogue: the campfire's style (flame, logs, sparks, light), the decorations at their places, and what the hero wears. */
 const homeDress = (): CampDress => ({
-  fire: cosmetics.fire,
-  tint: Object.fromEntries((['warrior', 'mage', 'rogue', 'huntress'] as const).map((name) => [name, cosmetics.tint(name)])),
+  fire: fireArt(cosmetics.fire?.id ?? 'fire.classic') ?? null,
+  decor: cosmetics.decor.map((item) => item.id),
+  wear: (heroClass) => wornFor(heroClass as HeroClass),
 });
 cosmetics.onChange(() => activeCamp?.dress(homeDress()));
+// The designer's art arrives as it is asked for: the camp and the dungeon are drawn again with it.
+void loadFl();
+onFlChange(() => {
+  activeCamp?.dress(homeDress());
+  drawPace.force();
+});
 
 /** The journal and catalog; from the menu it goes back to the menu, from the corner button to the game. */
 function openJournal(onClose: () => void = hideOverlay): void {
@@ -3012,6 +3023,7 @@ function tick(now: number): void {
       f.seeAll = scene.seeAll;
       f.focusX = scene.focus.x;
       f.focusY = scene.focus.y;
+      f.myId = session.myId;
       r3.hz = refreshMeter.hz;
       const gap = lastDraw3d ? now - lastDraw3d : 0;
       lastDraw3d = now;

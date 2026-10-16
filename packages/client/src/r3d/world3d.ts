@@ -34,6 +34,7 @@ import { LightRig, type Strongest, sourcesOf } from './lightrig';
 import type { Tier } from './governor';
 import { PerfOverlay } from './perfoverlay';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
+import type { WearQuad } from '../wearfx';
 
 /** What a frame draws from: the 2D loop's own data, read in place. */
 export interface Frame3D {
@@ -54,6 +55,8 @@ export interface Frame3D {
   /** The hero's middle, world pixels. */
   focusX: number;
   focusY: number;
+  /** My hero's id: what only it wears is drawn for it. */
+  myId: string;
 }
 
 /** A character drawn this frame, for the 2D layer's marks (health, sleep, alert, names): where its feet are, in world pixels. */
@@ -76,6 +79,8 @@ const PROP_REACH = 11;
 /** How the sprite batch stands a picture up: leaned toward the camera (characters, items) or straight up (a sconce on a wall). */
 const LEANED = 0;
 const UPRIGHT = 1;
+/** Lying on the floor, its top to the north (footprints). */
+const FLAT = 2;
 
 /** The kit's loaded files, once they have come (prepare). */
 let kitState: { kit: Kit; images: SharedImages } | null = null;
@@ -515,7 +520,11 @@ export class World3D {
     const m = this.sprites.instanceMatrix.array as Float32Array;
     const o = i * 16;
     m[o] = width; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
-    if (mode === LEANED) {
+    if (mode === FLAT) {
+      // Local up becomes north on the floor; the picture's face looks up.
+      m[o + 4] = 0; m[o + 5] = 0; m[o + 6] = -height; m[o + 7] = 0;
+      m[o + 8] = 0; m[o + 9] = 1; m[o + 10] = 0; m[o + 11] = 0;
+    } else if (mode === LEANED) {
       const sh = height * LEAN_STRETCH;
       const sinL = Math.sin(LEAN);
       const cosL = Math.cos(LEAN);
@@ -537,7 +546,13 @@ export class World3D {
     const c = this.sprites.instanceColor!.array as Float32Array;
     c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = tint;
     const r = this.spriteRim.array as Float32Array;
-    r[i * 3] = r[i * 3 + 1] = r[i * 3 + 2] = 0;
+    r[i * 3] = r[i * 3 + 1] = 0;
+    r[i * 3 + 2] = 1;
+  }
+
+  /** How strongly the sprite just written glows (a legendary look pulses): its emissive map is scaled by this (the shader's `aRim.z`). */
+  private glowLast(k: number): void {
+    if (this.spriteCount > 0) (this.spriteRim.array as Float32Array)[(this.spriteCount - 1) * 3 + 2] = k;
   }
 
   /**
@@ -560,7 +575,6 @@ export class World3D {
     const r = this.spriteRim.array as Float32Array;
     r[i * 3] = flip ? -dx : dx;
     r[i * 3 + 1] = dy;
-    r[i * 3 + 2] = 1;
     const c = this.spriteRimColor.array as Float32Array;
     c[i * 3] = s.r * s.strength;
     c[i * 3 + 1] = s.g * s.strength;
@@ -605,9 +619,26 @@ export class World3D {
     if (tint <= 0 || scale <= 0) return;
     const tx = px / TILE;
     const tz = py / TILE;
-    this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint);
+    const worn = puppet.worn;
+    const look = worn?.look;
+    // A legendary look's aura stands just behind the hero, bright (its own glow: it does not dim), a pixel lower.
+    if (look?.aura) {
+      const aura = look.aura;
+      this.sprite(aura.image, (Math.floor(f.now / aura.ms) % aura.frames) * aura.w, 0, aura.w, aura.h, false, tx, lift - 1 / TILE, tz - 0.02, (aura.w / TILE) * scale, (aura.h / TILE) * scale, tint, LEANED, 0, aura.image);
+    }
+    this.sprite(sheet.image, sx, sy, sheet.w, sheet.h, puppet.flip, tx, lift, tz, (sheet.w / TILE) * scale, (sheet.h / TILE) * scale, tint, LEANED, 0, look?.glow);
+    if (look?.glow) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
     // The rim of the strongest light on the silhouette (not on the dead: they lie flat), and the shade slipping away from that light.
     const lit = puppet.alive && this.rimLast(tx, tz, puppet.flip);
+    // The hat, a second picture by the same frame and armour, the hero's frame at (2, 7) of its cell: standing where he stands.
+    const hat = worn?.hat;
+    if (hat) {
+      const col = frame % sheet.cols;
+      const row = Math.floor(frame / sheet.cols) + puppet.row;
+      this.sprite(hat.image, col * hat.w, row * hat.h, hat.w, hat.h, puppet.flip, tx, lift, tz, (hat.w / TILE) * scale, (hat.h / TILE) * scale, tint, LEANED, 0, hat.glow);
+      if (hat.glow) this.glowLast(0.9);
+      this.rimLast(tx, tz, puppet.flip);
+    }
     if (puppet.alive || !puppet.laid) {
       const air = flyer || hover > 0;
       const size = Math.max(0.35, sk.shadow.width * (sheet.w / TILE)) * (air ? sk.fly.shadowScale : 1) * scale;
@@ -681,6 +712,7 @@ export class World3D {
     this.bossFound = false;
     this.effects.begin();
     f.view.puppets.forEach(this.puppetPass);
+    this.addWear(f);
     this.addItems(f);
     this.addProps(f, hx, hz);
     this.addCorpses(f);
@@ -751,6 +783,32 @@ export class World3D {
       accent.position.set(this.bossX, 2.2, this.bossZ + 1.2);
       accent.intensity = this.accentBase * pulse;
     } else if (!this.bossSeen) accent.intensity = 0;
+  }
+
+  /**
+   * What my hero's cosmetics put down (wearfx.ts): footprints lying on the floor, the effects of a kill and a fall and the pet as pictures
+   * standing up like the characters; the pet's shade is a blob on the floor, smaller and paler for a flyer.
+   */
+  private addWear(f: Frame3D): void {
+    const { quads, count } = f.view.wearQuads(f.myId, f.now);
+    const sk = this.kit.sprites;
+    for (let i = 0; i < count; i++) {
+      const q: WearQuad = quads[i]!;
+      if (!f.explored[Math.floor(q.x / TILE) + Math.floor(q.y / TILE) * WIDTH]) continue;
+      const fx0 = q.x + TILE / 2;
+      const fz0 = q.y + FEET_PX;
+      // The picture's bottom middle, from the feet point (px).
+      const bx = (fx0 + q.ox + (q.w / 2 - q.ax)) / TILE;
+      const down = q.oy + (q.h - q.ay);
+      if (q.kind === 'trail') {
+        this.sprite(q.image, q.sx, q.sy, q.w, q.h, false, bx, 0.03, fz0 / TILE + down / TILE, q.w / TILE, q.h / TILE, 1, FLAT);
+        continue;
+      }
+      const lift = Math.max(0, (q.lift - down) / TILE);
+      if (q.shade > 0) this.effects.shadowBlob(fx0 / TILE, fz0 / TILE, q.shade / TILE, q.shadeAlpha, sk.shadow.squash);
+      this.sprite(q.image, q.sx, q.sy, q.w, q.h, q.flip, bx, lift, fz0 / TILE, q.w / TILE, q.h / TILE, q.alpha, LEANED, 0, q.glow);
+      if (q.kind === 'pet') this.rimLast(fx0 / TILE, fz0 / TILE, q.flip);
+    }
   }
 
   private addItems(f: Frame3D): void {

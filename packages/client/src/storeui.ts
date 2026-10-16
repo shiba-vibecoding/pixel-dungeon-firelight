@@ -1,56 +1,69 @@
 import type { HeroClass } from '@pd/core';
 import { audio } from './audio';
-import { Camp, type CampDress, type CampExtra, CAMP_ORDER, seasonOf } from './camp';
+import { Camp, type CampDress, CAMP_ORDER, seasonOf } from './camp';
 import {
-  bundleValue, CATALOG, DECOR_MAX, earnOnly, forSale, HEROES, type Item, itemById, RARITY_RANK, slotOf, type Category,
+  bundleValue, CATALOG, DECOR_MAX, earnOnly, forSale, HEROES, type Item, itemById, PASS_PRICE, RARITY_RANK, type Slot, slotOf, type Category, passSku,
 } from './catalog';
 import { cosmetics } from './cosmetics';
+import {
+  fireArt, flCatalog, flItem, flStr, flUrl, fxArt, digitsArt, loadFl, onFlChange, type FlCategory,
+} from './flart';
 import { lang } from './i18n';
-import { L, S, type Tab } from './i18n-shop';
+import { L, S } from './i18n-shop';
 import { levelCost, PASS_LEVELS, REWARDS, type Track } from './pass';
 import { packLines } from './quip-packs';
 import { SEASON } from './season';
-import { AVATAR, button, el, hideOverlay, info, show, sprites, toast, windowOf } from './screens';
-import { frameStyle, glyph, itemArt, lookTint, paintName, rarityClass } from './shopart';
+import { AVATAR, button, el, hideOverlay, info, show, sprites, toast } from './screens';
+import { framedFace, itemArt, paintName, pixelImage, titlePlate } from './shopart';
+import { wornOf } from './wear';
 
 /*
- * Pixel-Mart's storefront (the expanded shop): the catalogue's categories as tabs, item cards with rarity frames, a try-on that shows
- * the item on the hero by the camp fire (camp.ts), «Мои вещи» to wear what is owned, the season pass's track, bundles, and gifts. The
- * design system's shop markup is reused (docs/design/system «Pixel-Mart»); what is new is in game.css (.pd-store-*). Art is a
- * placeholder, drawn by shopart.ts, until the sheets arrive.
+ * Pixel-Mart's storefront (design part 5, docs/design/system/firelight-mart.md and the mock tools/art/firelight/p5/mock): one window of
+ * the fl-mart.css classes over the game's own (.pd-window, .pd-button, .pd-chip). A head (the shop's name, a way back and out), the
+ * categories (a row of chips on a phone, a list at the left on a monitor), the shelves, and the try-on: on a monitor always at the
+ * right, on a phone its own screen. Screens: home (the season, the bundle of the week, the starter kit, what is new), a category,
+ * the try-on, a bundle, a gift, the season pass, the profile, the photo.
  *
+ * The try-on is the camp itself (camp.ts): the hero by the fire in what he would wear, the fire, the decorations, the pet, the trail.
  * Cosmetics are looks only: nothing here touches the rules or the scoring.
  */
 
-const BASE = `${import.meta.env.BASE_URL}assets/`;
-
 export interface StoreOptions {
   heroClass: HeroClass;
-  tab?: Tab;
+  /** Opens on this screen's category (a designer's category id: looks, fires, ...), or the pass. */
+  tab?: string;
   onClose(): void;
   /** The first shop (martui.ts): recolours, effects, the patronage. */
   classic?: () => void;
 }
 
-/** The tabs, in order; photo frames and stickers share one. */
-const TABS: readonly Tab[] = ['look', 'campfire', 'hat', 'pet', 'trail', 'killfx', 'deathfx', 'numbers', 'quips', 'decor', 'frame', 'title', 'namecolor', 'photo', 'bundle'];
-
-const inTab = (tab: Tab): Category[] => (tab === 'photo' ? ['photoframe', 'sticker'] : tab === 'pass' ? [] : [tab]);
-
-/** What a shelf shows: the catalogue's items of the tab, those for sale first, then those that are earned; cheapest first. */
-function shelf(tab: Tab, heroClass: HeroClass): Item[] {
-  const categories = inTab(tab);
-  return CATALOG.filter((item) => categories.includes(item.category) && (tab !== 'look' || item.heroClass === heroClass))
-    .sort((a, b) => Number(earnOnly(a)) - Number(earnOnly(b)) || a.stars - b.stars || RARITY_RANK[a.rarity] - RARITY_RANK[b.rarity]);
-}
-
-const stars = (amount: number, small = false): HTMLElement => el('span', { className: `pd-stars${small ? ' small' : ''}`, textContent: String(amount) });
-const nameOf = (item: Item): string => item.name[L];
-const keeperIcon = (): HTMLElement => {
-  const keeper = el('i', { className: 'keeper' });
-  keeper.style.setProperty('--keeper', `url(${BASE}shopkeeper.png)`);
-  return el('div', { className: 'pd-portrait' }, keeper);
+/** The designer's categories and which catalogue categories each holds. */
+const SHELVES: Readonly<Record<string, readonly Category[]>> = {
+  looks: ['look'], fires: ['campfire'], hats: ['hat'], pets: ['pet'], effects: ['trail', 'killfx', 'deathfx', 'numbers'], quips: ['quips'],
+  camp: ['decor'], profile: ['frame', 'title', 'namecolor'], photo: ['photoframe', 'sticker'],
 };
+const EFFECT_ORDER: ReadonlyArray<readonly [Category, string]> = [['trail', 'trails'], ['killfx', 'kills'], ['deathfx', 'deaths'], ['numbers', 'digits']];
+
+type Route =
+  | { s: 'home' }
+  | { s: 'cat'; cat: string }
+  | { s: 'tryon'; id: string }
+  | { s: 'bundle'; id: string }
+  | { s: 'gift'; id: string }
+  | { s: 'pass' }
+  | { s: 'profile' }
+  | { s: 'photo' };
+
+const WIDE = (): boolean => typeof matchMedia === 'function' && matchMedia('(min-width: 900px)').matches;
+const T = (key: string, n?: number | string): string => flStr(L, key, n);
+const nameOf = (item: Item): string => item.name[L];
+
+const starIcon = (): HTMLElement => el('i', { className: 'fl-star' });
+
+/** A price: a star and the number; a coal tag (`legend`) for a legendary thing's. */
+function priceTag(stars: number, className = ''): HTMLElement {
+  return el('span', { className: `fl-price ${className}`.trim() }, starIcon(), String(stars));
+}
 
 /** Buys and says how it went. */
 async function purchase(item: Item, then: () => void): Promise<void> {
@@ -68,413 +81,749 @@ async function purchase(item: Item, then: () => void): Promise<void> {
   then();
 }
 
-/** The price line of a card: stars, what it takes to earn it, or that it is yours. */
-function metaOf(item: Item): Array<Node | string> {
-  if (cosmetics.owns(item)) return [cosmetics.isWorn(item) ? S.worn : S.owned];
-  if (item.earn) return [S.earn(item.earn)];
-  const nodes: Array<Node | string> = [stars(item.stars, true)];
-  if (item.items) nodes.push(el('span', { className: 'pd-store-save', textContent: S.bundleSave(Math.round((1 - item.stars / bundleValue(item)) * 100)) }));
-  return nodes;
+/** Whether an item can be bought now (for sale, in season, not owned, a once-only offer not yet taken). */
+function buyable(item: Item): boolean {
+  if (!forSale(item) || cosmetics.owns(item)) return false;
+  return !(item.once && cosmetics.tookOffer(item.once));
 }
 
-function card(item: Item, refresh: () => void, openTry: (item: Item) => void): HTMLElement {
+const givable = (item: Item): boolean => forSale(item) && item.category !== 'pass' && !item.once;
+
+/** The items of a shelf: those for sale first, then those that are earned; cheapest first. */
+function shelf(categories: readonly Category[], heroClass: HeroClass): Item[] {
+  return CATALOG.filter((item) => categories.includes(item.category) && (item.category !== 'look' || item.heroClass === heroClass))
+    .sort((a, b) => Number(earnOnly(a)) - Number(earnOnly(b)) || a.stars - b.stars || RARITY_RANK[a.rarity] - RARITY_RANK[b.rarity]);
+}
+
+/** The meta line of a card: the class or the season, then the price, the earn, or that it is yours. */
+function cardMeta(item: Item): HTMLElement {
+  const meta = el('div', { className: 'fl-card-meta' });
+  if (item.category === 'look' && item.heroClass) meta.append(el('span', { textContent: S.classes[item.heroClass] }));
+  else if (item.season && !cosmetics.owns(item)) meta.append(el('span', { textContent: L === 'ru' ? 'Зима' : 'Winter' }));
+  if (cosmetics.owns(item) && item.category !== 'bundle') meta.append(el('span', { className: 'fl-own', textContent: cosmetics.isWorn(item) ? S.worn : S.owned }));
+  else if (earnOnly(item)) meta.append(el('span', { textContent: S.earn(item.earn!) }));
+  else if (item.stars > 0) meta.append(priceTag(item.stars, item.legendary ? 'legend' : ''));
+  else if (item.category === 'sticker') meta.append(el('span', { textContent: itemById('stickers.pack1')?.name[L] ?? '' }));
+  return meta;
+}
+
+function card(item: Item, selected: boolean, choose: (item: Item) => void, isNew = false): HTMLElement {
   const owned = cosmetics.owns(item);
-  const worn = owned && cosmetics.isWorn(item);
-  const art = el('div', { className: 'pd-offer-art' }, itemArt(item, item.category === 'look' ? 5 : 6));
-  if (item.legendary) art.append(el('span', { className: 'pd-chip legend', textContent: S.rarity.legendary }));
-  else if (item.rarity !== 'common') art.append(el('span', { className: `pd-chip rar-chip ${rarityClass(item.rarity)}`, textContent: S.rarity[item.rarity] }));
-  art.onclick = () => openTry(item);
-  const action = owned && item.category !== 'bundle'
-    ? button(worn ? S.takeOff : S.wear, () => void cosmetics.wear(item, !worn).then(refresh), worn ? 'small quiet' : 'small')
-    : button(S.tryOn, () => openTry(item), 'small');
-  return el(
-    'article',
-    { className: `pd-offer pd-store-card ${rarityClass(item.rarity)}${item.legendary ? ' legend' : ''}${worn ? ' worn' : owned ? ' owned' : item.earn ? ' badge' : ''}` },
-    art,
-    el('h3', { className: 'pd-offer-name', textContent: nameOf(item) }),
-    el('p', { className: 'pd-offer-meta' }, ...metaOf(item)),
-    action,
-  );
-}
-
-/** The storefront: a head with the pass and «Мои вещи», the tabs, the shelf. */
-export function showStore(options: StoreOptions): void {
-  let tab: Tab = options.tab ?? 'look';
-  let heroClass = options.heroClass;
-  const body = el('div', { className: 'pd-scroll pd-store-body' });
-  const tabs = el('div', { className: 'pd-tabs compact pd-store-tabs' });
-  tabs.setAttribute('role', 'tablist');
-  const reopen = (): void => showStore({ ...options, tab, heroClass });
-  const tryOn = (item: Item): void => showTryOn(item, heroClass, reopen);
-
-  const render = (): void => {
-    for (const node of tabs.children) node.setAttribute('aria-selected', String((node as HTMLElement).dataset.tab === tab));
-    if (tab === 'pass') {
-      body.replaceChildren(passBody(render));
-    } else {
-      const items = shelf(tab, heroClass);
-      const children: Node[] = [];
-      if (tab === 'look') {
-        children.push(el('div', { className: 'pd-store-classes' }, ...HEROES.map((name) => {
-          const pill = el('button', { className: 'pd-store-class', textContent: S.classes[name] });
-          pill.setAttribute('aria-pressed', String(name === heroClass));
-          pill.onclick = () => {
-            audio.play('click');
-            heroClass = name;
-            render();
-          };
-          return pill;
-        })));
-      }
-      children.push(items.length > 0 ? el('div', { className: 'pd-shop-grid' }, ...items.map((item) => card(item, render, tryOn))) : info(S.nothing, 'pd-note center'));
-      if (!cosmetics.open) children.push(info(S.closedNote, 'pd-note center'));
-      body.replaceChildren(...children);
-    }
-    sprites(body);
+  const node = el('div', { className: `fl-card${item.legendary ? ' legendary' : ''}${selected ? ' selected' : ''}${owned ? ' owned' : ''}` });
+  node.tabIndex = 0;
+  node.setAttribute('role', 'button');
+  const art = el('div', { className: 'fl-card-art' }, itemArt(item, 4, 80));
+  if (item.legendary) art.append(el('span', { className: 'pd-chip fl-legend-chip', textContent: T('legendary') }));
+  else if (isNew) art.append(el('span', { className: 'pd-chip', textContent: T('new') }));
+  node.append(art, el('div', { className: 'fl-card-name', textContent: nameOf(item) }), cardMeta(item));
+  node.onclick = () => {
+    audio.play('click');
+    choose(item);
   };
-  for (const id of TABS) {
-    const node = el('button', { className: 'pd-tab', textContent: S.tabs[id] });
-    node.dataset.tab = id;
-    node.setAttribute('role', 'tab');
-    node.onclick = () => {
-      audio.play('click');
-      tab = id;
-      render();
-      node.scrollIntoView?.({ inline: 'center', block: 'nearest' });
-    };
-    tabs.append(node);
-  }
-  const top = el(
-    'div',
-    { className: 'pd-store-top' },
-    button(S.passButton, () => {
-      tab = 'pass';
-      render();
-    }, 'small'),
-    button(S.wardrobe, () => showWardrobe(heroClass, reopen), 'small'),
-    ...(options.classic ? [button(S.classic, options.classic, 'small quiet')] : []),
-  );
-  const box = windowOf({ title: S.title, sub: S.sub, icon: keeperIcon(), onClose: options.onClose, className: 'pd-store' }, top, tabs, body);
-  show(box, options.onClose);
-  render();
+  node.onkeydown = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      node.click();
+    }
+  };
+  return node;
 }
 
-/* ---- The try-on ---- */
+function section(title: string, more: string | null, ...children: Array<Node | null>): HTMLElement {
+  const head = el('div', { className: 'fl-sec-head' }, el('h3', { textContent: title }));
+  if (more) head.append(el('span', { className: 'fl-more', textContent: more }));
+  return el('section', { className: 'fl-sec' }, head, ...children.filter((c): c is Node => c !== null));
+}
 
-/** Where placeholder icons stand on the camp scene (scene pixels; the hero's feet are at 50, 119, the fire at 24, 118). */
-const SPOT = {
-  hat: [46, 98], pet: [58, 111], numbers: [57, 92], killfx: [36, 106], deathfx: [62, 99], sticker: [3, 90],
-} as const;
-const DECOR_SPOTS: ReadonlyArray<readonly [number, number]> = [[6, 108], [12, 98], [36, 112], [2, 99]];
+/* ---- What the try-on puts on the hero ---- */
 
-/** What the camp wears for a set of items tried on over what is worn; also the name plate's things and a pack's line. */
 interface Dressing {
   dress: CampDress;
-  hero: HeroClass | null;
+  hero: HeroClass;
+  slots: Map<Slot, Item>;
+  /** The slots a candidate changed. */
+  changed: Set<string>;
   plate: { color?: Item; title?: Item; frame?: Item };
   photoFrame?: Item;
   pack: string | null;
 }
 
-function dressing(candidates: readonly Item[], heroClass: HeroClass): Dressing {
-  // What is worn already, then the candidates over it (a candidate takes its slot).
-  const slots = new Map<string, Item>();
+/** What the camp wears for a set of items tried on over what is worn already (a candidate takes its slot; a decoration joins the set). */
+function dressingOf(candidates: readonly Item[], heroClass: HeroClass): Dressing {
+  const slots = new Map<Slot, Item>();
   const decor: Item[] = [];
-  for (const item of Object.values(cosmetics.equipped.slots)) {
-    const found = item ? itemById(item) : undefined;
-    if (found && cosmetics.ownsId(found.id)) slots.set(slotOf(found)!, found);
+  for (const id of Object.values(cosmetics.equipped.slots)) {
+    const item = id ? itemById(id) : undefined;
+    const slot = item ? slotOf(item) : null;
+    if (item && slot && cosmetics.ownsId(item.id)) slots.set(slot, item);
   }
-  for (const id of cosmetics.equipped.decor) {
-    const found = itemById(id);
-    if (found && cosmetics.ownsId(id)) decor.push(found);
-  }
-  let hero: HeroClass | null = null;
-  let sticker: Item | undefined;
-  let photoFrame: Item | undefined;
+  for (const item of cosmetics.decor) decor.push(item);
+  let hero = heroClass;
+  const changed = new Set<string>();
+  const demo: NonNullable<CampDress['demo']> = {};
   for (const item of candidates) {
-    if (item.category === 'decor') decor.unshift(item);
-    else if (item.category === 'sticker') sticker = item;
-    else if (item.category === 'photoframe') photoFrame = item;
-    else {
+    if (item.category === 'decor') {
+      if (!decor.some((d) => d.id === item.id)) decor.unshift(item);
+      changed.add('decor');
+    } else {
       const slot = slotOf(item);
-      if (slot) slots.set(slot, item);
+      if (slot) {
+        slots.set(slot, item);
+        changed.add(slot.startsWith('look.') ? 'look' : slot);
+      }
     }
     if (item.category === 'look' && item.heroClass) hero = item.heroClass;
+    if (item.category === 'killfx') demo.kill = fxArt(item.id);
+    if (item.category === 'deathfx') demo.death = fxArt(item.id);
+    if (item.category === 'numbers') demo.digits = digitsArt(item.id);
   }
-  const look = slots.get(`look.${hero ?? heroClass}`);
-  const tint = look ? lookTint(look) : undefined;
-  const flame = slots.get('campfire')?.tones;
-  const extras: CampExtra[] = [];
-  const place = (item: Item | undefined, x: number, y: number, bob = false, alpha = 1): void => {
-    if (item) extras.push({ img: glyph(item), x, y, bob, alpha });
-  };
-  place(slots.get('hat'), ...SPOT.hat);
-  place(slots.get('pet'), ...SPOT.pet, true);
-  place(slots.get('numbers'), ...SPOT.numbers, true);
-  place(slots.get('killfx'), ...SPOT.killfx, true);
-  place(slots.get('deathfx'), ...SPOT.deathfx, true);
-  place(sticker, ...SPOT.sticker);
-  const trail = slots.get('trail');
-  [62, 70, 78].forEach((x, i) => place(trail, x, 114, false, 0.85 - i * 0.3));
-  decor.slice(0, DECOR_MAX).forEach((item, i) => place(item, ...DECOR_SPOTS[i]!));
+  const fireId = slots.get('campfire')?.id ?? 'fire.classic';
   return {
-    dress: {
-      fire: flame && flame.length >= 4 ? [flame[0]!, flame[1]!, flame[2]!, flame[3]!] : null,
-      tint: tint && (hero ?? heroClass) ? { [hero ?? heroClass]: tint } : {},
-      extras,
-    },
+    dress: { fire: fireArt(fireId) ?? null, decor: decor.slice(0, DECOR_MAX).map((d) => d.id), wear: (cls) => wornOf(slots, cls as HeroClass), demo: demo.kill || demo.death || demo.digits ? demo : null },
     hero,
+    slots,
+    changed,
     plate: { color: slots.get('namecolor'), title: slots.get('title'), frame: slots.get('frame') },
-    ...(photoFrame ? { photoFrame } : {}),
+    ...(slots.get('photoframe') ? { photoFrame: slots.get('photoframe')! } : {}),
     pack: slots.get('quips')?.id ?? null,
   };
 }
 
 /** The name plate: a portrait in its frame, the name in its colour, the title. */
-function plate(heroClass: HeroClass, things: Dressing['plate']): HTMLElement {
-  const face = el('i');
-  face.style.setProperty('--av', String(AVATAR[heroClass]));
-  const portrait = el('span', { className: `pd-profile-face${things.frame ? ' frame-p' : ''}` }, face);
-  portrait.style.cssText = frameStyle(things.frame);
-  const name = el('b', { className: 'pd-store-name', textContent: S.nameSample });
+function plateOf(heroClass: HeroClass, things: Dressing['plate']): HTMLElement {
+  const portrait = framedFace(things.frame, AVATAR[heroClass], 3);
+  if (!things.frame) portrait.style.border = '';
+  const name = el('b', { className: 'fl-name', textContent: S.nameSample });
   paintName(name, things.color);
-  return el('div', { className: 'pd-store-plate' }, portrait, el('span', { className: 'pd-store-who' }, name, things.title ? el('small', { textContent: nameOf(things.title) }) : null));
+  return el('div', { className: 'fl-profile-card' }, portrait, el('div', { className: 'who' }, name, things.title ? titlePlate(things.title, nameOf(things.title)) : null));
 }
 
-/**
- * An item up close, live: the hero by the camp fire with it on («Примерить» puts it on and takes it off), and «Купить» / «Подарить»
- * (or «Надеть» when it is owned). A bundle tries all its parts at once.
- */
-export function showTryOn(item: Item, heroClass: HeroClass, back: () => void): void {
-  const parts = item.items ? item.items.map((id) => itemById(id)).filter((part): part is Item => part !== undefined) : [item];
-  let on = true;
-  const stage = el('div', { className: 'pd-store-stage' });
-  const holder = el('div', { className: 'pd-store-camp' });
-  const plateBox = el('div', { className: 'pd-store-platebox' });
-  stage.append(holder);
-  const startClass = item.heroClass ?? heroClass;
+/** A live stage: the camp by the fire with the hero in what he would wear; stopped when the screen goes. */
+interface Stage {
+  root: HTMLElement;
+  apply(candidates: readonly Item[]): Dressing;
+  stop(): void;
+}
+
+function makeStage(heroClass: HeroClass, phone: boolean): Stage {
+  const root = el('div', { className: 'fl-tryon-stage' });
+  const holder = el('div', { className: 'fl-tryon-camp' });
+  root.append(holder);
+  const crop: [number, number, number, number] = phone ? [4, 90, 86, 70] : [8, 94, 84, 64];
+  const scale = phone ? Math.max(2, Math.min(4, Math.floor(Math.min(innerWidth - 56, 380) / crop[2]))) : 3;
+  // The camp's canvas is laid out by its host (position: absolute): the host has the size of the scene.
+  holder.style.width = `${crop[2] * scale}px`;
+  holder.style.height = `${crop[3] * scale}px`;
   const camp = new Camp(holder, {
-    scene: 'outdoor', season: seasonOf(new Date()), hero: Math.max(0, CAMP_ORDER.indexOf(startClass)), crop: [6, 86, 66, 46], scale: 4,
-    interactive: false, label: false, own: true,
+    scene: 'outdoor', season: seasonOf(new Date()), hero: Math.max(0, CAMP_ORDER.indexOf(heroClass)), crop, scale, interactive: false, label: false, own: true,
   });
   let said = '';
-  const apply = (): void => {
-    const d = dressing(on ? parts : [], startClass);
-    camp.setHero(startClass);
-    camp.dress(d.dress);
-    plateBox.replaceChildren(plate(startClass, d.plate));
-    stage.style.setProperty('--photo', d.photoFrame?.tones?.[0] ?? 'transparent');
-    stage.classList.toggle('photo', Boolean(d.photoFrame));
-    const line = on ? packLines(d.pack, lang, 'kill', startClass)?.[0] ?? '' : '';
-    if (line && line !== said) camp.speak(line, 60_000);
-    else if (!line && said) camp.speak('', 1);
-    said = line;
+  let last: Item[] = [];
+  let current: Dressing = dressingOf([], heroClass);
+  const stop = onFlChange(() => {
+    // The art arrives as it is asked for: dress again with what has come.
+    current = dressingOf(last, heroClass);
+    camp.setHero(current.hero);
+    camp.dress(current.dress);
+  });
+  return {
+    root,
+    apply(candidates) {
+      last = [...candidates];
+      current = dressingOf(candidates, heroClass);
+      camp.setHero(current.hero);
+      camp.dress(current.dress);
+      const line = packLines(current.pack, lang, 'kill', current.hero)?.[0] ?? '';
+      if (line && line !== said) camp.speak(line, 60_000);
+      else if (!line && said) camp.speak('', 1);
+      said = line;
+      root.classList.toggle('photo', Boolean(current.photoFrame));
+      return current;
+    },
+    stop() {
+      stop();
+      camp.stop();
+    },
   };
-  const tryButton = button(S.tryOff, () => {
-    on = !on;
-    tryButton.textContent = on ? S.tryOff : S.tryOn;
-    apply();
-  }, 'small');
-  const owned = cosmetics.owns(item);
-  const rows: Child[] = [];
-  const buy = !owned && forSale(item) ? button('', () => void purchase(item, () => { camp.stop(); back(); }), 'primary') : null;
-  if (buy) {
-    buy.append(S.buy, ' ', stars(item.stars));
-    buy.disabled = !cosmetics.open;
+}
+
+/** The five slots under the stage: what is on the hero, the one the item changes lit. */
+function slotsRow(d: Dressing): HTMLElement {
+  const order: Array<[string, Slot]> = [['look', `look.${d.hero}`], ['hat', 'hat'], ['pet', 'pet'], ['fire', 'campfire'], ['trail', 'trail']];
+  const row = el('div', { className: 'fl-slots' });
+  for (const [key, slot] of order) {
+    const item = d.slots.get(slot);
+    const art = el('div', { className: 'fl-slot-art' });
+    if (item) art.append(itemArt(item, 3, 36));
+    row.append(el('div', { className: `fl-slot${d.changed.has(key) ? ' changed' : ''}` }, art, el('span', { textContent: S.slotNames[key as keyof typeof S.slotNames] })));
   }
-  const givable = forSale(item) && item.category !== 'pass';
-  const give = givable ? button(S.gift, () => { camp.stop(); showGift(item, () => showTryOn(item, heroClass, back)); }, '') : null;
-  if (give) give.disabled = !cosmetics.open;
-  const wear = owned && item.category !== 'bundle'
-    ? button(cosmetics.isWorn(item) ? S.takeOff : S.wear, () => void cosmetics.wear(item, !cosmetics.isWorn(item)).then(() => { camp.stop(); back(); }), 'primary')
-    : null;
-  rows.push(el('div', { className: 'pd-actions' }, ...(buy ? [buy] : wear ? [wear] : []), el('div', { className: 'pd-row' }, tryButton, ...(give ? [give] : []))));
-  const partList = item.items
-    ? el('ul', { className: 'pd-store-parts' }, ...parts.map((part) => el('li', { className: `${rarityClass(part.rarity)}${cosmetics.ownsId(part.id) ? ' have' : ''}` }, itemArt(part, 3), el('span', { textContent: nameOf(part) }), cosmetics.ownsId(part.id) ? el('i', { className: 'pd-store-tick', textContent: '✓' }) : stars(part.stars, true))))
-    : null;
+  return row;
+}
+
+/* ---- The storefront ---- */
+
+/** Opens the storefront (once the designer's catalogue has come: a moment on a cold start). */
+export function showStore(options: StoreOptions): void {
+  const wait = el('section', { className: 'pd-window fl-mart' }, el('p', { className: 'pd-note center', textContent: S.loading }));
+  show(wait, options.onClose);
+  void loadFl().then(() => build(options));
+}
+
+function build(options: StoreOptions): void {
+  const data = flCatalog();
+  let heroClass = options.heroClass;
+  let route: Route = options.tab === 'pass' ? { s: 'pass' } : options.tab && SHELVES[options.tab] ? { s: 'cat', cat: options.tab } : { s: 'home' };
+  const trail: Route[] = [];
+  let selected: Item | null = null;
+  let stage: Stage | null = null;
+  const win = el('section', { className: 'pd-window fl-mart' });
+  win.setAttribute('role', 'dialog');
+  const cats = data?.categories ?? [];
+
   const close = (): void => {
-    camp.stop();
-    back();
+    stage?.stop();
+    options.onClose();
   };
-  const sub = `${S.category[item.category]} · ${S.rarity[item.rarity]}`;
-  const box = windowOf(
-    { title: nameOf(item), sub, onClose: close, className: 'pd-store-try' },
-    stage,
-    plateBox,
-    partList,
-    item.earn ? info(`${S.earnOnly}: ${S.earn(item.earn)}`, 'pd-note center') : item.items ? info(`${S.bundleHas(parts.length, bundleValue(item))} · ${S.bundleSave(Math.round((1 - item.stars / bundleValue(item)) * 100))}`, 'pd-note center') : null,
-    ...rows,
-    info(`${cosmetics.open ? S.starsNote : S.closedNote} ${S.placeholderNote}`, 'pd-note center'),
-  );
-  show(box, close);
-  apply();
-}
-
-type Child = Node | string | null | undefined | false;
-
-/* ---- Gifts ---- */
-
-/** «Подарить»: a friend by Telegram ID, or a link to send on. */
-function showGift(item: Item, back: () => void): void {
-  const input = el('input', { className: 'pd-input', type: 'text', inputMode: 'numeric', placeholder: S.giftIdHint, maxLength: 15 });
-  input.setAttribute('aria-label', S.giftId);
-  const status = el('p', { className: 'pd-note center', textContent: '' });
-  const say = (text: string, tone: 'good' | 'warn' = 'warn'): void => {
-    status.textContent = text;
-    status.dataset.tone = tone;
+  const go = (next: Route, push = true): void => {
+    if (push) trail.push(route);
+    route = next;
+    selected = null;
+    render();
   };
-  const finish = async (run: Promise<Awaited<ReturnType<typeof cosmetics.give>>>, link: boolean): Promise<void> => {
-    const result = await run;
-    if (result === 'paid') {
-      audio.play('badge');
-      say(link ? S.giftLinkNote : S.giftSent, 'good');
-    } else if (result === 'owned-by-friend') say(S.giftHas);
-    else if (result === 'bad-friend') say(S.giftBadId);
-    else if (result === 'expired') say(S.expired);
-    else if (result === 'failed') say(S.failed);
-  };
-  const byId = button(S.giftById, () => {
-    const id = input.value.trim();
-    if (!/^\d{4,15}$/.test(id)) return say(S.giftBadId);
-    void finish(cosmetics.give(item, { friend: Number(id) }), false);
-  }, 'primary');
-  const byLink = button(S.giftByLink, () => void finish(cosmetics.give(item, { link: true }), true), '');
-  byId.disabled = byLink.disabled = !cosmetics.open;
-  show(
-    windowOf(
-      { title: S.giftTitle, sub: nameOf(item), onClose: back, narrow: true },
-      el('div', { className: 'pd-store-giftart' }, itemArt(item, 6)),
-      info(S.giftText),
-      el('label', { className: 'pd-store-field' }, el('span', { textContent: S.giftId }), input),
-      el('div', { className: 'pd-actions' }, byId, byLink),
-      status,
-      stars(item.stars),
-      info(cosmetics.open ? S.starsNote : S.closedNote, 'pd-note center'),
-    ),
-    back,
-  );
-}
-
-/* ---- «Мои вещи» ---- */
-
-/** What is owned, by tab, to wear and take off. */
-function showWardrobe(heroClass: HeroClass, back: () => void): void {
-  const wardTabs = TABS.filter((id) => id !== 'bundle');
-  let tab: Tab = 'look';
-  let cls = heroClass;
-  const body = el('div', { className: 'pd-scroll pd-store-body' });
-  const tabs = el('div', { className: 'pd-tabs compact pd-store-tabs' });
-  const render = (): void => {
-    for (const node of tabs.children) node.setAttribute('aria-selected', String((node as HTMLElement).dataset.tab === tab));
-    const categories = inTab(tab);
-    const items = CATALOG.filter((item) => categories.includes(item.category) && cosmetics.ownsId(item.id) && (tab !== 'look' || item.heroClass === cls))
-      .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || a.id.localeCompare(b.id));
-    const children: Node[] = [];
-    if (tab === 'look') {
-      children.push(el('div', { className: 'pd-store-classes' }, ...HEROES.map((name) => {
-        const pill = el('button', { className: 'pd-store-class', textContent: S.classes[name] });
-        pill.setAttribute('aria-pressed', String(name === cls));
-        pill.onclick = () => {
-          audio.play('click');
-          cls = name;
-          render();
-        };
-        return pill;
-      })));
-    }
-    if (tab === 'decor') children.push(info(S.decorSet(cosmetics.equipped.decor.length, DECOR_MAX), 'pd-note center'));
-    children.push(items.length > 0 ? el('div', { className: 'pd-shop-grid' }, ...items.map((item) => card(item, render, (it) => showTryOn(it, cls, () => showWardrobe(cls, back))))) : info(S.nothingOwned, 'pd-note center'));
-    body.replaceChildren(...children);
-    sprites(body);
-  };
-  for (const id of wardTabs) {
-    const node = el('button', { className: 'pd-tab', textContent: S.tabs[id] });
-    node.dataset.tab = id;
-    node.setAttribute('role', 'tab');
-    node.onclick = () => {
-      audio.play('click');
-      tab = id;
+  const back = (): void => {
+    const previous = trail.pop();
+    if (previous) {
+      route = previous;
+      selected = null;
       render();
-    };
-    tabs.append(node);
-  }
-  show(windowOf({ title: S.wardrobe, sub: S.wardrobeSub, icon: keeperIcon(), onClose: back, className: 'pd-store' }, tabs, body), back);
-  render();
-}
-
-/* ---- The season pass ---- */
-
-function rewardCell(level: number, track: Track, reached: number, claimed: readonly number[], paid: boolean): HTMLElement {
-  const id = REWARDS[level - 1]?.[track];
-  const item = id ? itemById(id) : undefined;
-  if (!item) return el('div', { className: 'pd-pass-cell empty' });
-  const done = claimed.includes(level);
-  const open = level <= reached && (track === 'free' || paid);
-  const cell = el(
-    'div',
-    { className: `pd-pass-cell ${rarityClass(item.rarity)}${done ? ' done' : open ? ' open' : ' locked'}`, title: nameOf(item) },
-    itemArt(item, 3),
-    el('span', { className: 'pd-pass-name', textContent: nameOf(item) }),
-    done ? el('i', { className: 'pd-store-tick', textContent: '✓' }) : null,
-  );
-  cell.onclick = () => showTryOn(item, 'warrior', () => showStore({ heroClass: 'warrior', tab: 'pass', onClose: hideOverlay }));
-  return cell;
-}
-
-/** The pass: where the player stands, the paid track's purchase, and the 30 levels with a reward on each track. */
-function passBody(refresh: () => void): HTMLElement {
-  const pass = cosmetics.pass;
-  const reached = pass.level;
-  const bar = el('div', { className: 'pd-pass-bar' }, el('i'));
-  bar.style.setProperty('--fill', pass.need > 0 ? `${Math.round((pass.into / pass.need) * 100)}%` : '100%');
-  const claimable = (track: Track): number => REWARDS.filter((r) => r[track] && r.level <= reached && !pass.claimed[track].includes(r.level) && (track === 'free' || pass.paid)).length;
-  const claim = (track: Track): HTMLElement => {
-    const n = claimable(track);
-    const node = button(`${S.passClaim}${n > 0 ? ` (${n})` : ''}`, () => {
-      void cosmetics.claim(track).then((levels) => {
-        if (levels.length > 0) {
-          audio.play('badge');
-          toast(S.passGot(levels.length), { tone: 'good' });
-        } else {
-          toast(S.passNothing);
-        }
-        refresh();
-      });
-    }, n > 0 ? 'primary small' : 'small');
-    node.disabled = n === 0;
-    return node;
+    } else close();
   };
-  const paidItem = itemById(`pass.s${SEASON}`)!;
-  const buyPaid = pass.paid
-    ? el('span', { className: 'pd-chip active', textContent: S.passBought })
-    : (() => {
-        const node = button('', () => void purchase(paidItem, refresh), 'small');
-        node.append(S.passBuy, ' ', stars(paidItem.stars));
-        node.disabled = !cosmetics.open;
-        return node;
-      })();
-  const rows = REWARDS.map((reward) =>
-    el(
-      'div',
-      { className: `pd-pass-row${reward.level <= reached ? ' reached' : ''}` },
-      el('b', { className: 'pd-pass-level', textContent: String(reward.level) }),
-      rewardCell(reward.level, 'free', reached, pass.claimed.free, true),
-      rewardCell(reward.level, 'paid', reached, pass.claimed.paid, pass.paid),
-    ),
-  );
-  const dev = import.meta.env.DEV && !cosmetics.open ? null : import.meta.env.DEV ? button(S.passDevXp, () => { cosmetics.devAddXp(500); refresh(); }, 'small quiet') : null;
-  return el(
-    'div',
-    { className: 'pd-pass' },
-    el('h3', { className: 'pd-heading', textContent: S.passTitle }),
-    info(S.passSub(pass.season), 'pd-note'),
-    el('div', { className: 'pd-pass-head' }, el('b', { textContent: S.passLevel(reached) }), el('span', { textContent: reached >= PASS_LEVELS ? S.passMax : S.passXp(pass.into, pass.need || levelCost(reached + 1)) })),
-    bar,
-    el('div', { className: 'pd-pass-tools' }, buyPaid, ...(dev ? [dev] : [])),
-    el('div', { className: 'pd-pass-cols' }, el('span'), el('b', { textContent: S.passFree }), el('b', { textContent: S.passPaid })),
-    el('div', { className: 'pd-pass-claims' }, el('span'), claim('free'), claim('paid')),
-    el('div', { className: 'pd-pass-track' }, ...rows),
-    info(S.passHow, 'pd-note center'),
-    ...(cosmetics.open ? [] : [info(S.closedNote, 'pd-note center')]),
-  );
+  const choose = (item: Item): void => {
+    if (item.category === 'bundle' && !item.pack) go({ s: 'bundle', id: item.id });
+    else if (item.category === 'sticker') go({ s: 'bundle', id: 'stickers.pack1' });
+    else if (WIDE() && (route.s === 'home' || route.s === 'cat' || route.s === 'gift')) {
+      selected = item;
+      render();
+    } else go({ s: 'tryon', id: item.id });
+  };
+
+  /* -- pieces -- */
+
+  const head = (title: string, sub: string | null, withBack: boolean): HTMLElement => {
+    const row = el('div', { className: 'fl-mart-head' });
+    if (withBack) {
+      const backButton = el('button', { className: 'pd-button quiet small fl-back', ariaLabel: S.back }, '<', el('span', { className: 'lbl', textContent: ` ${S.back}` }));
+      backButton.onclick = () => {
+        audio.play('click');
+        back();
+      };
+      row.append(backButton);
+    }
+    row.append(el('div', { className: 'pd-titles' }, el('h2', { className: 'pd-heading', textContent: title }), sub ? el('div', { className: 'fl-motto', textContent: sub }) : null));
+    const x = el('button', { className: 'fl-close', ariaLabel: S.close, textContent: '×' });
+    x.onclick = () => {
+      audio.play('click');
+      close();
+    };
+    row.append(x);
+    return row;
+  };
+
+  const navigation = (current: string): HTMLElement => {
+    const nav = el('nav', { className: 'fl-cats' });
+    const entry = (id: string, label: string, icon: string | null, signature: boolean, target: Route): void => {
+      const b = el('button', { className: `fl-cat${signature ? ' signature' : ''}` });
+      if (id === current) b.setAttribute('aria-current', 'true');
+      if (icon) b.append(pixelImage(icon, 32, 2));
+      b.append(label);
+      b.onclick = () => {
+        audio.play('click');
+        if (id !== current) go(target, false);
+      };
+      nav.append(b);
+    };
+    entry('home', S.home, null, false, { s: 'home' });
+    for (const c of cats as FlCategory[]) entry(c.id, c[L], c.icon, c.signature === true, { s: 'cat', cat: c.id });
+    entry('pass', S.seasonShelf, null, false, { s: 'pass' });
+    return nav;
+  };
+
+  const classChips = (): HTMLElement => {
+    const row = el('div', { className: 'fl-filters' });
+    for (const name of HEROES) {
+      const chip = el('button', { className: 'fl-filter', textContent: S.classes[name] });
+      chip.setAttribute('aria-pressed', String(name === heroClass));
+      chip.onclick = () => {
+        audio.play('click');
+        heroClass = name;
+        render();
+      };
+      row.append(chip);
+    }
+    return row;
+  };
+
+  const grid = (items: readonly Item[], isNew: readonly string[] = []): HTMLElement =>
+    el('div', { className: 'fl-grid' }, ...items.map((item) => card(item, selected?.id === item.id, choose, isNew.includes(item.id))));
+
+  const cosmeticNote = (): HTMLElement => el('div', { className: 'fl-cosmetic', textContent: T('cosmetic') });
+
+  /* -- the try-on: buy, gift, wear -- */
+
+  const actionsOf = (item: Item, reopen: () => void): HTMLElement => {
+    const owned = cosmetics.owns(item);
+    const worn = owned && item.category !== 'bundle' && cosmetics.isWorn(item);
+    const row = el('div', { className: 'fl-tryon-buy' });
+    if (owned && item.category !== 'bundle' && (slotOf(item) !== null || item.category === 'decor')) {
+      row.append(button(worn ? S.takeOff : S.wear, () => void cosmetics.wear(item, !worn).then(reopen), 'primary'));
+    } else if (buyable(item)) {
+      const buy = el('button', { className: 'pd-button primary' }, `${S.buy} `, priceTag(item.stars));
+      buy.onclick = () => {
+        audio.play('click');
+        void purchase(item, reopen);
+      };
+      buy.disabled = !cosmetics.open;
+      row.append(buy);
+      if (givable(item)) {
+        const give = button(S.gift, () => go({ s: 'gift', id: item.id }), '');
+        give.disabled = !cosmetics.open;
+        row.append(give);
+      }
+    }
+    return row;
+  };
+
+  /** The try-on of one thing (or a bundle, all its parts together): the stage, the slots, the buttons. */
+  const tryon = (item: Item | null, phone: boolean): HTMLElement => {
+    stage?.stop();
+    const parts = item ? (item.items ? item.items.map((id) => itemById(id)).filter((p): p is Item => p !== undefined && p.category !== 'sticker') : [item]) : [];
+    const startClass = (item?.heroClass ?? heroClass) as HeroClass;
+    const live = makeStage(startClass, phone);
+    stage = live;
+    const d = live.apply(parts.filter((part) => part.category !== 'sticker'));
+    const panel = el('div', { className: 'fl-tryon' });
+    const stageBox = el('div', { className: 'fl-tryon-stage-box' }, live.root);
+    if (d.photoFrame) {
+      const raw = flItem(d.photoFrame.id);
+      if (raw?.sprite) live.root.style.cssText = `border:24px solid transparent;border-image:url("${flUrl(raw.sprite)}") 8 fill / 24px stretch;image-rendering:pixelated;`;
+    }
+    live.root.append(el('div', { className: 'fl-tryon-name', textContent: item ? nameOf(item) : S.classes[startClass] }));
+    panel.append(stageBox);
+    const profile = item && ['frame', 'title', 'namecolor'].includes(item.category);
+    if (profile) panel.append(plateOf(startClass, d.plate));
+    panel.append(el('div', { className: 'fl-sec-head' }, el('h3', { textContent: T('slots') })), slotsRow(d));
+    if (item) {
+      const reopen = (): void => render();
+      if (item.earn) panel.append(info(`${S.earnOnly}: ${S.earn(item.earn)}`, 'fl-hint'));
+      panel.append(actionsOf(item, reopen));
+      if (item.once) panel.append(info(S.starterNote, 'fl-hint'));
+      if (item.category === 'quips') panel.append(info(T('quipHint'), 'fl-hint'));
+      if (item.category === 'decor') panel.append(info(S.decorSet(cosmetics.equipped.decor.length, DECOR_MAX), 'fl-hint'));
+    }
+    panel.append(info(item ? (cosmetics.open ? S.starsNote : S.closedNote) : T('tryHint'), 'fl-hint'));
+    return panel;
+  };
+
+  /* -- screens -- */
+
+  const seasonCard = (compact: boolean): HTMLElement => {
+    const season = data?.season;
+    const pass = cosmetics.pass;
+    const box = el('div', { className: `fl-banner${compact ? ' compact' : ''}` });
+    if (season) {
+      const banner = el('img', { alt: '' });
+      banner.src = flUrl(season.banner);
+      box.append(banner);
+    }
+    const bar = el('div', { className: 'fl-xp' }, el('i'));
+    (bar.firstChild as HTMLElement).style.width = pass.need > 0 ? `${Math.round((pass.into / pass.need) * 100)}%` : '100%';
+    const text = el(
+      'div', { className: 'grow' },
+      el('span', { textContent: `${T('season')} ${SEASON}` }),
+      el('b', { textContent: season?.name[L] ?? S.passTitle }),
+      bar,
+      el('span', { textContent: `${S.passLevel(pass.level)} · ${pass.level >= PASS_LEVELS ? S.passMax : S.passXp(pass.into, pass.need || levelCost(pass.level + 1))}` }),
+    );
+    const row = el('div', { className: 'fl-banner-text' }, text);
+    if (!compact) row.append(button(T('pass'), () => go({ s: 'pass' }), 'primary small'));
+    box.append(row);
+    return box;
+  };
+
+  const bundleCard = (item: Item, title: string | null = null): HTMLElement => {
+    const value = bundleValue(item);
+    const art = el('div', { className: 'fl-bundle-art' }, itemArt(item, 3, 120));
+    const items = el('div', { className: 'fl-bundle-items' });
+    for (const id of item.items ?? []) {
+      const part = itemById(id);
+      if (part && part.category !== 'sticker') items.append(el('div', { className: 'fl-mini', title: nameOf(part) }, itemArt(part, 2, 34)));
+    }
+    const buyRow = el('div', { className: 'fl-bundle-buy' });
+    if (value > item.stars) buyRow.append(el('span', { className: 'fl-price old', textContent: String(value) }));
+    buyRow.append(priceTag(item.stars, 'big'));
+    if (value > item.stars) buyRow.append(el('span', { className: 'fl-save', textContent: T('save', Math.round((1 - item.stars / value) * 100)) }));
+    const open = button(cosmetics.owns(item) ? S.owned : S.tryOn, () => go({ s: 'bundle', id: item.id }), 'primary small');
+    buyRow.append(open);
+    return el('div', { className: 'fl-bundle' }, art, el('div', { className: 'fl-bundle-info' }, title ? el('span', { className: 'fl-motto', textContent: title }) : null, el('b', { textContent: nameOf(item) }), items, buyRow));
+  };
+
+  const homeScreen = (): HTMLElement[] => {
+    const out: HTMLElement[] = [seasonCard(false)];
+    const starter = itemById(`bundle.starter.${heroClass}`);
+    if (starter && buyable(starter)) {
+      const card2 = bundleCard(starter, S.starterTitle);
+      card2.classList.add('starter');
+      out.push(card2);
+    }
+    const week = data?.bundles[0] ? itemById(data.bundles[0].sku) : undefined;
+    if (week) out.push(bundleCard(week, T('featured')));
+    const fresh = ['skin.mage.starflame', 'fire.rainbow', 'pet.skull', 'hat.horns', 'kill.pillar', 'decor.musicbox', 'quips.robot', 'title.keeper']
+      .map((id) => itemById(id)).filter((i): i is Item => i !== undefined);
+    out.push(section(T('new'), null, grid(fresh.slice(0, WIDE() ? 8 : 6), fresh.map((i) => i.id))));
+    const others = CATALOG.filter((i) => i.category === 'bundle' && !i.once && !i.pack && i.id !== week?.id);
+    if (others.length > 0) out.push(section(T('bundles'), null, grid(others)));
+    out.push(cosmeticNote());
+    if (options.classic) out.push(button(S.classic, options.classic, 'small quiet'));
+    return out;
+  };
+
+  const catScreen = (id: string): HTMLElement[] => {
+    const category = (cats as FlCategory[]).find((c) => c.id === id);
+    const kinds = SHELVES[id] ?? [];
+    const out: HTMLElement[] = [];
+    const items = shelf(kinds, heroClass);
+    const hint = { fires: 'fireHint', camp: 'decorHint', quips: 'quipHint' }[id];
+    if (hint) out.push(el('p', { className: 'fl-hint', textContent: T(hint) }));
+    if (id === 'looks') {
+      out.push(classChips());
+      out.push(section(T('legendary'), T('animated'), grid(items.filter((i) => i.legendary))));
+      out.push(section(category?.[L] ?? '', T('lookTiers'), grid(items.filter((i) => !i.legendary))));
+    } else if (id === 'effects') {
+      for (const [kind, key] of EFFECT_ORDER) out.push(section(T(key), null, grid(items.filter((i) => i.category === kind))));
+    } else if (id === 'profile') {
+      out.push(button(T('profileTitle'), () => go({ s: 'profile' }), 'small'));
+      for (const [kind, key] of [['frame', 'frame'], ['title', 'titleL'], ['namecolor', 'nameColour']] as const) out.push(section(T(key), null, grid(items.filter((i) => i.category === kind))));
+    } else if (id === 'photo') {
+      out.push(button(T('photoTitle'), () => go({ s: 'photo' }), 'small'));
+      const pack = itemById('stickers.pack1');
+      out.push(section(T('photoFrames'), null, grid(items.filter((i) => i.category === 'photoframe'))));
+      out.push(section(T('stickers'), null, pack ? grid([pack]) : null));
+    } else {
+      out.push(grid(items));
+    }
+    out.push(cosmeticNote());
+    return out;
+  };
+
+  const tryonScreen = (id: string): HTMLElement[] => {
+    const item = itemById(id);
+    if (!item) return [];
+    const out: HTMLElement[] = [tryon(item, true)];
+    // Under the stage, more of the same kind to try (the looks of the class, the rest of the shelf).
+    const kinds: Category[] = item.category === 'look' ? ['look'] : [item.category];
+    const more = shelf(kinds, (item.heroClass ?? heroClass) as HeroClass).filter((i) => i.id !== item.id).slice(0, 6);
+    if (more.length > 0) out.push(section(S.category[item.category], item.heroClass ? S.classes[item.heroClass] : null, grid(more)));
+    return out;
+  };
+
+  const bundleScreen = (id: string): HTMLElement[] => {
+    const item = itemById(id);
+    if (!item) return [];
+    const parts = (item.items ?? []).map((p) => itemById(p)).filter((p): p is Item => p !== undefined);
+    const out: HTMLElement[] = [];
+    if (item.pack) {
+      const wall = el('div', { className: 'fl-sticker-wall' });
+      for (const part of parts) wall.append(itemArt(part, 3, 48));
+      out.push(el('div', { className: 'fl-tryon-stage' }, wall));
+    } else {
+      out.push(tryon(item, true));
+    }
+    out.push(section(T('inBundle'), null, grid(parts)));
+    const value = bundleValue(item);
+    const buyRow = el('div', { className: 'fl-bundle-buy' }, el('span', { className: 'fl-motto', textContent: T('total') }));
+    if (value > item.stars) buyRow.append(el('span', { className: 'fl-price old', textContent: String(value) }));
+    buyRow.append(priceTag(item.stars, 'big'));
+    if (value > item.stars) buyRow.append(el('span', { className: 'fl-save', textContent: T('save', Math.round((1 - item.stars / value) * 100)) }));
+    out.push(buyRow);
+    if (item.pack) out.push(actionsOf(item, () => render()));
+    return out;
+  };
+
+  const giftScreen = (id: string): HTMLElement[] => {
+    const item = itemById(id);
+    if (!item) return [];
+    const art = el('div', { className: 'fl-card-art' }, itemArt(item, 4, 100));
+    art.style.width = '120px';
+    const top = el('div', { className: 'fl-bundle fl-gift-top' }, art, el('div', { className: 'fl-bundle-info' }, el('b', { textContent: nameOf(item) }), el('span', { className: 'fl-motto', textContent: S.category[item.category] }), priceTag(item.stars, 'big')));
+    const input = el('input', { className: 'pd-input', type: 'text', inputMode: 'numeric', placeholder: S.giftIdHint, maxLength: 15 });
+    input.setAttribute('aria-label', S.giftId);
+    const status = el('p', { className: 'fl-hint', textContent: '' });
+    const say = (text: string, tone: 'good' | 'warn' = 'warn'): void => {
+      status.textContent = text;
+      status.dataset.tone = tone;
+    };
+    const finish = async (run: Promise<Awaited<ReturnType<typeof cosmetics.give>>>, link: boolean): Promise<void> => {
+      const result = await run;
+      if (result === 'paid') {
+        audio.play('badge');
+        say(link ? S.giftLinkNote : S.giftSent, 'good');
+      } else if (result === 'owned-by-friend') say(S.giftHas);
+      else if (result === 'bad-friend') say(S.giftBadId);
+      else if (result === 'expired') say(S.expired);
+      else if (result === 'failed') say(S.failed);
+    };
+    const byId = el('button', { className: 'pd-button primary' }, `${S.giftById} `, priceTag(item.stars));
+    byId.onclick = () => {
+      const friend = input.value.trim();
+      if (!/^\d{4,15}$/.test(friend)) return say(S.giftBadId);
+      void finish(cosmetics.give(item, { friend: Number(friend) }), false);
+    };
+    const byLink = button(S.giftByLink, () => void finish(cosmetics.give(item, { link: true }), true), '');
+    byId.disabled = byLink.disabled = !cosmetics.open;
+    return [
+      top,
+      info(S.giftText, 'fl-hint'),
+      section(T('giftTo'), null, el('label', { className: 'fl-search' }, input)),
+      el('div', { className: 'fl-tryon-buy' }, byId, byLink),
+      status,
+      info(cosmetics.open ? S.starsNote : S.closedNote, 'fl-hint'),
+    ];
+  };
+
+  const rewardCell = (level: number, track: Track, reached: number, claimed: readonly number[], paid: boolean): HTMLElement => {
+    const id = REWARDS[level - 1]?.[track];
+    const item = id ? itemById(id) : undefined;
+    if (!item) return el('div', { className: `fl-reward ${track} empty` });
+    const done = claimed.includes(level);
+    const ready = !done && level <= reached && (track === 'free' || paid);
+    const state = done ? ' claimed' : ready ? ' ready' : track === 'paid' && !paid ? ' locked' : level > reached ? ' locked' : '';
+    const status = done ? S.passClaimed : ready ? S.passClaim : null;
+    const cell = el(
+      'div', { className: `fl-reward ${track}${state}` },
+      itemArt(item, 2, 40),
+      el('span', { className: 'fl-rw' }, el('small', { textContent: nameOf(item) }), status ? el('small', { className: 'st', textContent: status }) : null),
+    );
+    cell.onclick = () => {
+      audio.play('click');
+      go({ s: 'tryon', id: item.id });
+    };
+    return cell;
+  };
+
+  const passScreen = (): HTMLElement[] => {
+    const pass = cosmetics.pass;
+    const reached = pass.level;
+    const claimable = (track: Track): number => REWARDS.filter((r) => r[track] && r.level <= reached && !pass.claimed[track].includes(r.level) && (track === 'free' || pass.paid)).length;
+    const claim = (track: Track): HTMLElement => {
+      const n = claimable(track);
+      const node = button(`${S.passClaim} ${track === 'free' ? S.passFree : S.passPaid}${n > 0 ? ` (${n})` : ''}`, () => {
+        void cosmetics.claim(track).then((levels) => {
+          if (levels.length > 0) {
+            audio.play('badge');
+            toast(S.passGot(levels.length), { tone: 'good' });
+          } else toast(S.passNothing);
+          render();
+        });
+      }, n > 0 ? 'primary small' : 'small');
+      node.disabled = n === 0;
+      return node;
+    };
+    const paidItem = itemById(passSku(SEASON))!;
+    const buyRow = el('div', { className: 'fl-bundle-buy' });
+    if (pass.paid) buyRow.append(el('span', { className: 'pd-chip active', textContent: S.passBought }));
+    else {
+      const buy = el('button', { className: 'pd-button primary' }, `${S.passBuy} `, priceTag(PASS_PRICE));
+      buy.onclick = () => {
+        audio.play('click');
+        void purchase(paidItem, () => render());
+      };
+      buy.disabled = !cosmetics.open;
+      buyRow.append(buy);
+    }
+    buyRow.append(claim('free'), claim('paid'));
+    if (import.meta.env.DEV && cosmetics.open) buyRow.append(button(S.passDevXp, () => { cosmetics.devAddXp(500); render(); }, 'small quiet'));
+    const track = el('div', { className: 'fl-track' }, el('div', { className: 'fl-track-label', textContent: T('level') }), el('div', { className: 'fl-track-label', textContent: S.passFree }), el('div', { className: 'fl-track-label paid', textContent: S.passPaid }));
+    for (let level = 1; level <= PASS_LEVELS; level++) {
+      track.append(
+        el('div', { className: `fl-lvl${level <= reached ? ' done' : level === reached + 1 ? ' now' : ''}`, textContent: String(level) }),
+        rewardCell(level, 'free', reached, pass.claimed.free, true),
+        rewardCell(level, 'paid', reached, pass.claimed.paid, pass.paid),
+      );
+    }
+    return [seasonCard(true), buyRow, section(`${S.passFree} · ${S.passPaid}`, null, track), info(data?.season.how[L] ?? S.passHow, 'fl-hint'), info(S.passHow, 'fl-hint'), ...(cosmetics.open ? [] : [info(S.closedNote, 'fl-hint')])];
+  };
+
+  const profileScreen = (): HTMLElement[] => {
+    const d = dressingOf([], heroClass);
+    const frames = shelf(['frame'], heroClass);
+    const titles = shelf(['title'], heroClass);
+    const names = shelf(['namecolor'], heroClass);
+    const swatch = (item: Item, content: Node): HTMLElement => {
+      const owned = cosmetics.owns(item);
+      const b = el('button', { className: 'fl-swatch' }, content);
+      b.setAttribute('aria-pressed', String(owned && cosmetics.isWorn(item)));
+      b.style.opacity = owned ? '1' : '.55';
+      b.onclick = () => {
+        audio.play('click');
+        if (owned) void cosmetics.wear(item, !cosmetics.isWorn(item)).then(() => render());
+        else go({ s: 'tryon', id: item.id });
+      };
+      return b;
+    };
+    const row = (items: Item[], make: (item: Item) => Node): HTMLElement => el('div', { className: 'fl-swatches' }, ...items.map((item) => swatch(item, make(item))));
+    return [
+      plateOf(heroClass, d.plate),
+      info(S.profileNote, 'fl-hint'),
+      section(T('frame'), null, row(frames, (item) => framedFace(item, AVATAR[heroClass], 2))),
+      section(T('titleL'), null, row(titles, (item) => titlePlate(item, nameOf(item)))),
+      section(T('nameColour'), null, row(names, (item) => {
+        const s = el('span', { textContent: nameOf(item) });
+        paintName(s, item);
+        return s;
+      })),
+    ];
+  };
+
+  const photoScreen = (): HTMLElement[] => {
+    const live = (() => { stage?.stop(); const s = makeStage(heroClass, !WIDE()); stage = s; s.apply([]); return s; })();
+    const frame = cosmetics.photoFrame;
+    const raw = frame ? flItem(frame.id) : undefined;
+    if (raw?.sprite) live.root.style.cssText = `border:24px solid transparent;border-image:url("${flUrl(raw.sprite)}") 8 fill / 24px stretch;image-rendering:pixelated;`;
+    const placed: HTMLElement[] = [];
+    const stickers = shelf(['sticker'], heroClass);
+    const swatchRow = (items: Item[], onTap: (item: Item) => void, pressed: (item: Item) => boolean): HTMLElement =>
+      el('div', { className: 'fl-swatches' }, ...items.map((item) => {
+        const b = el('button', { className: 'fl-swatch' }, itemArt(item, 2, 40));
+        b.setAttribute('aria-pressed', String(pressed(item)));
+        b.style.opacity = cosmetics.owns(item) ? '1' : '.55';
+        b.onclick = () => {
+          audio.play('click');
+          onTap(item);
+        };
+        return b;
+      }));
+    const frames = shelf(['photoframe'], heroClass);
+    const spots: ReadonlyArray<readonly [number, number]> = [[8, 6], [62, 8], [70, 52], [10, 54]];
+    const stickerRow = swatchRow(stickers, (item) => {
+      if (!cosmetics.owns(item)) return go({ s: 'bundle', id: 'stickers.pack1' });
+      const raw2 = flItem(item.id);
+      if (!raw2?.sprite) return;
+      const spot = spots[placed.length % spots.length]!;
+      const img = pixelImage(raw2.sprite, 40, 3, 'fl-sticker');
+      img.style.left = `${spot[0] * 3}px`;
+      img.style.top = `${spot[1] * 3}px`;
+      live.root.append(img);
+      placed.push(img);
+      if (placed.length > 6) placed.shift()?.remove();
+    }, () => false);
+    return [
+      el('div', { className: 'fl-photo-edit' }, live.root),
+      info(S.photoSoon, 'fl-hint'),
+      section(T('photoFrames'), null, swatchRow(frames, (item) => {
+        if (cosmetics.owns(item)) void cosmetics.wear(item, !cosmetics.isWorn(item)).then(() => render());
+        else go({ s: 'tryon', id: item.id });
+      }, (item) => cosmetics.owns(item) && cosmetics.isWorn(item))),
+      section(T('stickers'), T('stickerHint'), stickerRow),
+      info(S.photoNote, 'fl-hint'),
+    ];
+  };
+
+  /* -- the window -- */
+
+  function render(): void {
+    // Whatever stage there was is stopped: a screen makes its own.
+    stage?.stop();
+    stage = null;
+    const wide = WIDE();
+    const main = el('div', { className: 'fl-mart-main' });
+    const body = el('div', { className: 'fl-mart-body' });
+    let title = S.title;
+    let sub: string | null = T('motto');
+    let current = 'home';
+    let withBack = true;
+    let aside = false;
+    switch (route.s) {
+      case 'home':
+        main.append(...homeScreen());
+        withBack = false;
+        aside = true;
+        break;
+      case 'cat': {
+        const category = (cats as FlCategory[]).find((c) => c.id === (route as { cat: string }).cat);
+        current = route.cat;
+        title = S.title;
+        sub = category?.[L] ?? null;
+        main.append(...catScreen(route.cat));
+        withBack = false;
+        aside = true;
+        break;
+      }
+      case 'tryon': {
+        const item = itemById(route.id);
+        title = T('byFire');
+        sub = item ? nameOf(item) : T('tryOn');
+        current = 'looks';
+        main.append(...tryonScreen(route.id));
+        break;
+      }
+      case 'bundle': {
+        const item = itemById(route.id);
+        title = item ? nameOf(item) : T('bundles');
+        sub = T('bundles');
+        current = 'home';
+        main.append(...bundleScreen(route.id));
+        break;
+      }
+      case 'gift': {
+        const item = itemById(route.id);
+        title = T('giftTitle');
+        sub = item ? nameOf(item) : null;
+        current = 'home';
+        main.append(...giftScreen(route.id));
+        aside = true;
+        break;
+      }
+      case 'pass':
+        title = `${T('pass')} · ${data?.season.name[L] ?? ''}`;
+        sub = `${T('season')} ${SEASON}`;
+        current = 'pass';
+        main.append(...passScreen());
+        break;
+      case 'profile':
+        title = T('profileTitle');
+        sub = T('preview');
+        current = 'profile';
+        main.append(...profileScreen());
+        break;
+      case 'photo':
+        title = T('photoTitle');
+        sub = `${T('photoFrames')} · ${T('stickers')}`;
+        current = 'photo';
+        main.append(...photoScreen());
+        break;
+    }
+    // The categories: a row of chips on a phone's shelves, a list on a monitor; the inner screens of a phone have none.
+    if (wide || route.s === 'home' || route.s === 'cat') body.append(navigation(current));
+    body.append(main);
+    if (wide && aside) {
+      const side = el('aside', { className: 'fl-aside' });
+      side.append(tryon(selected, false));
+      body.append(side);
+    }
+    win.replaceChildren(head(title, sub, withBack), body);
+    sprites(win);
+    // The current category's chip is in view on a phone.
+    for (const nav of win.querySelectorAll<HTMLElement>('.fl-cats')) {
+      const here = nav.querySelector<HTMLElement>('[aria-current]');
+      if (here && !wide) nav.scrollLeft = here.offsetLeft - 24;
+    }
+  }
+
+  // The dressing changes as the art comes in; the owned and worn as the server answers.
+  const unsubscribe = cosmetics.onChange(() => {
+    if (win.isConnected) render();
+    else unsubscribe();
+  });
+  show(win, close);
+  render();
 }

@@ -365,6 +365,31 @@ export function floatNumber(
   return t < TIMELINES.number.dur;
 }
 
+/**
+ * A number as the glyphs of a damage-digits style (Pixel-Mart: 7 x 9 pixels a glyph, `0123456789-+!`, an advance of 6), rising and fading
+ * as the plain number does, at whole device pixels: the same size as the text it stands in for.
+ */
+export function floatGlyphs(
+  ctx: CanvasRenderingContext2D, art: { image: HTMLImageElement; w: number; h: number; glyphs: string; advance: number }, text: string,
+  kind: 'damage' | 'heal' | 'big' | 'kill', x: number, y: number, t: number, px: number,
+): void {
+  const k = step(TIMELINES.number, t);
+  if (k.a <= 0) return;
+  const scale = Math.max(1, Math.round((kind === 'kill' ? 4 : kind === 'big' ? 3 : 2) * px));
+  const width = (text.length - 1) * art.advance * scale + art.w * scale;
+  const left = snap(x - width / 2, 1);
+  const top = snap(y - 2 * scale + k.dy * scale * px - art.h * scale, 1);
+  ctx.save();
+  ctx.globalAlpha = k.a;
+  ctx.imageSmoothingEnabled = false;
+  for (let i = 0; i < text.length; i++) {
+    const index = art.glyphs.indexOf(text[i]!);
+    if (index < 0) continue;
+    ctx.drawImage(art.image, index * art.w, 0, art.w, art.h, left + i * art.advance * scale, top, art.w * scale, art.h * scale);
+  }
+  ctx.restore();
+}
+
 const PATRON_STAR = ['...w...', '..wo#..', 'wwoo###', '#oooo##', '.#oo##.', '.##.##.', '##...##'];
 const PATRON_COLORS: Record<string, string> = { '#': '#ffcc66', o: '#ffeba4', w: '#ffffff' };
 

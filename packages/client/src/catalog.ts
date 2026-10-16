@@ -1,17 +1,20 @@
 import type { HeroClass } from '@pd/core';
 
 /*
- * Pixel-Mart's catalogue (the expanded shop): every cosmetic that is sold for Telegram Stars or earned, written once as data.
- * The client's storefront and the server's purchases, gifts and equip rules read this one file (the server imports it by path:
- * it is pure data with no DOM, and @pd/core, the rules, stays untouched). Cosmetics never touch the rules or the scoring
- * (MONETIZATION.md).
+ * Pixel-Mart's catalogue: every cosmetic that is sold for Telegram Stars or earned, written once as data. The client's storefront and
+ * the server's purchases, gifts and equip rules read this one file (the server imports it by path: it is pure data with no DOM, and
+ * @pd/core, the rules, stays untouched). Cosmetics never touch the rules or the scoring (MONETIZATION.md).
  *
- * Art is a placeholder for now: an item's `asset` is where its real picture will be (public/assets/shop/<asset>.png), `tones`
- * are the colours the placeholder is tinted and drawn with, and ART lists the assets that really exist. When the designer's
- * sheets arrive only this data and the asset files change.
+ * The things sold are the designer's (design part 5, public/assets/mart/fl/catalog.json: ids, names, art and what each is). The
+ * client reads that file for the art (flart.ts); the PRICES are this file's, set by the owner (see below), and the server prices every
+ * purchase from here, never from what a device says. The ids are the designer's skus (`skin.huntress.*` is the designer's
+ * `skin.ranger.*`: the ranger's sheets are the huntress's). A test holds the two files together (client/test/mart.test.ts).
  *
- * Prices (Stars): small things 25–50, looks 100–250, legendary 500 and up, bundles below the sum of their parts. Earn-only
- * items have no price: a season-pass level, a streak or a place on a board gives them (see EARN, and pass.ts for the pass).
+ * Prices (Stars), steps 25 / 50 / 75 / 100 / 150 / 200 / 250 / 450: hero looks 100-250 in the designer's order, legendary looks 450,
+ * the camp's fires 75-150 (the classic one is free), pets 75 or 150 (seen all the time), hats 50 or 100, trails, kill effects and
+ * damage numbers 50, death effects 75 (seen once a run), quip packs 75, decorations 50-150, profile frames 50 (100 for the Sunforge),
+ * titles and name colours 25 or 50, photo frames 25 or 50, the sticker pack 50, bundles 0.7 of their parts rounded down to end in 9,
+ * the season pass 300. Earn-only items have no price: a season-pass level, a streak, a place on a board, a badge, the patronage.
  */
 
 export type Category =
@@ -26,42 +29,66 @@ export const CATEGORIES: readonly Category[] = [
 export const RARITIES: readonly Rarity[] = ['common', 'rare', 'epic', 'legendary'];
 export const HEROES: readonly HeroClass[] = ['warrior', 'mage', 'rogue', 'huntress'];
 
-/** How an earn-only item is won: a season-pass level, a streak of daily dungeons, a place among a finished board's best. */
+/** The prices that exist, Stars. */
+export const PRICE_STEPS: readonly number[] = [25, 50, 75, 100, 150, 200, 250, 450];
+/** A legendary look costs this, all of them. */
+export const LEGENDARY_PRICE = 450;
+/** The season pass, Stars, for a season. */
+export const PASS_PRICE = 300;
+/** The starter kit, Stars: sold once to an account. */
+export const STARTER_PRICE = 49;
+
+/**
+ * How an earn-only item is won: a season-pass level, a streak of daily dungeons, a place among a finished board's best, a badge (the
+ * server's checked runs know them), or the patronage.
+ */
 export type Earn =
   | { by: 'pass'; level: number; track: 'free' | 'paid' }
   | { by: 'streak'; days: number }
-  | { by: 'board'; kind: 'daily' | 'week'; place: number };
+  | { by: 'board'; kind: 'daily' | 'week'; place: number }
+  | { by: 'badge'; badge: string }
+  | { by: 'patron' };
+
+/** Only sold between these days of the year ([month, day], inclusive, wrapping over the new year). */
+export interface Season {
+  from: readonly [number, number];
+  to: readonly [number, number];
+}
+const WINTER: Season = { from: [12, 1], to: [2, 28] };
 
 export interface Item {
   /** Unique; also what the wallet keeps. */
   id: string;
   category: Category;
-  /** Price in Stars; 0 for earn-only items. */
+  /** Price in Stars; 0 for earn-only items (and for stickers, which are sold in their pack). */
   stars: number;
   name: Readonly<Record<Lang, string>>;
-  /** Where the real art goes (public/assets/shop/<asset>.png); see ART. */
-  asset: string;
   rarity: Rarity;
   /** For a hero look: whose. */
   heroClass?: HeroClass;
-  /** A legendary look (also set on the other legendary things): shown with a gold frame and sold dear. */
+  /** A legendary look (also set on the other legendary things): shown with a coal frame and sold dear. */
   legendary?: boolean;
   /** Earn-only: not for sale, won by this. */
   earn?: Earn;
+  /** The season pass gives it at this level of a track (besides its price, if it has one). */
+  reward?: { level: number; track: 'free' | 'paid' };
   /** A bundle: the items it grants. */
   items?: readonly string[];
-  /** Colours of the placeholder and of what the item does: a look's tint, a campfire's flame and sparks, a name's colour. */
+  /** A pack (the stickers): its parts are not sold alone, so it has no saving. */
+  pack?: boolean;
+  /** Sold once to an account, in whatever form (the starter kit's four classes). */
+  once?: string;
+  /** Only sold in this part of the year. */
+  season?: Season;
+  /** Colours of a placeholder (an earn-only item with no art yet): the glyph's tones, a name's colour. */
   tones?: readonly string[];
-  /** The name colour or number style shimmers through its tones. */
+  /** The name colour shimmers through its tones. */
   shimmer?: boolean;
 }
 
-const item = (
-  id: string, category: Category, stars: number, ru: string, en: string, rarity: Rarity, extra: Partial<Item> = {},
-): Item => ({ id, category, stars, name: { ru, en }, asset: id.replace('.', '/'), rarity, ...extra });
+type Row = readonly [key: string, ru: string, en: string, stars: number, extra?: Season | string];
 
-const earned = (id: string, category: Category, ru: string, en: string, rarity: Rarity, earn: Earn, extra: Partial<Item> = {}): Item =>
-  item(id, category, 0, ru, en, rarity, { earn, ...extra });
+const rarityOf = (stars: number, legendary: boolean): Rarity => (legendary ? 'legendary' : stars >= 150 ? 'epic' : stars >= 75 ? 'rare' : 'common');
 
 const CLASS_NAMES: Record<HeroClass, Record<Lang, string>> = {
   warrior: { ru: 'Воин', en: 'Warrior' },
@@ -70,157 +97,326 @@ const CLASS_NAMES: Record<HeroClass, Record<Lang, string>> = {
   huntress: { ru: 'Охотница', en: 'Huntress' },
 };
 
-/** The looks of each class: a tint over the class's own sprite until the recoloured sheets are drawn. */
-const LOOKS: ReadonlyArray<readonly [variant: string, ru: string, en: string, rarity: Rarity, stars: number, tone: string]> = [
-  ['ember', 'Угольный', 'Ember', 'rare', 100, '#e8641e'],
-  ['frost', 'Ледяной', 'Frost', 'rare', 150, '#5fb4f0'],
-  ['gilded', 'Золочёный', 'Gilded', 'epic', 250, '#e8c34a'],
-  ['phoenix', 'Феникс', 'Phoenix', 'legendary', 500, '#ff4a1c'],
+/* ---- What the designer drew: names in both languages, and the price (see above) ---- */
+
+const HATS: Row[] = [
+  ['straw', 'Соломенная шляпа', 'Straw Hat', 50],
+  ['tricorn', 'Треуголка', 'Pirate Tricorn', 50],
+  ['wizard', 'Колпак звездочёта', 'Stargazer Cap', 50],
+  ['crown', 'Корона углей', 'Crown of Embers', 100],
+  ['horns', 'Рогатый шлем', 'Horned Helm', 50],
+  ['tophat', 'Цилиндр', 'Top Hat', 50],
+  ['wreath', 'Венок', 'Flower Wreath', 50],
+  ['bandana', 'Бандана', 'Bandana', 50],
+  ['pompom', 'Шапка с помпоном', 'Pompom Hat', 50, WINTER],
+  ['halo', 'Нимб', 'Halo', 100],
+  ['eyepatch', 'Повязка на глаз', 'Eyepatch', 50],
+  ['scarf', 'Огненный шарф', 'Fire Scarf', 50],
+];
+const PETS: Row[] = [
+  ['firefly', 'Светлячок', 'Firefly', 75],
+  ['rat', 'Крысёнок', 'Little Rat', 75],
+  ['slime', 'Слизнячок', 'Slime', 75],
+  ['bat', 'Карманная мышь', 'Pocket Bat', 150],
+  ['skull', 'Весёлый череп', 'Grinning Skull', 150],
+  ['ember', 'Огонёк', 'Ember Spirit', 150],
+];
+const TRAILS: Row[] = [
+  ['embers', 'Угольки под ногами', 'Ember Steps', 50],
+  ['frost', 'Иней', 'Frost Steps', 50],
+  ['petals', 'Лепестки', 'Petals', 50],
+  ['gold', 'Золотая пыль', 'Gold Dust', 50],
+  ['shadow', 'Теневой след', 'Shadow Steps', 50],
+  ['ghost', 'Призрачные следы', 'Ghost Prints', 50],
+];
+const KILLS: Row[] = [
+  ['ember_burst', 'Взрыв углей', 'Ember Burst', 50],
+  ['soul', 'Улетающая душа', 'Soul Wisp', 50],
+  ['coins', 'Монетки', 'Coin Pop', 50],
+  ['pillar', 'Огненный столб', 'Flame Pillar', 50],
+  ['stars', 'Звёздный осколок', 'Starshatter', 50],
+  ['smoke_ring', 'Кольцо дыма', 'Smoke Ring', 50],
+];
+const DEATHS: Row[] = [
+  ['ascend', 'Вознесение', 'Ascension', 75],
+  ['ash', 'Прах к праху', 'Ash to Ash', 75],
+  ['ghost', 'Неупокоенный дух', 'Restless Ghost', 75],
+  ['eruption', 'Последнее пламя', 'Last Flame', 75],
+];
+const DIGITS: Row[] = [
+  ['ember', 'Огненные цифры', 'Ember Numbers', 50],
+  ['frost', 'Ледяные цифры', 'Frost Numbers', 50],
+  ['gold', 'Золотые цифры', 'Gold Numbers', 50],
+  ['toxic', 'Ядовитые цифры', 'Toxic Numbers', 50],
+];
+const QUIPS: Row[] = [
+  ['pirate', 'Пират', 'Pirate', 75],
+  ['gopnik', 'Гопник', 'Gopnik', 75],
+  ['knight', 'Рыцарь', 'Knight', 75],
+  ['philosopher', 'Философ', 'Philosopher', 75],
+  ['granny', 'Бабка', 'Granny', 75],
+  ['robot', 'Робот', 'Robot', 75],
+];
+const DECOR: Row[] = [
+  ['tent', 'Палатка', 'Tent', 150],
+  ['banner', 'Знамя костра', 'Firelight Banner', 100],
+  ['lantern', 'Фонарь', 'Lantern', 50],
+  ['statue', 'Статуя героя', 'Hero Statue', 150],
+  ['musicbox', 'Музыкальная шкатулка', 'Music Box', 100],
+  ['chest', 'Сундук', 'Treasure Chest', 50],
+  ['bedroll', 'Спальник', 'Bedroll', 50],
+  ['cauldron', 'Котёл ведьмы', 'Witch Cauldron', 100],
+  ['bench', 'Скамья из бревна', 'Log Bench', 50],
+  ['dummy', 'Чучело для тренировки', 'Training Dummy', 50],
+  ['signpost', 'Указатель', 'Signpost', 50],
+  ['woodpile', 'Поленница', 'Woodpile', 50],
+];
+const FRAMES: Row[] = [
+  ['ember', 'Угли', 'Ember', 50],
+  ['frost', 'Иней', 'Frost', 50],
+  ['moss', 'Мох', 'Moss', 50],
+  ['bone', 'Кость', 'Bone', 50],
+  ['stars', 'Звёздная ночь', 'Night Sky', 50],
+  ['runes', 'Демонские руны', 'Demon Runes', 50],
+  ['crystal', 'Пещерный кристалл', 'Cave Crystal', 50],
+  ['sunforge', 'Солнечная кузня', 'Sunforge', 100],
+];
+const PHOTOS: Row[] = [
+  ['polaroid', 'Моментальное фото', 'Instant Photo', 25],
+  ['film', 'Плёнка', 'Film Strip', 25],
+  ['dungeon', 'Камень подземелья', 'Dungeon Stone', 25],
+  ['gilded', 'Позолота', 'Gilded', 50],
+  ['frost', 'Изморозь', 'Frozen', 50],
+  ['embers', 'Тлеющие угли', 'Glowing Coals', 50],
+];
+const NAMES: Row[] = [
+  ['ember', 'Угольный', 'Ember', 25],
+  ['gold', 'Золотой', 'Gold', 50],
+  ['frost', 'Морозный', 'Frost', 25],
+  ['moss', 'Моховой', 'Moss', 25],
+  ['rose', 'Розовый', 'Rose', 25],
+  ['violet', 'Фиалковый', 'Violet', 25],
+  ['ash', 'Пепельный', 'Ash', 25],
+  ['flame', 'Живое пламя', 'Living Flame', 50],
+];
+const FIRES: Row[] = [
+  ['classic', 'Классический', 'Classic', 0],
+  ['blue', 'Синее пламя', 'Blue Flame', 75],
+  ['green', 'Ведьмин зелёный', 'Witch Green', 75],
+  ['ghost', 'Призрачный огонь', 'Ghost Fire', 100],
+  ['rainbow', 'Радужный', 'Rainbow', 150],
+  ['cursed', 'Проклятый лиловый', 'Cursed Purple', 100],
+  ['golden', 'Золотой', 'Golden', 150],
+  ['ice', 'Ледяное пламя', 'Ice Flame', 100],
+];
+const TITLES: Row[] = [
+  ['kindler', 'Разжигатель', 'Kindler', 25, 'common'],
+  ['keeper', 'Хранитель костра', 'Keeper of the Fire', 50, 'rare'],
+  ['ratking', 'Крысиный шептун', 'Rat Whisperer', 25, 'common'],
+  ['deepdiver', 'Ныряльщик в глубины', 'Deep Diver', 0, 'rare'],
+  ['slayer', 'Гроза Жижи', 'Goo Slayer', 0, 'common'],
+  ['alchemist', 'Безумный алхимик', 'Mad Alchemist', 50, 'rare'],
+  ['lucky', 'Везучий дурак', 'Lucky Fool', 25, 'common'],
+  ['ghost', 'Друг призраков', 'Friend of Ghosts', 0, 'rare'],
+  ['sage', 'Мудрец залов', 'Sage of the Halls', 0, 'legend'],
+  ['ember', 'Душа углей', 'Ember Soul', 0, 'legend'],
+  ['patron', 'Покровитель костра', 'Patron of the Fire', 0, 'legend'],
+  ['first', 'Первая искра', 'First Spark', 0, 'legend'],
+];
+const STICKERS: Row[] = [
+  ['fire', 'Огонь', 'Fire', 0],
+  ['skull', 'Череп', 'Skull', 0],
+  ['heart', 'Сердце', 'Heart', 0],
+  ['crown', 'Корона', 'Crown', 0],
+  ['star', 'Звезда', 'Star', 0],
+  ['amulet', 'Амулет', 'Amulet', 0],
+  ['sword', 'Меч', 'Sword', 0],
+  ['potion', 'Зелье', 'Potion', 0],
+  ['rat', 'Крыса', 'Rat', 0],
+  ['ghost', 'Призрак', 'Ghost', 0],
+  ['gg', 'GG', 'GG', 0],
+  ['wow', '!?', '!?', 0],
+];
+/** Five looks of each class (the designer's order: dearer further down), then the class's legendary one. */
+const LOOK_ROWS: Row[] = [
+  ['moss', 'Моховой', 'Moss', 100],
+  ['frost', 'Морозный', 'Frost', 150],
+  ['ember', 'Угольный', 'Ember', 150],
+  ['dusk', 'Сумеречный', 'Dusk', 200],
+  ['brass', 'Латунный', 'Brass', 250],
+];
+const LEGENDARY: Record<HeroClass, readonly [variant: string, ru: string, en: string]> = {
+  warrior: ['forgeborn', 'Рождённый в горне', 'Forgeborn'],
+  mage: ['starflame', 'Звёздное пламя', 'Starflame'],
+  rogue: ['smoulder', 'Тлеющая тень', 'Smouldering Shade'],
+  huntress: ['wildfire', 'Лесной пожар', 'Wildfire'],
+};
+
+/** What a title or a name needs instead of a price: a badge, the patronage (the season ones come from the pass's lines). */
+const TITLE_EARN: Readonly<Record<string, Earn>> = {
+  deepdiver: { by: 'badge', badge: 'boss4' },
+  slayer: { by: 'badge', badge: 'boss1' },
+  sage: { by: 'badge', badge: 'victory' },
+  patron: { by: 'patron' },
+};
+
+/**
+ * The season pass's two lines, the designer's (catalog.json season.free and season.paid) with one change: level 13 of the paid line
+ * gives the golden fire in place of the flame pillar, so that the paid line is worth over 1000 Stars at the shop's prices (a test
+ * holds it there). Level 30 of each line is an item the shop does not sell.
+ */
+export const PASS_FREE: ReadonlyArray<readonly [level: number, id: string]> = [
+  [1, 'sticker.fire'], [2, 'name.ember'], [4, 'trail.embers'], [6, 'sticker.skull'], [8, 'fire.green'], [10, 'title.kindler'], [12, 'quips.robot'],
+  [15, 'frame.moss'], [18, 'kill.smoke_ring'], [20, 'decor.woodpile'], [24, 'digits.toxic'], [28, 'hat.wreath'], [30, 'title.ghost'],
+];
+export const PASS_PAID: ReadonlyArray<readonly [level: number, id: string]> = [
+  [1, 'frame.sunforge'], [3, 'hat.pompom'], [5, 'pet.firefly'], [7, 'fire.ghost'], [9, 'photo.embers'], [11, 'skin.mage.frost'], [13, 'fire.golden'],
+  [16, 'decor.musicbox'], [19, 'death.ascend'], [22, 'name.flame'], [25, 'title.ember'], [27, 'pet.skull'], [30, 'title.first'],
+];
+/** Items only the pass gives (no price): the exclusive end of each line, and the paid line's title. */
+const PASS_ONLY: ReadonlySet<string> = new Set(['title.ghost', 'title.ember', 'title.first']);
+
+function passReward(id: string): Partial<Pick<Item, 'reward' | 'earn'>> {
+  for (const [track, list] of [['free', PASS_FREE], ['paid', PASS_PAID]] as const) {
+    const found = list.find(([, candidate]) => candidate === id);
+    if (found) return PASS_ONLY.has(id) ? { earn: { by: 'pass', level: found[0], track } } : { reward: { level: found[0], track } };
+  }
+  return {};
+}
+
+function make(prefix: string, category: Category, rows: readonly Row[]): Item[] {
+  return rows.map(([key, ru, en, stars, more]) => {
+    const id = `${prefix}.${key}`;
+    const earn = category === 'title' ? TITLE_EARN[key] : undefined;
+    const legend = category === 'title' && more === 'legend';
+    const season = more !== undefined && typeof more !== 'string' ? more : undefined;
+    return {
+      id, category, stars, name: { ru, en }, rarity: legend ? 'legendary' : category === 'title' && typeof more === 'string' ? (more === 'rare' ? 'rare' : 'common') : rarityOf(stars, false),
+      ...(legend ? { legendary: true } : {}), ...(earn ? { earn } : {}), ...(season ? { season } : {}), ...passReward(id),
+    };
+  });
+}
+
+/** Five looks and a legendary one for each class. */
+const lookItems = HEROES.flatMap((heroClass): Item[] => {
+  const legend = LEGENDARY[heroClass];
+  const plain = LOOK_ROWS.map(([variant, ru, en, stars]): Item => {
+    const id = `skin.${heroClass}.${variant}`;
+    return { id, category: 'look', stars, name: { ru, en }, rarity: rarityOf(stars, false), heroClass, ...passReward(id) };
+  });
+  const id = `skin.${heroClass}.${legend[0]}`;
+  return [...plain, { id, category: 'look', stars: LEGENDARY_PRICE, name: { ru: legend[1], en: legend[2] }, rarity: 'legendary', heroClass, legendary: true, ...passReward(id) }];
+});
+
+/** Bundles are sold at 0.7 of their parts' prices, rounded down to end in 9 (689, 359, 249). */
+export function bundlePrice(parts: readonly string[], catalog: readonly Item[]): number {
+  const value = parts.reduce((sum, id) => sum + (catalog.find((entry) => entry.id === id)?.stars ?? 0), 0);
+  const cut = Math.floor(value * 0.7);
+  return cut - ((cut + 1) % 10);
+}
+
+const base: Item[] = [
+  ...lookItems,
+  ...make('fire', 'campfire', FIRES),
+  ...make('hat', 'hat', HATS),
+  ...make('pet', 'pet', PETS),
+  ...make('trail', 'trail', TRAILS),
+  ...make('kill', 'killfx', KILLS),
+  ...make('death', 'deathfx', DEATHS),
+  ...make('digits', 'numbers', DIGITS),
+  ...make('quips', 'quips', QUIPS),
+  ...make('decor', 'decor', DECOR),
+  ...make('frame', 'frame', FRAMES),
+  ...make('title', 'title', TITLES),
+  ...make('name', 'namecolor', NAMES),
+  ...make('photo', 'photoframe', PHOTOS),
+  ...make('sticker', 'sticker', STICKERS),
+
+  // Earn-only, not the designer's (no art of theirs yet): a streak of daily dungeons, or a place on a board. Placeholder art.
+  { id: 'title.undying', category: 'title', stars: 0, name: { ru: 'Неугасимый', en: 'Undying' }, rarity: 'rare', earn: { by: 'streak', days: 7 } },
+  { id: 'trail.streak_flame', category: 'trail', stars: 0, name: { ru: 'Пламенный след', en: 'Flame trail' }, rarity: 'epic', earn: { by: 'streak', days: 14 }, tones: ['#ff5a1c'] },
+  { id: 'frame.laurel', category: 'frame', stars: 0, name: { ru: 'Рамка: лавры', en: 'Frame: laurels' }, rarity: 'epic', earn: { by: 'streak', days: 30 }, tones: ['#6adf6a', '#2a5a2a'] },
+  { id: 'frame.cup', category: 'frame', stars: 0, name: { ru: 'Рамка: кубок', en: 'Frame: cup' }, rarity: 'epic', earn: { by: 'board', kind: 'daily', place: 3 }, tones: ['#ffd84a', '#8a5a0a'] },
+  { id: 'title.champion', category: 'title', stars: 0, name: { ru: 'Чемпион недели', en: 'Champion of the week' }, rarity: 'epic', earn: { by: 'board', kind: 'week', place: 3 } },
+  {
+    id: 'name.champion', category: 'namecolor', stars: 0, name: { ru: 'Имя чемпиона', en: 'Champion’s name' }, rarity: 'legendary', legendary: true,
+    earn: { by: 'board', kind: 'week', place: 1 }, tones: ['#ffd84a', '#ffffff'], shimmer: true,
+  },
 ];
 
-const lookItems = HEROES.flatMap((heroClass): Item[] =>
-  LOOKS.map(([variant, ru, en, rarity, stars, tone]) =>
-    item(`look.${heroClass}.${variant}`, 'look', stars, `${CLASS_NAMES[heroClass].ru}: ${ru}`, `${CLASS_NAMES[heroClass].en}: ${en}`, rarity, {
-      heroClass, tones: [tone], ...(rarity === 'legendary' ? { legendary: true } : {}),
-    }),
-  ),
-);
+const bundle = (id: string, ru: string, en: string, parts: readonly string[]): Item => ({
+  id, category: 'bundle', stars: bundlePrice(parts, base), name: { ru, en }, rarity: 'epic', items: parts,
+});
 
-/** The three looks of a class together, cheaper than apart. */
-const lookBundles = HEROES.map((heroClass): Item =>
-  item(`bundle.looks.${heroClass}`, 'bundle', 349, `Три облика: ${CLASS_NAMES[heroClass].ru}`, `Three looks: ${CLASS_NAMES[heroClass].en}`, 'epic', {
-    heroClass, items: ['ember', 'frost', 'gilded'].map((variant) => `look.${heroClass}.${variant}`),
-  }),
-);
+/** The starter kit: a 100 Star look of the player's class, a 75 Star fire and a 50 Star trail for 49; once to an account. */
+export const STARTER_ONCE = 'starter';
+const starters = HEROES.map((heroClass): Item => ({
+  id: `bundle.starter.${heroClass}`, category: 'bundle', stars: STARTER_PRICE, rarity: 'rare', once: STARTER_ONCE, heroClass,
+  name: { ru: 'Стартовый набор', en: 'Starter kit' }, items: [`skin.${heroClass}.moss`, 'fire.blue', 'trail.embers'],
+}));
 
 export const CATALOG: readonly Item[] = [
-  ...lookItems,
-  // Campfire styles: the flame's tint, then the sparks' colours (hot, warm, cool).
-  item('fire.blue', 'campfire', 50, 'Синий костёр', 'Blue fire', 'rare', { tones: ['#5aa8ff', '#e8f6ff', '#9fd0ff', '#4a78d8'] }),
-  item('fire.green', 'campfire', 50, 'Зелёный костёр', 'Green fire', 'rare', { tones: ['#55d27a', '#f0ffe0', '#a8f0a0', '#3c9a5a'] }),
-  item('fire.violet', 'campfire', 75, 'Лиловый костёр', 'Violet fire', 'epic', { tones: ['#b078ff', '#fbeaff', '#d8a8ff', '#7a4ad8'] }),
-  item('fire.soul', 'campfire', 100, 'Костёр душ', 'Soulfire', 'epic', { tones: ['#46e0d0', '#f0ffff', '#9af4ec', '#2a8f98'] }),
-  item('fire.void', 'campfire', 500, 'Костёр бездны', 'Voidfire', 'legendary', { tones: ['#7a3cff', '#ffffff', '#c9a0ff', '#2a1a6a'], legendary: true }),
-  // Hats.
-  item('hat.cap', 'hat', 25, 'Колпак', 'Cap', 'common', { tones: ['#c0392b'] }),
-  item('hat.horns', 'hat', 40, 'Рога', 'Horns', 'rare', { tones: ['#d8d0b8'] }),
-  item('hat.wizard', 'hat', 50, 'Колдовской колпак', 'Wizard hat', 'rare', { tones: ['#4a5ad8'] }),
-  item('hat.crown', 'hat', 50, 'Корона', 'Crown', 'epic', { tones: ['#e8c34a'] }),
-  item('hat.halo', 'hat', 500, 'Нимб', 'Halo', 'legendary', { tones: ['#fff3b0'], legendary: true }),
-  // Pets, who walk after the hero.
-  item('pet.rat', 'pet', 100, 'Ручная крыса', 'Pet rat', 'rare', { tones: ['#8a7a68'] }),
-  item('pet.firefly', 'pet', 100, 'Светлячок', 'Firefly', 'rare', { tones: ['#d8ff8a'] }),
-  item('pet.cat', 'pet', 150, 'Подвальный кот', 'Cellar cat', 'epic', { tones: ['#4a4a52'] }),
-  item('pet.ghost', 'pet', 500, 'Призрачный друг', 'Ghost friend', 'legendary', { tones: ['#cfe8ff'], legendary: true }),
-  // Footstep trails.
-  item('trail.embers', 'trail', 50, 'Тлеющий след', 'Ember trail', 'rare', { tones: ['#ff9a3a'] }),
-  item('trail.petals', 'trail', 50, 'След из лепестков', 'Petal trail', 'rare', { tones: ['#f08ab0'] }),
-  item('trail.frost', 'trail', 50, 'Морозный след', 'Frost trail', 'rare', { tones: ['#bfe3ff'] }),
-  item('trail.stars', 'trail', 500, 'Звёздный след', 'Stardust trail', 'legendary', { tones: ['#fff3b0'], legendary: true }),
-  // Kill and death effects.
-  item('killfx.confetti', 'killfx', 50, 'Конфетти', 'Confetti', 'rare', { tones: ['#f0c040'] }),
-  item('killfx.ashburst', 'killfx', 50, 'Пепельный взрыв', 'Ash burst', 'rare', { tones: ['#8a8a8a'] }),
-  item('killfx.stars', 'killfx', 40, 'Звёздочки', 'Stars', 'common', { tones: ['#fff3b0'] }),
-  item('deathfx.petals', 'deathfx', 50, 'Лепестки', 'Petals', 'rare', { tones: ['#f08ab0'] }),
-  item('deathfx.ember', 'deathfx', 50, 'Угли', 'Embers', 'rare', { tones: ['#ff9a3a'] }),
-  item('deathfx.phoenix', 'deathfx', 500, 'Возрождение', 'Rebirth', 'legendary', { tones: ['#ff4a1c'], legendary: true }),
-  // Damage-number styles.
-  item('numbers.gold', 'numbers', 25, 'Золотые числа', 'Gold numbers', 'common', { tones: ['#e8c34a'] }),
-  item('numbers.ice', 'numbers', 25, 'Ледяные числа', 'Ice numbers', 'common', { tones: ['#9fd0ff'] }),
-  item('numbers.fire', 'numbers', 50, 'Огненные числа', 'Fire numbers', 'rare', { tones: ['#ff7a2a', '#ffd060'], shimmer: true }),
-  item('numbers.rainbow', 'numbers', 50, 'Радужные числа', 'Rainbow numbers', 'epic', { tones: ['#ff5a5a', '#ffd060', '#6adf6a', '#5aa8ff', '#b078ff'], shimmer: true }),
-  // Quip packs: another set of lines for the hero (quip-packs.ts).
-  item('quips.pirate', 'quips', 50, 'Реплики: пират', 'Quips: pirate', 'rare', { tones: ['#d8a050'] }),
-  item('quips.noble', 'quips', 50, 'Реплики: аристократ', 'Quips: noble', 'rare', { tones: ['#b078ff'] }),
-  // Camp decorations (a set of up to DECOR_MAX stands round the fire).
-  item('decor.lantern', 'decor', 25, 'Фонарь', 'Lantern', 'common', { tones: ['#ffb050'] }),
-  item('decor.banner', 'decor', 25, 'Знамя', 'Banner', 'common', { tones: ['#c0392b'] }),
-  item('decor.skull', 'decor', 25, 'Череп на колу', 'Skull on a pole', 'common', { tones: ['#d8d0b8'] }),
-  item('decor.flowers', 'decor', 25, 'Цветы', 'Flowers', 'common', { tones: ['#f08ab0'] }),
-  item('decor.tent', 'decor', 50, 'Палатка', 'Tent', 'rare', { tones: ['#8a6a48'] }),
-  item('decor.statue', 'decor', 50, 'Статуя', 'Statue', 'rare', { tones: ['#9a9a9a'] }),
-  // Profile frames (the portrait in the player's card and on the boards).
-  item('pframe.ember', 'frame', 50, 'Рамка: угли', 'Frame: embers', 'rare', { tones: ['#ff7a2a', '#7a2a0a'] }),
-  item('pframe.ice', 'frame', 50, 'Рамка: лёд', 'Frame: ice', 'rare', { tones: ['#bfe3ff', '#3a6ea8'] }),
-  item('pframe.rune', 'frame', 75, 'Рамка: руны', 'Frame: runes', 'epic', { tones: ['#b078ff', '#3a1a6a'] }),
-  item('pframe.crown', 'frame', 500, 'Рамка: корона', 'Frame: crown', 'legendary', { tones: ['#ffd84a', '#8a5a0a'], legendary: true }),
-  // Titles under the name.
-  item('title.delver', 'title', 25, 'Спелеолог', 'Delver', 'common'),
-  item('title.pyromancer', 'title', 25, 'Пиромант', 'Pyromancer', 'common'),
-  item('title.nightwalker', 'title', 50, 'Ночной странник', 'Nightwalker', 'rare'),
-  item('title.relic', 'title', 50, 'Реликвия подземелья', 'Relic of the dungeon', 'epic'),
-  // Name colours.
-  item('namecolor.crimson', 'namecolor', 25, 'Алое имя', 'Crimson name', 'common', { tones: ['#e0483a'] }),
-  item('namecolor.azure', 'namecolor', 25, 'Лазурное имя', 'Azure name', 'common', { tones: ['#4aa8f0'] }),
-  item('namecolor.emerald', 'namecolor', 25, 'Изумрудное имя', 'Emerald name', 'common', { tones: ['#3cc26a'] }),
-  item('namecolor.gold', 'namecolor', 50, 'Золотое имя', 'Gold name', 'rare', { tones: ['#ffd84a'] }),
-  item('namecolor.aurora', 'namecolor', 500, 'Имя-северное сияние', 'Aurora name', 'legendary', { tones: ['#5affc8', '#5aa8ff', '#b078ff'], shimmer: true, legendary: true }),
-  // Photo mode: frames and stickers.
-  item('photo.ember', 'photoframe', 25, 'Рамка кадра: угли', 'Photo frame: embers', 'common', { tones: ['#ff9a3a'] }),
-  item('photo.scroll', 'photoframe', 25, 'Рамка кадра: свиток', 'Photo frame: scroll', 'common', { tones: ['#d8c8a0'] }),
-  item('photo.film', 'photoframe', 50, 'Рамка кадра: плёнка', 'Photo frame: film', 'rare', { tones: ['#2a2a2a'] }),
-  item('sticker.flame', 'sticker', 25, 'Наклейка: пламя', 'Sticker: flame', 'common', { tones: ['#ff7a2a'] }),
-  item('sticker.skull', 'sticker', 25, 'Наклейка: череп', 'Sticker: skull', 'common', { tones: ['#d8d0b8'] }),
-  item('sticker.star', 'sticker', 25, 'Наклейка: звезда', 'Sticker: star', 'common', { tones: ['#ffd84a'] }),
-  item('sticker.crown', 'sticker', 50, 'Наклейка: корона', 'Sticker: crown', 'rare', { tones: ['#e8c34a'] }),
-
-  // Earn-only: from the season pass (pass.ts lists the levels), a streak of daily dungeons, or a place on a board.
-  earned('trail.pass_sparks', 'trail', 'Искристый след', 'Spark trail', 'common', { by: 'pass', level: 3, track: 'free' }, { tones: ['#fff3b0'] }),
-  earned('numbers.pass_pale', 'numbers', 'Бледные числа', 'Pale numbers', 'common', { by: 'pass', level: 6, track: 'free' }, { tones: ['#d8e0ea'] }),
-  earned('title.pass_veteran', 'title', 'Ветеран сезона', 'Veteran of the season', 'rare', { by: 'pass', level: 9, track: 'free' }),
-  earned('decor.pass_banner', 'decor', 'Знамя сезона', 'Season banner', 'rare', { by: 'pass', level: 12, track: 'free' }, { tones: ['#e8c34a'] }),
-  earned('namecolor.pass_ember', 'namecolor', 'Имя цвета углей', 'Ember-coloured name', 'rare', { by: 'pass', level: 15, track: 'free' }, { tones: ['#ff7a2a'] }),
-  earned('hat.pass_hood', 'hat', 'Капюшон сезона', 'Season hood', 'rare', { by: 'pass', level: 18, track: 'free' }, { tones: ['#4a4a62'] }),
-  earned('pframe.pass_bronze', 'frame', 'Рамка сезона', 'Season frame', 'rare', { by: 'pass', level: 21, track: 'free' }, { tones: ['#c88a4a', '#5a3a1a'] }),
-  earned('killfx.pass_glow', 'killfx', 'Сияние', 'Glow', 'rare', { by: 'pass', level: 24, track: 'free' }, { tones: ['#fff3b0'] }),
-  earned('deathfx.pass_smoke', 'deathfx', 'Дымок', 'Smoke', 'rare', { by: 'pass', level: 27, track: 'free' }, { tones: ['#9a9a9a'] }),
-  earned('fire.pass_season', 'campfire', 'Костёр сезона', 'Season fire', 'epic', { by: 'pass', level: 30, track: 'free' }, { tones: ['#ffcf3a', '#ffffff', '#ffe28a', '#e8641e'] }),
-
-  earned('hat.pass_wreath', 'hat', 'Лавровый венок', 'Laurel wreath', 'rare', { by: 'pass', level: 1, track: 'paid' }, { tones: ['#6adf6a'] }),
-  earned('sticker.pass_medal', 'sticker', 'Наклейка: медаль', 'Sticker: medal', 'rare', { by: 'pass', level: 4, track: 'paid' }, { tones: ['#e8c34a'] }),
-  earned('trail.pass_leaves', 'trail', 'Осенний след', 'Autumn trail', 'rare', { by: 'pass', level: 5, track: 'paid' }, { tones: ['#d8682a'] }),
-  earned('title.pass_vanguard', 'title', 'Авангард', 'Vanguard', 'epic', { by: 'pass', level: 8, track: 'paid' }),
-  earned('numbers.pass_royal', 'numbers', 'Королевские числа', 'Royal numbers', 'epic', { by: 'pass', level: 10, track: 'paid' }, { tones: ['#b078ff', '#ffd84a'], shimmer: true }),
-  earned('decor.pass_brazier', 'decor', 'Жаровня', 'Brazier', 'epic', { by: 'pass', level: 13, track: 'paid' }, { tones: ['#ff9a3a'] }),
-  earned('pet.pass_moth', 'pet', 'Ночная бабочка', 'Night moth', 'epic', { by: 'pass', level: 16, track: 'paid' }, { tones: ['#c8c8e8'] }),
-  earned('killfx.pass_flare', 'killfx', 'Вспышка', 'Flare', 'epic', { by: 'pass', level: 19, track: 'paid' }, { tones: ['#fff3b0'] }),
-  earned('namecolor.pass_dusk', 'namecolor', 'Имя цвета заката', 'Dusk-coloured name', 'epic', { by: 'pass', level: 22, track: 'paid' }, { tones: ['#ff7ab0', '#b078ff'], shimmer: true }),
-  earned('pframe.pass_gold', 'frame', 'Золотая рамка сезона', 'Golden season frame', 'epic', { by: 'pass', level: 25, track: 'paid' }, { tones: ['#ffd84a', '#8a5a0a'] }),
-  earned('deathfx.pass_wisp', 'deathfx', 'Огонёк', 'Wisp', 'epic', { by: 'pass', level: 28, track: 'paid' }, { tones: ['#9af4ec'] }),
-  earned('look.warrior.pass_season', 'look', 'Воин: Сезонный', 'Warrior: Seasonal', 'legendary', { by: 'pass', level: 30, track: 'paid' }, { heroClass: 'warrior', tones: ['#e8c34a'], legendary: true }),
-
-  earned('title.undying', 'title', 'Неугасимый', 'Undying', 'rare', { by: 'streak', days: 7 }),
-  earned('trail.streak_flame', 'trail', 'Пламенный след', 'Flame trail', 'epic', { by: 'streak', days: 14 }, { tones: ['#ff5a1c'] }),
-  earned('pframe.laurel', 'frame', 'Рамка: лавры', 'Frame: laurels', 'epic', { by: 'streak', days: 30 }, { tones: ['#6adf6a', '#2a5a2a'] }),
-  earned('pframe.cup', 'frame', 'Рамка: кубок', 'Frame: cup', 'epic', { by: 'board', kind: 'daily', place: 3 }, { tones: ['#ffd84a', '#8a5a0a'] }),
-  earned('title.champion', 'title', 'Чемпион недели', 'Champion of the week', 'epic', { by: 'board', kind: 'week', place: 3 }),
-  earned('namecolor.champion', 'namecolor', 'Имя чемпиона', 'Champion’s name', 'legendary', { by: 'board', kind: 'week', place: 1 }, { tones: ['#ffd84a', '#ffffff'], shimmer: true, legendary: true }),
-
-  // Bundles.
-  item('bundle.starter', 'bundle', 99, 'Набор новичка', 'Starter set', 'rare', { items: ['hat.cap', 'fire.blue', 'trail.embers', 'namecolor.gold'] }),
-  item('bundle.pyro', 'bundle', 199, 'Набор пироманта', 'Pyromancer set', 'epic', {
-    items: ['fire.violet', 'killfx.ashburst', 'deathfx.ember', 'trail.embers', 'title.pyromancer', 'hat.horns'],
-  }),
-  item('bundle.photo', 'bundle', 99, 'Набор фотографа', 'Photographer set', 'rare', {
-    items: ['photo.ember', 'photo.scroll', 'photo.film', 'sticker.flame', 'sticker.skull', 'sticker.star', 'sticker.crown'],
-  }),
-  item('bundle.camp', 'bundle', 99, 'Набор уюта', 'Cosy camp set', 'rare', { items: ['decor.lantern', 'decor.banner', 'decor.skull', 'decor.flowers', 'decor.tent', 'decor.statue'] }),
-  ...lookBundles,
+  ...base,
+  bundle('bundle.forge', 'Набор кузнеца', 'Forge Kit', ['skin.warrior.forgeborn', 'hat.crown', 'pet.ember', 'fire.golden']),
+  bundle('bundle.night', 'Ночной дозор', 'Night Watch', ['skin.rogue.dusk', 'hat.tricorn', 'pet.bat', 'trail.shadow', 'fire.cursed']),
+  bundle('bundle.camp', 'Первый привал', 'First Camp', ['decor.tent', 'decor.lantern', 'decor.bench', 'fire.blue', 'frame.ember']),
+  {
+    id: 'stickers.pack1', category: 'bundle', stars: 50, rarity: 'common', pack: true, name: { ru: 'Набор наклеек «Глубокая ночь»', en: 'Sticker Pack: Deep Night' },
+    items: STICKERS.map(([key]) => `sticker.${key}`),
+  },
+  ...starters,
 ];
 
 const BY_ID = new Map(CATALOG.map((entry) => [entry.id, entry]));
 
 // The season pass is one purchase a season: its item is made for the season asked about (pass.ts says which is on).
-export const PASS_PRICE = 299;
 export const passSku = (season: number): string => `pass.s${season}`;
 export const isPassSku = (id: string): boolean => /^pass\.s\d+$/.test(id);
 export const passSeason = (id: string): number => Number(/^pass\.s(\d+)$/.exec(id)?.[1] ?? NaN);
-const passItem = (id: string): Item => ({ id, category: 'pass', stars: PASS_PRICE, name: { ru: 'Пропуск сезона', en: 'Season pass' }, asset: 'pass/season', rarity: 'epic' });
+const passItem = (id: string): Item => ({ id, category: 'pass', stars: PASS_PRICE, name: { ru: 'Пропуск сезона', en: 'Season pass' }, rarity: 'epic' });
 
-/** An item by its id (a season pass's too). */
+/** An item by its id (a season pass's too). Only the catalogue's own ids: an old placeholder's is `canonical()` first. */
 export function itemById(id: string): Item | undefined {
   return BY_ID.get(id) ?? (isPassSku(id) ? passItem(id) : undefined);
 }
+
+
+/**
+ * The ids of the first, placeholder catalogue (before the designer's art came), and what each is now. Whoever bought or won one of
+ * those keeps its worth: an owned or worn old id counts as the item it is mapped to (the server's wallets hold the old ids as they
+ * were granted; nothing in storage is rewritten). Things the new catalogue still has under the same id are not listed.
+ */
+export const LEGACY: Readonly<Record<string, string>> = {
+  'look.warrior.ember': 'skin.warrior.ember', 'look.warrior.frost': 'skin.warrior.frost', 'look.warrior.gilded': 'skin.warrior.brass', 'look.warrior.phoenix': 'skin.warrior.forgeborn', 'look.mage.ember': 'skin.mage.ember', 'look.mage.frost': 'skin.mage.frost', 'look.mage.gilded': 'skin.mage.brass', 'look.mage.phoenix': 'skin.mage.starflame', 'look.rogue.ember': 'skin.rogue.ember', 'look.rogue.frost': 'skin.rogue.frost', 'look.rogue.gilded': 'skin.rogue.brass', 'look.rogue.phoenix': 'skin.rogue.smoulder', 'look.huntress.ember': 'skin.huntress.ember', 'look.huntress.frost': 'skin.huntress.frost', 'look.huntress.gilded': 'skin.huntress.brass', 'look.huntress.phoenix': 'skin.huntress.wildfire',
+  'fire.violet': 'fire.cursed', 'fire.soul': 'fire.ghost', 'fire.void': 'fire.golden',
+  'hat.cap': 'hat.bandana',
+  'pet.cat': 'pet.bat', 'pet.ghost': 'pet.skull',
+  'trail.stars': 'trail.gold',
+  'killfx.confetti': 'kill.coins', 'killfx.ashburst': 'kill.ember_burst', 'killfx.stars': 'kill.stars',
+  'deathfx.petals': 'death.ascend', 'deathfx.ember': 'death.eruption', 'deathfx.phoenix': 'death.ash',
+  'numbers.gold': 'digits.gold', 'numbers.ice': 'digits.frost', 'numbers.fire': 'digits.ember', 'numbers.rainbow': 'digits.toxic',
+  'quips.noble': 'quips.knight',
+  'decor.skull': 'decor.dummy', 'decor.flowers': 'decor.woodpile',
+  'pframe.ember': 'frame.ember', 'pframe.ice': 'frame.frost', 'pframe.rune': 'frame.runes', 'pframe.crown': 'frame.sunforge',
+  'pframe.laurel': 'frame.laurel', 'pframe.cup': 'frame.cup',
+  'title.delver': 'title.kindler', 'title.pyromancer': 'title.keeper', 'title.nightwalker': 'title.alchemist', 'title.relic': 'title.lucky',
+  'namecolor.crimson': 'name.ember', 'namecolor.azure': 'name.frost', 'namecolor.emerald': 'name.moss', 'namecolor.gold': 'name.gold',
+  'namecolor.aurora': 'name.flame', 'namecolor.champion': 'name.champion',
+  'photo.ember': 'photo.embers', 'photo.scroll': 'photo.dungeon', 'sticker.flame': 'sticker.fire',
+  // The first pass's rewards.
+  'trail.pass_sparks': 'trail.embers', 'numbers.pass_pale': 'digits.toxic', 'title.pass_veteran': 'title.kindler', 'decor.pass_banner': 'decor.banner',
+  'namecolor.pass_ember': 'name.ember', 'hat.pass_hood': 'hat.bandana', 'pframe.pass_bronze': 'frame.moss', 'killfx.pass_glow': 'kill.smoke_ring',
+  'deathfx.pass_smoke': 'death.ash', 'fire.pass_season': 'fire.golden', 'hat.pass_wreath': 'hat.wreath', 'sticker.pass_medal': 'sticker.star',
+  'trail.pass_leaves': 'trail.petals', 'title.pass_vanguard': 'title.keeper', 'numbers.pass_royal': 'digits.gold', 'decor.pass_brazier': 'decor.cauldron',
+  'pet.pass_moth': 'pet.bat', 'killfx.pass_flare': 'kill.pillar', 'namecolor.pass_dusk': 'name.violet', 'pframe.pass_gold': 'frame.sunforge',
+  'deathfx.pass_wisp': 'death.ghost', 'look.warrior.pass_season': 'skin.warrior.forgeborn',
+};
+
+/** An id as the catalogue knows it now: an old placeholder's, or the same. */
+export const canonical = (id: string): string => LEGACY[id] ?? id;
+
+/** What every player has: the classic campfire. Never bought, never earned, and worn when nothing else is. */
+export const DEFAULT_OWNED: readonly string[] = ['fire.classic'];
 
 /** Won, not sold. */
 export const earnOnly = (entry: Item): boolean => entry.earn !== undefined;
@@ -228,8 +424,18 @@ export const earnOnly = (entry: Item): boolean => entry.earn !== undefined;
 /** Sold for Stars: priced, not earn-only. */
 export const forSale = (entry: Item): boolean => entry.stars > 0 && !earnOnly(entry);
 
-/** What a bundle's parts cost apart. */
-export const bundleValue = (bundle: Item): number => (bundle.items ?? []).reduce((sum, id) => sum + (BY_ID.get(id)?.stars ?? 0), 0);
+/** Whether an item is in season on a day (UTC), by its own season if it has one. */
+export function inSeason(entry: Item, now: number): boolean {
+  if (!entry.season) return true;
+  const date = new Date(now);
+  const day = (date.getUTCMonth() + 1) * 100 + date.getUTCDate();
+  const from = entry.season.from[0] * 100 + entry.season.from[1];
+  const to = entry.season.to[0] * 100 + entry.season.to[1];
+  return from <= to ? day >= from && day <= to : day >= from || day <= to;
+}
+
+/** What a bundle's parts cost apart (a pack's parts are not sold alone: nothing). */
+export const bundleValue = (entry: Item): number => (entry.pack ? 0 : (entry.items ?? []).reduce((sum, id) => sum + (BY_ID.get(id)?.stars ?? 0), 0));
 
 /** Every item a purchase of this id puts in the wallet: the item, or a bundle's parts. */
 export function grantedBy(id: string): string[] {
@@ -242,25 +448,25 @@ export const itemName = (entry: Item, lang: Lang): string => entry.name[lang];
 
 export const RARITY_RANK: Readonly<Record<Rarity, number>> = { common: 0, rare: 1, epic: 2, legendary: 3 };
 
-/** Assets whose real art exists (public/assets/shop/<asset>.png); the rest are drawn as placeholders. Empty until the sheets arrive. */
-export const ART: ReadonlySet<string> = new Set<string>();
+/** The designer's sku of an item: the huntress's things are the ranger's there. */
+export const artSku = (id: string): string => id.replace('.huntress.', '.ranger.');
 
 /* ---- What is worn ---- */
 
 /** Where an item is worn: one slot of its own, or (decor) the set. */
-export type Slot = `look.${HeroClass}` | 'hat' | 'pet' | 'trail' | 'killfx' | 'deathfx' | 'numbers' | 'quips' | 'campfire' | 'frame' | 'title' | 'namecolor';
+export type Slot = `look.${HeroClass}` | 'hat' | 'pet' | 'trail' | 'killfx' | 'deathfx' | 'numbers' | 'quips' | 'campfire' | 'frame' | 'title' | 'namecolor' | 'photoframe';
 export const SLOTS: readonly Slot[] = [
   'look.warrior', 'look.mage', 'look.rogue', 'look.huntress',
-  'hat', 'pet', 'trail', 'killfx', 'deathfx', 'numbers', 'quips', 'campfire', 'frame', 'title', 'namecolor',
+  'hat', 'pet', 'trail', 'killfx', 'deathfx', 'numbers', 'quips', 'campfire', 'frame', 'title', 'namecolor', 'photoframe',
 ];
 /** The most decorations that stand in the camp at once. */
 export const DECOR_MAX = 4;
 
-/** The slot an item is worn in, or null for what is not worn (decor has its set; photo things, bundles and the pass are not worn). */
+/** The slot an item is worn in, or null for what is not worn (decor has its set; stickers, bundles and the pass are not worn). */
 export function slotOf(entry: Item): Slot | null {
   switch (entry.category) {
     case 'look': return entry.heroClass ? `look.${entry.heroClass}` : null;
-    case 'hat': case 'pet': case 'trail': case 'killfx': case 'deathfx': case 'numbers': case 'quips': case 'title': case 'namecolor':
+    case 'hat': case 'pet': case 'trail': case 'killfx': case 'deathfx': case 'numbers': case 'quips': case 'title': case 'namecolor': case 'photoframe':
       return entry.category;
     case 'campfire': return 'campfire';
     case 'frame': return 'frame';
@@ -284,13 +490,13 @@ export function cleanEquipped(raw: unknown): Equipped {
   if (typeof r.slots === 'object' && r.slots !== null) {
     for (const slot of SLOTS) {
       const id = (r.slots as Record<string, unknown>)[slot];
-      const entry = typeof id === 'string' ? itemById(id) : undefined;
+      const entry = typeof id === 'string' ? itemById(canonical(id)) : undefined;
       if (entry && slotOf(entry) === slot) out.slots[slot] = entry.id;
     }
   }
   if (Array.isArray(r.decor)) {
     for (const id of r.decor) {
-      const entry = typeof id === 'string' ? itemById(id) : undefined;
+      const entry = typeof id === 'string' ? itemById(canonical(id)) : undefined;
       if (entry?.category === 'decor' && !out.decor.includes(entry.id) && out.decor.length < DECOR_MAX) out.decor.push(entry.id);
     }
   }
@@ -299,33 +505,35 @@ export function cleanEquipped(raw: unknown): Equipped {
 
 /* ---- Validation (run by the tests, and by anyone who edits the data) ---- */
 
-/** Price bounds in Stars of what is sold and not legendary or a bundle, by category. */
+/** The prices a sold item of a category may have, Stars (a legendary one costs LEGENDARY_PRICE; bundles have their own rule). */
 export const PRICE_RANGE: Readonly<Partial<Record<Category, readonly [number, number]>>> = {
-  look: [100, 250], campfire: [50, 100], hat: [25, 50], pet: [100, 150], trail: [25, 50], killfx: [25, 50], deathfx: [25, 50],
-  numbers: [25, 50], quips: [25, 50], decor: [25, 50], frame: [50, 100], title: [25, 50], namecolor: [25, 50], photoframe: [25, 50], sticker: [25, 50],
+  look: [100, 250], campfire: [75, 150], hat: [50, 100], pet: [75, 150], trail: [50, 50], killfx: [50, 50], deathfx: [75, 75],
+  numbers: [50, 50], quips: [75, 75], decor: [50, 150], frame: [50, 100], title: [25, 50], namecolor: [25, 50], photoframe: [25, 50],
 };
-export const LEGENDARY_MIN = 500;
+export const LEGENDARY_MIN = LEGENDARY_PRICE;
 
 /** What every id of a category starts with. */
 export const ID_PREFIX: Readonly<Record<Category, string>> = {
-  look: 'look.', campfire: 'fire.', hat: 'hat.', pet: 'pet.', trail: 'trail.', killfx: 'killfx.', deathfx: 'deathfx.', numbers: 'numbers.', quips: 'quips.',
-  decor: 'decor.', frame: 'pframe.', title: 'title.', namecolor: 'namecolor.', photoframe: 'photo.', sticker: 'sticker.', bundle: 'bundle.', pass: 'pass.',
+  look: 'skin.', campfire: 'fire.', hat: 'hat.', pet: 'pet.', trail: 'trail.', killfx: 'kill.', deathfx: 'death.', numbers: 'digits.', quips: 'quips.',
+  decor: 'decor.', frame: 'frame.', title: 'title.', namecolor: 'name.', photoframe: 'photo.', sticker: 'sticker.', bundle: '', pass: 'pass.',
 };
 
 /** What is wrong with a catalogue: an empty list is a good one. */
 export function validateCatalog(catalog: readonly Item[] = CATALOG): string[] {
   const problems: string[] = [];
   const seen = new Set<string>();
+  const priceOf = (id: string): number => catalog.find((candidate) => candidate.id === id)?.stars ?? 0;
   for (const entry of catalog) {
     const at = entry.id;
     if (!/^[a-z]+(\.[a-z0-9_]+)+$/.test(entry.id)) problems.push(`${at}: odd id`);
     if (seen.has(entry.id)) problems.push(`${at}: duplicate id`);
     seen.add(entry.id);
     if (!entry.id.startsWith(ID_PREFIX[entry.category])) problems.push(`${at}: id does not match category ${entry.category}`);
+    if (entry.category === 'bundle' && !/^(bundle|stickers)\./.test(entry.id)) problems.push(`${at}: a bundle's id starts with bundle. or stickers.`);
     if (!entry.name.ru.trim() || !entry.name.en.trim()) problems.push(`${at}: missing name`);
-    if (!entry.asset) problems.push(`${at}: missing asset`);
     if (!RARITIES.includes(entry.rarity)) problems.push(`${at}: bad rarity`);
     if (!Number.isInteger(entry.stars) || entry.stars < 0) problems.push(`${at}: bad price`);
+    if (entry.stars > 0 && !PRICE_STEPS.includes(entry.stars) && !(entry.category === 'bundle' && entry.stars % 10 === 9)) problems.push(`${at}: price ${entry.stars} is not a step`);
     if (entry.category === 'look' && !entry.heroClass) problems.push(`${at}: a look needs a class`);
     if (entry.legendary && entry.rarity !== 'legendary') problems.push(`${at}: legendary flag without legendary rarity`);
     if (entry.rarity === 'legendary' && !entry.legendary) problems.push(`${at}: legendary rarity without the flag`);
@@ -342,15 +550,24 @@ export function validateCatalog(catalog: readonly Item[] = CATALOG): string[] {
         else if (found.earn) problems.push(`${at}: earn-only part ${part}`);
       }
       if (new Set(parts).size !== parts.length) problems.push(`${at}: a part twice`);
-      const value = parts.reduce((sum, part) => sum + (catalog.find((candidate) => candidate.id === part)?.stars ?? 0), 0);
-      if (entry.stars <= 0 || entry.stars >= value) problems.push(`${at}: a bundle must cost less than its parts (${entry.stars} against ${value})`);
+      if (!entry.pack && !entry.once) {
+        const value = parts.reduce((sum, part) => sum + priceOf(part), 0);
+        if (entry.stars <= 0 || entry.stars >= value) problems.push(`${at}: a bundle must cost less than its parts (${entry.stars} against ${value})`);
+        if (entry.stars !== bundlePrice(parts, catalog)) problems.push(`${at}: a bundle costs 0.7 of its parts, rounded down to end in 9 (${bundlePrice(parts, catalog)})`);
+      }
+      if (entry.pack && entry.stars !== 50) problems.push(`${at}: the sticker pack costs 50`);
+      if (entry.once && entry.stars !== STARTER_PRICE) problems.push(`${at}: the starter kit costs ${STARTER_PRICE}`);
+    } else if (entry.category === 'sticker') {
+      if (entry.stars !== 0) problems.push(`${at}: a sticker is sold in its pack, not alone`);
+    } else if (DEFAULT_OWNED.includes(entry.id)) {
+      if (entry.stars !== 0) problems.push(`${at}: what everyone has is free`);
     } else {
       if (entry.stars <= 0) problems.push(`${at}: for sale at no price`);
       if (entry.rarity === 'legendary') {
-        if (entry.stars < LEGENDARY_MIN) problems.push(`${at}: legendary below ${LEGENDARY_MIN}`);
+        if (entry.stars !== LEGENDARY_PRICE) problems.push(`${at}: a legendary costs ${LEGENDARY_PRICE}`);
       } else {
         const range = PRICE_RANGE[entry.category];
-        if (range && (entry.stars < range[0] || entry.stars > range[1])) problems.push(`${at}: price ${entry.stars} outside ${range[0]}–${range[1]}`);
+        if (range && (entry.stars < range[0] || entry.stars > range[1])) problems.push(`${at}: price ${entry.stars} outside ${range[0]}-${range[1]}`);
       }
     }
     if (entry.category !== 'bundle' && entry.items) problems.push(`${at}: only bundles hold items`);

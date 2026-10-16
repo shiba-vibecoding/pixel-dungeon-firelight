@@ -1,10 +1,10 @@
 import { emptyWallet, forSale, inSeason, type Offer, offerBySku, SUBSCRIPTION_SECONDS, type Wallet } from '@pd/core';
-import { forSale as itemForSale, type Item, itemById, isPassSku, passSeason } from '../../client/src/catalog';
+import { forSale as itemForSale, inSeason as itemInSeason, type Item, itemById, isPassSku, passSeason } from '../../client/src/catalog';
 import { ADMIN_USAGE, type AdminCommand, type AdminOps, describePayments, isAdminChat, parseAdminCommand } from './admin';
 import { SEASON } from './boards';
 import { type InvoiceText, invoiceText, itemInvoiceText, speaksRussian } from './catalogue';
 import type { WindowLimiter } from './limits';
-import { type GiftTarget, recentCharges, shopOf, type WalletChange, type WalletView } from './wallet';
+import { type GiftTarget, onceTaken, recentCharges, shopOf, type WalletChange, type WalletView } from './wallet';
 
 /*
  * Pixel-Mart's payments in Telegram Stars (core.telegram.org/bots/payments-stars):
@@ -72,6 +72,7 @@ function priced(sku: string, now: number, season: number): Priced | { error: str
   if (!entry || !itemForSale(entry)) return { error: 'not for sale' };
   // Only the pass of the season now on is sold.
   if (isPassSku(sku) && passSeason(sku) !== season) return { error: 'out of season' };
+  if (!itemInSeason(entry, now)) return { error: 'out of season' };
   return { stars: entry.stars, subscription: false, item: entry, text: (language, gift) => itemInvoiceText(entry, language, gift) };
 }
 
@@ -83,6 +84,8 @@ export interface InvoiceOptions {
   owned?: ReadonlySet<string>;
   /** The season the pass sold is of (the world's; tests give their own). */
   season?: number;
+  /** The once-only offers the buyer has bought (wallet.ts onceTaken). */
+  took?: ReadonlySet<string>;
 }
 
 /** An invoice link for an offer, worded from the server's catalogue in the buyer's language, or why there is none. */
@@ -95,6 +98,8 @@ export async function createInvoice(
   // Only the catalogue's things can be given, and not to oneself.
   if (gift && (!offer.item || ('to' in gift && gift.to === user))) return { error: 'cannot be a gift' };
   if (offer.item && options.owned && (offer.item.items ?? [offer.item.id]).every((id) => options.owned!.has(id))) return { error: 'already owned' };
+  // A once-only offer (the starter kit) is sold once to an account, and is no gift.
+  if (offer.item?.once && (gift || options.took?.has(offer.item.once))) return { error: gift ? 'cannot be a gift' : 'already taken' };
   const text = offer.text(language, Boolean(gift));
   const payload: Payload = { u: user, s: sku, ...(gift && 'to' in gift ? { g: gift.to } : {}), ...(gift && 'link' in gift ? { l: gift.link } : {}) };
   const link = await api('createInvoiceLink', {
@@ -114,7 +119,7 @@ export function checkoutValid(checkout: NonNullable<TelegramUpdate['pre_checkout
   const offer = payload && priced(payload.s, now, season);
   if (!payload || !offer || 'error' in offer) return false;
   // A gift is of the catalogue's things only.
-  if ((payload.g !== undefined || payload.l !== undefined) && !offer.item) return false;
+  if ((payload.g !== undefined || payload.l !== undefined) && (!offer.item || offer.item.once)) return false;
   return checkout.currency === 'XTR' && checkout.total_amount === offer.stars && payload.u === checkout.from.id;
 }
 
@@ -223,7 +228,14 @@ export async function handleUpdate(update: TelegramUpdate, api: BotApi, wallets:
   const checkout = update.pre_checkout_query;
   if (checkout) {
     // Confirm only what we sell today, at its price, to whom it was made out.
-    await api('answerPreCheckoutQuery', checkoutValid(checkout, now)
+    let ok = checkoutValid(checkout, now);
+    // A once-only offer the account has bought already is not confirmed again (the invoice may have been made before the first payment).
+    if (ok) {
+      const payload = parsePayload(checkout.invoice_payload);
+      const once = payload ? itemById(payload.s)?.once : undefined;
+      if (payload && once && onceTaken(await wallets.get(payload.u)).has(once)) ok = false;
+    }
+    await api('answerPreCheckoutQuery', ok
       ? { pre_checkout_query_id: checkout.id, ok: true }
       : { pre_checkout_query_id: checkout.id, ok: false, error_message: 'This offer is no longer available.' });
     return;
