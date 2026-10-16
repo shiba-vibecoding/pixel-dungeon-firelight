@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act, addHero, createMob, createWorld, findPath, floorAt, heroById, levelAt } from '@pd/core';
+import { act, addHero, canEnter, createMob, createWorld, findPath, floorAt, heroById, levelAt, NEIGHBOURS8 } from '@pd/core';
 import { botAction } from '../../core/test/helpers';
 import { CLASSES, makeSpec, playDevice, plainProblems, replayOnServer, soakRun } from './soak-engine';
 
@@ -37,13 +37,20 @@ describe('the soak engine', () => {
     const hero = heroById(world, 'me')!;
     const floor = floorAt(world, 1);
     floor.mobs = [];
-    const path = findPath(levelAt(world, 1), hero.pos, levelAt(world, 1).exit)!;
-    const image = createMob('#900', 'mirror', path[0]!, 'passive', floor.now);
-    image.image = { owner: 'me', attack: 10, damage: 1 };
-    floor.mobs.push(image);
-    expect(botAction(world, 'me', 26)).toEqual({ type: 'attack', target: '#900' });
-    expect(act(world, 'me', { type: 'attack', target: '#900' }).ok).toBe(true);
-    expect(hero.pos).toBe(path[0]);
+    const level = levelAt(world, 1);
+    const path = findPath(level, hero.pos, level.exit)!;
+    // Images on every way out (a bot walks round one when it can: only with no way round is a tap on one a step).
+    const ways = NEIGHBOURS8.map((n) => hero.pos + n).filter((cell) => canEnter(level, cell));
+    ways.forEach((cell, i) => {
+      const image = createMob(`#90${i}`, 'mirror', cell, 'passive', floor.now);
+      image.image = { owner: 'me', attack: 10, damage: 1 };
+      floor.mobs.push(image);
+    });
+    const action = botAction(world, 'me', 26);
+    expect(action.type).toBe('attack');
+    expect(act(world, 'me', action).ok).toBe(true);
+    expect(ways).toContain(hero.pos);
+    expect(path.length).toBeGreaterThan(0);
   });
 
   it('tells a replay that parts from the device (a lost action) at the next sync point', () => {

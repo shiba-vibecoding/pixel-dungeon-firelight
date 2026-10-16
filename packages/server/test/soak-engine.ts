@@ -270,6 +270,11 @@ function rush(world: World): Action | null {
   const yog = floor.mobs.find((m) => m.kind === 'yog');
   if (!yog && hero.pos === level.exit) return { type: 'descend' };
   const goal = yog ? yog.pos : level.exit;
+  // At the locked way down (its boss still standing) a walk is refused every time: a player fights what is hitting him there, as the boss's fall opens the way.
+  if (!yog && level.map[goal] === T.LOCKED_EXIT && distance(hero.pos, goal) <= 1) {
+    const foe = floor.mobs.find((m) => distance(m.pos, hero.pos) === 1 && m.state !== 'passive' && m.state !== 'sleeping');
+    if (foe) return { type: 'attack', target: foe.id };
+  }
   if (yog && distance(hero.pos, yog.pos) === 1) return { type: 'attack', target: yog.id };
   const none = new Set<number>();
   // (A shopkeeper stands where he stands: a hero who teleported into his shop walks round him, not into him.)

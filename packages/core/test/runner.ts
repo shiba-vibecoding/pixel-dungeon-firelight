@@ -68,7 +68,7 @@ function plan(world: World, id: string): Action {
     const door = level.arenaDoor;
     // Through the door, to the side farther from the entrance: that is the arena.
     const far = (cell: number): number => findPath(level, level.entrance, cell, new Set([door]))?.length ?? Infinity;
-    const inside = [door + WIDTH, door - WIDTH, door + 1, door - 1].filter((c) => canEnter(level, c)).sort((a, b) => far(b) - far(a))[0];
+    const inside = [door + WIDTH, door - WIDTH, door + 1, door - 1].filter((c) => canEnter(level, c) && !floor.mobs.some((m) => m.pos === c && isAlly(m))).sort((a, b) => far(b) - far(a))[0];
     const inArena = hero.pos === door && inside !== undefined ? toward(world, inside, id) : toward(world, door, id);
     if (inArena) return inArena;
   }
@@ -105,6 +105,9 @@ function toward(world: World, goal: number, id = 'p'): Action | null {
   const inTheWay = floor.mobs.find((m) => m.pos === path[0]);
   return inTheWay && !swapsWithHero(inTheWay) ? { type: 'attack', target: inTheWay.id } : { type: 'move', to: path[0]! };
 }
+
+/** The hero's own summoned allies (mirror images, bees): walked through, never a target of the bot. */
+const isAlly = (mob: { kind: string }): boolean => mob.kind === 'mirror' || mob.kind === 'bee';
 
 export function marathon(seed: number, heroClass: HeroClass): { world: World; effects: Effect[]; steps: number; trace: string[] } {
   let world = createWorld(seed);
