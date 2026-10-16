@@ -98,7 +98,7 @@ import { CoopMarks } from './coop-marks';
 import {
   backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
   shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
-  homeScreenStatus, addToHomeScreen, invitedGift,
+  homeScreenStatus, addToHomeScreen, invitedGift, inviteStart, launchedByInvite,
 } from './telegram';
 import { report, startReporting } from './report';
 import { STEP_MS, TILE, View } from './view';
@@ -285,6 +285,7 @@ const mapControlsActions = {
     cam.toggleOverview(world && me ? boxOf(exploredCells(world, me.depth), WIDTH, TILE) : null);
   },
   home: () => cam.recentre(),
+  photo: () => openPhoto(),
   attack: () => {
     const world = session?.world;
     const me = world && heroById(world, session!.myId);
@@ -437,6 +438,9 @@ let newLoot = false;
 void mart.refresh(SERVER);
 // The catalogue's side of it (storeui.ts): what is owned and worn. A friend's share link is opened once the shop is known.
 void cosmetics.refresh(SERVER).then(async () => {
+  // An invite or a share link a friend sent: the server makes the two friends who play (if the inviter is a known player).
+  const invite = launchedByInvite();
+  if (invite) void cosmetics.meetInviter(invite);
   const code = invitedGift();
   if (!code) return;
   const result = await cosmetics.acceptGift(code);
@@ -556,7 +560,7 @@ function pick3d(level: Level, world: World): boolean {
     canvas3d.id = 'game3d';
     canvas.before(canvas3d);
     const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(true) });
+    r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reduced: quality.reducedMotion, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(true) });
     governor.hold(2500);
     frame3d = {
       now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0, myId: '',
@@ -3278,7 +3282,7 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
@@ -3587,7 +3591,7 @@ function shareChoices(card: () => Promise<ShareCard>, text: string): ShareChoice
         void (async () => {
           const blob = await storyCard(await card(), t.ranked.storyCall);
           const url = blob && (await api.card(blob));
-          if (url) shareStory(url, `${text} ${appLink('daily')}`);
+          if (url) shareStory(url, `${text} ${appLink(inviteStart('daily'))}`);
           else toast(t.ranked.shareFailed);
         })();
       },

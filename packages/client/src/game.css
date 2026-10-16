@@ -450,6 +450,7 @@ body:has(#overlay.open) .pd-mapctl { visibility: hidden; }
 .pd-letter-head time { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); white-space: nowrap; }
 .pd-letter-text { grid-area: text; margin: 0; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
 .pd-letter-text em { font-style: normal; color: var(--ink); }
+.pd-letter-note { display: block; margin-top: 4px; padding: 4px 8px; font: var(--text-body, 400 16px/20px var(--font-small)); color: var(--ink); background: var(--stone-900); box-shadow: inset 2px 0 0 var(--fire-gold, #ffcc66); overflow-wrap: anywhere; }
 .pd-letter-act { grid-area: act; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; margin-top: 4px; }
 .pd-letter-gifts { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .pd-letter-act > .pd-button, .pd-letter-act > .pd-letter-done { flex: none; margin-left: auto; }

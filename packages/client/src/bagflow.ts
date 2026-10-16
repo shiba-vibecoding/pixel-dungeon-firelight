@@ -89,15 +89,20 @@ export function gearDrops(hero: Pick<Hero, 'items'>, from: Place, item: { kind: 
     const off: Action = 'ring' in from ? { type: 'remove', ring: from.ring } : from.worn === 'weapon' ? { type: 'unequip' } : { type: 'unequip', slot: 'armor' };
     drops.set('pack', off);
     hero.items.forEach((_, i) => drops.set(String(i), off));
+    // EquipableItem.doDrop: worn, it comes off and is dropped.
+    drops.set('away', { type: 'drop', item: 'ring' in from ? (from.ring === 0 ? 'ring0' : 'ring1') : from.worn });
     return drops;
   }
   const equip: Action = { type: 'equip', item: from.index };
   const category = itemDef(item.kind).category;
   if (category === 'weapon') drops.set('weapon', equip);
   if (category === 'armor') drops.set('armor', equip);
+  // Both ring places take a ring; dropped on one, with both hands full, that is the ring that comes off.
   if (category === 'ring') {
-    drops.set('ring0', equip);
-    drops.set('ring1', equip);
+    drops.set('ring0', { ...equip, replace: 0 });
+    drops.set('ring1', { ...equip, replace: 1 });
   }
+  // A thrown weapon held as a melee weapon is a weapon to the hand (a huntress or a rogue: the core says no to anyone else).
+  if (category === 'missile') drops.set('weapon', equip);
   return drops;
 }

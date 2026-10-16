@@ -100,7 +100,7 @@ export async function challengeRoute(request: Request, env: Env): Promise<Respon
   // Opened over the whole screen (Bot API 8.0 direct links' mode).
   // A circle's card (the week's board of a circle) invites into that circle; any other message is the daily dungeon's challenge.
   const circle = typeof body.circle === 'string' && /^[a-z0-9]{10}$/.test(body.circle) ? body.circle : null;
-  const link = `${env.APP_LINK ?? 'https://t.me/pixel_dungeon_gamebot/pixel_dungeon'}?startapp=${circle ? `c_${circle}` : 'daily'}&mode=fullscreen`;
+  const link = `${env.APP_LINK ?? 'https://t.me/pixel_dungeon_gamebot/pixel_dungeon'}?startapp=${circle ? `c_${circle}` : `daily_r${user.id}`}&mode=fullscreen`;
   const button = circle ? { text: ru ? '🔥 В круг' : '🔥 Join the circle', url: link } : { text: ru ? '⚔ Принять вызов' : '⚔ Take the challenge', url: link };
   const result = card
     ? { type: 'photo', id: crypto.randomUUID().slice(0, 32), photo_url: card, thumbnail_url: card, caption: text, reply_markup: { inline_keyboard: [[button]] } }

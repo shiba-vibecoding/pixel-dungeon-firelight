@@ -1016,14 +1016,15 @@ function perform(ctx: Ctx, hero: Hero, action: Action): void {
         else talkToGhost(ctx, hero);
         break;
       }
+      // Hero.actAttack: the delay is the weapon's as it is raised (a dart used up in the blow still took its time).
+      let delay = heroAttackDelay(hero);
       attack(ctx, hero, mob);
       // A berserker strikes faster the more foes surround him.
-      let delay = heroAttackDelay(hero);
       if (hero.subclass === 'berserker') {
         const around = NEIGHBOURS8.filter((n) => charAt(world, hero.depth, hero.pos + n)).length;
         if (around > 1) delay *= 1 - around / 16;
       }
-      spend(ctx, hero, delay);
+      spend(ctx, hero, delay + (ctx.extraTime ?? 0));
       break;
     }
 

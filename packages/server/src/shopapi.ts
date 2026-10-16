@@ -2,7 +2,8 @@ import { isPatron } from '@pd/core';
 import { CATALOG, DEFAULT_OWNED, earnOnly, type Equipped, type Item, itemById, passSku } from '../../client/src/catalog';
 import { levelProgress, PASS_LEVELS, type PassProgress, rewardAt, type Track } from '../../client/src/pass';
 import { type BotApi, type BotConfig, createInvoice, deliverGift, type Wallets } from './payments';
-import { decorProblem, equipProblem, type GiftNote, onceTaken, ownedItems, shopOf, type WalletView } from './wallet';
+import { cleanNote, connect, type Friend, friendByHandle, friendList, isHandle, type PlayerCard } from './friends';
+import { decorProblem, equipProblem, type GiftNote, noteKey, onceTaken, ownedItems, shopOf, type WalletView } from './wallet';
 
 /*
  * What the Mini App asks of the shop beyond a first look at the wallet (index.ts routes POST /shop/<route> here, once the player is
@@ -37,6 +38,8 @@ export interface ShopDeps {
   season: number;
   /** A fresh share-link code for a giver. */
   code(user: number): string;
+  /** What a player's own object tells of them to a friend: their name and class. Null if they are not a known player. Absent: no friends list. */
+  card?(user: number): Promise<PlayerCard | null>;
 }
 
 export interface Reply {
@@ -134,17 +137,57 @@ export async function giftInvoice(deps: ShopDeps, user: number, body: Record<str
   const sku = typeof body.sku === 'string' ? body.sku : '';
   const entry = itemById(sku);
   if (!entry || earnOnly(entry) || entry.category === 'pass' || entry.once) return fail(400, 'cannot be a gift');
+  const note = cleanNote(body.note);
+  if (!note.ok) return fail(400, note.error);
   if (body.link === true) {
     const code = deps.code(user);
     const result = await createInvoice(deps.api, user, sku, language, deps.now, { gift: { link: code }, season: deps.season });
-    return 'link' in result ? ok({ ...result, code }) : fail(400, result.error);
+    if (!('link' in result)) return fail(400, result.error);
+    await keepNote(deps, user, noteKey({ link: code }, sku), note.note);
+    return ok({ ...result, code });
   }
-  const to = typeof body.to === 'number' ? body.to : typeof body.to === 'string' && /^\d{1,15}$/.test(body.to) ? Number(body.to) : NaN;
+  // A friend of the list (an opaque handle, friends.ts), or any Telegram id.
+  let to = NaN;
+  if (typeof body.friend === 'string') {
+    const found = isHandle(body.friend) ? friendByHandle(shopOf(await deps.wallets.get(user)).connections, body.friend) : null;
+    if (found === null) return fail(400, 'bad friend');
+    to = found;
+  } else {
+    to = typeof body.to === 'number' ? body.to : typeof body.to === 'string' && /^\d{1,15}$/.test(body.to) ? Number(body.to) : NaN;
+  }
   if (!Number.isInteger(to) || to <= 0) return fail(400, 'bad friend');
   if (to === user) return fail(400, 'cannot be a gift');
   const owned = ownedItems(shopOf(await deps.wallets.get(to)));
   const result = await createInvoice(deps.api, user, sku, language, deps.now, { gift: { to }, owned, season: deps.season });
-  return 'link' in result ? ok(result) : fail(result.error === 'already owned' ? 409 : 400, result.error);
+  if (!('link' in result)) return fail(result.error === 'already owned' ? 409 : 400, result.error);
+  await keepNote(deps, user, noteKey({ to }, sku), note.note);
+  return ok(result);
+}
+
+/** Keeps the note for a gift about to be paid (the payment moves it onto the gift), or forgets an earlier one if there is none now. */
+async function keepNote(deps: ShopDeps, user: number, key: string, text: string | undefined): Promise<void> {
+  const had = shopOf(await deps.wallets.get(user)).notes?.[key];
+  if (text === undefined && !had) return;
+  await deps.wallets.apply(user, { kind: 'note', key, text: text ?? '', at: deps.now });
+}
+
+/**
+ * A launch from someone's invite or share link (`ref_<id>`, `daily_r<id>`): the two become friends who play, if the one who invited is a
+ * known player and is not the one who opened it. The start parameter is the link's own word; nothing but a real, known inviter counts.
+ */
+export async function connectByRef(deps: ShopDeps, user: number, inviter: number | null): Promise<Reply> {
+  if (inviter === null || inviter === user || !deps.card) return ok({ connected: false });
+  const known = await deps.card(inviter).catch(() => null);
+  if (!known) return ok({ connected: false });
+  await connect(deps, user, inviter, 'invite');
+  return ok({ connected: true });
+}
+
+/** The friends who play (the connections' names and classes, friends.ts) and the link to invite more. */
+export async function friendsOf(deps: ShopDeps, user: number): Promise<Reply> {
+  const connections = shopOf(await deps.wallets.get(user)).connections;
+  const friends: Friend[] = deps.card ? await friendList(connections, deps.card) : [];
+  return ok({ friends, invite: deps.config.appLink ? `${deps.config.appLink}?startapp=ref_${user}` : '' });
 }
 
 /** Opens a share link: its gift comes to this player's mail, if nobody else opened it first. */
@@ -159,7 +202,8 @@ export async function acceptGift(deps: ShopDeps, user: number, code: string): Pr
   // The first to be recorded keeps it: read again after taking, in case two opened it together.
   const after = await deps.wallets.apply(giver, { kind: 'takeLink', code, by: user });
   if (shopOf(after).links[code]?.by !== user) return fail(409, 'taken');
-  await deps.wallets.apply(user, { kind: 'gift', id: `l-${code}`, sku: link.sku, from: giver, at: link.at });
+  await deps.wallets.apply(user, { kind: 'gift', id: `l-${code}`, sku: link.sku, from: giver, at: link.at, ...(link.note ? { note: link.note } : {}) });
+  await connect(deps, user, giver, 'gift');
   return ok({ sku: link.sku });
 }
 
@@ -187,7 +231,7 @@ export interface GiftLetter {
   board: '';
   place: 0;
   at: number;
-  gifts: Array<{ type: 'item'; sku: string; from: number; name?: string }>;
+  gifts: Array<{ type: 'item'; sku: string; from: number; name?: string; note?: string }>;
   read?: boolean;
   claimed?: number;
 }
@@ -200,7 +244,7 @@ export function giftLetters(wallet: WalletView, now: number): GiftLetter[] {
     .filter((note) => note.claimed === undefined || note.claimed + CLAIMED_KEPT_MS > now)
     .map((note) => ({
       id: `gift:${note.id}`, kind: 'gift' as const, board: '' as const, place: 0 as const, at: note.at,
-      gifts: [{ type: 'item' as const, sku: note.sku, from: note.from, ...(note.name ? { name: note.name } : {}) }],
+      gifts: [{ type: 'item' as const, sku: note.sku, from: note.from, ...(note.name ? { name: note.name } : {}), ...(note.note ? { note: note.note } : {}) }],
       ...(note.claimed !== undefined ? { claimed: note.claimed, read: true } : {}),
     }));
 }

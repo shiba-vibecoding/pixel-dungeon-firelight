@@ -1,3 +1,4 @@
+import type { HeroClass } from '@pd/core';
 import {
   canonical, cleanEquipped, DECOR_MAX, DEFAULT_OWNED, type Equipped, emptyEquipped, grantedBy, type Item, itemById, passSku, type Slot, slotOf,
 } from './catalog';
@@ -18,6 +19,10 @@ import { initData, inTelegram, openInvoice } from './telegram';
 const CACHE_KEY = 'pd-shop2';
 const DEV_KEY = 'pd-shop2-dev';
 const DEV = import.meta.env.DEV && !inTelegram;
+const DEV_FRIENDS: FriendView[] = [
+  { h: '0123456789a0', name: 'Мира', heroClass: 'mage' }, { h: '0123456789a1', name: 'Толя', heroClass: 'warrior' },
+  { h: '0123456789a2', name: 'Саша', heroClass: 'huntress' }, { h: '0123456789a3', name: 'Глеб', heroClass: 'rogue' },
+];
 
 /** Where the player stands on the season pass (the server's passState). */
 export interface PassView {
@@ -36,7 +41,18 @@ export interface GiftNote {
   sku: string;
   from: number;
   name?: string;
+  note?: string;
   at: number;
+}
+
+/** The longest gift note (the server's friends.ts NOTE_MAX holds the same number, and checks it). */
+export const NOTE_MAX = 80;
+
+/** A friend who plays, as the shop lists them: a handle (to name them to the gift flow), a name and a class; never an id. */
+export interface FriendView {
+  h: string;
+  name: string;
+  heroClass?: HeroClass;
 }
 
 interface Saved {
@@ -105,12 +121,15 @@ class Cosmetics {
     return `${this.server.replace(/^ws/, 'http')}/shop/${route}`;
   }
 
-  private async post<T>(route: string, body: Record<string, unknown>): Promise<{ status: number; body: T | null }> {
+  private async post<T>(route: string, body: Record<string, unknown>): Promise<{ status: number; body: T | null; error?: string }> {
     try {
       const response = await fetch(this.url(route), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: initData(), ...body }),
       });
-      return { status: response.status, body: response.ok ? ((await response.json()) as T) : null };
+      if (response.ok) return { status: response.status, body: (await response.json()) as T };
+      // A refusal says why in a word or two (the shop's `error`).
+      const refused = (await response.json().catch(() => null)) as { error?: unknown } | null;
+      return { status: response.status, body: null, ...(typeof refused?.error === 'string' ? { error: refused.error } : {}) };
     } catch {
       return { status: 0, body: null };
     }
@@ -239,13 +258,15 @@ class Cosmetics {
   }
 
   /** Buys an item as a gift: for a friend by Telegram id, or behind a share link the bot sends on once it is paid. */
-  async give(item: Item, to: { friend: number } | { link: true }): Promise<BuyStatus | 'owned-by-friend' | 'bad-friend'> {
+  async give(item: Item, to: { friend: number } | { handle: string } | { link: true }, note = ''): Promise<BuyStatus | 'owned-by-friend' | 'bad-friend' | 'bad-note'> {
     if (DEV) return 'paid';
     if (!this.open) return 'failed';
-    const answer = await this.post<{ link?: string }>('gift', 'friend' in to ? { sku: item.id, to: to.friend } : { sku: item.id, link: true });
+    const target = 'friend' in to ? { to: to.friend } : 'handle' in to ? { friend: to.handle } : { link: true };
+    const text = note.trim();
+    const answer = await this.post<{ link?: string }>('gift', { sku: item.id, ...target, ...(text ? { note: text } : {}) });
     if (answer.status === 401) return 'expired';
     if (answer.status === 409) return 'owned-by-friend';
-    if (answer.status === 400) return 'bad-friend';
+    if (answer.status === 400) return answer.error === 'bad note' || answer.error === 'note too long' ? 'bad-note' : 'bad-friend';
     if (!answer.body?.link) return 'failed';
     return this.afterInvoice(answer.body.link, () => false);
   }
@@ -261,6 +282,21 @@ class Cosmetics {
       }
     }
     return status;
+  }
+
+  /** The friends who play (people the game has joined to this player by a real link or gift) and the link that invites more; null if the shop cannot say. */
+  async friends(): Promise<{ friends: FriendView[]; invite: string } | null> {
+    // A development build has no server: it shows a few made-up friends, so the screen can be tried.
+    if (DEV) return { friends: DEV_FRIENDS, invite: 'https://t.me/pixel_dungeon_gamebot/pixel_dungeon?startapp=ref_1' };
+    if (!this.open) return null;
+    const answer = await this.post<{ friends: FriendView[]; invite: string }>('friends', {});
+    return answer.body;
+  }
+
+  /** This launch came from a friend's invite or share link (its start parameter): the server makes the two friends who play, if it is real. */
+  async meetInviter(start: string): Promise<void> {
+    if (DEV || !this.open) return;
+    await this.post('ref', { start });
   }
 
   /** A friend's share link was opened: the gift is in this player's mail. */

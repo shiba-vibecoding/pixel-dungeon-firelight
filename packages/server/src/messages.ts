@@ -94,11 +94,21 @@ export function sanitizeAction(raw: unknown): Action | null {
     // ...or the scroll given up.
     case 'scrollCancel':
       return { type: 'scrollCancel' };
-    case 'equip':
-    case 'drop':
+    case 'equip': {
+      const item = slot(a.item);
+      if (item === null) return null;
+      if (a.replace === undefined) return { type: 'equip', item };
+      // Which ring comes off when two are worn (Ring.doEquip's WndOptions).
+      return a.replace === 0 || a.replace === 1 ? { type: 'equip', item, replace: a.replace } : null;
+    }
+    case 'drop': {
+      // From the pack, or something worn (EquipableItem.doDrop takes it off first).
+      const item = itemRef(a.item);
+      return item === null ? null : { type: 'drop', item };
+    }
     case 'sell': {
       const item = slot(a.item);
-      return item === null ? null : { type: a.type, item };
+      return item === null ? null : { type: 'sell', item };
     }
     case 'throw': {
       // Anything in the pack, or something worn (EquipableItem.cast takes it off first).

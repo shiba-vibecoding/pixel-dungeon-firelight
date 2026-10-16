@@ -142,6 +142,16 @@ export function attack(ctx: Ctx, attacker: Char, defender: Char, override: Attac
     if (!thrown && attacker.weapon) {
       familiarise(ctx, attacker, attacker.weapon, WEAPON_HITS_TO_KNOW);
       wear(ctx, attacker, attacker.weapon);
+      // MissileWeapon.proc: a thrown weapon used in the hand is spent: one of a stack goes, the last one is let go of (`doUnequip`,
+      // which takes its turn) and is gone. The boomerang is not a stack, and keeps.
+      const held = attacker.weapon;
+      if (itemDef(held.kind).category === 'missile' && held.kind !== 'missile.boomerang') {
+        if (held.qty > 1) held.qty--;
+        else {
+          attacker.weapon = null;
+          ctx.extraTime = (ctx.extraTime ?? 0) + 1;
+        }
+      }
     }
   }
 

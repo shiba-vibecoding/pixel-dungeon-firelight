@@ -30,7 +30,9 @@ import { SignalLimiter, validSignal } from './signals';
 import { DAY_SECONDS, type TelegramUser, verifyInitData, WEEK_SECONDS } from './telegram-auth';
 import { applyWalletChange, emptyRecord, parseWalletChange, type WalletRecord, walletView } from './wallet';
 import { walletsOf } from './walletsdo';
-import { acceptGift, claimPass, equip, type Facts, giftInvoice, invoice, noFacts, type Reply, shopState } from './shopapi';
+import { cleanWorn } from './worn';
+import { acceptGift, claimPass, connectByRef, equip, type Facts, friendsOf, giftInvoice, invoice, noFacts, type Reply, shopState } from './shopapi';
+import { type PlayerCard, refOfStart } from './friends';
 import { SEASON } from './boards';
 
 /*
@@ -721,10 +723,16 @@ async function playerFacts(env: Env, user: number): Promise<Facts> {
   return response.ok ? ((await response.json()) as Facts) : noFacts();
 }
 
+/** What a player's own object tells a friend of them: their name and the class of their latest run; null if they have never played (player.ts /card). */
+async function playerCard(env: Env, user: number): Promise<PlayerCard | null> {
+  const response = await env.PLAYER.get(env.PLAYER.idFromName(`tg${user}`)).fetch('https://player/card', { method: 'POST', body: '{}' });
+  return response.ok ? ((await response.json()) as PlayerCard | null) : null;
+}
+
 /** A fresh code for a share link: the giver's id, then eight random bytes (shopapi.ts acceptGift reads it back). */
 const shareCode = (user: number): string => `${user}_${[...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 
-const SHOP_ROUTES = ['me', 'invoice', 'equip', 'gift', 'accept', 'claim'] as const;
+const SHOP_ROUTES = ['me', 'invoice', 'equip', 'gift', 'accept', 'claim', 'friends', 'ref'] as const;
 type ShopRoute = (typeof SHOP_ROUTES)[number];
 
 async function shop(request: Request, env: Env, ctx: ExecutionContext, route: ShopRoute): Promise<Response> {
@@ -734,11 +742,11 @@ async function shop(request: Request, env: Env, ctx: ExecutionContext, route: Sh
   const body = await jsonBody(request);
   if (!body) return json({ error: 'bad json' }, 400);
   // Looking at one's wallet and wearing what one has are harmless, and the Mini App may stay open for days; buying and claiming take fresh init data.
-  const harmless = route === 'me' || route === 'equip';
+  const harmless = route === 'me' || route === 'equip' || route === 'friends';
   const user = await telegramUser(body, env, harmless ? WEEK_SECONDS : DAY_SECONDS);
   if (user === null) return json({ error: 'unauthorized' }, 401);
   const deps = {
-    wallets: walletsOf(env, (id) => ctx.waitUntil(patchWorn(env, id))), api: botApi(env.BOT_TOKEN), config: botConfig(env), facts: (id: number) => playerFacts(env, id), now: Date.now(), season: SEASON, code: shareCode,
+    wallets: walletsOf(env, (id) => ctx.waitUntil(patchWorn(env, id))), api: botApi(env.BOT_TOKEN), config: botConfig(env), facts: (id: number) => playerFacts(env, id), now: Date.now(), season: SEASON, code: shareCode, card: (id: number) => playerCard(env, id),
   };
   let reply: Reply;
   switch (route) {
@@ -753,6 +761,12 @@ async function shop(request: Request, env: Env, ctx: ExecutionContext, route: Sh
       break;
     case 'accept':
       reply = await acceptGift(deps, user.id, typeof body.code === 'string' ? body.code.slice(0, 64) : '');
+      break;
+    case 'friends':
+      reply = await friendsOf(deps, user.id);
+      break;
+    case 'ref':
+      reply = await connectByRef(deps, user.id, refOfStart(body.start));
       break;
     case 'claim':
       reply = await claimPass(deps, user.id, body.track === 'paid' ? 'paid' : 'free');
@@ -829,7 +843,7 @@ async function daily(request: Request, env: Env, date: string): Promise<Response
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
-    const shopRoute = /^\/shop\/(me|invoice|equip|gift|accept|claim)$/.exec(url.pathname);
+    const shopRoute = /^\/shop\/(me|invoice|equip|gift|accept|claim|friends|ref)$/.exec(url.pathname);
     if (shopRoute) return shop(request, env, ctx, shopRoute[1] as ShopRoute);
     if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env, ctx);
     if (url.pathname === '/report' || url.pathname === '/reports') return reports(request, env);

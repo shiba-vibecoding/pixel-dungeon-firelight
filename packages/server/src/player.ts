@@ -303,6 +303,12 @@ export class Player extends DurableObject<Env> {
       const facts: Facts = { pass: p.pass ?? null, streakBest: p.streak.best, trophies: p.trophies.map((trophy) => ({ board: trophy.board, place: trophy.place })), badges: p.badges.earned, honour: p.honour ?? [], leagueBest: p.league?.best ?? 0 };
       return json(facts);
     }
+    if (url.pathname === '/card') {
+      // What a friend may see of this player (shopapi.ts friendsOf): a name and a class, and only if they have played.
+      const p = logic.profile;
+      const heroClass = p.history[0]?.heroClass ?? (Object.keys(p.bestByClass)[0] as HeroClass | undefined);
+      return json(p.games > 0 ? { name: p.name, ...(heroClass ? { heroClass } : {}) } : null);
+    }
     if (url.pathname === '/worn') return json(await this.worn(logic, body.player));
     if (url.pathname === '/league') return json(await this.league(logic, body, now));
     if (url.pathname === '/circle') return this.circle(logic, body, now);

@@ -1,5 +1,5 @@
 import { effectiveLevel } from './wear';
-import { armorStats, createItem, type Item, type ItemKind, missileStats, type WeaponStats, weaponStats } from './items';
+import { armorStats, createItem, type Item, itemDef, type ItemKind, missileStats, type WeaponStats, weaponStats } from './items';
 import type { Rng } from './rng';
 import type { Action, PlanStep } from './world';
 import type { PendingScroll } from './scrolls';
@@ -226,6 +226,12 @@ export const isHungry = (hero: Hero): boolean => hero.hunger >= HUNGRY;
 
 /** The numbers of the weapon in hand, or of bare fists (Hero.damageRoll without a weapon: 1 to STR-9). */
 export function heroWeapon(hero: Hero): WeaponStats {
+  // A thrown weapon held in the hand (a huntress's or a rogue's): its own numbers; a huntress is deft with them (Weapon.acuracyFactor and
+  // speedFactor take two points off its strength requirement).
+  if (hero.weapon && itemDef(hero.weapon.kind).category === 'missile') {
+    const missile = missileStats(hero.weapon);
+    return { min: missile.min, max: missile.max, str: missile.str - (hero.heroClass === 'huntress' ? 2 : 0), accuracy: 1, delay: missile.delay };
+  }
   return hero.weapon ? weaponStats(hero.weapon) : { min: 1, max: Math.max(1, heroStr(hero) - 9), str: 0, accuracy: 1, delay: 1 };
 }
 

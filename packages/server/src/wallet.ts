@@ -3,6 +3,7 @@ import {
   canonical, cleanEquipped, DECOR_MAX, DEFAULT_OWNED, type Equipped, earnOnly, emptyEquipped, grantedBy, isPassSku, itemById, passSeason, passSku, type Slot, slotOf,
 } from '../../client/src/catalog';
 import { PASS_LEVELS, rewardAt, type Track } from '../../client/src/pass';
+import { cleanNote, CONNECTIONS_MAX, type Connection, isHandle, type Via } from './friends';
 
 /*
  * A change to a player's Pixel-Mart wallet, as the wallet's own Durable Object applies it (WalletStore, index.ts). The object reads
@@ -25,6 +26,8 @@ export interface GiftNote {
   /** Who gave it (Telegram id) and the name they go by. */
   from: number;
   name?: string;
+  /** The giver's note (friends.ts cleanNote). */
+  note?: string;
   at: number;
   /** When it was claimed from the mail. */
   claimed?: number;
@@ -36,6 +39,8 @@ export interface SentGift {
   /** Delivered to a friend by id, or waiting behind a share link. */
   to?: number;
   link?: string;
+  /** The note the giver wrote with it. */
+  note?: string;
   at: number;
   /** The friend's mail has it (by id); a link's gift is delivered when someone opens it. */
   delivered: boolean;
@@ -50,10 +55,18 @@ export interface ShopState {
   /** Gifts this player bought, by charge. */
   sent: Record<string, SentGift>;
   /** Share links this player bought, by code: who opened it. */
-  links: Record<string, { sku: string; charge: string; at: number; by?: number }>;
+  links: Record<string, { sku: string; charge: string; at: number; by?: number; note?: string }>;
   /** Pass levels claimed, by season. */
   pass: Record<string, { free: number[]; paid: number[] }>;
+  /** Notes written for gifts not yet paid for, by what they are for (see noteKey); few, and short-lived. Optional: older wallets have none. */
+  notes?: Record<string, { text: string; at: number }>;
+  /** The players this player is connected to by a real link or gift, by their id (friends.ts). Optional: older wallets have none. */
+  connections?: Record<string, Connection>;
 }
+
+/** How many unpaid notes a wallet keeps, and for how long (ms). */
+export const NOTES_KEPT = 10;
+export const NOTE_TTL_MS = 3 * 86_400_000;
 
 export const emptyShop = (): ShopState => ({ grants: {}, equipped: emptyEquipped(), inbox: [], sent: {}, links: {}, pass: {} });
 
@@ -64,11 +77,18 @@ export const shopOf = (wallet: WalletView): ShopState => wallet.shop ?? emptySho
 
 export type GiftTarget = { to: number } | { link: string };
 
+/** What an unpaid note is kept under: a share link's code, or the friend and the thing for a gift by id (the payment names both). */
+export const noteKey = (target: GiftTarget, sku: string): string => ('link' in target ? `l:${target.link}` : `g:${target.to}:${sku}`);
+
 export type WalletChange =
   | { kind: 'pay'; sku: string; charge: string; stars: number; at: number; expiresAt?: number; gift?: GiftTarget }
   | { kind: 'refund'; charge: string }
   /** A gift lands in this player's mail (the giver's wallet is not touched). */
-  | { kind: 'gift'; id: string; sku: string; from: number; name?: string; at: number }
+  | { kind: 'gift'; id: string; sku: string; from: number; name?: string; note?: string; at: number }
+  /** The giver's wallet: the note for a gift about to be paid (empty text: no note). */
+  | { kind: 'note'; key: string; text: string; at: number }
+  /** Both ends of a link or a gift: this player is connected to `with` (idempotent; `h` is the handle if it is new). */
+  | { kind: 'connect'; with: number; via: Via; at: number; h: string }
   /** The giver's wallet: the gift reached the friend's mail. */
   | { kind: 'delivered'; charge: string }
   | { kind: 'claimGift'; id: string; at: number }
@@ -155,6 +175,8 @@ const clone = (shop: ShopState | undefined): ShopState => {
     sent: { ...base.sent },
     links: { ...base.links },
     pass: Object.fromEntries(Object.entries(base.pass).map(([season, claimed]) => [season, { free: [...claimed.free], paid: [...claimed.paid] }])),
+    ...(base.notes ? { notes: { ...base.notes } } : {}),
+    ...(base.connections ? { connections: { ...base.connections } } : {}),
   };
 };
 
@@ -199,11 +221,18 @@ function payItem(record: WalletRecord, change: Extract<WalletChange, { kind: 'pa
   const shop = clone(record.shop);
   if (again) return { ...record, wallet, shop };
   if (change.gift) {
+    // The note written for this gift before it was paid goes with it, and is no longer pending.
+    const key = noteKey(change.gift, change.sku);
+    const note = shop.notes?.[key]?.text;
+    if (shop.notes && key in shop.notes) {
+      delete shop.notes[key];
+      if (Object.keys(shop.notes).length === 0) delete shop.notes;
+    }
     shop.sent[change.charge] = {
       sku: change.sku, at: change.at, delivered: 'link' in change.gift,
-      ...('to' in change.gift ? { to: change.gift.to } : { link: change.gift.link }),
+      ...('to' in change.gift ? { to: change.gift.to } : { link: change.gift.link }), ...(note ? { note } : {}),
     };
-    if ('link' in change.gift) shop.links[change.gift.link] = { sku: change.sku, charge: change.charge, at: change.at };
+    if ('link' in change.gift) shop.links[change.gift.link] = { sku: change.sku, charge: change.charge, at: change.at, ...(note ? { note } : {}) };
   } else {
     shop.grants[`charge:${change.charge}`] = grantedBy(change.sku);
   }
@@ -214,8 +243,27 @@ function applyShopChange(shop: ShopState, change: Exclude<WalletChange, { kind: 
   switch (change.kind) {
     case 'gift':
       if (shop.inbox.some((note) => note.id === change.id) || !itemById(canonical(change.sku))) return shop;
-      shop.inbox = [{ id: change.id, sku: change.sku, from: change.from, at: change.at, ...(change.name ? { name: change.name.slice(0, 32) } : {}) }, ...shop.inbox].slice(0, INBOX_MAX);
+      shop.inbox = [{
+        id: change.id, sku: change.sku, from: change.from, at: change.at, ...(change.name ? { name: change.name.slice(0, 32) } : {}),
+        ...(change.note ? { note: change.note } : {}),
+      }, ...shop.inbox].slice(0, INBOX_MAX);
       return shop;
+    case 'note': {
+      const notes = Object.fromEntries(Object.entries(shop.notes ?? {}).filter(([key, kept]) => key !== change.key && kept.at + NOTE_TTL_MS > change.at));
+      if (change.text) notes[change.key] = { text: change.text, at: change.at };
+      const kept = Object.entries(notes).sort((a, b) => b[1].at - a[1].at).slice(0, NOTES_KEPT);
+      if (kept.length > 0) shop.notes = Object.fromEntries(kept);
+      else delete shop.notes;
+      return shop;
+    }
+    case 'connect': {
+      const key = String(change.with);
+      const connections = shop.connections ?? {};
+      // Already connected (by whatever first), or the list is full: nothing is added or changed. Never to oneself.
+      if (connections[key] || Object.keys(connections).length >= CONNECTIONS_MAX || !Number.isSafeInteger(change.with) || change.with <= 0) return shop;
+      shop.connections = { ...connections, [key]: { at: change.at, via: change.via, h: change.h } };
+      return shop;
+    }
     case 'delivered':
       if (shop.sent[change.charge]) shop.sent[change.charge] = { ...shop.sent[change.charge]!, delivered: true };
       return shop;
@@ -299,7 +347,23 @@ export function parseWalletChange(raw: unknown): WalletChange | null {
       const from = int(c.from);
       const at = num(c.at);
       if (!id || !sku || from === null || at === null) return null;
-      return { kind: 'gift', id, sku, from, at, ...(typeof c.name === 'string' && c.name ? { name: c.name.slice(0, 32) } : {}) };
+      const note = cleanNote(c.note);
+      return {
+        kind: 'gift', id, sku, from, at, ...(typeof c.name === 'string' && c.name ? { name: c.name.slice(0, 32) } : {}),
+        ...(note.ok && note.note ? { note: note.note } : {}),
+      };
+    }
+    case 'note': {
+      const key = str(c.key);
+      const at = num(c.at);
+      const text = cleanNote(c.text);
+      return key && at !== null && text.ok ? { kind: 'note', key, text: text.note ?? '', at } : null;
+    }
+    case 'connect': {
+      const other = int(c.with);
+      const at = num(c.at);
+      if (other === null || other <= 0 || at === null || !isHandle(c.h) || (c.via !== 'gift' && c.via !== 'invite')) return null;
+      return { kind: 'connect', with: other, via: c.via, at, h: c.h };
     }
     case 'delivered': {
       const charge = str(c.charge);

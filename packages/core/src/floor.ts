@@ -260,6 +260,8 @@ export interface Ctx {
   floor: Floor;
   rng: Rng;
   effects: Effect[];
+  /** Time the action took besides its own, set by what happened in it (a dart spent in the hand: Item.doUnequip's spend). */
+  extraTime?: number;
 }
 
 export type Char = Hero | Mob;

@@ -141,7 +141,8 @@ describe('dragging gear', () => {
       const drops = gearDrops(hero, from, item);
       expect(drops.get('pack')).toEqual(action);
       hero.items.forEach((_, i) => expect(drops.get(String(i))).toEqual(action));
-      expect(drops.has('away')).toBe(false);
+      // Worn, it may also be dropped: off first, then down.
+      expect(drops.get('away')).toEqual({ type: 'drop', item: 'ring' in from ? `ring${from.ring}` : 'worn' in from ? from.worn : -1 });
       // And the core takes it: the item is off, back in the pack.
       const copy = structuredClone(world);
       expect(act(copy, 'p', action).ok).toBe(true);
@@ -155,11 +156,40 @@ describe('dragging gear', () => {
     for (const [index, places] of kinds) {
       const drops = gearDrops(hero, { index }, hero.items[index]!);
       expect([...drops.keys()].sort()).toEqual([...places].sort());
-      for (const action of drops.values()) {
-        expect(action).toEqual({ type: 'equip', item: index });
+      for (const [place, action] of drops) {
+        // A ring dropped on a place says which ring it takes the place of, should both hands be full.
+        expect(action).toEqual(place.startsWith('ring') ? { type: 'equip', item: index, replace: Number(place.slice(4)) } : { type: 'equip', item: index });
         expect(act(structuredClone(world), 'p', action).ok).toBe(true);
       }
     }
+  });
+
+  it('a ring dropped on a place with both hands full replaces the ring there', () => {
+    const { world, hero } = kit();
+    act(world, 'p', { type: 'equip', item: 1 });
+    act(world, 'p', { type: 'equip', item: 1 });
+    hero.items.push(createItem('ring.mending'));
+    const index = hero.items.length - 1;
+    const [first, second] = hero.rings;
+    for (const [place, off] of [['ring0', first], ['ring1', second]] as const) {
+      const copy = structuredClone(world);
+      expect(act(copy, 'p', gearDrops(hero, { index }, hero.items[index]!).get(place)!).ok).toBe(true);
+      const held = heroById(copy, 'p')!;
+      expect(held.rings.map((r) => r.kind)).toContain('ring.mending');
+      expect(held.items.some((i) => i.kind === off!.kind)).toBe(true);
+    }
+  });
+
+  it('a thrown weapon goes to the hand only for a huntress or a rogue', () => {
+    const { world, hero } = kit();
+    hero.items.push(createItem('missile.dart', 4));
+    const index = hero.items.length - 1;
+    const equip = gearDrops(hero, { index }, hero.items[index]!).get('weapon')!;
+    expect(act(structuredClone(world), 'p', equip).ok).toBe(false);
+    const rogue = createWorld(6);
+    const r = addHero(rogue, { id: 'p', name: 'P', heroClass: 'rogue' });
+    r.items = [createItem('missile.dart', 4)];
+    expect(act(rogue, 'p', gearDrops(r, { index: 0 }, r.items[0]!).get('weapon')!).ok).toBe(true);
   });
 
   it('taking off, armour included, keeps the backpack open', () => {

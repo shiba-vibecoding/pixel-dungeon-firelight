@@ -66,3 +66,6 @@
 .pd-camp-icon.photo { --ico: url("/assets/ui/fl-camera.png"); }
 .pd-camp-icon.photo i::before { width: 32px; height: 32px; }
 .pd-mapbtn.photo { --ico: url("/assets/ui/fl-camera.png"); --iw: 16; --ih: 16; }
+/* The phone's map column has the camera under the zoom buttons, at their size; the wide screen has its own in the HUD's corner. */
+.pd-mapctl .pd-mapbtn.photo::before { width: calc(12 * var(--u)); height: calc(12 * var(--u)); }
+.pd-wide .pd-mapctl .pd-mapbtn.photo { display: none; }
