@@ -103,6 +103,17 @@ describe('the world kit of Claude Design', () => {
     for (const name of Object.values(BOLT_OF)) expect(kit.bolts[name]).toBeDefined();
   });
 
+  it('reads the sprite rules, and falls back on the designer’s numbers when a kit has none', () => {
+    expect(kit.sprites.selfLight).toBe(0.14);
+    expect(kit.sprites.shadow).toEqual({ width: 0.9, squash: 0.42, opacity: 0.55, offset: 0.08 });
+    expect(kit.sprites.fly).toEqual({ hover: 0.35, shadowScale: 0.7, shadowFade: 0.55, bobHz: 1.2, bobAmp: 0.06 });
+    expect(kit.sprites.rim).toEqual({ on: true, strength: 0.3, max: 0.6, px: 1 });
+    const bare = { ...raw } as Record<string, unknown>;
+    delete bare.sprites;
+    expect(parseKit(bare).sprites).toEqual(kit.sprites);
+    expect(() => parseKit({ ...raw, sprites: { shadow: { width: 'wide' } } })).toThrow(/sprites.shadow.width/);
+  });
+
   it('refuses a kit that is wrong, and says where', () => {
     const broken = JSON.parse(JSON.stringify(raw)) as { regions: { caves: { torch: { intensity: unknown } } } };
     broken.regions.caves.torch.intensity = 'bright';

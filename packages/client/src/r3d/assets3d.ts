@@ -5,6 +5,7 @@
  * few draws. Pixel art: nearest, no mipmaps; colour and glow are sRGB, roughness is linear.
  */
 import { CanvasTexture, NearestFilter, NoColorSpace, SRGBColorSpace, type Texture } from 'three';
+import { paintDoorTiles } from './doorart';
 import { type Kit, materialOf, parseKit } from './kit';
 
 declare const __BUILD__: { commit: string; date: string } | undefined;
@@ -122,6 +123,8 @@ export function buildTerrain(images: RegionImages, kit: Kit, region: number): Te
   glow.g.drawImage(premultiplied(images.emissive, images.emissive.width, images.emissive.height), 0, 0);
   // The wall tiles that glow (the prison's barred windows, the caves' gold ore) glow on their faces too: the deco face is the tile's own glow.
   glow.g.drawImage(premultiplied(images.emissive, images.emissive.width, images.emissive.height), 12 * 16, 0, 16, 16, 16, images.tiles.height + 16, 16, 16);
+  // The doors' own pieces (frame wood, steel, the slab seen from above), after the walls' rows, with a faint warm glow of their own.
+  paintDoorTiles(color.g, glow.g, images.tiles, width / 16);
   const rough = canvasOf(width, width);
   // The roughness of the tiles is in their map; the walls' sheet is as rough as the kit's wall material says.
   const gray = (value: number): string => `rgb(${Math.round(value * 255)},${Math.round(value * 255)},${Math.round(value * 255)})`;

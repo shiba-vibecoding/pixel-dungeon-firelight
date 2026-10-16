@@ -5,9 +5,9 @@
  * patch, a city's forge door, lava, a prison's barred window, a hall's rune). Values are the kit's, with its r169 multipliers.
  */
 import { Color, PointLight, type Scene } from 'three';
-import { LENGTH, T, WIDTH } from '@pd/core';
+import { HEIGHT, LENGTH, T, WIDTH } from '@pd/core';
 import { type Kit, type Lights, type RegionKit, hex } from './kit';
-import { K_WATER, type LevelGeom } from './levelgeom';
+import { isDoorTile, K_WALL, K_WATER, type LevelGeom } from './levelgeom';
 
 /** A source of light in the level, from which the nearest are lit. */
 export interface Source {
@@ -80,6 +80,18 @@ export function sourcesOf(kit: Kit, region: RegionKit, geom: LevelGeom, depthTor
   return out;
 }
 
+/** The strongest light on a figure (LightRig.strongest): which way it lies, its colour, and how hard it rims the figure. */
+export interface Strongest {
+  /** Unit vector on the floor plane from the figure toward the light. */
+  ux: number;
+  uz: number;
+  r: number;
+  g: number;
+  b: number;
+  /** 0 to the kit's rim maximum. */
+  strength: number;
+}
+
 /** Scratch for the nearest three, so choosing allocates nothing. */
 const top = new Int32Array(3);
 const topD = new Float64Array(3);
@@ -95,6 +107,10 @@ export class LightRig {
   readonly accent: PointLight;
   private sources: Source[] = [];
   private d2 = new Float64Array(0);
+  /** The sources within reach of the hero (explored, near), chosen in assign(): what a figure's rim light is picked from. */
+  private near = new Int32Array(0);
+  private nearCount = 0;
+  private readonly rgb = new Float32Array(3);
   /** The source each of the four static lights shows (an index into `sources`), or -1. */
   private readonly slots = [-1, -1, -1, -1];
   private lights = new Array<PointLight>();
@@ -119,6 +135,8 @@ export class LightRig {
   configure(lights: Lights, sources: Source[], shadowLights: number): void {
     this.sources = sources;
     this.d2 = new Float64Array(sources.length);
+    this.near = new Int32Array(sources.length);
+    this.nearCount = 0;
     this.slots.fill(-1);
     this.hero.color.setHex(lights.hero.color);
     this.heroBase = lights.hero.intensity;
@@ -147,13 +165,16 @@ export class LightRig {
   assign(hx: number, hz: number, explored: readonly boolean[], accents: number): void {
     const n = this.sources.length;
     const sources = this.sources;
+    let nearCount = 0;
     for (let i = 0; i < n; i++) {
       const s = sources[i]!;
       const dx = s.x - hx;
       const dz = s.z - hz;
       const d = dx * dx + dz * dz;
       this.d2[i] = explored[s.cell] && d <= REACH * REACH ? d : Infinity;
+      if (this.d2[i] !== Infinity) this.near[nearCount++] = i;
     }
+    this.nearCount = nearCount;
     // Torches first: the two nearest cast the shadows.
     this.nearest(true, -1, -1);
     this.fill(0, 2, top, true);
@@ -224,6 +245,44 @@ export class LightRig {
     }
   }
 
+  /**
+   * The light that rims a figure standing at (x, z), 0.5 up: of the sources near the hero, the one with the most
+   * `k * intensity * (1 - d / distance)^2 / max(d, 0.6)` (capped at `max`), as the sprite rules say. False if none reaches it.
+   * Reads the list assign() made, allocates nothing.
+   */
+  strongest(x: number, z: number, k: number, max: number, out: Strongest): boolean {
+    const sources = this.sources;
+    let best = 0;
+    let bi = -1;
+    for (let n = 0; n < this.nearCount; n++) {
+      const i = this.near[n]!;
+      const s = sources[i]!;
+      const dx = s.x - x;
+      const dy = s.y - 0.5;
+      const dz = s.z - z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (d >= s.distance) continue;
+      const fall = 1 - d / s.distance;
+      const w = (k * s.intensity * fall * fall) / Math.max(d, 0.6);
+      if (w > best) {
+        best = w;
+        bi = i;
+      }
+    }
+    if (bi < 0) return false;
+    const s = sources[bi]!;
+    const dx = s.x - x;
+    const dz = s.z - z;
+    const len = Math.hypot(dx, dz) || 1;
+    out.ux = dx / len;
+    out.uz = dz / len;
+    out.r = ((s.color >> 16) & 255) / 255;
+    out.g = ((s.color >> 8) & 255) / 255;
+    out.b = (s.color & 255) / 255;
+    out.strength = Math.min(max, best);
+    return true;
+  }
+
   /** The nearest source's kind of the slot, for tests and the overlay: the index in the sources, or -1. */
   slot(i: number): number {
     return this.slots[i] ?? -1;
@@ -251,3 +310,80 @@ export class LightRig {
 /** The colour of a '#rrggbb' as the number Three.js takes, kept here so callers need one import. */
 export const colour = (css: string): Color => new Color(css);
 
+
+/** How far a baked pool reaches from a torch, and from other fixed light (a share of its own reach), cells. */
+const POOL_REACH_TORCH = 6;
+const POOL_REACH_MAX = 6;
+/** How strong the pool is at the middle of each kind of fire (1: the whole of the pool strength). */
+const POOL_TORCH = 0.7;
+
+/** Whether a straight line of cells from (x0, z0) to (x1, z1) is open: no wall or door between them (the ends do not count). */
+function clear(kinds: Uint8Array, x0: number, z0: number, x1: number, z1: number): boolean {
+  const dx = Math.abs(x1 - x0);
+  const dz = Math.abs(z1 - z0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sz = z0 < z1 ? 1 : -1;
+  let err = dx - dz;
+  let x = x0;
+  let z = z0;
+  while (x !== x1 || z !== z1) {
+    const e2 = err * 2;
+    if (e2 > -dz) { err -= dz; x += sx; }
+    if (e2 < dx) { err += dx; z += sz; }
+    if ((x !== x1 || z !== z1) && kinds[x + z * WIDTH] === K_WALL) return false;
+  }
+  return true;
+}
+
+/**
+ * The light of the level's fixed fires as one rgb byte triple a cell (the fog texture's other three channels): every source
+ * (wall torches, and the region's glowing tiles: fungus, forge doors, lava, barred windows) lays a soft pool of its colour on the cells
+ * round it that it can see, falling off to nothing at its reach. Worked out once per level (and again when a wall or a door goes),
+ * a few thousand steps; the shader adds it to what the cell shows, in sight or only remembered, with a slow flicker of its own.
+ */
+export function bakePools(sources: readonly Source[], kinds: Uint8Array, out: Uint8Array = new Uint8Array(LENGTH * 3)): Uint8Array {
+  const sum = new Float32Array(LENGTH * 3);
+  for (const s of sources) {
+    const ox = Math.floor(s.x);
+    const oz = Math.floor(s.z);
+    if (ox < 0 || oz < 0 || ox >= WIDTH || oz * WIDTH >= LENGTH) continue;
+    const reach = s.torch ? POOL_REACH_TORCH : Math.min(POOL_REACH_MAX, Math.max(2.5, s.distance));
+    // The strength follows the kit's intensity, a torch at its usual 11 to 14 being the most.
+    const strength = s.torch ? POOL_TORCH : Math.min(0.55, 0.12 + s.intensity * 0.14);
+    const r = Math.ceil(reach);
+    const cr = ((s.color >> 16) & 255) / 255;
+    const cg = ((s.color >> 8) & 255) / 255;
+    const cb = (s.color & 255) / 255;
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = ox + dx;
+        const z = oz + dz;
+        if (x < 0 || z < 0 || x >= WIDTH || z >= HEIGHT) continue;
+        const d = Math.hypot(x + 0.5 - s.x, z + 0.5 - s.z);
+        if (d >= reach) continue;
+        if (!clear(kinds, ox, oz, x, z)) continue;
+        const k = (1 - d / reach) ** 2 * strength;
+        const i = (x + z * WIDTH) * 3;
+        sum[i]! += cr * k;
+        sum[i + 1]! += cg * k;
+        sum[i + 2]! += cb * k;
+      }
+    }
+  }
+  for (let i = 0; i < out.length; i++) out[i] = Math.round(Math.min(1, sum[i]!) * 255);
+  return out;
+}
+
+/** A faint warm rim round every door (cold for a locked one): not a light, only a source of the baked pools, so a door in view reads in the dark. */
+export function doorGlow(terrain: Uint8Array): Source[] {
+  const out: Source[] = [];
+  for (let cell = 0; cell < LENGTH; cell++) {
+    const t = terrain[cell]!;
+    if (!isDoorTile(t)) continue;
+    out.push({
+      x: (cell % WIDTH) + 0.5, y: 0.8, z: Math.trunc(cell / WIDTH) + 0.5, cell, color: t === T.LOCKED_DOOR ? 0x9ab4e8 : 0xffa860, intensity: 0.6,
+      distance: 3, decay: 1, hz: 0, amp: 0, torch: false,
+    });
+  }
+  return out;
+}

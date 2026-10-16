@@ -1,0 +1,190 @@
+/* Firelight · Pixel-Mart (design part 5): the shop of looks, lit by the camp fire like the rest of the interface (part 2).
+   New classes fl-mart-*, fl-card, fl-price, fl-tryon, fl-track, fl-gift, fl-profile-card, fl-name-*; the window, buttons, tabs
+   and chips are the game's own (.pd-window, .pd-button, .pd-tab, .pd-chip). Pixel art is drawn at whole multiples, nearest. */
+
+.fl-mart { --window-max: 1180px; height: 100%; gap: var(--space-2); }
+.fl-mart canvas, .fl-mart img { image-rendering: pixelated; display: block; }
+.fl-mart-head { display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap-min, 44px); }
+.fl-mart-head .pd-titles { flex: 1; min-width: 0; }
+.fl-mart-head .pd-heading, .fl-mart-head .fl-motto { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 899px) { .fl-back .lbl { display: none; } .fl-back { min-width: 44px; padding: 0 8px; } .fl-mart-head:has(.fl-back) .fl-balance { display: none; } }
+.fl-mart-head .pd-heading { margin: 0; font: var(--text-title, 400 24px/28px var(--font-ui)); }
+.fl-motto { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+.fl-mart button { border: 0; cursor: pointer; }
+.fl-mart-main > * { flex: none; }
+@media (max-width: 899px) { .fl-mart-head .pd-heading { font: var(--text-label); } .fl-mart-head .fl-motto { display: none; } }
+.fl-mart-head .fl-back { flex: none; }
+.fl-balance { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; background: var(--stone-900); clip-path: var(--notch);
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark, #4a3424); font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--fire-gold, #ffcc66); white-space: nowrap; }
+.fl-star { width: calc(9px * var(--s, 2)); height: calc(9px * var(--s, 2)); background: url("/assets/mart/icon-stars.svg") center / contain no-repeat; image-rendering: pixelated; flex: none; }
+.fl-close { flex: none; width: var(--tap-min, 44px); height: var(--tap-min, 44px); display: grid; place-items: center; color: var(--ink-muted); font: var(--text-title); background: none; }
+
+.fl-mart-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.fl-mart-main { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding-right: 2px; }
+.fl-cosmetic { font: var(--text-caption); color: var(--ink-muted); display: flex; gap: 6px; align-items: center; }
+.fl-cosmetic::before { content: ""; width: 10px; height: 10px; background: var(--fire-flame, #ff9a3a); clip-path: polygon(50% 0, 100% 60%, 70% 100%, 30% 100%, 0 60%); flex: none; }
+
+/* Categories: a row of chips on a phone, a list on the left on a monitor. The signature one (campfires) burns. */
+.fl-cats { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; flex: none; }
+.fl-cat { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px 0 8px; background: var(--stone-800); clip-path: var(--notch);
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark, #4a3424); color: var(--ink-muted); font: var(--text-label); white-space: nowrap; }
+.fl-cat canvas { flex: none; }
+.fl-cat[aria-current="true"] { color: var(--fire-light, #ffeba4); background: var(--stone-700);
+  box-shadow: inset 0 calc(-2 * var(--u)) 0 var(--fire-gold, #ffcc66), inset 0 calc(-8 * var(--u)) 0 var(--glow-2, rgba(255, 154, 58, .08)); }
+.fl-cat.signature { color: var(--fire-gold, #ffcc66); }
+
+/* Section heads */
+.fl-sec { display: flex; flex-direction: column; gap: var(--space-2); }
+.fl-sec-head { display: flex; align-items: baseline; gap: var(--space-2); }
+.fl-sec-head h3 { margin: 0; flex: 1; font: var(--text-label); color: var(--fire-light, #ffeba4); text-shadow: 0 var(--u) 0 var(--fire-ash, #1a0a06); }
+.fl-sec-head .fl-more { font: var(--text-caption); color: var(--fire-gold, #ffcc66); }
+.fl-hint { margin: 0; font: var(--text-caption); color: var(--ink-muted); }
+
+/* Item cards */
+.fl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.fl-card { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--stone-800); clip-path: var(--notch);
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark, #4a3424); min-width: 0; }
+.fl-card-art { position: relative; height: 104px; display: grid; place-items: center; background: var(--stone-900); overflow: hidden;
+  background-image: radial-gradient(ellipse at 50% 100%, var(--glow-1, rgba(255, 154, 58, .16)), transparent 70%); }
+.fl-card-name { font: var(--text-label); color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 40px; }
+.fl-card-meta { display: flex; align-items: center; gap: 6px; min-height: 22px; font: var(--text-caption); color: var(--ink-muted); }
+.fl-card-meta .fl-price { margin-left: auto; flex: none; }
+.fl-card-meta > span:first-child:not(.fl-price):not(.fl-own) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-card-meta .fl-price.legend { padding: 0 4px 0 2px; }
+.fl-card .pd-chip { position: absolute; top: 10px; left: 10px; z-index: 2; }
+.fl-card.selected { box-shadow: inset 0 0 0 calc(2 * var(--u)) var(--fire-gold, #ffcc66), inset 0 calc(-8 * var(--u)) 0 var(--glow-2); }
+.fl-card.owned .fl-card-meta { color: var(--ink-muted); }
+.fl-own { margin-left: auto; color: var(--good, #44ff44); }
+.fl-card.legendary { background: linear-gradient(var(--stone-800), var(--stone-800)) padding-box, var(--fire-coal-deep, #6e161a); }
+.fl-card.legendary .fl-card-art { background-image: radial-gradient(ellipse at 50% 90%, rgba(255, 176, 64, .30), transparent 70%); }
+.fl-card.legendary::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-ember, #e8641f), inset 0 0 0 calc(2 * var(--u)) var(--fire-coal-deep, #6e161a); animation: fl-legend 1.2s steps(3) infinite alternate; }
+@keyframes fl-legend { to { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66), inset 0 0 0 calc(2 * var(--u)) var(--fire-ember, #e8641f); } }
+.fl-legend-chip { background: var(--fire-coal, #b22a2a) !important; color: var(--fire-light, #ffeba4) !important; }
+
+/* Price tags: a star and the number in gold; struck for the old price of a bundle; a coal tag for legendary. */
+.fl-price { display: inline-flex; align-items: center; gap: 5px; font: var(--text-label); color: var(--fire-gold, #ffcc66); white-space: nowrap; --s: 2; }
+.fl-price .fl-star { --s: 2; }
+.fl-price.old { color: var(--ink-muted); text-decoration: line-through; text-decoration-thickness: 2px; font: var(--text-caption); --s: 1; }
+.fl-price.big { font: var(--text-title); }
+.fl-price.legend { align-self: flex-start; padding: 0 8px 0 4px; background: var(--fire-coal-deep, #6e161a); clip-path: var(--notch); color: var(--fire-light, #ffeba4); }
+.fl-save { font: var(--text-caption); color: var(--void); background: var(--fire-gold, #ffcc66); padding: 0 6px; clip-path: var(--notch); }
+
+/* Season banner card: the art on top, the season under it */
+.fl-banner { display: flex; flex-direction: column; clip-path: var(--notch); background: var(--stone-800); overflow: hidden;
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark, #4a3424); }
+.fl-banner > canvas { width: 100% !important; height: auto !important; aspect-ratio: 160 / 60; }
+.fl-banner.compact > canvas { aspect-ratio: 160 / 46; object-fit: cover; object-position: 50% 85%; }
+.fl-banner-text { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-3) var(--space-3); }
+.fl-banner-text b { display: block; font: var(--text-title); color: var(--fire-light, #ffeba4); text-shadow: 0 var(--u) 0 var(--fire-ash, #1a0a06); font-weight: 400; }
+.fl-banner-text span { font: var(--text-caption); color: var(--ink-muted); }
+.fl-banner-text .grow { flex: 1; min-width: 180px; }
+.fl-xp { height: calc(4 * var(--u)); background: var(--stone-900); box-shadow: inset 0 0 0 var(--u) var(--void); margin: 6px 0 4px; }
+.fl-xp > i { display: block; height: 100%; background: linear-gradient(var(--fire-gold, #ffcc66) 50%, var(--fire-flame, #ff9a3a) 50%); }
+
+/* Bundle card */
+.fl-bundle { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); padding: var(--space-2); background: var(--stone-800); clip-path: var(--notch);
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark, #4a3424), inset 0 calc(-10 * var(--u)) 0 var(--glow-3, rgba(255, 154, 58, .035)); }
+.fl-bundle-art { background: var(--stone-900); clip-path: var(--notch); align-self: start; }
+@media (max-width: 899px) { .fl-bundle:not(.fl-gift-top) { grid-template-columns: 1fr !important; } .fl-bundle-art canvas { width: 100% !important; height: auto !important; } }
+.fl-bundle-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fl-bundle-info b { font: var(--text-title); color: var(--fire-light, #ffeba4); font-weight: 400; }
+.fl-bundle-items { display: flex; flex-wrap: wrap; gap: 4px; }
+.fl-bundle-items .fl-mini { width: 40px; height: 40px; display: grid; place-items: center; background: var(--stone-900); clip-path: var(--notch); }
+.fl-bundle-buy { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-top: auto; }
+.fl-bundle-buy .pd-button { flex: none; }
+
+/* Try-on: the hero by the fire, what is on him, buy or gift */
+.fl-tryon { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; }
+.fl-tryon-stage { position: relative; background: #000; clip-path: var(--notch); display: grid; place-items: center; overflow: hidden; }
+.fl-tryon-stage canvas { max-width: 100%; }
+.fl-tryon-name { position: absolute; left: 8px; bottom: 6px; font: var(--text-label); color: var(--fire-light, #ffeba4); text-shadow: var(--text-outline); }
+.fl-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.fl-slot { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; background: var(--stone-800); clip-path: var(--notch);
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark, #4a3424); font: var(--text-caption); font-size: 13px; line-height: 16px; color: var(--ink-muted); min-width: 0; overflow: hidden; }
+.fl-slot.changed { color: var(--fire-light, #ffeba4); box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66); }
+.fl-slot .fl-slot-art { width: 40px; height: 40px; display: grid; place-items: center; }
+.fl-tryon-buy { display: flex; gap: var(--space-2); }
+.fl-tryon-buy .pd-button { flex: 1; }
+
+/* Filters (classes, kinds) */
+.fl-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.fl-filter { height: 32px; min-height: 32px !important; line-height: 20px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; min-height: 32px; background: var(--stone-800); clip-path: var(--notch);
+  color: var(--ink-muted); font: var(--text-caption); }
+.fl-filter[aria-pressed="true"] { color: var(--void); background: var(--fire-gold, #ffcc66); }
+
+/* Season track: a free line and a paid line under the levels */
+.fl-track { display: grid; grid-auto-flow: column; grid-auto-columns: 96px; grid-template-columns: 76px; grid-template-rows: auto auto auto; gap: 4px; overflow-x: auto; padding-bottom: 6px; }
+.fl-track-label { position: sticky; left: 0; z-index: 3; display: grid; place-items: center start; padding: 0 6px; background: var(--stone-900); font: var(--text-caption); color: var(--ink-muted); }
+.fl-track-label.paid { color: var(--fire-gold, #ffcc66); }
+.fl-lvl { display: grid; place-items: center; height: 28px; font: var(--text-digits); color: var(--ink-muted); background: var(--stone-900); clip-path: var(--notch); }
+.fl-lvl.done { color: var(--void); background: var(--fire-gold, #ffcc66); }
+.fl-lvl.now { color: var(--fire-light); background: var(--fire-coal, #b22a2a); box-shadow: inset 0 calc(-2 * var(--u)) 0 var(--fire-gold); }
+.fl-reward { position: relative; height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--stone-800); clip-path: var(--notch);
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark, #4a3424); font: var(--text-caption); color: var(--ink-muted); text-align: center; }
+.fl-rw { display: flex; flex-direction: column; align-items: inherit; min-width: 0; }
+.fl-rw .st { font-size: 11px; }
+.fl-reward.paid { background: linear-gradient(var(--stone-800), #2a1c14); }
+.fl-reward.empty { background: transparent; box-shadow: none; }
+.fl-reward.claimed { color: var(--good, #44ff44); }
+.fl-reward.ready { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold); color: var(--fire-light); }
+.fl-reward.locked::after { content: ""; position: absolute; top: 4px; right: 4px; width: 14px; height: 16px; background: url("/assets/mart/icon-lock.svg") center / contain no-repeat; image-rendering: pixelated; }
+.fl-reward small { font: var(--text-caption); font-size: 12px; line-height: 14px; max-width: 90px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fl-reward { height: 100px; padding: 2px; }
+
+/* Gift */
+.fl-friends { display: flex; flex-direction: column; gap: 4px; }
+.fl-friend { display: flex; align-items: center; gap: var(--space-2); min-height: 52px; padding: 4px 10px 4px 6px; background: var(--stone-800); clip-path: var(--notch); }
+.fl-friend[aria-checked="true"] { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66); background: var(--stone-700); }
+.fl-friend .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fl-friend .who b { font: var(--text-label); font-weight: 400; color: var(--ink); }
+.fl-friend .who span { font: var(--text-caption); color: var(--ink-muted); }
+.fl-check { width: 20px; height: 20px; background: var(--stone-900); clip-path: var(--notch); }
+.fl-friend[aria-checked="true"] .fl-check { background: var(--fire-gold, #ffcc66); box-shadow: inset 0 0 0 4px var(--stone-700); }
+.fl-note { min-height: 64px; padding: 8px 10px; background: var(--stone-900); clip-path: var(--notch); font: var(--text-body); color: var(--ink-muted); }
+.fl-search { min-height: 40px; padding: 0 10px; display: flex; align-items: center; background: var(--stone-900); clip-path: var(--notch); font: var(--text-caption); color: var(--ink-muted); }
+
+/* Profile */
+.fl-profile-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--stone-800); clip-path: var(--notch);
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark, #4a3424); }
+.fl-profile-card .who { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fl-face { border: calc(4 * 3px) solid transparent; border-image-slice: 4 fill; border-image-width: calc(4 * 3px); image-rendering: pixelated; background: var(--stone-900); }
+.fl-title-plate { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px 0 6px; min-height: 30px; border: 8px solid transparent; border-image-slice: 4 fill;
+  border-image-width: 8px; image-rendering: pixelated; font: var(--text-caption); color: var(--ink); white-space: nowrap; box-sizing: border-box; padding: 0 4px 0 0; }
+.fl-title-plate.rare { color: #dcecff; } .fl-title-plate.legend { color: var(--fire-ash, #1a0a06); }
+.fl-name { font: var(--text-title); text-shadow: 0 var(--u) 0 var(--void); }
+.fl-name-ember { color: #ff9a3a; } .fl-name-gold { color: #ffcc66; } .fl-name-frost { color: #9fdcff; } .fl-name-moss { color: #8adc5a; }
+.fl-name-rose { color: #ff8aa8; } .fl-name-violet { color: #b48aff; } .fl-name-ash { color: #c8c2b8; }
+.fl-name-flame { background: linear-gradient(#fff6c8, #ffcc66 35%, #ff9a3a 65%, #e8641f); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none;
+  filter: drop-shadow(0 var(--u) 0 var(--void)); }
+.fl-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.fl-swatch { min-width: 0; padding: 6px 10px; background: var(--stone-900); clip-path: var(--notch); font: var(--text-label); display: flex; align-items: center; gap: 8px; }
+.fl-swatch[aria-pressed="true"] { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66); }
+.fl-board-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--stone-900); clip-path: var(--notch); font: var(--text-label); }
+.fl-board-row .place { color: var(--fire-gold); width: 28px; } .fl-board-row .score { margin-left: auto; color: var(--ink-muted); font: var(--text-digits); }
+
+/* Photo */
+.fl-photo-edit { position: relative; display: grid; place-items: center; }
+.fl-photo-shot { border: 24px solid transparent; border-image-slice: 8 fill; border-image-width: 24px; image-rendering: pixelated; position: relative; }
+.fl-photo-shot canvas { display: block; }
+.fl-sticker { position: absolute; image-rendering: pixelated; }
+
+/* Monitor: categories on the left, the try-on on the right */
+@media (min-width: 900px) {
+  .fl-mart { --window-max: 1180px; }
+  .fl-mart-body { flex-direction: row; gap: var(--space-4); }
+  .fl-cats { flex-direction: column; width: 200px; overflow: visible; }
+  .fl-cat { min-height: 44px; }
+  .fl-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .fl-aside { width: 320px; flex: none; display: flex; flex-direction: column; gap: var(--space-3); }
+}
+
+/* Phone: the season track runs down the screen, a row per level: level | free | pass */
+@media (max-width: 899px) {
+  .fl-track { grid-auto-flow: row; grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: none; grid-auto-columns: auto; overflow: visible; }
+  .fl-track-label { position: static; place-items: center; min-height: 28px; }
+  .fl-lvl { height: auto; }
+  .fl-reward { height: 64px; flex-direction: row; gap: 8px; justify-content: flex-start; padding: 0 8px; text-align: left; }
+  .fl-reward small { max-width: none; }
+  .fl-rw { align-items: flex-start; }
+}

@@ -224,7 +224,7 @@ export class Player extends DurableObject<Env> {
     if (url.pathname === '/facts') {
       // What the shop needs of the player (shopapi.ts): the pass's XP, the best streak and the trophies that earn things.
       const p = logic.profile;
-      const facts: Facts = { pass: p.pass ?? null, streakBest: p.streak.best, trophies: p.trophies.map((trophy) => ({ board: trophy.board, place: trophy.place })) };
+      const facts: Facts = { pass: p.pass ?? null, streakBest: p.streak.best, trophies: p.trophies.map((trophy) => ({ board: trophy.board, place: trophy.place })), badges: p.badges.earned };
       return json(facts);
     }
     if (url.pathname === '/honor') {

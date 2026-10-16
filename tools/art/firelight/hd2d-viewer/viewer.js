@@ -305,9 +305,7 @@ for (const p of props) {
 // Sprite rules (kit.sprites): an upright quad, feet at the bottom middle, leaned back LEAN toward the camera and stretched
 // 1 / cos(pitch - lean) so it keeps the proportions of its art; lit like the floor (the region tints it), never darker than
 // its self light; a rim of the strongest light nearby on the silhouette's side that faces it; a soft blob under the feet.
-// the sprite rules ship in hd2d-kit.json (firelight-sprites); the same values stand in when a kit without the block is linked
-const SP = kit.sprites || { camera_pitch: 70, lean: 20, feet: 0, selfLight: 0.14, shadow: { width: 0.9, squash: 0.42, opacity: 0.55, offset: 0.08 },
-  fly: { hover: 0.35, shadowScale: 0.7, shadowFade: 0.55, bob: { hz: 1.2, amp: 0.06 } }, rim: { on: true, strength: 0.3, max: 0.6, px: 1 }, castShadow: false };
+const SP = kit.sprites;
 const LEAN = THREE.MathUtils.degToRad(SP.lean);
 const STRETCH = 1 / Math.cos(pitch - LEAN);
 const sheetCache = {};
@@ -363,7 +361,7 @@ const rimLights = [];
 scene.add(new THREE.AmbientLight(env.ambient.color, env.ambient.intensity * kit.three.ambientScale));
 scene.add(new THREE.HemisphereLight(reg.hemi.sky, reg.hemi.ground, reg.hemi.intensity * kit.three.hemiScale));
 const hl = kit.hero_light;
-const heroL = new THREE.PointLight(hl.color, hl.intensity, hl.distance, hl.decay); heroL.position.set(hero[0] + 0.5, RULES ? SP.heroLightY ?? 1.8 : 0.9, hero[1] + 0.6); scene.add(heroL);
+const heroL = new THREE.PointLight(hl.color, hl.intensity, hl.distance, hl.decay); heroL.position.set(hero[0] + 0.5, RULES ? kit.sprites.heroLightY ?? 1.8 : 0.9, hero[1] + 0.6); scene.add(heroL);
 const tk = reg.torch; const torchTex = cellTexture(itemsImg, 4 * 16, 10 * 16, 16, 16);
 const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');

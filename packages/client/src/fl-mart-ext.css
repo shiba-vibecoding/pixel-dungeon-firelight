@@ -1,0 +1,25 @@
+/* Firelight · Pixel-Mart, the game's own additions to the designer's fl-mart.css: what the live storefront needs that the static mock drew
+   by other means (the camp scene as a canvas of its own, the avatar in a frame, the pieces of a bundle). Loaded after fl-mart.css. */
+
+.fl-tryon-camp { position: relative; max-width: 100%; margin: 0 auto; overflow: hidden; background: #000; }
+.fl-tryon-stage-box { display: block; }
+.fl-tryon-stage.photo { overflow: visible; }
+.fl-mart .pd-item-art { display: grid; place-items: center; min-height: 40px; }
+.fl-mart .pd-item-art.parts { grid-template-columns: repeat(2, auto); gap: 6px; padding: 6px; align-items: end; justify-items: center; }
+.fl-bundle-art .pd-item-art { min-width: 120px; }
+.fl-face { display: inline-block; flex: none; line-height: 0; }
+.fl-face-av { display: block; width: calc(24px * var(--s, 3)); height: calc(32px * var(--s, 3)); background: var(--atlas-avatars) no-repeat; background-size: calc(128px * var(--s, 3)) calc(32px * var(--s, 3));
+  background-position: calc(var(--av, 0) * -24px * var(--s, 3)) 0; image-rendering: pixelated; }
+.fl-face:not([style*="border-image"]) { background: var(--stone-900); }
+.fl-sticker-wall { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 12px; }
+.fl-sticker { position: absolute; image-rendering: pixelated; pointer-events: none; }
+.fl-photo-edit .fl-tryon-stage { overflow: visible; }
+.fl-profile-card .fl-face { margin: 0; }
+.fl-mart [data-tone="good"] { color: var(--good); }
+.fl-mart [data-tone="warn"] { color: var(--warn); }
+.fl-mart .fl-search input { width: 100%; background: transparent; border: 0; color: var(--ink); font: var(--text-body); outline: none; }
+.fl-card:focus-visible { outline: 2px solid var(--fire-gold, #ffcc66); outline-offset: -2px; }
+.fl-card { cursor: pointer; }
+.fl-card.starter { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66); }
+.fl-bundle.starter { box-shadow: inset 0 0 0 calc(var(--u)) var(--fire-gold, #ffcc66), inset 0 calc(-10 * var(--u)) 0 var(--glow-3, rgba(255, 154, 58, .035)); }
+.fl-mart-main .pd-note.center { text-align: center; }

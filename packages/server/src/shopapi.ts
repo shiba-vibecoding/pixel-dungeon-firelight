@@ -1,8 +1,8 @@
 import { isPatron } from '@pd/core';
-import { CATALOG, earnOnly, type Equipped, type Item, itemById, passSku } from '../../client/src/catalog';
+import { CATALOG, DEFAULT_OWNED, earnOnly, type Equipped, type Item, itemById, passSku } from '../../client/src/catalog';
 import { levelProgress, PASS_LEVELS, type PassProgress, rewardAt, type Track } from '../../client/src/pass';
 import { type BotApi, type BotConfig, createInvoice, deliverGift, type Wallets } from './payments';
-import { decorProblem, equipProblem, type GiftNote, ownedItems, shopOf, type WalletView } from './wallet';
+import { decorProblem, equipProblem, type GiftNote, onceTaken, ownedItems, shopOf, type WalletView } from './wallet';
 
 /*
  * What the Mini App asks of the shop beyond a first look at the wallet (index.ts routes POST /shop/<route> here, once the player is
@@ -16,9 +16,11 @@ export interface Facts {
   pass: PassProgress | null;
   streakBest: number;
   trophies: ReadonlyArray<{ board: string; place: number }>;
+  /** The badges the checked runs have won (the titles of the first boss and of the amulet are earned by them). */
+  badges?: readonly string[];
 }
 
-export const noFacts = (): Facts => ({ pass: null, streakBest: 0, trophies: [] });
+export const noFacts = (): Facts => ({ pass: null, streakBest: 0, trophies: [], badges: [] });
 
 export interface ShopDeps {
   wallets: Wallets;
@@ -41,13 +43,14 @@ export interface Reply {
 const ok = (body: Record<string, unknown> = {}): Reply => ({ status: 200, body });
 const fail = (status: number, error: string): Reply => ({ status, body: { error } });
 
-/** The earn-only items a player's facts have won (a streak, a place on a finished board). */
+/** The earn-only items a player's facts have won (a streak, a place on a finished board, a badge). */
 export function earnedBy(facts: Facts, catalog: readonly Item[] = CATALOG): string[] {
   const won: string[] = [];
   for (const entry of catalog) {
     const earn = entry.earn;
     if (!earn || earn.by === 'pass') continue;
     if (earn.by === 'streak' && facts.streakBest >= earn.days) won.push(entry.id);
+    if (earn.by === 'badge' && (facts.badges ?? []).includes(earn.badge)) won.push(entry.id);
     if (earn.by === 'board' && facts.trophies.some((trophy) => trophy.board.startsWith(`${earn.kind}:`) && trophy.place <= earn.place)) won.push(entry.id);
   }
   return won;
@@ -70,7 +73,8 @@ export async function shopState(deps: ShopDeps, user: number): Promise<Reply> {
   let wallet = await wallets.get(user);
   const facts = await deps.facts(user).catch(noFacts);
   const owned = ownedItems(shopOf(wallet));
-  const won = earnedBy(facts).filter((id) => !owned.has(id));
+  // The patronage gives the Patron's title while it lasts (it is granted on a look at the shop, and kept).
+  const won = [...earnedBy(facts), ...(isPatron(wallet, now) ? ['title.patron'] : [])].filter((id) => !owned.has(id));
   if (won.length > 0) wallet = await wallets.apply(user, { kind: 'earn', ids: won });
   // A gift paid for whose delivery failed is delivered now.
   for (const [charge, sent] of Object.entries(shopOf(wallet).sent)) {
@@ -81,7 +85,9 @@ export async function shopState(deps: ShopDeps, user: number): Promise<Reply> {
   const shop = shopOf(wallet);
   return ok({
     owned: wallet.owned, patronUntil: wallet.patronUntil ?? null, patron: isPatron(wallet, now), tipped: wallet.tipped ?? 0,
-    items: [...ownedItems(shop)], equipped: shop.equipped, gifts: waitingGifts(wallet), pass: passState(wallet, facts, deps.season),
+    items: [...DEFAULT_OWNED, ...ownedItems(shop)], equipped: shop.equipped, gifts: waitingGifts(wallet), pass: passState(wallet, facts, deps.season),
+    // The once-only offers this account has bought (the starter kit), so the shop can hide them.
+    taken: [...onceTaken(wallet)],
   });
 }
 
@@ -110,7 +116,7 @@ export async function equip(deps: ShopDeps, user: number, body: Record<string, u
 /** An invoice for an item, a bundle or the season pass (or the first shop's offers) for the player themselves. */
 export async function invoice(deps: ShopDeps, user: number, sku: string, language?: string): Promise<Reply> {
   const owned = ownedItems(shopOf(await deps.wallets.get(user)));
-  const result = await createInvoice(deps.api, user, sku, language, deps.now, { owned, season: deps.season });
+  const result = await createInvoice(deps.api, user, sku, language, deps.now, { owned, season: deps.season, took: onceTaken(await deps.wallets.get(user)) });
   return 'link' in result ? ok(result) : fail(result.error === 'already owned' ? 409 : 400, result.error);
 }
 
@@ -121,7 +127,7 @@ export async function invoice(deps: ShopDeps, user: number, sku: string, languag
 export async function giftInvoice(deps: ShopDeps, user: number, body: Record<string, unknown>, language?: string): Promise<Reply> {
   const sku = typeof body.sku === 'string' ? body.sku : '';
   const entry = itemById(sku);
-  if (!entry || earnOnly(entry) || entry.category === 'pass') return fail(400, 'cannot be a gift');
+  if (!entry || earnOnly(entry) || entry.category === 'pass' || entry.once) return fail(400, 'cannot be a gift');
   if (body.link === true) {
     const code = deps.code(user);
     const result = await createInvoice(deps.api, user, sku, language, deps.now, { gift: { link: code }, season: deps.season });

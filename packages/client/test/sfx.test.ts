@@ -119,16 +119,15 @@ describe('the sounds', () => {
 });
 
 describe('the sounds the game asks for', () => {
-  const KEPT = new Set(['boss', 'badge']);
   const sources = readdirSync(new URL('../src', import.meta.url)).filter((f) => f.endsWith('.ts'));
 
-  it('all exist (the two kept from the original aside)', () => {
+  it('all exist (there are no sound files: every sound is made here)', () => {
     const missing: string[] = [];
     for (const file of sources) {
       const text = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
       for (const match of text.matchAll(/audio\.(?:play|later)\((?:[\w.* ]+,\s*)?'([A-Za-z_]+)'/g)) {
         const name = match[1]!;
-        if (!hasSfx(name) && !KEPT.has(name)) missing.push(`${file}: ${name}`);
+        if (!hasSfx(name)) missing.push(`${file}: ${name}`);
       }
     }
     expect(missing).toEqual([]);

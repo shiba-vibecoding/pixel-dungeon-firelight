@@ -252,7 +252,7 @@ export class Motion {
       } else if (was === T.OPEN_DOOR && is === T.DOOR) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'close', ms: this.animMs(`doors${r}`, 'door', DOOR_CLOSE_MS, true) });
         // Shutting behind whoever left: only a soft knock of wood as it meets the frame.
-        audio.later(DOOR_CLOSE_MS * 0.7, 'knock', 0.75, 0.22, centre(cell));
+        audio.later(DOOR_CLOSE_MS * 0.5, 'door_close', 1, 0.7, centre(cell));
       } else if (was === T.HIGH_GRASS && is === T.GRASS) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'trample', ms: this.animMs(`grass${r}`, 'trample', TRAMPLE_MS) });
         const x = (cell % WIDTH) * TILE + TILE / 2;
@@ -265,6 +265,7 @@ export class Motion {
       } else if (was === T.LOCKED_DOOR) {
         // The key turns: the lock clicks and the door stands open.
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'locked', ms: this.animMs(`doors${r}`, 'locked', FADE_MS) });
+        audio.play('door_locked', 1, 0.8, centre(cell));
       } else if (was === T.BARRICADE) {
         this.tiles.push({ cell, from: was, to: is, start: now, kind: 'barricade', ms: this.animMs(`doors${r}`, 'barricade', FADE_MS) });
       } else {

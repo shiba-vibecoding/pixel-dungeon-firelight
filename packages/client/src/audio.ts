@@ -1,7 +1,8 @@
 import { onPause, onResume, paused } from './lifecycle';
 import { MusicPlayer, planLayers, type LayerPlan, SONGS, type SongName, songLength, type StingerName } from './music';
 import { type Place, heard } from './spatial';
-import { hasSfx, makeBuffer, SFX, type SfxName } from './sfx-synth';
+import { startFire } from './fireambience';
+import { makeBuffer, SFX, type SfxName } from './sfx-synth';
 
 /*
  * Sound effects, music and the dungeon's own air.
@@ -13,13 +14,11 @@ import { hasSfx, makeBuffer, SFX, type SfxName } from './sfx-synth';
  * duller the farther it is from the hero. No sound plays twice the same: pitch and
  * level wander a little, and a sound piling up on itself is thinned out.
  *
- * Firelight makes its own sounds (sfx-synth.ts): every effect is rendered once from a few
- * numbers and kept, so nothing is downloaded. The original's samples stay as files for the
- * two that are iconic (the boss's cry and the badge's chime), and for the player who sets
- * «Sounds: original» (then the whole set, and the original's title and dungeon tunes, are
- * fetched and played in place of ours). Each region has its air as well: a fire's crackle at
- * the camp, running water and drips in the sewers, the prison's hum and chains, wind and
- * falling pebbles in the caves, the dwarven city's forge, the demon halls' rumble and embers.
+ * Firelight makes all its own sounds (sfx-synth.ts): every effect is rendered once from a few
+ * numbers and kept, so nothing is downloaded, and there is no other set to choose. Each region
+ * has its air as well: a fire at the camp, running water and drips in the sewers, the prison's
+ * hum and chains, wind and falling pebbles in the caves, the dwarven city's forge, the demon
+ * halls' rumble and embers.
  *
  * The music is played here too (music.ts): a tune for the camp and one a region, each in three
  * layers (calm, danger, boss) that crossfade as enemies come into sight and a boss is fought,
@@ -29,45 +28,24 @@ import { hasSfx, makeBuffer, SFX, type SfxName } from './sfx-synth';
  * all starts on the first tap; everything is suspended while the app is hidden.
  */
 
-/** The original's samples, as files. */
-export type Sample =
-  | 'hit' | 'miss' | 'step' | 'water' | 'death' | 'levelup' | 'descend' | 'door_open' | 'secret' | 'alert'
-  | 'click' | 'boss' | 'gold' | 'item' | 'drink' | 'bones' | 'read' | 'teleport' | 'trap' | 'lightning' | 'burning'
-  | 'zap' | 'unlock' | 'ghost' | 'eat' | 'shatter' | 'dewdrop' | 'puff' | 'rocks' | 'falling' | 'blast' | 'evoke'
-  | 'beacon' | 'bee' | 'cursed' | 'badge' | 'degrade';
+export type Sound = SfxName;
 
-export type Sound = Sample | SfxName;
+/** The music: a tune played here (music.ts). */
+export type Track = SongName;
 
-/** The music: the original's tunes from files (the title's and the dungeon's), or one played here. */
-export type Track = 'theme' | 'game' | SongName;
 
-/** Whose sounds: Firelight's own, or the original's samples and tunes. */
-export type SoundSet = 'firelight' | 'original';
-
-const SONG_NAMES: ReadonlySet<string> = new Set<string>(SONGS);
-const isSong = (track: Track): track is SongName => SONG_NAMES.has(track);
-
-/** A tune playing, faded in and out through its own gain: from a file through an element, or played here. */
+/** A tune playing, faded in and out through its own gain. */
 interface Music {
   track: Track;
-  element: HTMLAudioElement | null;
-  player: MusicPlayer | null;
-  gain: GainNode | null;
+  player: MusicPlayer;
+  gain: GainNode;
 }
-
-const SAMPLES: readonly Sample[] = [
-  'hit', 'miss', 'step', 'water', 'death', 'levelup', 'descend', 'door_open', 'secret', 'alert',
-  'click', 'boss', 'gold', 'item', 'drink', 'bones', 'read', 'teleport', 'trap', 'lightning', 'burning', 'zap', 'unlock', 'ghost',
-  'eat', 'shatter', 'dewdrop', 'puff', 'rocks', 'falling', 'blast', 'evoke', 'beacon', 'bee', 'cursed', 'badge', 'degrade',
-];
-
-/** The two sounds that stay the original's in every set: the boss's cry and the badge's chime. */
-const KEPT: ReadonlySet<string> = new Set(['boss', 'badge']);
 
 /** How much a sound's pitch wanders from play to play (a fraction), if not the default. */
 const VARY: Partial<Record<Sound, number>> = {
   click: 0, tick: 0, levelup: 0, boss: 0, badge: 0, descend: 0, secret: 0.02, death: 0.02, quip: 0.03, equip: 0.03, alarm: 0, roar: 0.03,
   step: 0.07, stepGrass: 0.1, stepWood: 0.08, hit: 0.08, thump: 0.08, miss: 0.08, coin: 0.06, rustle: 0.12, drip: 0.15,
+  door_open: 0.1, door_locked: 0.08, door_close: 0.1,
 };
 const DEFAULT_VARY = 0.04;
 /** The fewest milliseconds between two of the same sound, and how many may sound at once. */
@@ -94,18 +72,6 @@ interface Air {
   /** Now-and-then sounds: which, how often (ms between), how loud, at what pitches. Each keeps its own time. */
   events: ReadonlyArray<{ sound: Sound; every: readonly [number, number]; volume: number; rate: readonly [number, number] }>;
 }
-
-/** The camp: a fire's body and hiss, crackles and a spark now and then. */
-const CAMP_AIR: Air = {
-  beds: [
-    { type: 'lowpass', hz: 340, q: 0.7, gain: 0.05, sway: 60, flicker: 0.5 },
-    { type: 'bandpass', hz: 2600, q: 0.6, gain: 0.011, flicker: 0.8 },
-  ],
-  events: [
-    { sound: 'crackle', every: [260, 1100], volume: 0.3, rate: [0.8, 1.35] },
-    { sound: 'ember', every: [2500, 6500], volume: 0.12, rate: [0.8, 1.2] },
-  ],
-};
 
 const AIRS: readonly Air[] = [
   // The sewers: water running somewhere, drips from the pipes.
@@ -193,9 +159,6 @@ function store(key: string, value: string): void {
 
 class Audio {
   private context: AudioContext | null = null;
-  /** The original's samples, decoded. */
-  private readonly files = new Map<Sample, AudioBuffer>();
-  private readonly loading = new Set<Sample>();
   /** Our sounds, rendered when first wanted (or in the quiet after the first tap). */
   private readonly made = new Map<SfxName, AudioBuffer>();
   private unlocked = false;
@@ -224,19 +187,17 @@ class Audio {
   /** The player's levels, 0 to 1. */
   musicVolume: number;
   soundVolume: number;
-  soundSet: SoundSet;
 
-  constructor(private readonly base: string) {
+  constructor() {
     let saved: string | null = null;
-    let set: string | null = null;
     try {
       saved = localStorage.getItem('pd-sound');
-      set = localStorage.getItem('pd-sound-set');
+      // The choice of «original sounds» is gone: only Firelight's own are played, and an old choice is forgotten.
+      localStorage.removeItem('pd-sound-set');
     } catch {
-      // Defaults to on, and to ours.
+      // Defaults to on.
     }
     this.enabled = saved !== 'off';
-    this.soundSet = set === 'original' ? 'original' : 'firelight';
     this.musicVolume = stored('pd-music-volume', 0.6);
     this.soundVolume = stored('pd-sound-volume', 0.8);
     const unlock = (): void => this.unlock();
@@ -245,8 +206,7 @@ class Audio {
     for (const type of ['pointerdown', 'touchend', 'click', 'keydown']) addEventListener(type, unlock, { capture: true });
     // Out of sight (the tab hidden, the window minimised, Telegram's «deactivated»): the music's timer and the context stop.
     onPause(() => {
-      this.music?.element?.pause();
-      this.music?.player?.pause();
+      this.music?.player.pause();
       void this.context?.suspend();
     });
     onResume(() => {
@@ -303,7 +263,6 @@ class Audio {
       this.musicFilter.connect(this.musicDuck).connect(this.musicBus).connect(master);
       this.stingers.connect(this.musicBus);
       this.levels();
-      this.loadFiles();
       this.warm();
       const white = noiseSource(12345);
       const noise = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
@@ -315,25 +274,6 @@ class Audio {
     }
     this.startMusic();
     this.startAir();
-  }
-
-  /** Fetches the original's samples that are wanted: the two kept, or all of them in the original set. */
-  private loadFiles(): void {
-    for (const name of SAMPLES) if (this.soundSet === 'original' || KEPT.has(name)) void this.load(name);
-  }
-
-  private async load(name: Sample): Promise<void> {
-    if (this.files.has(name) || this.loading.has(name) || !this.context) return;
-    this.loading.add(name);
-    try {
-      const response = await fetch(`${this.base}${name}.mp3`);
-      const data = await response.arrayBuffer();
-      this.files.set(name, await this.context.decodeAudioData(data));
-    } catch {
-      // Without that sound.
-    } finally {
-      this.loading.delete(name);
-    }
   }
 
   /** Renders our sounds in the quiet after the first tap, a few at a time, so the first fight does not stutter on them. */
@@ -355,12 +295,8 @@ class Audio {
     return buffer;
   }
 
-  /** The buffer to play for a sound: the original's file in the original set (and for the two kept), else ours. */
+  /** The buffer to play for a sound. */
   private buffer(name: Sound): AudioBuffer | undefined {
-    const file = this.files.get(name as Sample);
-    const ours = hasSfx(name);
-    if (!ours) return file;
-    if (file && (this.soundSet === 'original' || KEPT.has(name))) return file;
     return this.make(name);
   }
 
@@ -374,7 +310,6 @@ class Audio {
     this.air.gain.setTargetAtTime(on * this.soundVolume, at, 0.3);
     // The music's level is a gentle curve: half way sounds like half.
     this.musicBus.gain.setTargetAtTime(on * this.musicVolume * this.musicVolume * 0.75, at, 0.1);
-    if (this.music?.element && !this.music.gain) this.music.element.volume = on * this.musicVolume * 0.6;
   }
 
   /** The hero's place, world pixels: what sounds from somewhere is heard from here. */
@@ -449,16 +384,6 @@ class Audio {
     for (let i = 0; i < clinks; i++) this.later(i * 55 + Math.random() * 25, 'coin', 0.92 + i * 0.05, 0.5 - i * 0.05, at);
   }
 
-  /** Whose sounds are heard (the original's samples and tunes, or Firelight's own). */
-  setSoundSet(set: SoundSet): void {
-    if (set === this.soundSet) return;
-    this.soundSet = set;
-    store('pd-sound-set', set);
-    if (set === 'original') this.loadFiles();
-    // The title's and the sewers' tunes come from the files in the original set.
-    this.retune();
-  }
-
   playMusic(track: Track | null): void {
     if (track === this.track) return;
     this.track = track;
@@ -477,34 +402,13 @@ class Audio {
     const changed = plan.mode !== this.layer.mode;
     this.layer = plan;
     if (!changed) return;
-    this.music?.player?.setMode(plan.mode);
-    this.retune();
+    this.music?.player.setMode(plan.mode);
   }
 
   /** The music at rest: a new run or the title, nothing to be wary of yet. */
   calmDown(): void {
     this.layer = { mode: 'calm', holdUntil: 0 };
-    this.music?.player?.setMode('calm');
-    this.retune();
-  }
-
-  /** The track to hear for the one asked for: in the original set, the calm title and sewers play the original's tunes. */
-  private resolve(track: Track): Track {
-    if (this.soundSet === 'original' && this.layer.mode === 'calm') {
-      if (track === 'camp') return 'theme';
-      if (track === 'sewers') return 'game';
-    }
-    return track;
-  }
-
-  /** Changes the tune playing if what should be heard is not it (the set changed, or a fight began on a file's tune). */
-  private retune(): void {
-    if (!this.music || !this.track) return;
-    if (this.music.track === this.resolve(this.track)) return;
-    const old = this.music;
-    this.music = null;
-    this.fadeOut(old);
-    this.startMusic();
+    this.music?.player.setMode('calm');
   }
 
   /**
@@ -514,11 +418,10 @@ class Audio {
   private fadeOut(old: Music): void {
     const ctx = this.context;
     const stop = (): void => {
-      old.element?.pause();
-      old.player?.dispose();
-      old.gain?.disconnect();
+      old.player.dispose();
+      old.gain.disconnect();
     };
-    if (ctx && old.gain) {
+    if (ctx) {
       // Its own fade-in may not have begun yet: that is dropped, and the fade-out starts from where it is.
       old.gain.gain.cancelScheduledValues(ctx.currentTime);
       old.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
@@ -541,32 +444,13 @@ class Audio {
     if (!this.unlocked || !this.enabled || !this.track || paused()) return;
     const ctx = this.context;
     if (!this.music) {
-      const track = this.resolve(this.track);
-      if (isSong(track)) {
-        // A tune played here needs the audio graph; without one there is no such music.
-        if (!ctx || !this.musicFilter) return;
-        const gain = this.fadeIn(ctx, this.musicFilter);
-        this.music = { track, element: null, player: new MusicPlayer(ctx, track, gain, { mode: this.layer.mode }), gain };
-      } else {
-        const element = new window.Audio(`${this.base}${track}.mp3`);
-        element.loop = true;
-        element.preload = 'auto';
-        let gain: GainNode | null = null;
-        if (ctx && this.musicFilter) {
-          try {
-            const source = ctx.createMediaElementSource(element);
-            gain = this.fadeIn(ctx, this.musicFilter);
-            source.connect(gain);
-          } catch {
-            gain = null;
-          }
-        }
-        this.music = { track, element, player: null, gain };
-      }
+      // A tune played here needs the audio graph; without one there is no music.
+      if (!ctx || !this.musicFilter) return;
+      const gain = this.fadeIn(ctx, this.musicFilter);
+      this.music = { track: this.track, player: new MusicPlayer(ctx, this.track, gain, { mode: this.layer.mode }), gain };
       this.levels();
     }
-    if (this.music.element) void this.music.element.play().catch(() => undefined);
-    this.music.player?.play();
+    this.music.player.play();
   }
 
   /** The music dips for a moment under something that matters (a boss, a level gained, death). */
@@ -632,8 +516,14 @@ class Audio {
 
   private startAir(): void {
     const ctx = this.context;
-    const air = this.region === null ? CAMP_AIR : AIRS[this.region];
-    if (!ctx || !this.air || !this.noise || !air || this.playing) return;
+    if (!ctx || !this.air || !this.noise || this.playing) return;
+    // The camp's air is its fire, made fresh and never looped (fireambience.ts).
+    if (this.region === null) {
+      this.playing = startFire(ctx, this.air, this.noise);
+      return;
+    }
+    const air = AIRS[this.region];
+    if (!air) return;
     const gain = ctx.createGain();
     gain.gain.value = 0;
     gain.connect(this.air);
@@ -720,8 +610,7 @@ class Audio {
     this.levels();
     if (enabled) this.startMusic();
     else {
-      this.music?.element?.pause();
-      this.music?.player?.pause();
+      this.music?.player.pause();
     }
   }
 
@@ -738,4 +627,4 @@ class Audio {
   }
 }
 
-export const audio = new Audio(`${import.meta.env.BASE_URL}audio/`);
+export const audio = new Audio();

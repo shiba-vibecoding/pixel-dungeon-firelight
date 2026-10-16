@@ -12,6 +12,8 @@ import * as core from '@pd/core';
 import './ui.css';
 import './game.css';
 import './fl-fx.css';
+import './fl-mart.css';
+import './fl-mart-ext.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickIndex, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -37,6 +39,7 @@ import type { Frame3D, World3D } from './r3d/world3d';
 import { Governor, RefreshMeter } from './r3d/governor';
 import { FEET_PX, setPitchDeg, YS } from './r3d/project';
 import { beta3d, covers3D } from './r3d/setting';
+import { brightness } from './brightness';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
   askDrink, onWindow, reopenWindow, type WindowState, windowState,
@@ -64,6 +67,8 @@ import { netlog, sendNetlog } from './netlog';
 import { looksRows, setBadgeImages, showMart, showTreat } from './martui';
 import { showStore } from './storeui';
 import { cosmetics } from './cosmetics';
+import { fireArt, loadFl, onFlChange } from './flart';
+import { wornFor } from './wear';
 import { S as shopText } from './i18n-shop';
 import { quality } from './quality';
 import { type Launch, Motion } from './motion';
@@ -483,12 +488,23 @@ function setMode3d(on: boolean): void {
   if (canvas3d) canvas3d.style.display = on ? 'block' : 'none';
   document.body.classList.toggle('pd-3d', on);
   if (!on) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  paintBrightness();
   resize();
   drawPace.force();
 }
 
+/** The brightness setting in the classic view: a filter on the canvas (the 3D view lights itself, r3d/world3d.ts). */
+function paintBrightness(): void {
+  canvas.style.filter = mode3d || Math.abs(brightness.value - 1) < 0.01 ? '' : `brightness(${brightness.value})`;
+}
+brightness.onChange(() => {
+  paintBrightness();
+  drawPace.force();
+});
+paintBrightness();
+
 /** The 3D view is put away: its memory is given back, and with a message the switch goes off (it was too slow, or would not start). */
-function stop3d(message?: string): void {
+function stop3d(message?: string, quietUnlessChosen = false): void {
   r3?.dispose();
   r3 = null;
   frame3d = null;
@@ -497,8 +513,10 @@ function stop3d(message?: string): void {
   canvas3d = null;
   setMode3d(false);
   if (message) {
-    beta3d.set(false);
-    toast(message, { tone: 'warn' });
+    // 3D is on by default: a device that cannot start it at all is not told about a switch it never touched.
+    const tell = !quietUnlessChosen || beta3d.chosen;
+    beta3d.fallBack();
+    if (tell) toast(message, { tone: 'warn' });
   }
 }
 
@@ -511,7 +529,7 @@ function pick3d(level: Level, world: World): boolean {
   if (!covers3D(level.depth, levelRegion(level), Boolean(world.arena))) return false;
   const mod = lazy3d.ready();
   if (!mod) {
-    load(lazy3d, () => drawPace.force(), () => stop3d(t.render3dFailed));
+    load(lazy3d, () => drawPace.force(), () => stop3d(t.render3dFailed, true));
     return false;
   }
   // The world kit and the floor's region maps come first (a second or so, the first time): till then the floor is 2D.
@@ -519,7 +537,7 @@ function pick3d(level: Level, world: World): boolean {
   const region = levelRegion(level);
   const state = mod.prepare(base, assets, region);
   if (state === 'failed') {
-    stop3d(t.render3dFailed);
+    stop3d(t.render3dFailed, true);
     return false;
   }
   if (state === 'loading') return false;
@@ -535,14 +553,14 @@ function pick3d(level: Level, world: World): boolean {
     r3 = new mod.World3D(canvas3d, assets, { tier: governor.tier, phone, perf: perfOn, persp: cam50, reveal: new URLSearchParams(location.search).get('reveal') === '1', onLost: () => stop3d(t.render3dFailed) });
     governor.hold(2500);
     frame3d = {
-      now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0,
+      now: 0, camX: 0, camY: 0, zoom: 1, width: 1, height: 1, visible: [], explored: [], heaps: [], plants: undefined, gas: undefined, view, seeAll: false, focusX: 0, focusY: 0, myId: '',
     };
     r3.resize(canvas.width, canvas.height);
   } catch {
     canvas3d?.remove();
     canvas3d = null;
     r3 = null;
-    stop3d(t.render3dFailed);
+    stop3d(t.render3dFailed, true);
     return false;
   }
   return true;
@@ -1057,12 +1075,19 @@ function toTitle(ask = true): void {
   activeCamp.dress(homeDress());
 }
 
-/** What the camp wears from the catalogue: the campfire's style and the looks' tints. The rest waits for its art (cosmetics.ts hooks). */
+/** What the camp wears from the catalogue: the campfire's style (flame, logs, sparks, light), the decorations at their places, and what the hero wears. */
 const homeDress = (): CampDress => ({
-  fire: cosmetics.fire,
-  tint: Object.fromEntries((['warrior', 'mage', 'rogue', 'huntress'] as const).map((name) => [name, cosmetics.tint(name)])),
+  fire: fireArt(cosmetics.fire?.id ?? 'fire.classic') ?? null,
+  decor: cosmetics.decor.map((item) => item.id),
+  wear: (heroClass) => wornFor(heroClass as HeroClass),
 });
 cosmetics.onChange(() => activeCamp?.dress(homeDress()));
+// The designer's art arrives as it is asked for: the camp and the dungeon are drawn again with it.
+void loadFl();
+onFlChange(() => {
+  activeCamp?.dress(homeDress());
+  drawPace.force();
+});
 
 /** The journal and catalog; from the menu it goes back to the menu, from the corner button to the game. */
 function openJournal(onClose: () => void = hideOverlay): void {
@@ -3024,6 +3049,7 @@ function tick(now: number): void {
       f.seeAll = scene.seeAll;
       f.focusX = scene.focus.x;
       f.focusY = scene.focus.y;
+      f.myId = session.myId;
       r3.hz = refreshMeter.hz;
       const gap = lastDraw3d ? now - lastDraw3d : 0;
       lastDraw3d = now;

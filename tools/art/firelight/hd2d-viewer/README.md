@@ -13,7 +13,8 @@ node sheet-shot.js ../../../../docs/design/previews/firelight/world "lighting-sh
 ```
 
 `index.html` parameters: `r` region 0-4, `boss=1` the boss arena, `t` frozen time (flicker, scroll), `cells` width that fits,
-`dx`/`dz` camera offset in cells, `nomist`, `notorch`. Rooms are in `maps.js`.
+`dx`/`dz` camera offset in cells, `nomist`, `notorch`, `pitch` (70 = the game's camera), `close=1` the close rooms with three monsters,
+`rules=0` sprites as before the sprite rules, `norim`. `sprite-rules.html?lang=ru` is the sprite rules sheet. Rooms are in `maps.js`.
 Headless Chromium needs WebGL: `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` (set in render.js).
 
 The art scripts: `python3 tools/art/firelight/p3_kit.py` writes `hd2d-kit.json`, then `python3 tools/art/firelight/p3_art.py` draws the maps.

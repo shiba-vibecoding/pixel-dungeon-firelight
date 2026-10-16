@@ -318,8 +318,8 @@ export class Effects3D {
   }
 
   /** A blob of shade under a character or an item, `size` cells wide. */
-  shadowBlob(x: number, z: number, size: number): void {
-    this.soft.flat(x, 0.02, z, size, size * 0.7, 0, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], 0.01, 0.012, 0.03, 0.5);
+  shadowBlob(x: number, z: number, size: number, opacity = 0.55, squash = 0.42): void {
+    this.soft.flat(x, 0.02, z, size, size * squash, 0, UV_DOT[0], UV_DOT[1], UV_DOT[2], UV_DOT[3], 0.01, 0.012, 0.03, opacity);
   }
 
   /** The halo round a torch's flame. */

@@ -1,7 +1,9 @@
 import type { EffectId, SkinVariant } from '@pd/core';
 import { audio } from './audio';
+import { type DecorArt, decorArt, type DigitsArt, type FireArt, type FxArt } from './flart';
 import { t } from './i18n';
 import { quality } from './quality';
+import { NOTHING, type Worn } from './wear';
 
 /*
  * «Привал»: the home screen's live scene (design system v18, components/CampScreen, CampHero; the
@@ -59,6 +61,11 @@ const PLACES: Record<CampScene, Place> = {
 
 /** The armour tier the camp shows (the sheets' row 1: the first armour, as a new hero wears it). */
 const TIER_ROW = 1;
+/** The hero's canvas: his frame at (6, 12) in it. */
+const SIL_W = 24;
+const SIL_H = 32;
+const SIL_X = 6;
+const SIL_Y = 12;
 
 const BASE = `${import.meta.env.BASE_URL}assets/`;
 const images = new Map<string, HTMLImageElement>();
@@ -154,7 +161,7 @@ interface Particle {
 
 type Mode = 'idle' | 'tap' | 'sulk' | 'swipe' | 'blink';
 
-/** A small picture drawn on the scene at scene pixels (the shop's try-on: placeholder icons for what the scene has no art for yet). */
+/** A small picture drawn on the scene at scene pixels (the shop's try-on: placeholder icons for what the scene has no art of its own for). */
 export interface CampExtra {
   img: CanvasImageSource;
   x: number;
@@ -169,10 +176,14 @@ export interface CampExtra {
  * Changed with `dress()` while the scene runs.
  */
 export interface CampDress {
-  /** A campfire style: the flame's tint, then the sparks' colours (hot, warm, cool). */
-  fire?: readonly [flame: string, hot: string, warm: string, cool: string] | null;
-  /** A tint over a class's sprite: a look's placeholder until its recoloured sheet is drawn. */
-  tint?: Readonly<Record<string, { color: string; strength: number } | undefined>>;
+  /** A campfire style (the designer's art): the flame, the logs, the sparks and the colour of the light; null for the camp's own fire. */
+  fire?: FireArt | null;
+  /** The decorations that stand in the camp, by catalogue id: each at its own place on the ground, sorted by feet with the fire and the hero. */
+  decor?: readonly string[];
+  /** What a class's hero wears (flart look, hat, pet, trail): by the class's name. */
+  wear?: (heroClass: string) => Worn;
+  /** The try-on plays an effect or shows a number style on the spot (a kill's, a fall's, damage digits): these loop beside the hero. */
+  demo?: { kill?: FxArt; death?: FxArt; digits?: DigitsArt } | null;
   extras?: readonly CampExtra[];
 }
 
@@ -256,8 +267,9 @@ export class Camp {
     this.canvas.setAttribute('aria-hidden', 'true');
     this.ctx = this.canvas.getContext('2d')!;
     this.ctx.imageSmoothingEnabled = false;
-    this.silhouette.width = 12;
-    this.silhouette.height = 15;
+    // The hero's own pixels at (6, 12), with room round them for an aura (24 x 28) and a hat (16 x 22).
+    this.silhouette.width = SIL_W;
+    this.silhouette.height = SIL_H;
     this.layer.className = 'pd-camp-layer';
     this.size();
     host.classList.add('pd-camp');
@@ -482,7 +494,7 @@ export class Camp {
       ...this.place.torches.map((tc): LightSpec => [tc[0], tc[1] - 3, 9, '#ffb050', 2]),
       ...this.place.lights,
     ];
-    if (this.dressing.fire) specs[0] = [FIRE[0], FIRE[1] - 6, 30, this.dressing.fire[0], 2];
+    if (this.dressing.fire) specs[0] = [FIRE[0], FIRE[1] - 6, 30, this.dressing.fire.light, 2];
     this.lights = specs.map((spec) => ({
       x: spec[0], y: spec[1], pulse: spec[4],
       rings: [lightCanvas(spec[2] - 1, spec[3]), lightCanvas(spec[2], spec[3]), lightCanvas(spec[2] + 1, spec[3])],
@@ -511,8 +523,9 @@ export class Camp {
 
   /** Puts on (or takes off) a campfire style, tints and extras; the scene goes on running. */
   dress(patch: CampDress): void {
+    const fireChanged = 'fire' in patch && (patch.fire?.flame ?? null) !== (this.dressing.fire?.flame ?? null);
     this.dressing = { ...this.dressing, ...patch };
-    if ('fire' in patch) this.setScene();
+    if (fireChanged) this.setScene();
   }
 
   /** The hero says a line in his bubble (the try-on shows a quip pack so). */
@@ -524,6 +537,9 @@ export class Camp {
   private source(index: number): { img: HTMLImageElement; row: number; key: string } {
     const name = this.classes[index] ?? 'warrior';
     const file = SHEET[name] ?? 'warrior';
+    // A look of the shop's catalogue (the designer's sheet, the same layout): its own picture's address keys the blink.
+    const look = this.dressing.wear?.(name).look;
+    if (look) return { img: look.sheet, row: TIER_ROW, key: `${name}-${look.sheet.src}` };
     const skin = this.options.skinOf?.(name);
     if (skin) {
       const sheet = image(`skins/${file}-${skin}.png`);
@@ -599,23 +615,39 @@ export class Camp {
     const x = HERO[0] - 6 + dx - this.crop[0];
     const y = HERO[1] - 15 - this.crop[1];
     const sg = this.silhouette.getContext('2d')!;
-    sg.clearRect(0, 0, 12, 15);
+    sg.clearRect(0, 0, SIL_W, SIL_H);
+    const worn = this.dressing.wear?.(this.classes[this.hero] ?? '') ?? NOTHING;
+    // A legendary look's aura behind him (its feet at (12, 26), his at (6, 14)).
+    const aura = worn.look?.aura;
+    if (aura) sg.drawImage(aura.image, (Math.floor(now / aura.ms) % aura.frames) * aura.w, 0, aura.w, aura.h, SIL_X + 6 - aura.feetX, SIL_Y + 14 - aura.feetY, aura.w, aura.h);
     const blinked = blink && f === 0 ? this.blinkFrame(src) : null;
-    if (blinked) sg.drawImage(blinked, 0, 0);
-    else if (ready(src.img)) sg.drawImage(src.img, f * 12, src.row * 15, 12, 15, 0, 0, 12, 15);
-    const tint = this.dressing.tint?.[this.classes[this.hero] ?? ''];
-    if (tint) {
-      sg.globalCompositeOperation = 'source-atop';
-      sg.globalAlpha = tint.strength;
-      sg.fillStyle = tint.color;
-      sg.fillRect(0, 0, 12, 15);
+    if (blinked) sg.drawImage(blinked, SIL_X, SIL_Y);
+    else if (ready(src.img)) sg.drawImage(src.img, f * 12, src.row * 15, 12, 15, SIL_X, SIL_Y, 12, 15);
+    // The mask of what glows, added onto itself in a pulse.
+    const look = worn.look;
+    if (look?.glow && ready(look.glow)) {
+      sg.globalCompositeOperation = 'lighter';
+      sg.globalAlpha = look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2));
+      sg.drawImage(look.glow, f * 12, src.row * 15, 12, 15, SIL_X, SIL_Y, 12, 15);
       sg.globalAlpha = 1;
       sg.globalCompositeOperation = 'source-over';
+    }
+    // The hat: its cell (16 x 22, his frame at (2, 7) in it) of the same frame and armour.
+    const hat = worn.hat;
+    if (hat) {
+      sg.drawImage(hat.image, f * hat.w, src.row * hat.h, hat.w, hat.h, SIL_X - hat.heroX, SIL_Y - hat.heroY, hat.w, hat.h);
+      if (hat.glow) {
+        sg.globalCompositeOperation = 'lighter';
+        sg.globalAlpha = 0.7;
+        sg.drawImage(hat.glow, f * hat.w, src.row * hat.h, hat.w, hat.h, SIL_X - hat.heroX, SIL_Y - hat.heroY, hat.w, hat.h);
+        sg.globalAlpha = 1;
+        sg.globalCompositeOperation = 'source-over';
+      }
     }
     if (dark) {
       sg.globalCompositeOperation = 'source-atop';
       sg.fillStyle = `rgba(6,6,10,${Math.min(1, dark).toFixed(2)})`;
-      sg.fillRect(0, 0, 12, 15);
+      sg.fillRect(0, 0, SIL_W, SIL_H);
       sg.globalCompositeOperation = 'source-over';
     }
     // A shadow under the feet.
@@ -624,11 +656,11 @@ export class Camp {
     ctx.fillRect(x + 3, y + 15, 6, 1);
     ctx.save();
     if (flip) {
-      ctx.translate(x + 12, y);
+      ctx.translate(x - SIL_X + SIL_W, y - SIL_Y);
       ctx.scale(-1, 1);
       ctx.drawImage(this.silhouette, 0, 0);
     } else {
-      ctx.drawImage(this.silhouette, x, y);
+      ctx.drawImage(this.silhouette, x - SIL_X, y - SIL_Y);
     }
     ctx.restore();
     if (this.mode === 'sulk') {
@@ -698,7 +730,13 @@ export class Camp {
       if (p.k === 'spark') {
         p.vx += (R() - 0.5) * 0.0006 * dt;
         const sparks = this.dressing.fire;
-        ctx.fillStyle = q < 0.3 ? (sparks?.[1] ?? '#fff3a0') : q < 0.65 ? (sparks?.[2] ?? '#ffb02e') : (sparks?.[3] ?? '#c0301a');
+        if (sparks && ready(sparks.sparks)) {
+          // The style's own sparks: four stages of 3 x 3, from the hot one to the cool.
+          const stage = Math.min(sparks.sparkFrames - 1, Math.floor(q * sparks.sparkFrames));
+          ctx.drawImage(sparks.sparks, stage * sparks.sparkW, 0, sparks.sparkW, sparks.sparkH, Math.round(p.x) - 1 - crop[0], Math.round(p.y) - 1 - crop[1], sparks.sparkW, sparks.sparkH);
+          continue;
+        }
+        ctx.fillStyle = q < 0.3 ? '#fff3a0' : q < 0.65 ? '#ffb02e' : '#c0301a';
       } else if (p.k === 'snow') {
         p.x += Math.sin((now + p.l) / 700) * 0.01;
         ctx.fillStyle = p.near ? '#ffffff' : 'rgba(230,238,248,.9)';
@@ -784,8 +822,7 @@ export class Camp {
     this.place.torches.forEach((tc, i) => {
       if (ready(torch)) ctx.drawImage(torch, ((Math.floor(t / 130) + i * 2) % 4) * 5, 0, 5, 7, tc[0] - 2 - crop[0], tc[1] - 7 - crop[1], 5, 7);
     });
-    if (ready(fire)) this.drawFire(fire, (Math.floor(t / 100) % 6) * 13, FIRE[0] - 6 - crop[0], FIRE[1] - 17 - crop[1]);
-    this.drawHero(t, now);
+    this.drawStanding(fire, t, now);
     for (const extra of this.dressing.extras ?? []) {
       ctx.globalAlpha = extra.alpha ?? 1;
       ctx.drawImage(extra.img, Math.round(extra.x - crop[0]), Math.round(extra.y - crop[1] + (extra.bob ? Math.sin(t / 320) : 0)));
@@ -802,25 +839,106 @@ export class Camp {
     this.drawParts(now, dt);
   }
 
-  /** One frame of the fire, in the style's tint when it has one. */
-  private drawFire(sheet: HTMLImageElement, sx: number, x: number, y: number): void {
-    const flame = this.dressing.fire?.[0];
-    if (!flame) {
-      this.ctx.drawImage(sheet, sx, 0, 13, 17, x, y, 13, 17);
-      return;
+  /**
+   * What stands on the ground, back to front by its feet: the decorations at the places the designer gave them, the fire (its logs, then its
+   * flame), and the hero with his pet and footprints. All the pictures are whole pixels of the 94 x 203 scene.
+   */
+  private drawStanding(plain: HTMLImageElement, t: number, now: number): void {
+    const order: Array<{ y: number; draw: () => void }> = [];
+    for (const id of this.dressing.decor ?? []) {
+      const art = decorArt(id);
+      if (art) order.push({ y: art.feetY, draw: () => this.drawDecor(art, t) });
     }
-    const scratch = (this.fireScratch ??= Object.assign(document.createElement('canvas'), { width: 13, height: 17 }));
-    const g = scratch.getContext('2d')!;
-    g.clearRect(0, 0, 13, 17);
-    g.globalCompositeOperation = 'source-over';
-    g.drawImage(sheet, sx, 0, 13, 17, 0, 0, 13, 17);
-    g.globalCompositeOperation = 'source-atop';
-    g.globalAlpha = 0.62;
-    g.fillStyle = flame;
-    g.fillRect(0, 0, 13, 17);
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    this.ctx.drawImage(scratch, x, y);
+    order.push({ y: FIRE[1], draw: () => this.drawFire(plain, t) });
+    order.push({ y: HERO[1], draw: () => this.drawHeroAndFriends(t, now) });
+    order.sort((a, b) => a.y - b.y);
+    for (const standing of order) standing.draw();
+    this.drawDemo(t);
+  }
+
+  private drawDecor(art: DecorArt, t: number): void {
+    const { ctx, crop } = this;
+    const x = Math.round(art.feetX - art.w / 2) - crop[0];
+    const y = art.feetY - art.h + 1 - crop[1];
+    ctx.drawImage(art.image, x, y);
+    if (art.glow) {
+      // The lantern's flame, the cauldron's brew: the mask of what glows, flickering.
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.55 + 0.25 * Math.sin(t / 130 + art.feetX) * Math.sin(t / 47 + art.feetY);
+      ctx.drawImage(art.glow, x, y);
+      ctx.restore();
+    }
+  }
+
+  /** The fire: the style's logs and flame and the colour of its light (the designer's), or the camp's own fire as it was. */
+  private drawFire(plain: HTMLImageElement, t: number): void {
+    const { ctx, crop } = this;
+    const art = this.dressing.fire;
+    if (art && ready(art.flame) && ready(art.logs)) {
+      ctx.drawImage(art.logs, FIRE[0] + art.logsAt[0] - crop[0], FIRE[1] + art.logsAt[1] - crop[1]);
+      ctx.drawImage(art.flame, (Math.floor(t / art.ms) % art.frames) * art.w, 0, art.w, art.h, FIRE[0] - 6 - crop[0], FIRE[1] - 18 - crop[1], art.w, art.h);
+    } else if (ready(plain)) {
+      ctx.drawImage(plain, (Math.floor(t / 100) % 6) * 13, 0, 13, 17, FIRE[0] - 6 - crop[0], FIRE[1] - 17 - crop[1], 13, 17);
+    }
+  }
+
+  /** The hero, with the footprints of his trail by him and his pet at his feet. */
+  private drawHeroAndFriends(t: number, now: number): void {
+    const { ctx, crop } = this;
+    const worn = this.dressing.wear?.(this.classes[this.hero] ?? '') ?? NOTHING;
+    const trail = worn.trail;
+    if (trail) {
+      // Three footprints, the oldest the faintest.
+      for (const [dx, k] of [[10, 3], [6, 2], [2, 1]] as const) {
+        if (k < trail.frames) ctx.drawImage(trail.image, k * trail.w, 0, trail.w, trail.h, HERO[0] + dx - trail.atX - crop[0], HERO[1] + 1 - trail.atY - crop[1], trail.w, trail.h);
+      }
+    }
+    this.drawHero(t, now);
+    const pet = worn.pet;
+    if (pet) {
+      const [px, py] = [HERO[0] + 11, HERO[1] + 2];
+      const frame = pet.idle[Math.floor(t / pet.ms) % pet.idle.length]!;
+      const lift = pet.fly ? Math.round(5.6 + 0.96 * Math.sin((t / 1000) * 1.2 * Math.PI * 2)) : 0;
+      ctx.fillStyle = `rgba(0,0,0,${pet.fly ? 0.3 : 0.45})`;
+      const sw = Math.round(pet.w * (pet.fly ? 0.65 : 0.85));
+      ctx.fillRect(px - (sw >> 1) - crop[0], py - crop[1], sw, 1);
+      ctx.drawImage(pet.image, frame * pet.w, 0, pet.w, pet.h, px - pet.feetX - crop[0], py - pet.feetY - 1 - lift - crop[1], pet.w, pet.h);
+      if (pet.glow) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.drawImage(pet.glow, frame * pet.w, 0, pet.w, pet.h, px - pet.feetX - crop[0], py - pet.feetY - 1 - lift - crop[1], pet.w, pet.h);
+        ctx.restore();
+      }
+    }
+  }
+
+  /** The shop's try-on of a kill effect, a fall or a number style: it plays by the hero again and again. */
+  private drawDemo(t: number): void {
+    const demo = this.dressing.demo;
+    if (!demo) return;
+    const { ctx, crop } = this;
+    const cycle = 2400;
+    const at = t % cycle;
+    if (demo.kill) {
+      const frame = Math.floor(at / demo.kill.ms);
+      if (frame < demo.kill.frames) ctx.drawImage(demo.kill.image, frame * demo.kill.w, 0, demo.kill.w, demo.kill.h, HERO[0] - 26 - crop[0], HERO[1] - 20 - crop[1], demo.kill.w, demo.kill.h);
+    }
+    if (demo.death) {
+      const frame = Math.min(demo.death.frames - 1, Math.floor(at / demo.death.ms));
+      ctx.drawImage(demo.death.image, frame * demo.death.w, 0, demo.death.w, demo.death.h, HERO[0] - demo.death.atX - crop[0], HERO[1] - demo.death.atY - crop[1], demo.death.w, demo.death.h);
+    }
+    if (demo.digits) {
+      const d = demo.digits;
+      const text = at < 1200 ? '-12' : '+8';
+      let x = HERO[0] - 6 - ((text.length * d.advance) >> 1) - crop[0];
+      const y = HERO[1] - 28 - Math.floor((at % 1200) / 200) - crop[1];
+      for (const ch of text) {
+        const k = d.glyphs.indexOf(ch);
+        if (k >= 0) ctx.drawImage(d.image, k * d.w, 0, d.w, d.h, x, y, d.w, d.h);
+        x += d.advance;
+      }
+    }
   }
 
   private say(text: string, ms: number): void {

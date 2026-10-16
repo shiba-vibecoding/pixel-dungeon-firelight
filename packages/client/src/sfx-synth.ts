@@ -291,10 +291,23 @@ export const SFX = {
     { wave: 'sine', freq: 420, slide: 14, delay: 0.035, decay: 0.07, gain: 0.4 },
     { wave: 'sine', freq: 620, slide: 10, delay: 0.075, decay: 0.06, gain: 0.3 }),
   rustle: fx(0.45, { wave: 'noise', filter: bp(1500, 3500, 0.9), attack: 0.03, decay: 0.2, shape: 1.8, trem: [26, 0.35] }),
-  door_open: fx(0.7,
-    { wave: 'saw', freq: 150, slide: 5, vib: [7, 1.2], noise: 0.3, filter: bp(350, 900, 3), attack: 0.03, hold: 0.15, decay: 0.22, gain: 0.8 },
-    { wave: 'sine', freq: 120, slide: -8, delay: 0.35, decay: 0.12, gain: 0.5 },
-    { wave: 'noise', filter: lp(900), delay: 0.35, decay: 0.06, gain: 0.5 }),
+  // A dry wooden latch knock, then a short thin creak up high; nothing low (no thump under 200 Hz). Quiet.
+  door_open: fx(0.4,
+    { wave: 'noise', filter: bp(1700, undefined, 2.2), attack: 0.001, decay: 0.012, shape: 3 },
+    { wave: 'triangle', freq: 640, slide: -5, attack: 0.001, decay: 0.014, shape: 3, gain: 0.35 },
+    { wave: 'saw', freq: 560, slide: 2.5, vib: [17, 0.45], noise: 0.12, filter: bp(1150, 1500, 6), delay: 0.03, attack: 0.025, hold: 0.07, decay: 0.12, gain: 0.55 },
+    { wave: 'noise', filter: bp(2100, 1700, 9), delay: 0.04, attack: 0.03, hold: 0.04, decay: 0.1, gain: 0.3 }),
+  // A key turned in a lock that gives way: a metal tick and tock, a short high creak, the bolt's clack.
+  door_locked: fx(0.4,
+    { wave: 'noise', filter: bp(3600, undefined, 4), attack: 0.001, decay: 0.01, shape: 3 },
+    { wave: 'square', freq: 1900, slide: -3, attack: 0.001, decay: 0.012, shape: 3, gain: 0.25 },
+    { wave: 'noise', filter: bp(2600, undefined, 4), delay: 0.07, attack: 0.001, decay: 0.014, shape: 3, gain: 0.9 },
+    { wave: 'saw', freq: 700, slide: 2, vib: [15, 0.4], filter: bp(1500, 1300, 6), delay: 0.12, attack: 0.02, hold: 0.04, decay: 0.09, gain: 0.35 }),
+  // A door pushed to: a short soft creak on the way, then the dry knock of the leaf meeting its frame.
+  door_close: fx(0.35,
+    { wave: 'saw', freq: 620, slide: -2.5, vib: [16, 0.4], filter: bp(1250, 1000, 6), attack: 0.02, hold: 0.04, decay: 0.08, gain: 0.35 },
+    { wave: 'noise', filter: bp(1400, undefined, 2), delay: 0.12, attack: 0.001, decay: 0.014, shape: 3 },
+    { wave: 'triangle', freq: 520, slide: -6, delay: 0.12, attack: 0.001, decay: 0.016, shape: 3, gain: 0.3 }),
   creak: fx(0.6,
     { wave: 'saw', freq: 205, vib: [8.5, 3], trem: [23, 0.6], filter: bp(400, 1500, 4), attack: 0.03, hold: 0.25, decay: 0.2 },
     { wave: 'square', freq: 213, vib: [11, 2], filter: bp(500, 1200, 3), attack: 0.04, hold: 0.2, decay: 0.2, gain: 0.5 }),
@@ -507,6 +520,18 @@ export const SFX = {
   alarm: fx(0.4,
     { wave: 'square', freq: 740, hold: 0.06, decay: 0.01, crush: 6, repeat: [4, 0.16] },
     { wave: 'square', freq: 988, delay: 0.08, hold: 0.06, decay: 0.01, crush: 6, repeat: [4, 0.16] }),
+
+  // The cry of a boss and of champions about to come: a brassy blare falling away over a growl, the hall answering.
+  boss: fx(0.9,
+    { wave: 'saw', freq: 196, slide: -9, vib: [7, 0.4], filter: lp(2200, 600, 1.4), attack: 0.03, hold: 0.28, decay: 0.7, gain: 0.8 },
+    { wave: 'saw', freq: 98, slide: -6, trem: [24, 0.6], filter: lp(900, 400, 2), attack: 0.04, hold: 0.3, decay: 0.7, gain: 0.7 },
+    { wave: 'noise', filter: bp(700, 300, 1.2), attack: 0.05, hold: 0.2, decay: 0.55, gain: 0.45 },
+    { wave: 'sine', freq: 55, attack: 0.04, hold: 0.3, decay: 0.8, gain: 0.7 }),
+  // A badge earned: three bright notes up, a ring after them.
+  badge: fx(0.65,
+    ...run([880, 1108.7, 1318.5], 0.09, { wave: 'square', duty: 0.25, attack: 0.003, decay: 0.12, gain: 0.35 }, 0.25),
+    ...run([1760, 2217.5, 2637], 0.09, { wave: 'sine', attack: 0.003, decay: 0.15, gain: 0.35 }, 0.7),
+    { wave: 'sine', freq: 3520, delay: 0.27, decay: 0.5, gain: 0.12 }),
 
   /* The scrolls' waves. */
   // A roar: a growl in the chest (a saw chopped fast), breath through it, a rumble to close.

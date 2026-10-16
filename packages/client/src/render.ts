@@ -1,7 +1,7 @@
 import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
-import { bossCard, depthCard, floatNumber, floorTitle, levelCard, nameplate, slainCard, waveCard } from './cards';
+import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard, waveCard } from './cards';
 
 import { fx } from './fx';
 import { drawFx2D } from './fxdraw2d';
@@ -11,6 +11,7 @@ import { drawFrame, frameAt as sheetFrame, lookIndex, regionIndex, sheet, tinted
 import { quality } from './quality';
 import { BOSS_CARD_MS } from './bosscard';
 import { t } from './i18n';
+import type { WearQuad } from './wearfx';
 
 /* Canvas renderer for the world, using the original 16px tiles and sprites. */
 
@@ -207,7 +208,12 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   } else {
     ctx.translate(dx, dy);
   }
+  const worn = puppet.worn;
+  // A legendary look's aura stands behind the hero (24 x 28, its feet at (12, 26); the hero's at (6, 14)).
+  const aura = worn?.look?.aura;
+  if (aura) ctx.drawImage(aura.image, (Math.floor(now / aura.ms) % aura.frames) * aura.w, 0, aura.w, aura.h, 6 - aura.feetX, 14 - aura.feetY, aura.w, aura.h);
   ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+  if (worn) drawWorn(ctx, puppet, frame, now);
   if (now < puppet.flashUntil) {
     // Hit flash: adding the sprite onto itself brightens only its own pixels.
     ctx.globalCompositeOperation = 'lighter';
@@ -218,6 +224,66 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.35 + 0.35 * Math.sin(now / 60);
     ctx.drawImage(sheet.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+  }
+  ctx.restore();
+}
+
+/**
+ * The hat and the glow of what my hero wears, over the body just drawn (the context is at the sprite's corner, mirrored if it faces
+ * left): the hat is a second picture by the same frame and armour, in a cell 16 x 22 with the hero's frame at (2, 7); a legendary look's
+ * mask of what glows is added onto itself, pulsing; a crown or a halo glows too.
+ */
+function drawWorn(ctx: CanvasRenderingContext2D, puppet: Puppet, frame: number, now: number): void {
+  const worn = puppet.worn!;
+  const { sheet } = puppet.sprite;
+  const col = frame % sheet.cols;
+  const row = Math.floor(frame / sheet.cols) + puppet.row;
+  const look = worn.look;
+  if (look?.glow) {
+    const k = 0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = look.pulse.min + (look.pulse.max - look.pulse.min) * k;
+    ctx.drawImage(look.glow, col * sheet.w, row * sheet.h, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
+    ctx.restore();
+  }
+  const hat = worn.hat;
+  if (hat) {
+    ctx.drawImage(hat.image, col * hat.w, row * hat.h, hat.w, hat.h, -hat.heroX, -hat.heroY, hat.w, hat.h);
+    if (hat.glow) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.7;
+      ctx.drawImage(hat.glow, col * hat.w, row * hat.h, hat.w, hat.h, -hat.heroX, -hat.heroY, hat.w, hat.h);
+      ctx.restore();
+    }
+  }
+}
+
+/** One of the pictures my hero's cosmetics put on the floor (wearfx.ts): a footprint, a puff, a pet, drawn flat in 2D. */
+function drawWearQuad(ctx: CanvasRenderingContext2D, q: WearQuad): void {
+  const fx0 = q.x + TILE / 2;
+  const fy0 = q.y + TILE;
+  if (q.shade > 0) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${q.shadeAlpha})`;
+    const w = Math.round(q.shade);
+    ctx.fillRect(snap(fx0 - w / 2), snap(fy0 - 2), w, 2);
+    ctx.fillRect(snap(fx0 - w / 2 + 1), snap(fy0 - 3), Math.max(1, w - 2), 1);
+  }
+  const dx = snap(fx0 + q.ox - q.ax);
+  const dy = snap(fy0 + q.oy - q.ay - Math.round(q.lift));
+  ctx.save();
+  ctx.globalAlpha = q.alpha;
+  if (q.flip) {
+    ctx.translate(dx + q.w, dy);
+    ctx.scale(-1, 1);
+  } else {
+    ctx.translate(dx, dy);
+  }
+  ctx.drawImage(q.image, q.sx, q.sy, q.w, q.h, 0, 0, q.w, q.h);
+  if (q.glow) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.drawImage(q.glow, q.sx, q.sy, q.w, q.h, 0, 0, q.w, q.h);
   }
   ctx.restore();
 }
@@ -481,7 +547,20 @@ export function render(
       return { puppet, x: Math.round(at.x * camera.zoom) / camera.zoom, y: Math.round(at.y * camera.zoom) / camera.zoom };
     })
     .sort((a, b) => Number(a.puppet.alive) - Number(b.puppet.alive) || a.y - b.y);
-  for (const { puppet, x, y } of shown) drawPuppet(ctx, puppet, x, y, now);
+  // What my hero's cosmetics put down: footprints under everyone, then the pet among the walkers by its feet, then the effects over all.
+  const wear = view.wearQuads(myId, now);
+  for (let i = 0; i < wear.count; i++) if (wear.quads[i]!.kind === 'trail') drawWearQuad(ctx, wear.quads[i]!);
+  let pet = -1;
+  for (let i = 0; i < wear.count; i++) if (wear.quads[i]!.kind === 'pet') pet = i;
+  for (const { puppet, x, y } of shown) {
+    if (pet >= 0 && puppet.alive && wear.quads[pet]!.y <= y) {
+      drawWearQuad(ctx, wear.quads[pet]!);
+      pet = -1;
+    }
+    drawPuppet(ctx, puppet, x, y, now);
+  }
+  if (pet >= 0) drawWearQuad(ctx, wear.quads[pet]!);
+  for (let i = 0; i < wear.count; i++) if (wear.quads[i]!.kind === 'kill' || wear.quads[i]!.kind === 'death') drawWearQuad(ctx, wear.quads[i]!);
 
   // From afar the sprites are a few pixels: the hero is a gold mark in a ring, foes red, companions teal, whatever the zoom
   // (the dot fades out as the zoom brings the sprites up to size; the ring stays).
@@ -615,6 +694,12 @@ function floaterY(camera: Camera, y: number): number {
   return ys === 1 ? (y - camera.y) * camera.zoom : ((y + FEET_PX - camera.y) * ys - 15) * camera.zoom;
 }
 
+/** The digits style my hero wears, if its art has come. */
+function wornDigits(view: View): NonNullable<Puppet['worn']>['digits'] {
+  for (const puppet of view.puppets.values()) if (puppet.worn?.digits) return puppet.worn.digits;
+  return undefined;
+}
+
 /** What is laid over the map at screen resolution: names, numbers, cards and banners, the same over the 2D and the 3D view. */
 function screenLayer(
   ctx: CanvasRenderingContext2D, scene: Scene, view: View, camera: Camera, now: number,
@@ -644,13 +729,18 @@ function screenLayer(
   ctx.globalAlpha = 1;
 
   // Numbers and words rising over characters (PD.fx.number): damage red, healing green, words in their colour.
+  let digits: ReturnType<typeof wornDigits>;
+  if (view.floaters.length > 0) digits = wornDigits(view);
   for (const floater of view.floaters) {
     const sx = (floater.x - camera.x) * camera.zoom;
     const sy = floaterY(camera, floater.y);
     const numeric = /^\d+$/.test(floater.text);
     const scale = floater.scale ?? 1;
     const kind = floater.word ? 'word' : numeric ? (scale >= 2 ? 'kill' : scale > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
-    floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px);
+    // The damage-digits style my hero wears draws numbers in its glyphs; words stay words.
+    const glyphs = digits && kind !== 'word' && /^\+?\d+$/.test(floater.text) ? digits : undefined;
+    if (glyphs && kind !== 'word') floatGlyphs(ctx, glyphs, floater.text, kind, sx, sy, now - floater.start, px);
+    else floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px);
   }
   ctx.globalAlpha = 1;
 
