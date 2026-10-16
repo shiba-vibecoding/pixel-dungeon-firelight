@@ -41,8 +41,10 @@ export function botAction(world: World, id: string, deepest = 4): Action {
   const companions = new Set(
     world.heroes.filter((h) => h !== hero && h.depth === hero.depth && isAlive(h)).map((h) => h.pos),
   );
+  // The harmless folk who stand and never move (a shopkeeper in the way of a hero who teleported into his shop) are walked round when there is a way.
+  const standing = new Set(floor.mobs.filter((mob) => mob.state === 'passive' && mob.kind !== 'mirror' && mob.kind !== 'bee' && !swapsWithHero(mob)).map((mob) => mob.pos));
   const toward = (target: number): Action => {
-    const path = findPath(level, hero.pos, target, companions);
+    const path = findPath(level, hero.pos, target, new Set([...companions, ...standing])) ?? findPath(level, hero.pos, target, companions);
     if (!path || path.length === 0) return { type: 'wait' };
     const inTheWay = floor.mobs.find((mob) => mob.pos === path[0]);
     if (swapsWithHero(inTheWay)) return { type: 'move', to: path[0]! };
