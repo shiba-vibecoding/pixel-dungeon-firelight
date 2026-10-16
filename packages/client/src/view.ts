@@ -271,7 +271,7 @@ export class View {
   /** The arena's wave banner: its words, its kind, and when it shows (after a sinking card, if one is up). */
   waveCard: { title: string; sub: string; kind: '' | 'champions' | 'boss'; start: number } | null = null;
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
-  projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string }> = [];
+  projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string; bolt?: string }> = [];
 
   constructor(private readonly assets: Assets) {}
 
@@ -486,9 +486,9 @@ export class View {
     this.projectiles = this.projectiles.filter((p) => now - p.start < p.duration);
   }
 
-  private shoot(from: number, to: number, sprite: number | null, now: number, color?: string): void {
+  private shoot(from: number, to: number, sprite: number | null, now: number, color?: string, bolt?: string): void {
     const cells = Math.max(Math.abs(cellX(to) - cellX(from)), Math.abs(cellY(to) - cellY(from)));
-    this.projectiles.push({ from, to, start: now, duration: Math.max(90, cells * 45), sprite, color });
+    this.projectiles.push({ from, to, start: now, duration: Math.max(90, cells * 45), sprite, color, ...(bolt ? { bolt } : {}) });
   }
 
   /** How long my hero's step has still to go (ms; 0 or less when standing): the walk sends the next step as it ends. */
@@ -890,7 +890,7 @@ export class View {
           }
           break;
         case 'zapped':
-          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now, BOLT_COLORS[effect.bolt ?? 'magic']);
+          if (effect.depth === this.depth) this.shoot(effect.from, effect.to, null, now, BOLT_COLORS[effect.bolt ?? 'magic'], effect.bolt ?? 'magic');
           audio.play(BOLT_SOUND[effect.bolt ?? 'magic'] ?? 'zap', 1, 1, effect.depth === this.depth ? cellMiddle(effect.from) : undefined);
           break;
         case 'avalanche':
