@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import {
   allowedLook, type ClientMessage, emptyWallet, type HeroClass, isPatron, type Look, type PlayerInfo, RULES_VERSION, type Wallet,
 } from '@pd/core';
+import { newGuideLimits } from './guide';
 import { botApi, type BotConfig, handleUpdate, type TelegramUpdate } from './payments';
 import { ChunkWriter, chunkKeys, fromChunks } from './chunks';
 import { guestId } from './guest';
@@ -788,13 +789,14 @@ async function shop(request: Request, env: Env, ctx: ExecutionContext, route: Sh
 
 /** How often one player's messages reach the admin through /paysupport, per Worker instance. */
 const supportLimiter = new WindowLimiter(5, 10 * 60_000);
+const guideLimits = newGuideLimits();
 
 /** The longest update the webhook reads; Telegram's are a few kilobytes. */
 const MAX_UPDATE_BYTES = 256 * 1024;
 
 /** How the bot is set up in this deployment. */
 function botConfig(env: Env): BotConfig {
-  return { appLink: env.APP_LINK ?? '', adminChatId: env.ADMIN_CHAT_ID, termsUrl: env.TERMS_URL, supportLimiter, ops: adminOps(env) };
+  return { appLink: env.APP_LINK ?? '', adminChatId: env.ADMIN_CHAT_ID, termsUrl: env.TERMS_URL, supportLimiter, ops: adminOps(env), guideLimits };
 }
 
 async function webhook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
