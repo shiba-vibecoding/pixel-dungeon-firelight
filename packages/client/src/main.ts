@@ -134,6 +134,9 @@ const showChallenges = (options: ChallengesOptions): void => load(metaMod, (m) =
 const showJournal = (options: JournalOptions, tab?: 'notes' | 'catalog' | 'guide', category?: number, entry?: string): void =>
   load(metaMod, (m) => m.showJournal(options, tab, category, entry), windowFailed);
 const showGuide = (onClose: () => void, entry?: string): void => load(metaMod, (m) => m.showGuide(onClose, entry), windowFailed);
+/** The information windows (the hunger card: infoui.ts) are a chunk of their own too. */
+const infoMod = lazy(() => import('./infoui'));
+const showHunger = (...args: Parameters<typeof import('./infoui').showHunger>): void => load(infoMod, (m) => m.showHunger(...args), windowFailed);
 
 initTelegram('#1f1d1d');
 // What goes wrong reaches whoever looks after the game (report.ts): never who, only where.
@@ -254,6 +257,11 @@ const hud = new Hud({
     openBackpack();
   },
   history: () => showHistory(view.log, hideOverlay),
+  hunger: () => {
+    const world = session?.world;
+    const me = world && heroById(world, session!.myId);
+    if (me) showHunger(world, me, hideOverlay);
+  },
   buff: (name, turns) => toast(turns ? `${t.buffs[name]} (${t.turnsLeft(turns)})` : t.buffs[name]),
   mate: (id) => {
     const hero = session?.world && heroById(session.world, id);
@@ -3803,6 +3811,7 @@ if (launchedForDaily()) {
 // Badges and the rankings from the player's other devices: on the title at once, once they come.
 // The windows the camp opens are fetched in the spare time after the first screen.
 idle(() => load(metaMod, () => undefined));
+idle(() => load(infoMod, () => undefined));
 void pullCloud().then(() => {
   reloadBadges();
   if (!session && document.querySelector('.pd-camp')) toTitle(false);

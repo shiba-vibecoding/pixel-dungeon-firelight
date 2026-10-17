@@ -81,6 +81,8 @@ export interface HudHandlers {
   buff(name: BuffName, turns?: number): void;
   /** A tap on a companion. */
   mate(id: string): void;
+  /** A tap on the hunger icon or its bar: the turns left. */
+  hunger(): void;
 }
 
 /** The status line under the HUD: one passing state at a time (the design's .pd-status). */
@@ -263,7 +265,7 @@ export class Hud {
             'div',
             'pd-bars-small',
             el('div', 'pd-bar-pair', icon('star'), this.xp),
-            el('div', 'pd-bar-pair', icon('food'), this.food),
+            this.hungerButton(),
           ),
         ),
         el(
@@ -374,6 +376,19 @@ export class Hud {
       this.islandRight.remove();
       this.root.prepend(this.band, this.log, this.toolbar);
     }
+  }
+
+  /** The satiety icon and bar: a tap opens the card of turns left before hungry and starving. */
+  private hungerButton(): HTMLElement {
+    const pair = el('div', 'pd-bar-pair tappable', icon('food'), this.food);
+    pair.setAttribute('role', 'button');
+    pair.ariaLabel = t.buffs.hunger;
+    const open = (): void => {
+      audio.play('click');
+      this.handlers.hunger();
+    };
+    pair.onclick = open;
+    return pair;
   }
 
   /** The hourglass: a tap waits a turn; holding it fills a bar in steps, then rests until healed. */

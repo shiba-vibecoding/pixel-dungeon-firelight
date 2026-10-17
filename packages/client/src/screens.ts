@@ -11,6 +11,7 @@ import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBa
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
 import { P } from './i18n-photo';
+import { wasteLine } from './infolines';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import { mart } from './mart';
 import { labelWords } from './labels';
@@ -333,7 +334,11 @@ export function markWear(node: HTMLElement): void {
 
 /** An item's description, its curse and weight set apart as warnings, and how worn it is under its numbers. */
 function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
-  const nodes = described(itemInfo(world, hero, item));
+  // What a meal would waste (infolines.ts).
+  const extra = [itemDef(item.kind).category === 'food' && inPack(hero, item) ? wasteLine(hero, item) : null].filter((n): n is HTMLElement => n !== null);
+  const base = described(itemInfo(world, hero, item));
+  // Right after the first paragraph, so that it is in view without scrolling the panel.
+  const nodes = [...base.slice(0, 1), ...extra, ...base.slice(1)];
   const wear = wearOf(world, item);
   if (!wear) return nodes;
   const line = el('div', { className: `pd-durability${wear.left > 0 && wear.left / wear.max <= 0.25 ? ' low' : ''}` },
@@ -341,6 +346,9 @@ function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
   const after = [line, ...(wear.left <= 0 ? [el('p', { className: 'pd-callout broken', textContent: t.brokenInfo })] : [])];
   return [nodes[0]!, ...after, ...nodes.slice(1)].filter(Boolean);
 }
+
+/** Whether the item is in the hero's pack (a thing for sale or lying on the floor is not). */
+const inPack = (hero: Hero, item: Item): boolean => hero.items.includes(item);
 
 /** A window title for an item: a broken item's level struck through rather than its name saying «broken». */
 function titleFor(world: World, item: Item, box: HTMLElement): void {
