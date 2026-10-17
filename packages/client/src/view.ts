@@ -833,7 +833,9 @@ export class View {
             audio.play('gold', 1, 0.8);
             audio.coins(effect.item.qty);
           } else {
-            this.say(t.youPicked(itemName(world, effect.item)), COLORS.default, now);
+            // Hero.actPickUp: a known scroll of upgrade or potion of strength is told in the positive colour; anything unknown, plainly.
+            const precious = (effect.item.kind === 'scroll.upgrade' || effect.item.kind === 'potion.strength') && world.known.includes(effect.item.kind);
+            this.say(t.youPicked(itemName(world, effect.item)), precious ? COLORS.positive : COLORS.default, now);
             audio.play('item');
           }
           break;

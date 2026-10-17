@@ -1858,7 +1858,9 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
     if (effect.type === 'pickedUp' && effect.hero === myId && world) {
       const item = effect.item;
       finds.show(item.kind === 'gold' ? 'gold' : `${item.kind}:${item.level}`, itemSprite(item, world.run.labels), capitalize(itemName(world, item)),
-        item.kind.startsWith('ring.') || item.kind.startsWith('wand.') || item.kind === 'potion.strength' || item.kind === 'scroll.upgrade');
+        // A ring or a wand shows for what it is anyway; a potion of strength or a scroll of upgrade only once its kind is known
+        // (Hero.actPickUp: GLog.p for them only when isKnown), or the gleam would give an unknown one away.
+        item.kind.startsWith('ring.') || item.kind.startsWith('wand.') || ((item.kind === 'potion.strength' || item.kind === 'scroll.upgrade') && world.known.includes(item.kind)));
     }
     if (effect.type === 'sold' && effect.hero === myId && selling && overlayOpen()) openShop();
     if (world && me) learnFromEffect(world, me, effect);
