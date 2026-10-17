@@ -30,7 +30,6 @@ export function scrub(text: string): string {
   return text.replace(/[?#][^\s)'"]*/g, '');
 }
 
-/** Browser notes that are not errors of the game: a ResizeObserver that could not deliver everything in one frame, and the like. */
 /** Browser notes that are not errors of the game: a ResizeObserver that could not deliver everything in one frame, sound refused before a touch. */
 const BENIGN = /^(ResizeObserver loop|Failed to start the audio device|NotAllowedError)/;
 
