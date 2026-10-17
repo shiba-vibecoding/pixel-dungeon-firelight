@@ -338,7 +338,7 @@ export class View {
   readonly arrivals = new Map<number, { at: number; how: 'pop' | 'shimmer' }>();
   /** Statues that have just woken (the cell), and creatures that have just been teleported in (the cell they landed on): placefx.ts shows both. */
   woke: number[] = [];
-  warps: Array<{ cell: number }> = [];
+  warps: Array<{ cell: number; from?: number }> = [];
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
   projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string; bolt?: string }> = [];
 
@@ -475,7 +475,7 @@ export class View {
           puppet.bend = undefined;
           puppet.moveStart = -1e9;
           puppet.pop = { start: now, how: 'shimmer' };
-          this.warps.push({ cell: pos });
+          this.warps.push({ cell: pos, from: shown });
         } else if (adjacent(pos, shown) && (now < end || (puppet.queue?.length ?? 0) > 0)) {
           // A step while the last is still on screen: it waits its turn (see advance), however fast turns come.
           (puppet.queue ??= []).push({ cell: pos, bend: cornerBend(map, shown, pos) });
@@ -1111,7 +1111,8 @@ export class View {
           if (effect.depth !== this.depth) break;
           // The swing with the pickaxe in hand (questfx.ts), the crunch of it on the rock and the gleam of the ore coming loose.
           swingPick(this, effect.hero, effect.pos, now);
-          this.flashes.push({ cell: effect.pos, start: now, color: '255, 210, 90', duration: 500 });
+          // (The glow of the blow is the designer's own light when its sheet is there.)
+          if (!fxp.has('quest.ore.hit')) this.flashes.push({ cell: effect.pos, start: now, color: '255, 210, 90', duration: 500 });
           audio.play('pick', 1, 0.9, cellMiddle(effect.pos));
           audio.later(110, 'oreGleam', 1, 0.5, cellMiddle(effect.pos));
           break;
@@ -1127,7 +1128,7 @@ export class View {
         case 'mirrored':
           if (effect.depth !== this.depth) break;
           for (const cell of effect.cells) {
-            this.flashes.push({ cell, start: now, color: '200, 220, 255', duration: 500 });
+            if (!fxp.has('minor.mirror')) this.flashes.push({ cell, start: now, color: '200, 220, 255', duration: 500 });
             this.arrivals.set(cell, { at: now, how: 'shimmer' });
           }
           if (effect.hero === myId) this.say(t.mirrored(effect.cells.length), COLORS.default, now);
@@ -1135,15 +1136,17 @@ export class View {
         case 'flock':
           if (effect.depth !== this.depth) break;
           for (const cell of effect.cells) {
-            this.flashes.push({ cell, start: now, color: '255, 255, 255', duration: 500 });
+            // (The white of the puff is the designer's poof of wool when its sheet is there: placefx.ts.)
+            if (!fxp.has('minor.sheep.appear')) this.flashes.push({ cell, start: now, color: '255, 255, 255', duration: 500 });
             this.arrivals.set(cell, { at: now, how: 'pop' });
           }
           audio.play('puff');
           break;
         case 'faded':
           if (effect.depth !== this.depth) break;
+          // A sheep's vanishing is the designer's minor.sheep.vanish (placefx.ts); the white flash of the cell stays for what else fades, and until it has come.
+          if (!(this.puppets.get(effect.mob)?.kind === 'sheep' && fxp.has('minor.sheep.vanish'))) this.flashes.push({ cell: effect.pos, start: now, color: '255, 255, 255', duration: 500 });
           this.puppets.delete(effect.mob);
-          this.flashes.push({ cell: effect.pos, start: now, color: '255, 255, 255', duration: 500 });
           break;
         case 'baa':
           if (effect.depth === this.depth) this.float(effect.mob, t.baa[Math.floor(Math.random() * t.baa.length)]!, COLORS.default, now);

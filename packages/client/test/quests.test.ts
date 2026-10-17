@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { addHero, createItem, createWorld, floorAt, type Hero, heroById, levelAt, ORE_WANTED, TOKENS_WANTED, type World } from '@pd/core';
 import { describe, expect, it } from 'vitest';
 import { QUEST_EN } from '../src/i18n-quest';
 import { QUEST_RU } from '../src/i18n-quest.ru';
-import { cardForItem, chipCard, openCards, type QuestCard, questCards, share } from '../src/questcard';
+import { BADGE_ICON, GOAL_ICON, PICKAXE_ICON, PORTRAIT_OF, rewardKind, stepsOf } from '../src/questart';
+import { cardForItem, chipCard, type Goal, openCards, type QuestCard, type QuestId, questCards, share } from '../src/questcard';
 import { chipLine, pickupToast, progressLine, rewardLine, stageLine } from '../src/questcardtext';
-import { ghostPlan, impPlan, smithPlan, wandmakerPlan } from '../src/questtalk';
+import { ghostPlan, impPlan, moodOf, smithPlan, wandmakerPlan } from '../src/questtalk';
 import { LINE_IDS, type QuestWords, type Register, registerOf, say } from '../src/quest-words';
 import { CPS, schedule, shown, totalMs } from '../src/typewriter';
 
@@ -350,5 +352,115 @@ describe('the typewriter', () => {
     const longest = Math.max(...LANGS.flatMap(([, w]) => LINE_IDS.map((id) => w.lines[id][1] ?? w.lines[id][0]).map((t) => totalMs(t))));
     expect(longest).toBeLessThan(12_000);
     expect(totalMs('')).toBe(0);
+  });
+});
+
+describe('the designer\'s quest art (part 13: ui/quest)', () => {
+  const art = JSON.parse(readFileSync(new URL('../public/assets/ui/quest/quest.json', import.meta.url), 'utf8')) as {
+    portraits: { rows: string[]; moods: string[]; size: number };
+    icons: { goals: string[]; badges: string[] };
+    goals: Record<string, Record<string, { item?: string; of: number; icon?: string }>>;
+    rewards: Record<string, string>;
+  };
+  const png = (path: string): { w: number; h: number } => {
+    const head = readFileSync(new URL(`../public/assets/${path}`, import.meta.url));
+    return { w: head.readUInt32BE(16), h: head.readUInt32BE(20) };
+  };
+
+  it('picks the mood of the portrait by the moment: calm, pleased, annoyed', () => {
+    for (const line of ['intro', 'remind'] as const) expect(moodOf(line), line).toBe('calm');
+    for (const line of ['reward', 'farewell', 'completed'] as const) expect(moodOf(line), line).toBe('pleased');
+    for (const line of ['noGold', 'noPickaxe', 'noBlood', 'busy'] as const) expect(moodOf(line), line).toBe('annoyed');
+    // The blacksmith's services are business, not a mood.
+    expect(moodOf('reforge')).toBe('calm');
+    // The plans carry it, each moment its own.
+    const { world: w, hero } = world();
+    w.quest = { depth: 3, type: 'rose', given: true, dropped: false, killsLeft: 8, done: false, weapon: createItem('weapon.sword'), armor: createItem('armor.mail') };
+    w.smithQuest = { depth: 12, given: true, done: false, reforged: false, wants: 'gold' };
+    w.impQuest = { depth: 18, given: true, done: false, prey: 'monk', reward: createItem('ring.accuracy') };
+    w.wandQuest = { depth: 8, given: true, done: false, battle: createItem('wand.firebolt'), utility: createItem('wand.blink'), wants: 'dust' };
+    expect(ghostPlan(QUEST_EN, w, hero, 'intro', 'rose', 'clean', 'X').mood).toBe('calm');
+    expect(ghostPlan(QUEST_EN, w, hero, 'reward', 'rose', 'clean', 'X').mood).toBe('pleased');
+    expect(wandmakerPlan(QUEST_EN, w, hero, 'remind', 'clean').mood).toBe('calm');
+    expect(wandmakerPlan(QUEST_EN, w, hero, 'reward', 'clean').mood).toBe('pleased');
+    expect(impPlan(QUEST_EN, w, hero, 'reward', 'clean', 'X').mood).toBe('pleased');
+    for (const line of ['noGold', 'noPickaxe', 'noBlood', 'busy'] as const) expect(smithPlan(QUEST_EN, w, hero, line, 'clean').mood, line).toBe('annoyed');
+    expect(smithPlan(QUEST_EN, w, hero, 'completed', 'clean').mood).toBe('pleased');
+    expect(smithPlan(QUEST_EN, w, hero, 'intro', 'clean').mood).toBe('calm');
+  });
+
+  it('has a portrait for four of the givers in the sheet\'s rows and none for the Rat King, three moods each', () => {
+    expect(art.portraits.moods).toEqual(['calm', 'pleased', 'annoyed']);
+    expect(art.portraits.rows).toEqual(['ghost', 'wandmaker', 'blacksmith', 'imp']);
+    expect(Object.values(PORTRAIT_OF).sort()).toEqual([...art.portraits.rows].sort());
+    expect(PORTRAIT_OF.ratKing).toBeUndefined();
+    const size = png('ui/quest/portraits.png');
+    expect(size).toEqual({ w: art.portraits.size * 3, h: art.portraits.size * 4 });
+    for (const [kind, row] of Object.entries(PORTRAIT_OF)) expect(art.portraits.rows.indexOf(row!), kind).toBeGreaterThanOrEqual(0);
+  });
+
+  it('stands each reward on its giver\'s podium, in the rows of the reward sheet', () => {
+    expect(rewardKind('ghost', 0)).toBe('ghost-weapon');
+    expect(rewardKind('ghost', 1)).toBe('ghost-armor');
+    expect(rewardKind('wandmaker', 0)).toBe('wand-battle');
+    expect(rewardKind('wandmaker', 1)).toBe('wand-utility');
+    expect(rewardKind('imp', 0)).toBe('ring');
+    // The blacksmith's reward is no item: the reforging window shows pairs as it did.
+    expect(rewardKind('smith', 0)).toBeNull();
+    expect(Object.keys(art.rewards).length).toBe(6);
+    // (The sheet has a row for each podium, the CSS names them in the same order.)
+    expect(png('fx/quest/reward.png').h / 48).toBe(6);
+    const css = readFileSync(new URL('../src/fl-p13.css', import.meta.url), 'utf8');
+    for (const [name, row] of [['ghost-weapon', 0], ['ghost-armor', 1], ['wand-battle', 2], ['wand-utility', 3], ['reforge', 4], ['ring', 5]] as const) {
+      expect(css, name).toContain(`.fl-reward-slot.${name} { --rr: ${row}; }`);
+    }
+  });
+
+  it('takes the tiles of the icon sheet by the designer\'s order: the goals in row 0, the givers\' faces in row 1', () => {
+    const goalName: Record<Goal, string> = { rose: 'rose', skull: 'skull', curse: 'curse', dust: 'dust', berry: 'seed', fish: 'fish', ore: 'ore', blood: 'blood', monk: 'token', golem: 'golem' };
+    for (const [goal, name] of Object.entries(goalName)) expect(art.icons.goals[GOAL_ICON[goal as Goal]], goal).toBe(name);
+    expect(art.icons.goals[PICKAXE_ICON]).toBe('pickaxe');
+    expect(art.icons.badges.map((b) => b)).toEqual(['ghost', 'wandmaker', 'blacksmith', 'imp']);
+    const badge: Record<QuestId, string> = { ghost: 'ghost', wandmaker: 'wandmaker', smith: 'blacksmith', imp: 'imp' };
+    for (const [id, name] of Object.entries(badge)) expect(art.icons.badges[BADGE_ICON[id as QuestId]], id).toBe(name);
+    expect(png('ui/quest/icons.png')).toEqual({ w: 16 * art.icons.goals.length, h: 32 });
+    // Every goal of the data has an icon (the data's `icon`, or the goal's own name).
+    for (const quests of Object.values(art.goals)) {
+      for (const [goal, g] of Object.entries(quests)) expect(art.icons.goals, goal).toContain(g.icon ?? goal);
+    }
+  });
+
+  it('lays the bar out as a step a unit (ore 15, tokens 8 or 6), one step for a single thing, green once the goal is met', () => {
+    const { world: w, hero } = world();
+    w.smithQuest = { depth: 12, given: true, done: false, reforged: false, wants: 'gold' };
+    hero.items.push(createItem('weapon.pickaxe'), createItem('quest.ore', 9));
+    expect(stepsOf(questCards(w, hero)[0]!)).toEqual({ of: 15, done: 9, green: false });
+    expect(art.goals.blacksmith!.gold!.of).toBe(15);
+    hero.items.find((i) => i.kind === 'quest.ore')!.qty = 15;
+    expect(stepsOf(questCards(w, hero)[0]!)).toEqual({ of: 15, done: 15, green: true });
+    w.impQuest = { depth: 18, given: true, done: false, prey: 'golem', reward: createItem('ring.accuracy') };
+    hero.items.push(createItem('quest.token', 4));
+    const imp = questCards(w, hero).find((c) => c.id === 'imp')!;
+    expect(stepsOf(imp)).toEqual({ of: TOKENS_WANTED.golem, done: 4, green: false });
+    expect(art.goals.imp!.golem!.of).toBe(TOKENS_WANTED.golem);
+    expect(art.goals.imp!.monk!.of).toBe(TOKENS_WANTED.monk);
+    w.quest = { depth: 3, type: 'rose', given: true, dropped: false, killsLeft: 8, done: false, weapon: createItem('weapon.sword'), armor: createItem('armor.mail') };
+    expect(stepsOf(questCards(w, hero).find((c) => c.id === 'ghost')!)).toEqual({ of: 1, done: 0, green: false });
+    hero.items.push(createItem('quest.rose'));
+    expect(stepsOf(questCards(w, hero).find((c) => c.id === 'ghost')!)).toEqual({ of: 1, done: 1, green: true });
+    w.quest.done = true;
+    expect(stepsOf(questCards(w, hero).find((c) => c.id === 'ghost')!).green).toBe(true);
+  });
+
+  it('shows the bar of a card from the pack and the world only, the same in two worlds that differ in what the hero cannot see', () => {
+    const a = world(7);
+    const b = world(8);
+    for (const { world: w, hero } of [a, b]) {
+      w.wandQuest = { depth: 8, given: true, done: false, battle: createItem('wand.firebolt'), utility: createItem('wand.blink'), wants: 'fish' };
+      hero.items.push(createItem('quest.ore', 2));
+    }
+    // Where the fish swims and the rest of the dungeon's secrets are not in the card's reach: only the pack is.
+    expect(questCards(a.world, a.hero).map(stepsOf)).toEqual(questCards(b.world, b.hero).map(stepsOf));
+    expect(stepsOf(questCards(a.world, a.hero)[0]!)).toEqual({ of: 1, done: 0, green: false });
   });
 });

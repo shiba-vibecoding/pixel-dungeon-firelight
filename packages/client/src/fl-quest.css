@@ -42,7 +42,11 @@
 .fl-qmote.c { left: 78%; animation-delay: 2.1s; }
 @keyframes fl-qmote { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 0.9; } 100% { transform: translateY(-62px); opacity: 0; } }
 
-.fl-talk-window .pd-heading { font-size: 22px; line-height: 26px; }
+.fl-talk-window:not(.fl-dialog) .pd-heading { font-size: 22px; line-height: 26px; }
+/* The designer's portrait bobs a pixel for 1.2 s; while the giver talks it goes on (the class is set for as long as the words come). */
+.fl-dialog .fl-portrait.speaks::after { animation: fl-q-speak .5s steps(2, jump-none) infinite; }
+.fl-dialog .fl-portrait { margin-bottom: 2px; }
+.fl-dialog .fl-reward-slot .pd-item { pointer-events: none; }
 .fl-talk-window .pd-window-head .pd-note { color: var(--q-sub, var(--ink-muted)); font-style: normal; }
 .fl-talk-window.ghost { --q-sub: #a6cbe0; }
 .fl-talk-window.wandmaker { --q-sub: #c2b0ee; }
@@ -93,7 +97,7 @@
 @keyframes fl-qflash { from { opacity: 1; } to { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fl-qframe.ghost .fl-qstage canvas, .fl-qframe.talking .fl-qstage canvas, .fl-qmote, .fl-replies.shown, .fl-qflash,
+  .fl-dialog .fl-portrait.speaks::after, .fl-qframe.ghost .fl-qstage canvas, .fl-qframe.talking .fl-qstage canvas, .fl-qmote, .fl-replies.shown, .fl-qflash,
   .fl-talk-window.revealed .fl-qbanner, .fl-talk-window.revealed .fl-qstar, .fl-talk-window.revealed .fl-reveal, .fl-talk-window.revealed .fl-reveal::after { animation: none; }
   .fl-qmote { display: none; }
   .fl-talk-window.revealed .fl-reveal::after { display: none; }
@@ -104,39 +108,27 @@
 .fl-notes { display: flex; flex-direction: column; gap: var(--space-3); }
 .fl-quests { display: flex; flex-direction: column; gap: var(--space-2); }
 .fl-quests-title { font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold-deep); padding: 0 2px; }
-.fl-qcard {
-  --q-accent: #bfe9ff;
-  display: flex; flex-direction: column; gap: 6px; padding: var(--space-2) var(--space-3) var(--space-3);
-  background: var(--stone-800); clip-path: var(--notch);
-  box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--stone-500), inset 3px 0 0 0 var(--q-accent);
-}
-.fl-qcard.wandmaker { --q-accent: #c2a8ff; }
-.fl-qcard.smith { --q-accent: #ffa850; }
-.fl-qcard.imp { --q-accent: #ff7a5a; }
-.fl-qcard-head { display: flex; align-items: center; gap: var(--space-2); }
-.fl-qcard-head .pd-portrait { width: 48px; height: 48px; }
-.fl-qcard-head .pd-portrait canvas { max-width: 44px; max-height: 44px; }
-.fl-qcard-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.fl-qcard-name { font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--gold); }
-.fl-qtag { flex: none; font: var(--text-caption, 400 15px/20px var(--font-small)); padding: 0 8px; clip-path: var(--notch); background: var(--stone-700); color: var(--ink); }
+/* The card itself is the designer's `.fl-quest` (fl-p13.css: badge, title, goal row, steps); what the game adds is the tint of each giver,
+   the «ready» and «done» tags and the lines under the bar. */
+.fl-quest { --q-accent: #bfe9ff; box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--stone-500), inset 3px 0 0 0 var(--q-accent); }
+.fl-quest.wandmaker { --q-accent: #c2a8ff; }
+.fl-quest.smith { --q-accent: #ffa850; }
+.fl-quest.imp { --q-accent: #ff7a5a; }
+.fl-quest-title { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-2); min-width: 0; }
+.fl-quest-title .pd-note { flex: none; white-space: nowrap; }
+.fl-quest-title .fl-qtag { margin-left: auto; }
+.fl-quest-goal span { min-width: 0; }
+.fl-quest-goal b { flex: none; white-space: nowrap; }
+.fl-quest > p { grid-column: 1 / -1; margin: 0; }
+.fl-qtag { flex: none; align-self: center; font: var(--text-caption, 400 15px/20px var(--font-small)); padding: 0 8px; clip-path: var(--notch); background: var(--stone-700); color: var(--ink); }
 .fl-qtag.ready { background: var(--gold-deep); color: var(--void); animation: fl-qpulse 1.4s ease-in-out infinite; }
 .fl-qtag.done { color: var(--good); }
-.fl-qgoal { font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--ink); }
-.fl-qprogress { font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
-.fl-qcard.ready .fl-qprogress { color: var(--good); }
 .fl-qback { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--good); }
-.fl-qwarn { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--warn); }
+.fl-qwarn { display: flex; align-items: center; gap: var(--space-2); font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--warn); }
+.fl-qwarn .fl-qicon.inline { --qs: 1; }
 .fl-qreward { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
 .fl-qreward b { font-weight: 400; color: var(--gold-deep); }
-.fl-qcard.done { opacity: 0.72; }
-.fl-qcard.done .fl-qgoal { color: var(--ink-muted); }
-.fl-qbar { position: relative; height: 12px; background: var(--hp-track); box-shadow: inset 0 0 0 2px var(--void), inset 0 0 0 3px var(--stone-600); }
-.fl-qbar > i { display: block; height: 100%; background: linear-gradient(var(--gold), var(--gold-deep)); box-shadow: 2px 0 0 0 rgba(255, 235, 164, 0.5); }
-.fl-qbar:not(.single)::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) calc(100% / var(--need, 1) - 2px), rgba(0, 0, 0, 0.7) calc(100% / var(--need, 1) - 2px), rgba(0, 0, 0, 0.7) calc(100% / var(--need, 1)));
-}
-.fl-qcard.ready .fl-qbar > i { background: linear-gradient(#8cff8c, var(--good)); }
+.fl-quest.ready .fl-quest-goal b { color: var(--good); }
 @keyframes fl-qpulse { 50% { filter: brightness(1.35); } }
 
 /* ---------- The HUD chip ---------- */
@@ -153,8 +145,7 @@
 }
 .fl-qchip[hidden] { display: none; }
 .fl-qchip-face { flex: none; display: grid; place-items: center; width: 24px; height: 24px; overflow: hidden; }
-.fl-qchip-face .pd-portrait { width: 24px; height: 24px; background: none; box-shadow: none; clip-path: none; }
-.fl-qchip-face .pd-portrait canvas { max-width: 24px; max-height: 24px; width: auto !important; height: auto !important; }
+.fl-qchip-face .fl-qicon { --qs: 1.5; }
 .fl-qchip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fl-qchip-more { flex: none; color: var(--gold-deep); }
 .fl-qchip[data-stage="ready"] { color: var(--good); box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--good); }

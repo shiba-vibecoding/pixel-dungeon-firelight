@@ -3,6 +3,7 @@ import { audio } from './audio';
 import { brewOdds, SEEDS_TO_BREW, type SeedCount, seedsIn, seedsInPot } from './brewodds';
 import { hungerReport } from './hungerinfo';
 import { I } from './i18n-info';
+import { picon } from './placeart';
 import { hungerLines, percent, potLines, seedList, seedName } from './infotext';
 import { button, el, info, show, slot, windowOf } from './screens';
 import './info.css';
@@ -141,7 +142,7 @@ export function showPot(options: PotOptions): void {
   };
 
   const box = windowOf(
-    { title: I.pot.title, sub: I.pot.sub, onClose, narrow: true, className: 'pd-info-window pd-pot' },
+    { title: I.pot.title, sub: I.pot.sub, icon: picon('pot'), onClose, narrow: true, className: 'pd-info-window pd-pot fl-place-window' },
     el(
       'div',
       { className: 'pd-scroll pd-stack' },

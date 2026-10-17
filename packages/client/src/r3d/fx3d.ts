@@ -67,6 +67,9 @@ export class Fx3D {
   /** Draws the frame's effects into the batches and offers their brightest light to the scene. Returns false if there is nothing to draw with. */
   frame(c: FxContext, dyn: Dynamic): boolean {
     if (!this.sync()) return false;
+    // The loops of the places are drawn near the hero only.
+    fxp.hx = c.hx;
+    fxp.hz = c.hz;
     const n = fxp.collect(c.now, c.visible);
     const W = this.atlas.w;
     const H = this.atlas.h;

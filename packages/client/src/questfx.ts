@@ -2,6 +2,8 @@ import { createItem, type Effect, type Hero, itemSprite, type World, WIDTH } fro
 import { audio } from './audio';
 import { turnAt } from './dirs';
 import { fx } from './fx';
+import { fxp } from './fxplayer';
+import { playMs } from './fxsheet';
 import { cardForItem, questCards } from './questcard';
 import { pickupToast } from './questcardtext';
 import { Q } from './quest-text';
@@ -12,6 +14,10 @@ import type { Puppet, View } from './view';
  * a vein of dark gold (the swing with the pickaxe in the hand, the crunch, sparks, rock chips, a little shake, and the ore that
  * pops out with a gleam and flies to the pack), the toast that counts the ore and the tokens, and the leave-takings of the
  * wandmaker, the imp and the blacksmith's forge, to stand beside the ghost's (view.ts, fx-events.ts).
+ *
+ * Part 13: where the designer's sheets are there (fx.json: `mined` → quest.ore.hit, then quest.ore.nugget; `smith` → quest.anvil; the forge's loop
+ * is kept by places.ts), they are the look of the blow, the nugget and the hammer, in place of the sparks, chips and dust drawn here, and are
+ * never drawn beside them: the older ones stay for as long as the data has not come.
  */
 
 const TILE = 16;
@@ -24,6 +30,26 @@ const EMBER = ['#ff7a20', '#ff4010', '#ffcf60', '#6a6a6a'];
 
 /** How long the pickaxe stays in the hand after a swing, ms. */
 export const TOOL_MS = 900;
+
+/** How far from the middle of a vein toward the hero its face is (a wall fills its cell; the blow is seen on its face), cells. */
+export const FACE = 0.85;
+
+/** The face of a vein toward the one who struck it (`angle`: from the vein to the hero, radians), as a place in cells. */
+export function faceOf(at: { x: number; y: number }, angle: number): { x: number; z: number } {
+  return { x: at.x / TILE + Math.cos(angle) * FACE, z: at.y / TILE + Math.sin(angle) * FACE };
+}
+
+/** The nugget falls on the floor in front of the vein's face, a little toward the viewer so that the one who struck does not stand on it (cells). */
+export const NUGGET_DROP = 0.42;
+
+/** Where the nugget lies for a face (cells). */
+export const nuggetAt = (face: { x: number; z: number }): { x: number; z: number } => ({ x: face.x, z: face.z + NUGGET_DROP });
+
+/** How long the nugget lies gleaming on the floor before it goes to the pack, ms: the strike's frames, and then the nugget's. */
+export function nuggetMs(): number {
+  const hit = fxp.has('quest.ore.hit') ? fxp.lib!.fx['quest.ore.hit']! : null;
+  return hit ? playMs(hit) + 380 : 160;
+}
 
 const centre = (cell: number): { x: number; y: number } => ({ x: (cell % WIDTH) * TILE + TILE / 2, y: Math.trunc(cell / WIDTH) * TILE + TILE / 2 });
 
@@ -45,7 +71,13 @@ export function swingPick(view: View, heroId: string, pos: number, now: number):
  * The vein gives way: a spray of sparks and a shower of rock chips thrown back toward the hero, a puff of dust, a little shake, and a
  * moment later the gleam of the ore working loose. `angle` is the way from the vein to the hero (radians).
  */
-export function minedFx(at: { x: number; y: number }, angle: number, now: number): void {
+export function minedFx(at: { x: number; y: number }, angle: number, now: number, mine = true): void {
+  // The designer's: the flash and crumbs of the blow on the vein's face, its dust, and the nugget that follows it onto the floor.
+  const id = fxp.idOf('mined');
+  if (id) {
+    const face = faceOf(at, angle);
+    if (fxp.playAt(id, face.x, face.z, now, { shake: mine, tint: mine, thenAt: nuggetAt(face) })) return;
+  }
   fx.burst(at.x, at.y, now, { count: 10, colors: SPARK, glow: true, speed: [50, 130], life: [180, 420], gravity: 380, angle, cone: 1.4, size: [1, 1], spread: 2 });
   fx.burst(at.x, at.y, now, { count: 12, colors: ROCK, speed: [40, 110], life: [350, 720], gravity: 430, drag: 0.1, angle, cone: 2.3, size: [1, 2], spread: 3 });
   fx.burst(at.x, at.y, now, { count: 6, colors: DUST, speed: [6, 20], life: [380, 760], rise: 8, drag: 0.4, angle, cone: 3, size: [2, 3], spread: 4 });
@@ -106,8 +138,12 @@ export function releaseFarewells(view: View, now: number): void {
   }
 }
 
-/** The forge flares as the errand is handed in: two blows of the hammer, a spray of sparks, a glow. */
+/**
+ * The forge flares as the errand is handed in, and again when the reforging is done: two blows of the hammer on the anvil. The designer's
+ * (quest.anvil: the white flash and the fan of sparks, with their light) or, until it has come, a spray of sparks and a glow of ours.
+ */
 export function forgeFlare(view: View, now: number): void {
+  const anvil = fxp.idOf('smith');
   for (const puppet of view.puppets.values()) {
     if (puppet.kind !== 'blacksmith' || !puppet.alive) continue;
     const { x, y } = view.position(puppet, now);
@@ -115,6 +151,8 @@ export function forgeFlare(view: View, now: number): void {
     const cy = y + TILE / 2;
     audio.play('hammer', 1, 0.8);
     audio.later(230, 'hammer', 0.9, 0.7);
+    // The anvil stands at his side, where his forge burns (places.ts).
+    if (anvil && fxp.playAt(anvil, cx / TILE + 0.5, cy / TILE, now, { shake: false, tint: false }) && fxp.playAt(anvil, cx / TILE + 0.5, cy / TILE, now, { delay: 230, shake: false, tint: false })) continue;
     fx.burst(cx, cy, now, { count: 16, colors: SPARK, glow: true, speed: [30, 90], life: [260, 620], gravity: 260, size: [1, 1], spread: 3 });
     fx.burst(cx, cy, now + 230, { count: 12, colors: SPARK, glow: true, speed: [30, 90], life: [260, 620], gravity: 260, size: [1, 1], spread: 3 });
     fx.pulse(cx, cy, now, '255, 150, 60', 6, 700);
@@ -140,8 +178,12 @@ export function questTake(effects: readonly Effect[], world: World, me: Hero, no
   for (const effect of effects) {
     if (effect.type === 'mined' && effect.hero === me.id && effect.depth === me.depth) {
       const sprite = itemSprite(createItem('quest.ore'), world.run.labels);
-      const at = centre(effect.pos);
-      io.launch(sprite, at.x, at.y, now + 160);
+      // With the designer's nugget (it gleams on the floor before the vein's face) the ore is lifted from there when the gleam is over; else it pops from the vein.
+      const vein = centre(effect.pos);
+      const hero = centre(me.pos);
+      const face = fxp.has('quest.ore.nugget') ? nuggetAt(faceOf(vein, Math.atan2(hero.y - vein.y, hero.x - vein.x))) : null;
+      const at = face ? { x: face.x * TILE, y: face.z * TILE } : vein;
+      io.launch(sprite, at.x, at.y, now + (face ? nuggetMs() : 160));
       io.find('quest.ore', sprite, io.oreName());
       const card = cardForItem(questCards(world, me), 'quest.ore');
       const text = card && pickupToast(card, Q);

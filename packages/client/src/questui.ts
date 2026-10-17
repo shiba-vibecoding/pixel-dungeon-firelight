@@ -4,14 +4,16 @@ import { capitalize, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { quality } from './quality';
 import type { QuestId } from './questcard';
+import { PORTRAIT_OF, rewardKind } from './questart';
+import type { Mood } from './questtalk';
 import { Q } from './quest-text';
-import { button, el, mobSprite, show, slot, windowOf } from './screens';
+import { button, el, itemIcon, mobSprite, show, slot, windowOf } from './screens';
 import { frameAt } from './sprites';
 import { schedule, shown } from './typewriter';
 
 /*
- * A word with a quest giver, as the fork stages it: the giver's sprite in a frame of its own (it idles, and bobs while it talks), the
- * words coming out letter by letter with a blip (a tap brings the rest out at once), a few little replies for the player to tap
+ * A word with a quest giver, as the fork stages it: the giver's portrait of the designer's (part 13: the calm, pleased or annoyed face of the
+ * moment, in its niche; the Rat King has none and keeps his idle sprite in a frame of its own), the words coming out letter by letter with a blip (a tap brings the rest out at once), a few little replies for the player to tap
  * (cosmetic: «Fine», «Later», «And what do I get?» only close the window or ask the giver for a word more), and, when a reward is
  * earned, the «quest complete» line with its fanfare and the reward cards coming up one after another.
  * What is really chosen (the ghost's gift, the wandmaker's wand, the curse's yes and no) is passed in as it always was, untouched.
@@ -43,10 +45,25 @@ export interface TalkOptions {
   answers?: ReadonlyArray<{ label: string; onAnswer(): void }>;
   /** The errand is done: the banner and the fanfare when the words are out. */
   complete?: boolean;
+  /** The face of the portrait for this moment (calm when not said). */
+  mood?: Mood;
   onClose(): void;
 }
 
 const reduced = (): boolean => quality.reducedMotion;
+
+/**
+ * The giver's face: the designer's portrait in its niche, in the mood of the moment, with a `speaks` class while it talks (the face
+ * bobs a pixel). A giver without a portrait (the Rat King) is shown as his own idle sprite in the old frame.
+ */
+export function talkFace(kind: MobKind, id: QuestId, mood: Mood = 'calm'): { node: HTMLElement; talking(on: boolean): void } {
+  const npc = PORTRAIT_OF[kind];
+  if (!npc) return talkFrame(kind, id);
+  const node = el('div', { className: `fl-portrait ${npc} ${mood}` });
+  // The window's title names who it is; the picture is only a face.
+  node.setAttribute('aria-hidden', 'true');
+  return { node, talking: (on) => node.classList.toggle('speaks', on) };
+}
 
 /** The giver in its frame: a canvas that idles on the giver's own animation, and a `talking` class while it speaks. */
 export function talkFrame(kind: MobKind, id: QuestId): { node: HTMLElement; talking(on: boolean): void } {
@@ -171,10 +188,13 @@ function rewardCards(options: TalkOptions): HTMLElement | null {
   // The rewards are shown for what they are.
   const world = { ...options.world, known: [...options.world.known, ...offers.map((item) => item.kind)] };
   const card = (item: Item, index: number): HTMLElement => {
+    // The reward stands on its giver's podium of light (the designer's reward.png); the item is drawn on it.
+    const podium = rewardKind(options.id, index);
+    const cell = podium ? el('div', { className: `fl-reward-slot ${podium}`, ariaLabel: capitalize(itemName(world, item)) }, itemIcon(world, item)) : slot(world, item, { hero });
     const node = el(
       'div',
       { className: 'pd-reward fl-reveal' },
-      slot(world, item, { hero }),
+      cell,
       el('div', { className: 'pd-reward-name', textContent: capitalize(itemName(world, item)) }),
       el('div', { className: 'pd-reward-desc', textContent: itemInfo(world, hero, item).join(' ') }),
       button(t.take, () => {
@@ -191,7 +211,7 @@ function rewardCards(options: TalkOptions): HTMLElement | null {
 /** The dialogue with a quest giver. */
 export function showTalk(options: TalkOptions): void {
   const { id, kind } = options;
-  const frame = talkFrame(kind, id);
+  const frame = talkFace(kind, id, options.mood);
   const speech = new Speech(VOICE_RATE[id], frame.talking);
   const banner = options.complete
     ? el('div', { className: 'fl-qbanner' }, el('i', { className: 'fl-qstar' }), el('span', { textContent: Q.talk.done }), el('i', { className: 'fl-qstar' }))
@@ -202,7 +222,7 @@ export function showTalk(options: TalkOptions): void {
   const body = el('div', { className: 'pd-scroll pd-stack fl-talk' }, speech.node, hint, banner, cards);
   const real = options.answers ?? [];
   const box = windowOf(
-    { title: capitalize(t.mobs[kind]), sub: Q.role[id], icon: frame.node, onClose: real.length > 0 ? undefined : options.onClose, className: `fl-talk-window ${id}` },
+    { title: capitalize(t.mobs[kind]), sub: Q.role[id], icon: frame.node, onClose: real.length > 0 ? undefined : options.onClose, className: `fl-talk-window${PORTRAIT_OF[kind] ? ' fl-dialog' : ''} ${id}` },
     body,
     replies,
   );
@@ -282,8 +302,8 @@ function gleam(box: HTMLElement): void {
 }
 
 /** The same dialogue for the blacksmith's reforging window: the portrait frame and the speech to hand to `showReforge`. */
-export function smithTalk(id: QuestId, kind: MobKind, text: string, complete: boolean): { icon: HTMLElement; speech: HTMLElement; sub: string } {
-  const frame = talkFrame(kind, id);
+export function smithTalk(id: QuestId, kind: MobKind, text: string, complete: boolean, mood: Mood = 'calm'): { icon: HTMLElement; speech: HTMLElement; sub: string } {
+  const frame = talkFace(kind, id, mood);
   const speech = new Speech(VOICE_RATE[id], frame.talking);
   const node = el('div', { className: 'fl-talk smith-talk' }, speech.node);
   if (complete) node.append(el('div', { className: 'fl-qbanner' }, el('i', { className: 'fl-qstar' }), el('span', { textContent: Q.talk.done }), el('i', { className: 'fl-qstar' })));

@@ -183,17 +183,21 @@ interface WindowOptions {
 
 /** A window: the head (icon, title, cross), then the body. */
 export function windowOf(options: WindowOptions, ...body: Child[]): HTMLElement {
+  // A giver's dialogue (part 13): the designer's frame, the portrait in its niche, the name and the role in their own type.
+  const dialog = options.className?.split(' ').includes('fl-dialog') === true;
+  // A place's card (part 13): its icon, and its name in the card's own type.
+  const place = options.className?.split(' ').includes('fl-place-window') === true;
   const head =
     (options.title || options.icon || options.onClose) &&
     el(
       'header',
-      { className: 'pd-window-head' },
+      { className: `pd-window-head${dialog ? ' fl-dialog-head' : ''}` },
       options.icon,
       el(
         'div',
         { className: 'pd-titles' },
-        options.title && el('h2', { className: 'pd-heading', textContent: options.title }),
-        options.sub && el('span', { className: 'pd-note', textContent: options.sub }),
+        options.title && el('h2', { className: `pd-heading${dialog ? ' fl-dialog-name' : ''}${place ? ' fl-place-name' : ''}`, textContent: options.title }),
+        options.sub && el('span', { className: `pd-note${dialog ? ' fl-dialog-role' : ''}`, textContent: options.sub }),
       ),
     );
   const box = el(
@@ -241,7 +245,7 @@ export function healthBar(hp: number, ht: number, text = true): HTMLElement {
 
 /* Item slots */
 
-function itemIcon(world: World, item: Item): HTMLElement {
+export function itemIcon(world: World, item: Item): HTMLElement {
   const icon = el('i', { className: 'pd-item' });
   icon.dataset.i = String(itemSprite(item, world.run.labels));
   return icon;
@@ -739,12 +743,14 @@ export interface InfoExtras {
   icon?: HTMLElement;
   /** A creature's health, as a bar under its name. */
   health?: readonly [number, number];
+  /** Classes of the window (a place's card: `fl-place-window`). */
+  className?: string;
 }
 
 /** A few lines about something looked at (the examine tool's windows). */
 export function showInfo(title: string, lines: readonly string[], onClose: () => void, extras: InfoExtras = {}): void {
   const box = windowOf(
-    { title: capitalize(title), icon: extras.icon, onClose },
+    { title: capitalize(title), icon: extras.icon, onClose, ...(extras.className ? { className: extras.className } : {}) },
     ...described(lines),
   );
   if (extras.health) box.querySelector('.pd-titles')!.append(healthBar(extras.health[0], extras.health[1]));
@@ -805,7 +811,7 @@ export function showReforge(options: ReforgeOptions): void {
     );
   show(
     windowOf(
-      { title: capitalize(t.mobs.blacksmith), ...(options.talk?.sub ? { sub: options.talk.sub } : {}), icon: options.talk?.icon ?? portrait('blacksmith'), onClose: options.onClose, ...(options.talk ? { className: 'fl-smith-window' } : {}) },
+      { title: capitalize(t.mobs.blacksmith), ...(options.talk?.sub ? { sub: options.talk.sub } : {}), icon: options.talk?.icon ?? portrait('blacksmith'), onClose: options.onClose, ...(options.talk ? { className: 'fl-smith-window fl-dialog' } : {}) },
       el(
         'div',
         { className: 'pd-scroll pd-stack' },

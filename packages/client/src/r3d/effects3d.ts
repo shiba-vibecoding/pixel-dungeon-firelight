@@ -768,7 +768,7 @@ export class Effects3D {
     this.ripples(c);
     this.glows(c);
     this.cellFlashes(c);
-    this.places.frame(c, quality.light || !this.particlesOn, quality.reducedMotion);
+    this.places.frame(c, quality.light || !this.particlesOn, quality.reducedMotion, this.sheets.ready);
     this.bolts(c, kit);
     this.legacy(c);
     // The designer's effects and clouds; until their sheets have come, the older puffs of gas.

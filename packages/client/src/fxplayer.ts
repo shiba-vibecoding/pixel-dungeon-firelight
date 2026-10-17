@@ -109,6 +109,33 @@ export interface PlayOpts {
   /** Shake and flash the screen (the def's own), or not. */
   shake?: boolean;
   tint?: boolean;
+  /** Where what follows the effect (its `then`) is played, when that is not where it is (a vein's nugget lies on the floor in front of the wall). */
+  thenAt?: { x: number; z: number };
+}
+
+/**
+ * A loop the scene keeps while its cause is in the party's sight (fx.json `ambient`): a well's water, the pot, the pedestal, the fireflies of a
+ * garden, the dust before the shelves. It is not an instance of the pool: it has no memory, and where its frame is at a moment is worked out
+ * from the time and its seed, so a floor of them costs a handful of small sums a frame and nothing is made.
+ */
+export const AMBIENT_LOOP = 0;
+/** One that plays its frames once every few seconds (a glint over the spines of the books), `every` ms apart. */
+export const AMBIENT_CADENCE = 1;
+/** One mote drifting up and fading, born again somewhere else about the cell (`life` and `rise` are the def's). */
+export const AMBIENT_MOTE = 2;
+
+export interface AmbientEntry {
+  id: string;
+  mode: number;
+  /** Where, cells (the middle of a cell is .5). */
+  x: number;
+  z: number;
+  /** Height over the floor when the def's anchor is not the thing to go by (a well's water lies lower than the floor of its room); NaN: the def's. */
+  lift: number;
+  /** 0..1, so that two of the same do not beat together. */
+  seed: number;
+  /** Cadence only: ms between plays, min and max. */
+  every: readonly [number, number];
 }
 
 /** What the player needs to know of the game while it takes an effect in. */
@@ -125,6 +152,9 @@ export interface Env {
 }
 
 const CAP_INST = 160;
+/** The loops of the places in a frame (the gas and the instances come before and after), and how far from the hero they are drawn, cells. */
+const AMBIENT_ITEMS = 140;
+const AMBIENT_REACH = 11;
 const CAP_ITEMS = 520;
 /** The most gas tiles drawn: more would only be fill. */
 const GAS_TILES = 240;
@@ -152,6 +182,11 @@ export class FxPlayer {
   count = 0;
 
   private readonly pool: Inst[] = [];
+  /** The loops of the floor in view (setAmbient), and the hero's cell (cells) beyond which they are not drawn. */
+  private ambient: readonly AmbientEntry[] = [];
+  private readonly ambientDefs: Array<FxDef | null> = [];
+  hx = NaN;
+  hz = NaN;
   private readonly spot = { x: 0, z: 0 };
   private cursor = 0;
   private readonly kicks: Array<{ at: number; px: number; ms: number; rgb: string; alpha: number }> = [];
@@ -166,6 +201,8 @@ export class FxPlayer {
   use(lib: FxLib | null): void {
     this.lib = lib;
     this.clear();
+    // The loops asked for before the data came are looked up again.
+    this.setAmbient(this.ambient);
   }
 
   clear(): void {
@@ -177,6 +214,14 @@ export class FxPlayer {
   get ready(): boolean {
     return this.lib !== null;
   }
+
+  /** The loops of the floor (the entries are made once for a floor; nothing is copied or made while a frame is drawn). */
+  setAmbient(list: readonly AmbientEntry[]): void {
+    this.ambient = list;
+    this.ambientDefs.length = 0;
+    for (const e of list) this.ambientDefs.push(this.lib?.fx[e.id] ?? null);
+  }
+
 
   /** Whether anything is playing (the picture must be drawn at full pace), or gas lies on the floor. */
   moving(now: number): boolean {
@@ -192,7 +237,7 @@ export class FxPlayer {
   /** The effect an event key names, or null. */
   idOf(key: string | null): string | null {
     if (!key || !this.lib) return null;
-    const id = this.lib.events[key];
+    const id = this.lib.events[key] ?? this.lib.moments[key];
     return id !== undefined && this.lib.fx[id] ? id : null;
   }
 
@@ -268,9 +313,21 @@ export class FxPlayer {
   playAt(id: string, x: number, z: number, now: number, o: PlayOpts = {}): boolean {
     const d = this.lib?.fx[id];
     if (!d) return false;
+    const played = this.playOne(d, x, z, now, o);
+    // What follows (a struck vein's nugget, a waking statue's dust, the bell over an alarm's plate) starts when this one is through. The
+    // clouds that follow a trap are the burst's own, so they are not played twice.
+    if (played && d.then && !d.then.startsWith('gas.') && !d.loop && d.then !== id) {
+      const at = o.thenAt ?? { x, z };
+      this.playAt(d.then, at.x, at.z, now, { ...o, thenAt: undefined, delay: (o.delay ?? 0) + playMs(d) + (d.hold ?? 0) });
+    }
+    return played;
+  }
+
+  private playOne(d: FxDef, x: number, z: number, now: number, o: PlayOpts): boolean {
     switch (d.behaviour) {
       case 'hang': {
-        const inst = this.begin(KIND.hang, d, x, z, now, o, o.ms ?? d.hold ?? 2400);
+        // A loop lasts as long as it is asked to (or its hold); one that plays once holds its last frame for its hold.
+        const inst = this.begin(KIND.hang, d, x, z, now, o, o.ms ?? (d.loop ? d.hold ?? 2400 : playMs(d) + (d.hold ?? 0) || 2400));
         return inst !== null;
       }
       case 'splat': {
@@ -283,7 +340,7 @@ export class FxPlayer {
       }
       case 'wave': return this.wave(d, x, z, now, o);
       default: {
-        const dur = d.loop ? (o.ms ?? d.hold ?? playMs(d)) : playMs(d);
+        const dur = d.loop ? (o.ms ?? d.hold ?? playMs(d)) : playMs(d) + (d.hold ?? 0);
         const inst = this.begin(KIND.flash, d, x, z, now, o, dur);
         return inst !== null;
       }
@@ -602,8 +659,69 @@ export class FxPlayer {
         default: break;
       }
     }
+    this.ambientItems(now, see, calm);
     this.gasTiles(now, visible, calm);
     return this.count;
+  }
+
+  /** The kept loops, each one frame (or one mote) in the party's sight and near the hero, at most AMBIENT_ITEMS in a frame. */
+  private ambientItems(now: number, see: (x: number, z: number) => boolean, calm: boolean): void {
+    const list = this.ambient;
+    if (list.length === 0) return;
+    const light = this.sink.light();
+    const near = Number.isNaN(this.hx) ? Infinity : AMBIENT_REACH;
+    let used = 0;
+    for (let n = 0; n < list.length && used < AMBIENT_ITEMS; n++) {
+      const e = list[n]!;
+      const d = this.ambientDefs[n];
+      if (!d) continue;
+      if (Math.abs(e.x - this.hx) > near || Math.abs(e.z - this.hz) > near || !see(e.x, e.z)) continue;
+      // Low quality keeps every other of the motes.
+      if (light && e.mode === AMBIENT_MOTE && e.seed > 0.5) continue;
+      // Reduced motion holds one frame still.
+      const ms = calm ? 0 : now + e.seed * 9973;
+      let frame = Math.floor((ms * d.fps) / 1000) % d.frames;
+      let x = e.x;
+      let z = e.z;
+      let lift = e.lift;
+      let alpha = 1;
+      if (e.mode === AMBIENT_CADENCE) {
+        const period = e.every[0] + e.seed * (e.every[1] - e.every[0]);
+        const t = calm ? 0 : (now + e.seed * period) % period;
+        frame = Math.floor((t * d.fps) / 1000);
+        if (frame >= d.frames) continue;
+      } else if (e.mode === AMBIENT_MOTE) {
+        // Born at a place about the cell, drifts up (or sinks) by the def's `rise` and fades in and out; the next one is born elsewhere.
+        const life = d.life ? d.life[0] + (d.life[1] - d.life[0]) * hash(e.seed * 1e5, 3) : 2400;
+        const age = calm ? life * 0.5 : now / life + e.seed;
+        const cycle = Math.floor(age);
+        const u = age - cycle;
+        const r = hash(e.seed * 1e5 + cycle, 7);
+        const r2 = hash(e.seed * 1e5 + cycle, 11);
+        x += (r - 0.5) * 0.8 + (calm ? 0 : Math.sin(now / 900 + e.seed * 40 + cycle) * 0.06);
+        z += (r2 - 0.5) * 0.7;
+        lift = (Number.isNaN(lift) ? 0.45 : lift) + (d.rise ?? 0) * u * 0.0625 + r2 * 0.3;
+        alpha = Math.sin(Math.PI * u);
+      }
+      const it = this.placeAmbient(d, frame, x, z, lift);
+      if (!it) return;
+      it.alpha = alpha;
+      used++;
+    }
+  }
+
+  /** One frame of a loop where its anchor puts it: standing at the feet, lying on the floor, or in the air. */
+  private placeAmbient(d: FxDef, frame: number, x: number, z: number, lift: number): DrawItem | null {
+    switch (d.anchor) {
+      case 'feet': return this.emit(d, frame, d.row, x, z, 0, MODE_FEET);
+      case 'floor': case 'feet-floor': {
+        const it = this.emit(d, frame, d.row, x, z, Number.isNaN(lift) ? d.lift ?? 0.02 : lift, MODE_FLOOR);
+        if (it && d.anchor === 'feet-floor') it.feet = true;
+        return it;
+      }
+      case 'head': return this.emit(d, frame, d.row, x, z, 0.95, MODE_STAND);
+      default: return this.emit(d, frame, d.row, x, z, Number.isNaN(lift) ? 0.5 : lift, MODE_STAND);
+    }
   }
 
   private flight(i: Inst, t: number, see: (x: number, z: number) => boolean): void {
@@ -632,7 +750,8 @@ export class FxPlayer {
   private stand(i: Inst, t: number, see: (x: number, z: number) => boolean): void {
     const d = i.def;
     if (!see(i.x0, i.z0)) return;
-    if (!d.loop && t >= playMs(d) && i.kind === KIND.flash) return;
+    const shown = playMs(d) + (d.hold ?? 0);
+    if (!d.loop && t >= shown && i.kind === KIND.flash) return;
     const frame = frameAt(d, t);
     let mode = MODE_STAND;
     let lift = 0.5;
@@ -642,11 +761,13 @@ export class FxPlayer {
       case 'feet': mode = MODE_FEET; lift = 0; feet = true; break;
       case 'floor': mode = MODE_FLOOR; lift = d.lift ?? 0.02; if (d.sheet.includes('/traps/')) z -= 0.25; break;
       case 'feet-floor': mode = MODE_FLOOR; lift = d.lift ?? 0.02; feet = true; break;
+      case 'head': lift = 0.95; break;
       default: break;
     }
     if (i.kind === KIND.hang) {
-      // Over the figure's head, drifting up a little.
-      lift = 0.95 + (d.rise ?? 0) * (t / i.dur);
+      // What is anchored at the feet or on the floor stays there (rising by its `rise`); the rest hangs over the head, drifting up a little.
+      const drift = (d.rise ?? 0) * (t / i.dur);
+      lift = d.anchor === 'feet' ? drift : d.anchor === 'floor' || d.anchor === 'feet-floor' ? lift + drift : 0.95 + drift;
     }
     const it = this.emit(d, frame, i.row, i.x0, z, lift, mode);
     if (!it) return;
@@ -654,7 +775,7 @@ export class FxPlayer {
     it.feet = feet;
     // A flash fades out over its last frame.
     if (!d.loop && i.kind === KIND.flash) {
-      const left = playMs(d) - t;
+      const left = shown - t;
       it.alpha = left < 1000 / d.fps ? Math.max(0.15, left / (1000 / d.fps)) : 1;
     } else if (i.kind === KIND.hang) {
       const k = t / i.dur;

@@ -114,6 +114,11 @@ export interface FxLib {
   fx: Record<string, FxDef>;
   /** Event key -> effect id (or `boss.<kind>`, which is a card in `bossCards`). */
   events: Record<string, string>;
+  /**
+   * Part 13: keys of moments the client sees that `events` does not yet name (migration-p13.md), each to the effect it plays. `eventKey`
+   * knows the ones it is taught; the lookup (`idOf`) tries `events` first and `moments` after.
+   */
+  moments: Record<string, string>;
   bossCards: BossCards;
 }
 
@@ -266,7 +271,9 @@ export function parseFx(raw: unknown): FxLib {
   for (const [id, v] of Object.entries(raw.fx)) fx[id] = def(id, v);
   const events: Record<string, string> = {};
   for (const [key, id] of Object.entries(raw.events)) events[key] = str(id, `events.${key}`);
-  return { version: num(raw.version, 'version', 1), fx, events, bossCards: bossCards(raw.bossCards) };
+  const moments: Record<string, string> = {};
+  if (isObject(raw.moments)) for (const [key, id] of Object.entries(raw.moments)) if (key !== 'note') moments[key] = str(id, `moments.${key}`);
+  return { version: num(raw.version, 'version', 1), fx, events, moments, bossCards: bossCards(raw.bossCards) };
 }
 
 /** The effect ids a def points to (its hit, the ends of a beam, the specks a wave throws, what follows a trap). */
@@ -291,6 +298,7 @@ export function problems(lib: FxLib, sizeOf?: (sheet: string) => { w: number; h:
       if (!lib.bossCards.bosses[id.slice(5)]) out.push(`event ${key}: no boss card ${id}`);
     } else if (!lib.fx[id]) out.push(`event ${key}: no effect ${id}`);
   }
+  for (const [key, id] of Object.entries(lib.moments)) if (!lib.fx[id]) out.push(`moment ${key}: no effect ${id}`);
   for (const d of Object.values(lib.fx)) {
     for (const link of linksOf(d)) if (!lib.fx[link]) out.push(`${d.id}: links to missing ${link}`);
     if (d.behaviour === 'tile' && (!d.rows || !d.volume)) out.push(`${d.id}: a cloud with no rows or volume`);
@@ -376,9 +384,22 @@ export function eventKey(e: Effect, colour?: string, ht?: number): string | null
     case 'yell': return e.line === 'notice' ? `yell.notice.${e.kind}` : null;
     case 'attack': return attackKey(e.hit, e.damage, ht ?? 0);
     case 'levelUp': case 'resurrected': case 'amulet': case 'healed': return e.type;
+    // Part 13 (fx.json `moments`): what the client already sees, and no event that the core does not send.
+    case 'mined': return 'mined';
+    // The errand handed in: the hammer comes down on the anvil (the reforging itself is told by the client, see questfx.ts `anvil`).
+    case 'smith': return e.line === 'completed' ? 'smith' : null;
+    case 'flock': return 'flock';
+    case 'faded': return 'faded';
+    case 'mirrored': return 'mirrored';
+    case 'teleported': return 'teleported';
+    case 'well': return `well.${e.water}`;
+    case 'glyph': return `glyph.${e.glyph}`;
     default: return null;
   }
 }
+
+/** The key of the wave of clean light a cloud of purity gives beside its gas (the gas itself is `burst.purity`), or null. */
+export const purityWaveKey = (e: Effect): string | null => (e.type === 'burst' && e.kind === 'purity' ? 'burst.purity.wave' : null);
 
 /** The sprite of a monster's own missile that the game draws as a shuriken (items.png cell 15); the rest are arrows. */
 export const SHURIKEN_SPRITE = 15;

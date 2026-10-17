@@ -12,6 +12,21 @@ import { type LineId, type QuestWords, type Register, say, type Vars } from './q
 
 export type TalkLine = 'intro' | 'remind' | 'reward' | 'farewell';
 
+/** The face the giver wears, as the designer's portraits have it (assets/ui/quest/quest.json portraits.mood). */
+export type Mood = 'calm' | 'pleased' | 'annoyed';
+
+/**
+ * The mood of a moment: the greeting and the reminder are calm; the errand done, the reward and the parting words pleased; not enough,
+ * no pickaxe, no blood, a busy smith, annoyed. His services (the reforging window) are calm business.
+ */
+export function moodOf(line: TalkLine | SmithTalk): Mood {
+  switch (line) {
+    case 'reward': case 'farewell': case 'completed': return 'pleased';
+    case 'noGold': case 'noPickaxe': case 'noBlood': case 'busy': return 'annoyed';
+    default: return 'calm';
+  }
+}
+
 export interface ReplyPlan {
   label: string;
   /** What the giver says back; absent for a reply that only closes the window. */
@@ -28,6 +43,8 @@ export interface TalkPlan {
   offers: Item[];
   /** The errand is done: the banner and the fanfare. */
   complete: boolean;
+  /** The face of the portrait. */
+  mood: Mood;
 }
 
 const lineOf = (words: QuestWords, id: LineId, register: Register, vars: Vars): string => say(words.lines[id], register, vars);
@@ -49,7 +66,7 @@ export function ghostPlan(
 ): TalkPlan {
   const vars: Vars = { cls };
   const quest = world.quest;
-  const base = { id: 'ghost' as const, kind: 'ghost' as const, complete: line === 'reward' };
+  const base = { id: 'ghost' as const, kind: 'ghost' as const, complete: line === 'reward', mood: moodOf(line) };
   if (line === 'farewell') {
     return { ...base, text: lineOf(words, 'ghost.farewell', register, vars), replies: [], bye: say(words.replies.ghost.bye, register), offers: [] };
   }
@@ -67,7 +84,7 @@ export function wandmakerPlan(words: QuestWords, world: World, _hero: Hero, line
   const quest = world.wandQuest;
   const wants = quest?.wants ?? 'dust';
   const vars: Vars = {};
-  const base = { id: 'wandmaker' as const, kind: 'wandmaker' as const, complete: line === 'reward' };
+  const base = { id: 'wandmaker' as const, kind: 'wandmaker' as const, complete: line === 'reward', mood: moodOf(line) };
   if (line === 'farewell') {
     return { ...base, text: lineOf(words, 'wand.farewell', register, vars), replies: [], bye: say(words.replies.wandmaker.bye, register), offers: [] };
   }
@@ -86,7 +103,7 @@ export function smithPlan(words: QuestWords, world: World, hero: Hero, line: Smi
   const quest = world.smithQuest;
   const wants = quest?.wants ?? 'gold';
   const vars: Vars = { n: ORE_WANTED, have: oreHeld(hero) };
-  const base = { id: 'smith' as const, kind: 'blacksmith' as const, offers: [] as Item[], complete: line === 'completed' };
+  const base = { id: 'smith' as const, kind: 'blacksmith' as const, offers: [] as Item[], complete: line === 'completed', mood: moodOf(line) };
   const text = lineOf(words, line === 'intro' ? (`smith.intro.${wants}` as LineId) : (`smith.${line}` as LineId), register, vars);
   if (line === 'intro') return { ...base, text, replies: repliesFor(words, 'smith', register, vars, 'smith.ask', `smith.where.${wants}` as LineId) };
   if (line === 'noGold' || line === 'noBlood') return { ...base, text, replies: repliesFor(words, 'smith', register, vars, undefined, `smith.where.${wants}` as LineId, false) };
@@ -98,7 +115,7 @@ export function impPlan(words: QuestWords, world: World, hero: Hero, line: TalkL
   const quest = world.impQuest;
   const prey = quest?.prey ?? 'golem';
   const vars: Vars = { n: TOKENS_WANTED[prey], have: tokensHeld(hero), cls };
-  const base = { id: 'imp' as const, kind: 'imp' as const, complete: line === 'reward' };
+  const base = { id: 'imp' as const, kind: 'imp' as const, complete: line === 'reward', mood: moodOf(line) };
   if (line === 'farewell') {
     return { ...base, text: lineOf(words, 'imp.farewell', register, vars), replies: [], bye: say(words.replies.imp.bye, register), offers: [] };
   }

@@ -1,8 +1,10 @@
 import { cellX, cellY, type Effect, type Glyph, heroById, type Mob, T, WIDTH, type World } from '@pd/core';
 import { audio, type Sound } from './audio';
 import { fx } from './fx';
+import { fxp, type PlayOpts } from './fxplayer';
+import { eventKey, purityWaveKey } from './fxsheet';
 import { itemName } from './itemtext';
-import { P_ALTAR, P_PEDESTAL, P_POT, P_SHELF, P_WELL, placeStore, scanPlaces, type Spot, W_AWARE, W_CHANGE, W_HEALTH } from './places';
+import { P_ALTAR, P_PEDESTAL, P_POT, P_SHELF, P_WELL, placeStore, scanAmbient, scanPlaces, type Spot, W_AWARE, W_CHANGE, W_HEALTH } from './places';
 import { WORDS } from './placetext';
 import { quality } from './quality';
 import { seenCells } from './sight';
@@ -19,9 +21,26 @@ import type { View } from './view';
  *
  * Presentation only: it reads the effects the rules already give and the world as it is; it changes no rule, and it says nothing that
  * what the party sees does not already say. (A ring's thorns and haggling show only once the ring is known.)
+ *
+ * Part 13: where the designer's sheets have a look for the moment (fx.json: the wells' beams, the sheep, the mirror, the sleepers' «z», the
+ * thorns, the glyphs, the purity wave, the waking statue, the alarm's bell, levitation), they are played in place of the hand-made one
+ * (`art`), never beside it; the older look stays for as long as the data has not come, and for what the sheets have nothing for.
  */
 
 const TILE = 16;
+
+/** How long the shimmer stays on a mirror image, and the «z»s over a sleeper, ms. */
+const MIRROR_MS = 6000;
+const SLEEP_MS = 3600;
+
+/** The designer's effect `id` played at a cell, if the data has it: false (and the older look then plays) when it has not. */
+function art(id: string | null, cell: number, now: number, o: PlayOpts = {}): boolean {
+  if (!id || !fxp.has(id)) return false;
+  return fxp.playAt(id, (cell % WIDTH) + 0.5, Math.trunc(cell / WIDTH) + 0.5, now, o);
+}
+
+/** What each creature on the floor is, by its id: a creature that has faded is no longer in the world when its effect is told. */
+const kindOfMob = new Map<string, string>();
 
 /** Where a toast goes (main.ts sets it: screens.ts is not imported here). */
 export const placeSink = {
@@ -34,12 +53,12 @@ const cz = (cell: number): number => Math.trunc(cell / WIDTH) + 0.5;
 
 /** The palettes of each water, as the effects module's colours. */
 const WATER_COLORS: ReadonlyArray<readonly string[]> = [
-  ['#7dffa0', '#c8ffd8', '#ffa8c8', '#40e070'],
+  ['#ff8a9a', '#ffd0d8', '#ffb0c0', '#ff5a6a'],
   ['#8fd0ff', '#e0f4ff', '#5aa0ff', '#ffffff'],
   ['#d09aff', '#ffd0ff', '#7a50e0', '#ffe080'],
 ];
-const WATER_RGB: ReadonlyArray<readonly [number, number, number]> = [[0.42, 0.95, 0.55], [0.42, 0.74, 1.0], [0.78, 0.45, 1.0]];
-const WATER_CSS = ['110, 255, 150', '120, 190, 255', '200, 140, 255'];
+const WATER_RGB: ReadonlyArray<readonly [number, number, number]> = [[1.0, 0.5412, 0.6039], [0.42, 0.74, 1.0], [0.78, 0.45, 1.0]];
+const WATER_CSS = ['255, 138, 154', '120, 190, 255', '200, 140, 255'];
 
 const GLYPH_RGB: Readonly<Record<Glyph, readonly [number, number, number]>> = {
   bounce: [0.95, 0.9, 0.55], affection: [1, 0.45, 0.72], antiEntropy: [0.6, 0.86, 1], multiplicity: [0.76, 0.8, 1], potential: [1, 0.95, 0.4],
@@ -57,7 +76,7 @@ const WOOL = ['#ffffff', '#f2f2f2', '#dcdcdc'];
 const waterOf = (water: string): number => (water === 'health' ? W_HEALTH : water === 'awareness' ? W_AWARE : W_CHANGE);
 
 /** A column of light and the rest of what drinking from a well looks like. */
-function wellUse(cell: number, water: number, mine: boolean, now: number): void {
+function wellUse(cell: number, water: number, mine: boolean, now: number, beamId: string | null): void {
   const at = place(cell);
   const colors = WATER_COLORS[water]!;
   const rgb = WATER_RGB[water]!;
@@ -69,11 +88,15 @@ function wellUse(cell: number, water: number, mine: boolean, now: number): void 
     audio.play('wellChange', 1, 0.7, at);
     return;
   }
-  stamps.add(stamps.BEAM, cx(cell), cz(cell), 0, now, calm ? 900 : 1500, rgb, 1);
+  // The designer's beam (its column, the spices rising in it, its light and a tint of the screen for the one who drinks) or, until it has come, ours.
+  const beam = art(beamId, cell, now, { shake: mine, tint: mine });
+  if (!beam) stamps.add(stamps.BEAM, cx(cell), cz(cell), 0, now, calm ? 900 : 1500, rgb, 1);
   fx.wave(at.x, at.y, now, { colors, rings: calm ? 1 : 3, tiles: 3.2, duration: 800, stagger: 140, width: 2 });
-  fx.burst(at.x, at.y - 2, now, { count: quality.light ? 16 : 34, colors, glow: true, speed: [8, 40], life: [700, 1400], rise: 40, drag: 0.3, spread: 5, size: [1, 2] });
-  fx.pulse(at.x, at.y, now, WATER_CSS[water]!, 8, 1200);
-  if (mine) fx.flash(WATER_CSS[water]!, 0.22, 500, now);
+  if (!beam) {
+    fx.burst(at.x, at.y - 2, now, { count: quality.light ? 16 : 34, colors, glow: true, speed: [8, 40], life: [700, 1400], rise: 40, drag: 0.3, spread: 5, size: [1, 2] });
+    fx.pulse(at.x, at.y, now, WATER_CSS[water]!, 8, 1200);
+    if (mine) fx.flash(WATER_CSS[water]!, 0.22, 500, now);
+  }
   audio.play(water === W_HEALTH ? 'wellHealth' : 'wellAware', 1, 1, mine ? undefined : at);
 }
 
@@ -86,7 +109,7 @@ function one(effects: readonly Effect[], index: number, view: View, world: World
       const hero = heroById(world, effect.hero);
       if (!hero || hero.depth !== view.depth) return;
       const water = waterOf(effect.water);
-      wellUse(hero.pos, water, effect.hero === myId, now);
+      wellUse(hero.pos, water, effect.hero === myId, now, fxp.idOf(eventKey(effect)));
       if (effect.hero === myId) placeSink.toast(WORDS.wellDone(water), 'good');
       return;
     }
@@ -94,10 +117,14 @@ function one(effects: readonly Effect[], index: number, view: View, world: World
       const hero = heroById(world, effect.hero);
       if (!hero || hero.depth !== view.depth) return;
       const at = place(hero.pos);
-      stamps.add(stamps.BEAM, cx(hero.pos), cz(hero.pos), 0, now, 1400, WATER_RGB[W_CHANGE]!, 1);
+      // The water of change's own beam (the moment `well.transmutation`), or ours.
+      const beam = art(fxp.idOf('well.transmutation'), hero.pos, now, { shake: effect.hero === myId, tint: effect.hero === myId });
+      if (!beam) stamps.add(stamps.BEAM, cx(hero.pos), cz(hero.pos), 0, now, 1400, WATER_RGB[W_CHANGE]!, 1);
       fx.wave(at.x, at.y, now, { colors: WATER_COLORS[W_CHANGE]!, rings: 3, tiles: 3, duration: 800, stagger: 150, width: 2 });
-      fx.burst(at.x, at.y - 2, now, { count: quality.light ? 18 : 40, colors: WATER_COLORS[W_CHANGE]!, glow: true, speed: [10, 50], life: [700, 1300], rise: 30, spread: 5, size: [1, 2] });
-      fx.pulse(at.x, at.y, now, WATER_CSS[W_CHANGE]!, 8, 1100);
+      if (!beam) {
+        fx.burst(at.x, at.y - 2, now, { count: quality.light ? 18 : 40, colors: WATER_COLORS[W_CHANGE]!, glow: true, speed: [10, 50], life: [700, 1300], rise: 30, spread: 5, size: [1, 2] });
+        fx.pulse(at.x, at.y, now, WATER_CSS[W_CHANGE]!, 8, 1100);
+      }
       audio.play('wellChange', 1, 1, effect.hero === myId ? undefined : at);
       if (effect.hero === myId) placeSink.toast(WORDS.transmuted(itemName(world, effect.from), itemName(world, effect.to)), 'good');
       return;
@@ -145,20 +172,26 @@ function one(effects: readonly Effect[], index: number, view: View, world: World
     case 'flock': {
       if (!here(effect.depth)) return;
       // Sheep pop in with a puff of wool, each with its own bleat, a beat apart, and a little different.
+      const poof = fxp.idOf(eventKey(effect));
       effect.cells.forEach((cell, i) => {
         const at = place(cell);
-        fx.burst(at.x, at.y, now + i * 40, { count: 9, colors: WOOL, speed: [20, 60], life: [300, 620], gravity: 60, drag: 0.2, size: [1, 2], spread: 3 });
-        fx.burst(at.x, at.y - 4, now + i * 40, { count: 4, colors: ['#ffffff', '#ffe9a0'], glow: true, speed: [10, 30], life: [300, 600], rise: 20, size: [1, 1] });
+        // The designer's puff of wool where each sheep stands (minor.sheep.appear), or ours.
+        if (!art(poof, cell, now, { delay: i * 40, shake: false, tint: false })) {
+          fx.burst(at.x, at.y, now + i * 40, { count: 9, colors: WOOL, speed: [20, 60], life: [300, 620], gravity: 60, drag: 0.2, size: [1, 2], spread: 3 });
+          fx.burst(at.x, at.y - 4, now + i * 40, { count: 4, colors: ['#ffffff', '#ffe9a0'], glow: true, speed: [10, 30], life: [300, 600], rise: 20, size: [1, 1] });
+        }
         if (i < 4) audio.later(60 + i * 90, 'bleat', 0.82 + ((i * 37) % 7) * 0.05, 0.6, at);
       });
       return;
     }
     case 'faded': {
       if (!here(effect.depth)) return;
-      // A sheep melts away in a soft puff.
+      // A sheep melts away: the designer's vanishing with a spark (minor.sheep.vanish), or a soft puff of ours; whatever else fades (a bee, a mirror image) keeps the puff.
       const at = place(effect.pos);
-      fx.burst(at.x, at.y, now, { count: 12, colors: WHITE_SMOKE, speed: [10, 40], life: [400, 800], rise: 14, drag: 0.4, size: [2, 3], spread: 5 });
-      fx.burst(at.x, at.y - 4, now, { count: 6, colors: ['#ffffff', '#ffe9a0'], glow: true, speed: [10, 30], life: [300, 600], rise: 24, size: [1, 1] });
+      if (!(kindOfMob.get(effect.mob) === 'sheep' && art(fxp.idOf(eventKey(effect)), effect.pos, now, { shake: false, tint: false }))) {
+        fx.burst(at.x, at.y, now, { count: 12, colors: WHITE_SMOKE, speed: [10, 40], life: [400, 800], rise: 14, drag: 0.4, size: [2, 3], spread: 5 });
+        fx.burst(at.x, at.y - 4, now, { count: 6, colors: ['#ffffff', '#ffe9a0'], glow: true, speed: [10, 30], life: [300, 600], rise: 24, size: [1, 1] });
+      }
       audio.play('pop', 0.9, 0.6, at);
       audio.later(40, 'puff', 1.2, 0.5, at);
       return;
@@ -174,8 +207,12 @@ function one(effects: readonly Effect[], index: number, view: View, world: World
     }
     case 'mirrored': {
       if (!here(effect.depth)) return;
+      const shimmer = fxp.idOf(eventKey(effect));
       effect.cells.forEach((cell, i) => {
         const at = place(cell);
+        // The shimmer of the designer's runs down each image and stays with it (minor.mirror, following it for a while), or ours.
+        const image = world.floors[view.depth]?.mobs.find((m) => m.pos === cell && m.kind === 'mirror');
+        if (art(shimmer, cell, now, { delay: i * 60, shake: false, tint: false, ms: MIRROR_MS, ...(image ? { follow: image.id } : {}) })) return;
         fx.burst(at.x, at.y - 4, now + i * 60, { count: quality.light ? 8 : 18, colors: ['#c6f6ff', '#86d6ff', '#ffffff'], glow: true, speed: [6, 30], life: [400, 900], rise: 10, spread: 5, size: [1, 1] });
         fx.wave(at.x, at.y, now + i * 60, { colors: ['#bfe6ff'], rings: 1, tiles: 1.1, duration: 420, width: 1.5 });
       });
@@ -191,12 +228,17 @@ function one(effects: readonly Effect[], index: number, view: View, world: World
       const hero = heroById(world, effect.hero);
       if (!hero || hero.depth !== view.depth) return;
       const rgb = GLYPH_RGB[effect.glyph] ?? [1, 1, 1];
-      stamps.add(stamps.RUNE, cx(hero.pos), cz(hero.pos), 0.55, now, quality.reducedMotion ? 320 : 520, rgb, 1);
+      // Each of the eleven glyphs has its own flash in the designer's sheet (glyph.<name>); the ring and marks of ours stand in until it has come.
+      if (!art(fxp.idOf(eventKey(effect)), hero.pos, now, { shake: false, tint: false })) {
+        stamps.add(stamps.RUNE, cx(hero.pos), cz(hero.pos), 0.55, now, quality.reducedMotion ? 320 : 520, rgb, 1);
+      }
       audio.play('glyph', 0.85 + GLYPH_ORDER.indexOf(effect.glyph) * 0.055, 0.7, effect.hero === myId ? undefined : place(hero.pos));
       return;
     }
     case 'trap': {
       if (!here(effect.depth) || effect.kind !== 'alarm') return;
+      // The designer's plate and the bell that swings over it with its rings of sound (trap.alarm, then minor.alarm) are the look once they have come.
+      if (fxp.has('minor.alarm') && fxp.has('trap.alarm')) return;
       // The alarm: rings of sound spreading out from the plate, each wider than the last, and the plate shivering.
       const at = place(effect.pos);
       const seen = effect.hero !== '' || seenCells(world, view.depth)[effect.pos] === true;
@@ -210,10 +252,12 @@ function one(effects: readonly Effect[], index: number, view: View, world: World
       if (!here(effect.depth)) return;
       const at = place(effect.to);
       if (effect.bolt === 'teleport') {
-        // The target is drawn into a point and gone: specks flying in, a ring closing, a violet flash.
-        fx.curse(at.x, at.y, now + 80, 8);
-        fx.wave(at.x, at.y, now + 60, { colors: ['#e0b0ff', '#ffffff'], rings: 2, tiles: 1.6, duration: 380, stagger: 90, width: 2 });
-        fx.pulse(at.x, at.y, now + 60, '200, 140, 255', 6, 500);
+        // The target is drawn into a point and gone: the designer's violet sparks leaving (status.teleport.out), or specks flying in, a ring closing, a violet flash.
+        if (!art('status.teleport.out', effect.to, now + 60, { shake: false, tint: false })) {
+          fx.curse(at.x, at.y, now + 80, 8);
+          fx.wave(at.x, at.y, now + 60, { colors: ['#e0b0ff', '#ffffff'], rings: 2, tiles: 1.6, duration: 380, stagger: 90, width: 2 });
+          fx.pulse(at.x, at.y, now + 60, '200, 140, 255', 6, 500);
+        }
       } else if (effect.bolt === 'slow') {
         // A weight settling on it: an amber ring that sinks, drops dripping off it.
         fx.wave(at.x, at.y, now + 60, { colors: ['#ffd060', '#fff0b0'], rings: 2, tiles: 1.4, duration: 600, stagger: 140, width: 2 });
@@ -230,8 +274,11 @@ function one(effects: readonly Effect[], index: number, view: View, world: World
       if (!hero || hero.depth !== view.depth) return;
       if (effect.kind === 'potion.levitation') {
         const at = place(hero.pos);
-        fx.wave(at.x, at.y + 3, now, { colors: ['#dff2ff', '#ffffff'], rings: 2, tiles: 1.5, duration: 600, stagger: 150, width: 1.5 });
-        fx.burst(at.x, at.y + 4, now, { count: quality.light ? 8 : 18, colors: ['#e8f4ff', '#bfe3ff', '#ffffff'], speed: [10, 36], life: [400, 800], rise: 20, drag: 0.3, angle: -Math.PI / 2, cone: 2.2, size: [1, 1], spread: 5 });
+        // The air circling under the feet is the designer's loop for as long as the hero floats (`levitation`, below); ours only while it has not come.
+        if (!fxp.has('minor.levitate')) {
+          fx.wave(at.x, at.y + 3, now, { colors: ['#dff2ff', '#ffffff'], rings: 2, tiles: 1.5, duration: 600, stagger: 150, width: 1.5 });
+          fx.burst(at.x, at.y + 4, now, { count: quality.light ? 8 : 18, colors: ['#e8f4ff', '#bfe3ff', '#ffffff'], speed: [10, 36], life: [400, 800], rise: 20, drag: 0.3, angle: -Math.PI / 2, cone: 2.2, size: [1, 1], spread: 5 });
+        }
         audio.play('levitate', 1, 0.8, effect.hero === myId ? undefined : at);
       }
       return;
@@ -240,9 +287,12 @@ function one(effects: readonly Effect[], index: number, view: View, world: World
       if (!here(effect.depth) || effect.kind !== 'purity') return;
       // The clearing: a wave of white-blue that runs out over the whole of the cloud's reach and takes the gas with it.
       const at = place(effect.pos);
-      fx.wave(at.x, at.y, now, { colors: ['#ffffff', '#cfeaff', '#e8f8ff'], rings: quality.light ? 2 : 3, tiles: effect.radius + 1.6, duration: 900, stagger: 170, width: 3 });
-      fx.pulse(at.x, at.y, now, '210, 235, 255', 7, 700);
-      fx.burst(at.x, at.y - 3, now, { count: 14, colors: ['#ffffff', '#cfeaff'], glow: true, speed: [14, 50], life: [500, 1000], rise: 14, size: [1, 1], spread: 4 });
+      // The designer's ring of clean light beside the cloud (minor.purity: the `burst.purity.wave` moment), or ours.
+      if (!art(fxp.idOf(purityWaveKey(effect)), effect.pos, now, { shake: false, tint: false })) {
+        fx.wave(at.x, at.y, now, { colors: ['#ffffff', '#cfeaff', '#e8f8ff'], rings: quality.light ? 2 : 3, tiles: effect.radius + 1.6, duration: 900, stagger: 170, width: 3 });
+        fx.pulse(at.x, at.y, now, '210, 235, 255', 7, 700);
+        fx.burst(at.x, at.y - 3, now, { count: 14, colors: ['#ffffff', '#cfeaff'], glow: true, speed: [14, 50], life: [500, 1000], rise: 14, size: [1, 1], spread: 4 });
+      }
       audio.play('purify', 1, 0.8, at);
       return;
     }
@@ -268,7 +318,10 @@ function thorns(effects: readonly Effect[], index: number, view: View, world: Wo
     if (next.type === 'hurt' && next.who === blow.attacker && next.damage > 0) {
       const mob = world.floors[view.depth]?.mobs.find((m) => m.id === blow.attacker);
       if (mob) {
-        stamps.add(stamps.SPIKES, cx(mob.pos), cz(mob.pos), 0.45, now + 60, 380, [1, 0.45, 0.35], 0.9, 0.4);
+        // The spikes shoot out of the hero and are drawn back in (minor.thorns, the moment `thorns`); ours, at the one struck, until they have come.
+        if (!art(fxp.idOf('thorns'), hero.pos, now, { delay: 60, shake: false, tint: false })) {
+          stamps.add(stamps.SPIKES, cx(mob.pos), cz(mob.pos), 0.45, now + 60, 380, [1, 0.45, 0.35], 0.9, 0.4);
+        }
         audio.later(60, 'thorns', 1, 0.7, place(mob.pos));
       }
       return;
@@ -282,7 +335,13 @@ function lullaby(view: View, world: World, now: number): void {
   const mobs = (world.floors[view.depth]?.mobs ?? []).filter((m: Mob) => m.state === 'sleeping' && m.kind !== 'statue' && seen[m.pos] === true);
   const rgb: readonly [number, number, number] = [0.78, 0.88, 1];
   let n = 0;
+  // The designer's «z»s (minor.sleep) rise over each sleeper for a few seconds; ours only while the sheet has not come.
+  const sleep = fxp.has('minor.sleep');
   for (const mob of mobs.slice(0, 10)) {
+    if (sleep) {
+      fxp.playAt('minor.sleep', cx(mob.pos), cz(mob.pos), now, { delay: 200 + (mob.pos % 5) * 70, follow: mob.id, ms: SLEEP_MS, shake: false, tint: false });
+      continue;
+    }
     const flip = (mob.pos % 3) * 1.2;
     for (let k = 0; k < 3; k++) {
       if (n++ >= 30) return;
@@ -315,8 +374,14 @@ export function placesBatch(effects: readonly Effect[], view: View, world: World
 export function updatePlaces(world: World, depth: number, key: string): void {
   if (placeStore.key === key) return;
   placeStore.key = key;
-  placeStore.floor = `${depth}:${key.slice(key.lastIndexOf(':') + 1)}`;
+  const floor = `${depth}:${key.slice(key.lastIndexOf(':') + 1)}`;
+  if (floor !== placeStore.floor) kindOfMob.clear();
+  placeStore.floor = floor;
   placeStore.spots = scanPlaces(world, depth);
+  // The designer's loops of the floor (the wells' water, the pot, the pedestals, the fireflies, the dust, the forge): the effects player draws them.
+  placeStore.ambient = scanAmbient(world, depth);
+  fxp.setAmbient(placeStore.ambient);
+  for (const mob of world.floors[depth]?.mobs ?? []) kindOfMob.set(mob.id, mob.kind);
 }
 
 /** What each place sounds like, how often (ms between), how loud, from how many cells it is heard. */
@@ -336,6 +401,12 @@ const AIRS: Readonly<Record<number, Air>> = {
 };
 
 const nextAt = new Map<number, number>();
+/** When each floating creature's loop of air is next renewed (it is played in short pieces, so that it ends when the levitation does). */
+const floatAt = new Map<string, number>();
+const FLOAT_MS = 1200;
+/** The creatures are looked over for who floats a few times a second, not every frame (nothing is made on the frames in between). */
+const FLOAT_SCAN_MS = 200;
+let floatScan = 0;
 let airKey = '';
 const hearing = { x: 0, y: 0 };
 
@@ -344,6 +415,18 @@ export function placesFrame(view: View, world: World, hero: { pos: number }, now
   if (airKey !== placeStore.floor) {
     airKey = placeStore.floor;
     nextAt.clear();
+    floatAt.clear();
+  }
+  // Whoever floats (a potion of levitation) has the air circling under the feet, the designer's `minor.levitate`, for as long as it lasts.
+  if (now >= floatScan && fxp.has('minor.levitate')) {
+    floatScan = now + FLOAT_SCAN_MS;
+    for (const [id, puppet] of view.puppets) {
+      if (!puppet.levitating || !puppet.alive) continue;
+      if (now < (floatAt.get(id) ?? 0)) continue;
+      floatAt.set(id, now + FLOAT_MS);
+      const p = view.position(puppet, now);
+      fxp.playAt('minor.levitate', (p.x + TILE / 2) / TILE, (p.y + TILE / 2) / TILE, now, { follow: id, ms: FLOAT_MS + 200, shake: false, tint: false });
+    }
   }
   const seen = seenCells(world, view.depth);
   const hx = hero.pos % WIDTH;
@@ -374,8 +457,13 @@ export function placesFrame(view: View, world: World, hero: { pos: number }, now
     const w = view.warps.pop()!;
     const at = place(w.cell);
     if (seen[w.cell]) {
-      fx.burst(at.x, at.y - 4, now, { count: quality.light ? 8 : 16, colors: ['#e0b0ff', '#ffffff', '#b070ff'], glow: true, speed: [6, 40], life: [400, 900], rise: 14, spread: 4, size: [1, 1] });
-      fx.wave(at.x, at.y, now, { colors: ['#e0b0ff'], rings: 1, tiles: 1.3, duration: 420, width: 2 });
+      // Sparks gather where it lands (status.teleport.in, the moment `teleported`) and left where it was (status.teleport.out): the designer's, or a burst of ours.
+      if (art(fxp.idOf('teleported'), w.cell, now, { shake: false, tint: false })) {
+        if (w.from !== undefined && seen[w.from]) art('status.teleport.out', w.from, now, { shake: false, tint: false });
+      } else {
+        fx.burst(at.x, at.y - 4, now, { count: quality.light ? 8 : 16, colors: ['#e0b0ff', '#ffffff', '#b070ff'], glow: true, speed: [6, 40], life: [400, 900], rise: 14, spread: 4, size: [1, 1] });
+        fx.wave(at.x, at.y, now, { colors: ['#e0b0ff'], rings: 1, tiles: 1.3, duration: 420, width: 2 });
+      }
       audio.play('teleport', 1.3, 0.5, at);
     }
   }
@@ -384,14 +472,18 @@ export function placesFrame(view: View, world: World, hero: { pos: number }, now
 /** A statue stirring: cracks run over it and glow, dust sifts off, the grinding of stone; then it breaks free. */
 function stoneWakes(cell: number, now: number): void {
   const at = place(cell);
-  stamps.add(stamps.CRACKS, cx(cell), cz(cell), 0.5, now, 720, [0.6, 0.95, 1], 1);
   audio.play('stoneCrack', 1, 1, at);
-  fx.burst(at.x, at.y - 2, now, { count: quality.light ? 10 : 22, colors: DUST, speed: [4, 22], life: [500, 1100], gravity: 30, drag: 0.3, size: [1, 2], spread: 6 });
-  fx.burst(at.x, at.y - 2, now + 300, { count: quality.light ? 6 : 14, colors: ['#9a958a', '#c0b8a4', '#6e6a62'], speed: [14, 50], life: [400, 800], gravity: 40, size: [1, 2], spread: 5 });
   fx.shake(1.5, 500, now);
-  // Then it breaks away from what held it.
-  fx.burst(at.x, at.y - 2, now + 640, { count: quality.light ? 12 : 30, colors: ['#9a958a', '#c0b8a4', '#6e6a62', '#d8dce4'], speed: [30, 100], life: [350, 800], gravity: 40, size: [1, 3], spread: 4 });
-  fx.burst(at.x, at.y - 6, now + 640, { count: 8, colors: ['#9ff4ff', '#ffffff'], glow: true, speed: [10, 40], life: [300, 600], size: [1, 1], spread: 2 });
+  // The designer's: cracks run over it, glow and shed crumbs (place.statue.wake), then the dust of its breaking free (place.statue.dust, which the
+  // wake's `then` brings in on time); ours, a stamp of cracks and the bursts of stone, only while the sheets have not come.
+  if (!art(fxp.idOf('statue.wake'), cell, now, { shake: false, tint: false })) {
+    stamps.add(stamps.CRACKS, cx(cell), cz(cell), 0.5, now, 720, [0.6, 0.95, 1], 1);
+    fx.burst(at.x, at.y - 2, now, { count: quality.light ? 10 : 22, colors: DUST, speed: [4, 22], life: [500, 1100], gravity: 30, drag: 0.3, size: [1, 2], spread: 6 });
+    fx.burst(at.x, at.y - 2, now + 300, { count: quality.light ? 6 : 14, colors: ['#9a958a', '#c0b8a4', '#6e6a62'], speed: [14, 50], life: [400, 800], gravity: 40, size: [1, 2], spread: 5 });
+    // Then it breaks away from what held it.
+    fx.burst(at.x, at.y - 2, now + 640, { count: quality.light ? 12 : 30, colors: ['#9a958a', '#c0b8a4', '#6e6a62', '#d8dce4'], speed: [30, 100], life: [350, 800], gravity: 40, size: [1, 3], spread: 4 });
+    fx.burst(at.x, at.y - 6, now + 640, { count: 8, colors: ['#9ff4ff', '#ffffff'], glow: true, speed: [10, 40], life: [300, 600], size: [1, 1], spread: 2 });
+  }
   window.setTimeout(() => fx.shake(4, 380, fx.now), 640);
   audio.later(640, 'stoneAwake', 1, 1, at);
 }

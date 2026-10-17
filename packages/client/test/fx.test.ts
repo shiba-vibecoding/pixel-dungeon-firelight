@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { type Effect, HEIGHT, type ItemKind, POTION_COLORS, type TrapKind, WIDTH } from '@pd/core';
-import { FxPlayer, MODE_FLOOR, MODE_HEAD, type Env } from '../src/fxplayer';
+import { AMBIENT_CADENCE, AMBIENT_LOOP, AMBIENT_MOTE, type AmbientEntry, FxPlayer, MODE_FEET, MODE_FLOOR, MODE_HEAD, MODE_STAND, type Env } from '../src/fxplayer';
 import {
-  ATLAS, CRIT_SHARE, type FxLib, attackKey, eventKey, frameAt, gasRow, headingFrame, lightLevel, packSheets, parseFx, playMs, problems, sheetPaths,
-  waveScale, withExtras,
+  ATLAS, CRIT_SHARE, type FxLib, attackKey, eventKey, frameAt, gasRow, headingFrame, lightLevel, packSheets, parseFx, playMs, problems, purityWaveKey,
+  sheetPaths, waveScale, withExtras,
 } from '../src/fxsheet';
 
 const ASSETS = new URL('../public/assets/', import.meta.url);
@@ -536,5 +536,214 @@ describe('the player', () => {
     expect(p.brightest(200, 10, 10, everywhere, out)).toBe(true);
     expect(out.light.color).toBe('#ff3a2a');
     expect(out.light.intensity).toBe(4);
+  });
+});
+
+// ---- part 13: the moments, the loops, what follows ---------------------------------------------------------------------------------
+
+describe('the moments of part 13 (fx.json `moments`)', () => {
+  it('has the 32 keys the designer lists, each to an effect that exists, and no check of the data finds fault with them', () => {
+    expect(Object.keys(designer.moments)).toHaveLength(32);
+    for (const [key, id] of Object.entries(designer.moments)) expect(designer.fx[id], `${key} -> ${id}`).toBeDefined();
+    expect(problems({ ...designer, moments: { ...designer.moments, mined: 'quest.nothing' } })).toEqual(['moment mined: no effect quest.nothing']);
+    // (Part 6's own events are not touched: a key moves from `moments` to `events` only when the designer says so.)
+    for (const key of Object.keys(designer.moments)) expect(designer.events[key], key).toBeUndefined();
+  });
+
+  it('teaches eventKey the moments the client already sees, and no event the core does not send', () => {
+    const at = (e: Effect): string | undefined => lib.moments[eventKey(e)!];
+    expect(at({ type: 'mined', depth: 1, pos: 5, hero: 'h' })).toBe('quest.ore.hit');
+    expect(at({ type: 'smith', hero: 'h', line: 'completed' })).toBe('quest.anvil');
+    // The blacksmith's other words are not a hammer blow.
+    for (const line of ['intro', 'noPickaxe', 'noGold', 'noBlood', 'reforge', 'busy'] as const) expect(eventKey({ type: 'smith', hero: 'h', line }), line).toBeNull();
+    expect(at({ type: 'flock', depth: 1, cells: [1, 2] })).toBe('minor.sheep.appear');
+    expect(at({ type: 'faded', depth: 1, mob: 'm', pos: 3 })).toBe('minor.sheep.vanish');
+    expect(at({ type: 'mirrored', depth: 1, hero: 'h', cells: [4] })).toBe('minor.mirror');
+    expect(at({ type: 'teleported', hero: 'h' })).toBe('status.teleport.in');
+    for (const water of ['health', 'awareness', 'transmutation'] as const) expect(at({ type: 'well', hero: 'h', water })).toBe(`place.well.${water}.beam`);
+    for (const glyph of ['bounce', 'affection', 'antiEntropy', 'potential', 'metabolism', 'stench', 'viscosity', 'displacement', 'entanglement', 'multiplicity', 'autoRepair'] as const) {
+      expect(at({ type: 'glyph', depth: 1, hero: 'h', glyph }), glyph).toBe(`glyph.${glyph}`);
+    }
+    expect(lib.moments[purityWaveKey({ type: 'burst', depth: 1, pos: 0, kind: 'purity', radius: 2 })!]).toBe('minor.purity');
+    expect(purityWaveKey({ type: 'burst', depth: 1, pos: 0, kind: 'fire', radius: 2 })).toBeNull();
+    // The moments the client sees by other means have their keys named by the code that sees them (the ring's thorns, the statue that wakes).
+    expect(lib.moments.thorns).toBe('minor.thorns');
+    expect(lib.moments['statue.wake']).toBe('place.statue.wake');
+    // The gas of a burst is still the older events' own: the new keys do not take its place.
+    expect(lib.events[eventKey({ type: 'burst', depth: 1, pos: 0, kind: 'purity', radius: 1 })!]).toBe('gas.purity');
+  });
+
+  it('looks an id up in the events and then in the moments', () => {
+    const { p } = player();
+    expect(p.idOf('mined')).toBe('quest.ore.hit');
+    expect(p.idOf('attack.hit')).toBe('hit');
+    expect(p.idOf('nothing.here')).toBeNull();
+    expect(p.idOf(null)).toBeNull();
+  });
+});
+
+describe('what follows an effect, and how a held one stands', () => {
+  it('plays the nugget after the blow, the dust after a statue\'s cracks and the bell after the alarm\'s plate, each when the one before is through', () => {
+    const { p } = player();
+    p.playAt('quest.ore.hit', 10.5, 10.5, 0);
+    const hit = lib.fx['quest.ore.hit']!;
+    p.collect(playMs(hit) - 10, everywhere);
+    expect(Array.from({ length: p.count }, (_, i) => p.items[i]!.def.id)).toEqual(['quest.ore.hit']);
+    p.collect(playMs(hit) + 30, everywhere);
+    expect(Array.from({ length: p.count }, (_, i) => p.items[i]!.def.id)).toEqual(['quest.ore.nugget']);
+    // The nugget may lie elsewhere than the blow (on the floor before the wall's face).
+    const moved = player().p;
+    moved.playAt('quest.ore.hit', 10.5, 10.5, 0, { thenAt: { x: 10.5, z: 10.92 } });
+    moved.collect(playMs(hit) + 30, everywhere);
+    expect(moved.items[0]!.z).toBeCloseTo(10.92, 5);
+    // The cracks of a statue hold their last frame for their hold, and then the dust comes in the same place.
+    const wake = lib.fx['place.statue.wake']!;
+    const s = player().p;
+    s.playAt('place.statue.wake', 5.5, 6.5, 0);
+    s.collect(playMs(wake) + (wake.hold ?? 0) - 20, everywhere);
+    expect(s.items[0]!.def.id).toBe('place.statue.wake');
+    expect(s.items[0]!.col).toBe(wake.frames - 1);
+    s.collect(playMs(wake) + (wake.hold ?? 0) + 30, everywhere);
+    expect(s.items[0]!.def.id).toBe('place.statue.dust');
+    expect(s.items[0]!.x).toBe(5.5);
+    // The alarm's plate and then its bell.
+    const a = player().p;
+    a.onEffect({ type: 'trap', depth: 1, pos: cell(10, 10), kind: 'alarm', hero: 'me' }, env(), 0);
+    a.collect(playMs(lib.fx['trap.alarm']!) + 40, everywhere);
+    expect(a.items[0]!.def.id).toBe('minor.alarm');
+  });
+
+  it('does not play the clouds a trap names twice: they come with the burst, and not with the plate', () => {
+    const { p } = player();
+    p.onEffect({ type: 'trap', depth: 1, pos: cell(10, 10), kind: 'fire', hero: 'me' }, env(), 0);
+    p.collect(2000, everywhere);
+    expect(p.count).toBe(0);
+  });
+
+  it('holds the last frame of a flash for its hold (the alarm\'s bell), and lets a plain flash end with its frames', () => {
+    const { p } = player();
+    const bell = lib.fx['minor.alarm']!;
+    p.playAt('minor.alarm', 3.5, 3.5, 0);
+    p.collect(playMs(bell) + 300, everywhere);
+    expect(p.count).toBe(1);
+    expect(p.items[0]!.col).toBe(bell.frames - 1);
+    // The bell hangs over the head, not at the middle of the figure.
+    expect(p.items[0]!.mode).toBe(MODE_STAND);
+    expect(p.items[0]!.lift).toBeCloseTo(0.95, 5);
+    p.collect(playMs(bell) + (bell.hold ?? 0) + 50, everywhere);
+    expect(p.count).toBe(0);
+    const g = player().p;
+    g.playAt('glyph.bounce', 3.5, 3.5, 0);
+    g.collect(playMs(lib.fx['glyph.bounce']!) + 40, everywhere);
+    expect(g.count).toBe(0);
+  });
+
+  it('stands what is anchored at the feet on the floor (it rises by its own rise), and what lies on the floor flat', () => {
+    const { p } = player();
+    p.playAt('place.pot.amber', 4.5, 4.5, 0);
+    p.playAt('minor.levitate', 6.5, 4.5, 0);
+    p.playAt('minor.sleep', 8.5, 4.5, 0);
+    p.collect(500, everywhere);
+    const by = (id: string) => Array.from({ length: p.count }, (_, i) => p.items[i]!).find((it) => it.def.id === id)!;
+    expect(by('place.pot.amber').mode).toBe(MODE_FEET);
+    expect(by('place.pot.amber').lift).toBe(0);
+    expect(by('minor.levitate').mode).toBe(MODE_FLOOR);
+    // Over a sleeper's head, drifting up as the data says.
+    expect(by('minor.sleep').lift).toBeGreaterThanOrEqual(0.95);
+  });
+});
+
+describe('the loops of a floor', () => {
+  const entry = (id: string, mode: number, x: number, z: number, o: Partial<AmbientEntry> = {}): AmbientEntry => ({ id, mode, x, z, lift: NaN, seed: 0.3, every: [0, 0], ...o });
+
+  it('draws a loop\'s frame by the clock where its anchor puts it, and only where the party sees', () => {
+    const { p } = player();
+    const water = lib.fx['place.well.awareness']!;
+    p.setAmbient([entry('place.well.awareness', AMBIENT_LOOP, 10.5, 10.5, { lift: 0.22 }), entry('place.pot.amber', AMBIENT_LOOP, 20.5, 10.5), entry('quest.forge', AMBIENT_LOOP, 30.5, 10.5)]);
+    p.collect(1000, everywhere);
+    expect(p.count).toBe(3);
+    expect(p.items[0]!.def.id).toBe('place.well.awareness');
+    expect(p.items[0]!.mode).toBe(MODE_FLOOR);
+    expect(p.items[0]!.lift).toBeCloseTo(0.22, 5);
+    expect(p.items[0]!.col).toBe(Math.floor(((1000 + 0.3 * 9973) * water.fps) / 1000) % water.frames);
+    expect(p.items[1]!.mode).toBe(MODE_FEET);
+    expect(p.items[2]!.def.id).toBe('quest.forge');
+    // Only the lit cells.
+    const lit = new Array<boolean>(WIDTH * HEIGHT).fill(false);
+    lit[10 * WIDTH + 20] = true;
+    p.collect(1000, lit);
+    expect(Array.from({ length: p.count }, (_, i) => p.items[i]!.def.id)).toEqual(['place.pot.amber']);
+  });
+
+  it('plays a glint once every few seconds (the shelf), and a mote that drifts up, fades in and out and is born elsewhere (the dust)', () => {
+    const { p } = player();
+    const shelf = lib.fx['place.shelf']!;
+    p.setAmbient([entry('place.shelf', AMBIENT_CADENCE, 5.5, 5.5, { every: [4000, 7000] })]);
+    const period = 4000 + 0.3 * 3000;
+    const t0 = period - 0.3 * period;
+    // At the start of a period the frames run; after them (the glint is over) nothing is drawn until the next.
+    p.collect(t0 + 10, everywhere);
+    expect(p.count).toBe(1);
+    expect(p.items[0]!.col).toBe(0);
+    p.collect(t0 + playMs(shelf) + 200, everywhere);
+    expect(p.count).toBe(0);
+    p.collect(t0 + period + 10, everywhere);
+    expect(p.count).toBe(1);
+    const m = player().p;
+    m.setAmbient([entry('place.dust', AMBIENT_MOTE, 7.5, 7.5, { seed: 0.4 })]);
+    const seen = new Set<number>();
+    let faded = 1;
+    let strong = 0;
+    for (let t = 0; t < 5000; t += 50) {
+      m.collect(t, everywhere);
+      expect(m.count).toBe(1);
+      seen.add(Math.round(m.items[0]!.x * 100));
+      faded = Math.min(faded, m.items[0]!.alpha);
+      strong = Math.max(strong, m.items[0]!.alpha);
+    }
+    expect(faded).toBeLessThan(0.1);
+    expect(strong).toBeGreaterThan(0.9);
+    expect(seen.size).toBeGreaterThan(10);
+  });
+
+  it('holds one frame still under reduced motion, keeps half of the motes on the light quality, and draws no more than its share', () => {
+    const { p, screen } = player();
+    p.setAmbient([entry('place.well.health', AMBIENT_LOOP, 10.5, 10.5)]);
+    screen.reduced = true;
+    p.collect(0, everywhere);
+    const first = p.items[0]!.col;
+    p.collect(3333, everywhere);
+    expect(p.items[0]!.col).toBe(first);
+    screen.reduced = false;
+    const light = player();
+    light.screen.light = true;
+    const motes = [0.1, 0.2, 0.6, 0.9].map((seed, i) => entry('place.firefly', AMBIENT_MOTE, 5.5 + i, 5.5, { seed }));
+    light.p.setAmbient(motes);
+    light.p.collect(1000, everywhere);
+    expect(light.p.count).toBe(2);
+    // A great many loops: capped, and nothing is made while they are drawn (the same items are reused).
+    const many = Array.from({ length: 400 }, (_, i) => entry('place.sign', AMBIENT_LOOP, (i % 40) + 0.5, Math.floor(i / 40) + 0.5, { seed: (i % 7) / 7 }));
+    const big = player().p;
+    big.setAmbient(many);
+    const items = big.items.slice();
+    big.collect(500, everywhere);
+    expect(big.count).toBeLessThanOrEqual(140);
+    expect(big.items.every((it, i) => it === items[i])).toBe(true);
+  });
+
+  it('draws only what is near the hero when it knows where he is, and takes the loops again when the data comes', () => {
+    const { p } = player();
+    p.setAmbient([entry('place.sign', AMBIENT_LOOP, 5.5, 5.5), entry('place.sign', AMBIENT_LOOP, 40.5, 5.5)]);
+    p.hx = 6;
+    p.hz = 6;
+    p.collect(100, everywhere);
+    expect(p.count).toBe(1);
+    const late = new FxPlayer();
+    late.setAmbient([entry('place.sign', AMBIENT_LOOP, 5.5, 5.5)]);
+    late.collect(100, everywhere);
+    expect(late.count).toBe(0);
+    late.use(lib);
+    late.collect(100, everywhere);
+    expect(late.count).toBe(1);
   });
 });

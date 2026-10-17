@@ -1,4 +1,4 @@
-import { cellX, cellY, type Effect, F, HEIGHT, type ItemKind, terrainFlags, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
+import { cellX, cellY, type Effect, F, heroById, HEIGHT, type ItemKind, terrainFlags, type Level, type MobKind, T, WIDTH, type World } from '@pd/core';
 import { type BurstOptions, fx, type Piece } from './fx';
 import { type Puppet, STEP_MS, TILE, type View } from './view';
 import { audio } from './audio';
@@ -6,6 +6,7 @@ import { quality } from './quality';
 import { seenCells } from './sight';
 import { duration, levelRegion } from './sprites';
 import { fxp } from './fxplayer';
+import { eventKey } from './fxsheet';
 import { showBossCard } from './bosscard';
 import { addFxLights } from './fxdraw2d';
 import { regionIndex } from './worldsheets';
@@ -580,8 +581,23 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     case 'pickedUp':
       if (effect.item.kind === 'gold') burst(centreOf(view, effect.hero, now), now, { count: 10, colors: GOLD, glow: true, speed: [15, 45], life: [300, 650], rise: 20, size: [1, 1] });
       return;
-    case 'teleported': case 'mirrored':
-      burst(centreOf(view, effect.hero, now), now, { count: 26, colors: ECTO, glow: true, speed: [10, 50], life: [400, 900], rise: 10, spread: 5 });
+    case 'teleported': {
+      // Violet sparks leave where the hero stood (status.teleport.out) and gather where it lands (status.teleport.in: the moment `teleported`);
+      // the burst of ours only while the designer's sheets have not come.
+      const arrived = fxp.idOf(eventKey(effect));
+      const hero = heroById(world, effect.hero);
+      const left = centreOf(view, effect.hero, now);
+      if (arrived && hero && hero.depth === view.depth && left && fxp.has('status.teleport.out')) {
+        fxp.playAt('status.teleport.out', left.x / TILE, left.y / TILE, now, { shake: false, tint: false });
+        fxp.playAt(arrived, cellX(hero.pos) + 0.5, cellY(hero.pos) + 0.5, now, { delay: 160, shake: false, tint: false });
+        return;
+      }
+      burst(left, now, { count: 26, colors: ECTO, glow: true, speed: [10, 50], life: [400, 900], rise: 10, spread: 5 });
+      return;
+    }
+    case 'mirrored':
+      // The images' shimmer is the designer's minor.mirror, played with the places' looks (placefx.ts); this burst only until it has come.
+      if (!fxp.idOf(eventKey(effect))) burst(centreOf(view, effect.hero, now), now, { count: 26, colors: ECTO, glow: true, speed: [10, 50], life: [400, 900], rise: 10, spread: 5 });
       return;
     case 'burst': {
       if (!here(effect.depth)) return;
@@ -732,7 +748,7 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
       // Sparks and rock chips thrown back at whoever struck, the ore's gleam, a little shake (questfx.ts).
       const at = cellCentre(effect.pos);
       const from = centreOf(view, effect.hero, now);
-      minedFx(at, from ? Math.atan2(from.y - at.y, from.x - at.x) : -Math.PI / 2, now);
+      minedFx(at, from ? Math.atan2(from.y - at.y, from.x - at.x) : -Math.PI / 2, now, effect.hero === myId);
       return;
     }
     case 'wraiths': {

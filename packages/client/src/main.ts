@@ -33,6 +33,7 @@ import { placeSink, placesBatch, placesFrame, updatePlaces } from './placefx';
 import { placeStore } from './places';
 import { stamps } from './stamps';
 import { placeCard } from './placetext';
+import { picon } from './placeart';
 /** The visual clock's last reading, for frame-to-frame particle steps. */
 let lastVisual = 0;
 /** When my hero fell, on the visual clock, or 0 while alive. */
@@ -60,7 +61,7 @@ import { showTalk, smithTalk, type TalkOptions } from './questui';
 import { ghostPlan, impPlan, smithPlan, type TalkPlan, wandmakerPlan } from './questtalk';
 import { Q, registerNow } from './quest-text';
 import { QuestChip } from './questcardui';
-import { questTake, releaseFarewells } from './questfx';
+import { forgeFlare, questTake, releaseFarewells } from './questfx';
 import { showBoards } from './boardsui';
 import { showProfile } from './profileui';
 import { lastArmor, lastWeapon } from './compete-ui';
@@ -1959,7 +1960,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
 /** A word with a quest giver (questui.ts): the plan of the moment (questtalk.ts) in the language and register of now. */
 function talkWith(plan: TalkPlan, world: World, me: Hero, extra: Partial<TalkOptions> = {}): void {
   showTalk({
-    world, hero: me, id: plan.id, kind: plan.kind, text: plan.text, replies: plan.replies, offers: plan.offers, complete: plan.complete,
+    world, hero: me, id: plan.id, kind: plan.kind, text: plan.text, replies: plan.replies, offers: plan.offers, complete: plan.complete, mood: plan.mood,
     ...(plan.bye ? { bye: plan.bye } : {}),
     // The wandmaker and the imp go once the farewell is read: the leave-taking is seen on the map (questfx.ts).
     onClose: plan.bye ? () => { hideOverlay(); releaseFarewells(view, fx.time(performance.now())); } : hideOverlay, ...extra,
@@ -2002,6 +2003,9 @@ function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): vo
   });
 }
 
+/** A reforging has been asked of the blacksmith and its outcome is awaited: the next upgrade of mine is his work (the anvil rings for it). */
+let reforging = 0;
+
 function talkWithSmith(line: SmithLine): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
@@ -2012,8 +2016,12 @@ function talkWithSmith(line: SmithLine): void {
   // Done with the errand: his services are on offer at once.
   if (line === 'completed' || line === 'reforge') {
     showReforge({
-      world, hero: me, text: plan.text, talk: smithTalk(plan.id, plan.kind, plan.text, plan.complete),
-      onReforge: (first, second) => send({ type: 'reforge', first, second }, performance.now()),
+      world, hero: me, text: plan.text, talk: smithTalk(plan.id, plan.kind, plan.text, plan.complete, plan.mood),
+      onReforge: (first, second) => {
+        // The hammer comes down on the anvil when the reforging is done (the `upgraded` it brings, below).
+        reforging = performance.now();
+        send({ type: 'reforge', first, second }, performance.now());
+      },
       onClose: hideOverlay,
     });
     return;
@@ -3028,7 +3036,7 @@ function examineCell(pos: number): void {
   const card = placeCard(here, (world.floors[me.depth]?.altar?.volume ?? 0) > 0, pos, heapShown);
   if (card && !(heapShown && here.map[pos] === T.PEDESTAL)) {
     const well = here.map[pos] === T.WELL ? here.wells.find((w) => w.pos === pos) : undefined;
-    showInfo(card.name, well ? [wellText(well.water), ...card.lines] : card.lines, hideOverlay);
+    showInfo(card.name, well ? [wellText(well.water), ...card.lines] : card.lines, hideOverlay, { icon: picon(card.icon), className: 'fl-place-window' });
     return;
   }
   if (heap && heapShown) {
@@ -3046,7 +3054,9 @@ function examineCell(pos: number): void {
   const well = level.map[pos] === T.WELL ? level.wells.find((w) => w.pos === pos) : undefined;
   // Level.tileDesc: and what covers it (Web.tileDesc).
   const webbed = seen && world.floors[me.depth]?.gas?.web?.some(([cell]) => cell === pos);
-  showInfo(name, [well ? wellText(well.water) : desc, ...(webbed ? [t.webHere] : [])], hideOverlay);
+  // A statue wears the designer's statue icon, as the places' cards do (its words are the original's).
+  const statue = level.map[pos] === T.STATUE || level.map[pos] === T.STATUE_SP;
+  showInfo(name, [well ? wellText(well.water) : desc, ...(webbed ? [t.webHere] : [])], hideOverlay, statue ? { icon: picon('statue'), className: 'fl-place-window' } : {});
 }
 
 function startResting(): void {
@@ -3545,6 +3555,11 @@ function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: nu
     launch: (sprite, x, y, at) => launches.push({ sprite, x, y, at, gold: false }),
     oreName: () => capitalize(itemName(world, core.createItem('quest.ore'))),
   });
+  // The reforging done: two blows of the hammer on the anvil (the designer's quest.anvil, questfx.ts).
+  if (reforging > 0 && effects.some((e) => e.type === 'upgraded' && e.hero === session!.myId)) {
+    if (now - reforging < 4000) forgeFlare(view, vnow);
+    reforging = 0;
+  }
   placesBatch(effects, view, world, session!.myId, vnow);
   motion.effects(effects, world, me.depth, (e) => itemSprite(e.item, world.run.labels));
   scenery.effects(effects, me.depth, vnow);

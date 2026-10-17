@@ -3,6 +3,11 @@
  * pollen, a prize's light on its pedestal, the shelves' dust, a sign's glint, a dewdrop's twinkle; and the short things that happen over them
  * (a column of light when a well is used, the «z» over a creature put to sleep, the spikes of a ring, a glyph's rune).
  *
+ * Part 13: for the wells' water, the pot, the pedestal and its prize, the garden's fireflies, the shelves' dust and glints, the signs and the dew
+ * the designer's sheets are drawn (fxplayer.ts keeps those loops: places.ts scanAmbient); once they are in the atlas (`art`) this draws of these
+ * places only what is not a shape the sheets have: the soft pad and halo of light on the floor round a place, which the sheets do not have. Where a
+ * sheet is not there (or not yet), the hand-made motes of this file stay, so nothing is ever drawn twice and nothing is missing.
+ *
  * It costs no draw call: every piece is one more instance of the effects' two batches (added: light; blended: dust, steam), cut from the
  * soft shapes of the effects atlas (effects3d.ts). The motes need no memory: where one is at a moment is worked out from the time and its
  * cell, so a place with ten of them costs ten small sums and no array. Only what is in the party's sight is drawn (the batches dim the
@@ -46,13 +51,13 @@ const CRACKS: ReadonlyArray<readonly [number, number, number, number]> = [
 const lin = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 
 const WELL_RGB = [
-  [0.42, 0.95, 0.55],
+  [1.0, 0.5412, 0.6039],
   [0.42, 0.74, 1.0],
   [0.78, 0.45, 1.0],
 ].map((c) => new Float32Array(c.map(lin)));
 const FIRE_RGB = new Float32Array([1.0, 0.42, 0.16].map(lin));
 const FLAME_RGB = new Float32Array([1.0, 0.78, 0.3].map(lin));
-const POT_RGB = new Float32Array([0.4, 0.95, 0.8].map(lin));
+const POT_RGB = new Float32Array([1.0, 0.72, 0.29].map(lin));
 const POLLEN_RGB = new Float32Array([1.0, 0.86, 0.4].map(lin));
 const GOLD_RGB = new Float32Array([1.0, 0.9, 0.6].map(lin));
 const DEW_RGB = new Float32Array([0.7, 0.92, 1.0].map(lin));
@@ -68,6 +73,8 @@ const hash = (cell: number, salt: number): number => {
 
 export class Places3D {
   private used = 0;
+  /** The designer's sheets are in the atlas: they draw the water, the bubbles, the motes of the places (see the top of the file). */
+  private art = false;
   /** The altar's fire is lit, for the scene's sake of flicker (updated with the spots). */
   private readonly tmp = new Float32Array(3);
 
@@ -77,9 +84,13 @@ export class Places3D {
     private readonly uv: PlaceShapes,
   ) {}
 
-  /** Draws the frame's places and short things. `light`: the low quality tier (fewer motes); `calm`: reduced motion (no flicker). */
-  frame(c: FxContext, light: boolean, calm: boolean): void {
+  /**
+   * Draws the frame's places and short things. `light`: the low quality tier (fewer motes); `calm`: reduced motion (no flicker); `art`: the
+   * designer's sheets are in the atlas, and draw what they have.
+   */
+  frame(c: FxContext, light: boolean, calm: boolean, art = false): void {
     this.used = 0;
+    this.art = art;
     const spots = placeStore.spots;
     const t = c.now / 1000;
     for (let i = 0; i < spots.length && this.used < BUDGET; i++) {
@@ -136,8 +147,10 @@ export class Places3D {
     const ph = hash(cell, 1) * TAU;
     const breathe = calm ? 1 : 0.82 + 0.18 * Math.sin(t * (water === W_AWARE ? 2.6 : 1.7) + ph);
     this.pad(x, 0.07, z, 2.2, rgb, 1.5 * breathe, 0.55);
-    this.pad(x, WATER_Y + 0.02, z, 0.86, rgb, 2.2 * breathe, 0.5);
     this.halo(x, 0.62, z, 1.5, rgb, 1.4 * breathe, 0.28);
+    // The water inside the rim, its ripples and glint, and what rises from it, are the designer's tile (place.well.<water>).
+    if (this.art) return;
+    this.pad(x, WATER_Y + 0.02, z, 0.86, rgb, 2.2 * breathe, 0.5);
     const n = light ? 3 : 5;
     if (water === W_HEALTH) {
       // Crosses of life rise off the water, slowly, and fade as they climb.
@@ -201,6 +214,8 @@ export class Places3D {
   private pot(cell: number, x: number, z: number, t: number, light: boolean): void {
     this.pad(x, 0.06, z, 1.9, POT_RGB, 1.3, 0.4);
     this.halo(x, 0.62, z, 1.1, POT_RGB, 1.3, 0.22);
+    // The brew, its bubbles and the steam are the designer's loop (place.pot.amber).
+    if (this.art) return;
     const n = light ? 3 : 5;
     for (let k = 0; k < n; k++) {
       const u = (t * (0.55 + hash(cell, k) * 0.5) + hash(cell, k + 8)) % 1;
@@ -227,6 +242,8 @@ export class Places3D {
   /** Sungrass: warm pollen drifting up from the bush. */
   private pollen(cell: number, x: number, z: number, t: number, light: boolean): void {
     this.pad(x, 0.06, z, 1.6, POLLEN_RGB, 1.1, 0.3);
+    // The garden's flying lights are the designer's fireflies (place.firefly), over its tall grass.
+    if (this.art) return;
     const n = light ? 2 : 4;
     for (let k = 0; k < n; k++) {
       const u = (t * 0.22 + k / n + hash(cell, k)) % 1;
@@ -238,6 +255,8 @@ export class Places3D {
   private prize(cell: number, x: number, z: number, t: number, light: boolean): void {
     const k = 0.8 + 0.2 * Math.sin(t * 1.9 + cell);
     this.pad(x, 0.06, z, 1.7, GOLD_RGB, 1.4 * k, 0.4);
+    // The gold glow of the pedestal and the four marks circling the prize are the designer's (place.pedestal, place.prize).
+    if (this.art) return;
     const b = this.uv.beam;
     this.glow.billboard(x, 1.0, z - 0.02, 0.5, 2.0, b[0], b[1], b[2], b[3], GOLD_RGB[0]! * 1.3, GOLD_RGB[1]! * 1.3, GOLD_RGB[2]! * 1.3, 0.26 * k);
     this.used++;
@@ -251,6 +270,8 @@ export class Places3D {
 
   /** Dust hanging in the air before a bookshelf, and now and then the pale edge of a page catching the light. */
   private dust(cell: number, x: number, z: number, t: number, hx: number, hz: number): void {
+    // The shelves' dust and the light that runs over the spines are the designer's (place.dust, place.shelf).
+    if (this.art) return;
     if (Math.abs(x - hx) > 6 || Math.abs(z - hz) > 6 || (cell & 1) !== 0) return;
     const u = (t * 0.1 + hash(cell, 1)) % 1;
     this.mote(this.uv.dot, x + Math.sin(t * 0.4 + cell) * 0.3, 0.5 + u * 0.7, z + 0.45, 0.07, PAPER_RGB, 1.6, Math.sin(Math.PI * u) * 0.55);
@@ -260,6 +281,8 @@ export class Places3D {
 
   /** A sign: a single glint now and then, so it is noticed. */
   private glint(cell: number, x: number, z: number, t: number, hx: number, hz: number): void {
+    // The signs' runes smoulder in the designer's sheet (place.sign).
+    if (this.art) return;
     if (Math.abs(x - hx) > 7 || Math.abs(z - hz) > 7) return;
     const a = Math.max(0, Math.sin(t * 0.8 + hash(cell, 5) * TAU) - 0.85) * 6.5;
     if (a > 0) this.mote(this.uv.star, x + 0.18, 0.72, z, 0.22, PAPER_RGB, 2.4, a);
@@ -269,6 +292,8 @@ export class Places3D {
   private dew(cell: number, x: number, z: number, t: number): void {
     const a = 0.5 + 0.5 * Math.sin(t * 2.2 + hash(cell, 1) * TAU);
     this.halo(x, 0.22, z, 0.7, DEW_RGB, 1.3, 0.2 + 0.1 * a);
+    // The drop's glint is the designer's (place.dew).
+    if (this.art) return;
     this.mote(this.uv.star, x + 0.12, 0.36 + 0.04 * a, z - 0.04, 0.16 + 0.1 * a, DEW_RGB, 3, 0.4 + 0.6 * a);
   }
 

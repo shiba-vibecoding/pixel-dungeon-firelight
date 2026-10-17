@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { LENGTH, T, type Level, type World } from '@pd/core';
+import { LENGTH, RoomType, T, type Level, type World, WIDTH } from '@pd/core';
 import { hasSfx, renderSfx, seedOf, SFX, voiceSpan } from '../src/sfx-synth';
-import { lookOf, P_ALTAR, P_DEW, P_PEDESTAL, P_POT, P_SHELF, P_SIGN, P_SUNGRASS, P_WELL, scanPlaces, W_AWARE, W_CHANGE, W_HEALTH } from '../src/places';
+import { AMBIENT_CADENCE, AMBIENT_LOOP, AMBIENT_MOTE } from '../src/fxplayer';
+import { parseFx } from '../src/fxsheet';
+import { DUST_PER, FIREFLY_PER, lookOf, P_ALTAR, P_DEW, P_FORGE, P_PEDESTAL, P_POT, P_SHELF, P_SIGN, P_SUNGRASS, P_WELL, POT_LOOK, scanAmbient, scanPlaces, W_AWARE, W_CHANGE, W_HEALTH, WATER_Y, WELL_FX, WELL_LOOK } from '../src/places';
 import { stamps } from '../src/stamps';
 
 /** A world with just what the places read: one level's map and wells, one floor's altar, heaps and plants. */
@@ -148,5 +151,106 @@ describe('a search tells nothing the find does not', () => {
       return names;
     };
     expect(before(true)).toEqual(before(false));
+  });
+});
+
+describe('the designer\'s loops of a floor (part 13: fx.json ambient)', () => {
+  const asset = (path: string): unknown => JSON.parse(readFileSync(new URL(`../public/assets/${path}`, import.meta.url), 'utf8'));
+  const data = asset('fx/fx.json') as { ambient: { terrain: Record<string, unknown>; garden: { fx: string; per: number }; library: { fx: string; per: number; shelfEvery: [number, number] }; heap: Record<string, string>; npc: Record<string, string> } };
+  const lib = parseFx(data);
+
+  /** A world with rooms and a blacksmith too. */
+  function level(o: Parameters<typeof world>[0] & { rooms?: Array<{ left: number; top: number; right: number; bottom: number; type: number }>; blacksmith?: number }): World {
+    const w = world(o);
+    Object.assign(w.levels[1]!, { rooms: o.rooms ?? [], ...(o.blacksmith !== undefined ? { blacksmith: o.blacksmith } : {}) });
+    return w;
+  }
+
+  it('keeps the effects the designer\'s data names for each terrain, and every one of them exists', () => {
+    const ids = scanAmbient(level({
+      cells: [[100, T.WELL], [101, T.WELL], [102, T.WELL], [110, T.ALCHEMY], [120, T.SIGN], [130, T.PEDESTAL], [140, T.BOOKSHELF]],
+      wells: [{ pos: 100, water: 'health' }, { pos: 101, water: 'awareness' }, { pos: 102, water: 'transmutation' }],
+      heaps: [{ pos: 130, kind: 'heap', items: [{ kind: 'ring.accuracy' }] }, { pos: 150, kind: 'heap', items: [{ kind: 'dew' }] }],
+    }), 1).map((e) => e.id);
+    const terrain = data.ambient.terrain;
+    const wells = terrain.WELL as Record<string, string>;
+    expect(ids).toEqual(expect.arrayContaining([wells.health, wells.awareness, wells.transmutation, terrain.ALCHEMY, terrain.SIGN, terrain.PEDESTAL, terrain.BOOKSHELF, data.ambient.heap.pedestalPrize, data.ambient.heap.dew]));
+    for (const id of new Set(ids)) expect(lib.fx[id], id).toBeDefined();
+    // Each well has its own water, in the order of the places' waters.
+    expect(WELL_FX).toEqual([wells.health, wells.awareness, wells.transmutation]);
+  });
+
+  it('shows a well\'s water only while it holds water, a pedestal only with a prize on it, and never the altar\'s', () => {
+    expect(scanAmbient(level({ cells: [[100, T.WELL], [200, T.EMPTY_WELL]], wells: [{ pos: 100, water: 'awareness' }] }), 1).map((e) => e.id)).toEqual(['place.well.awareness']);
+    const prize = scanAmbient(level({ cells: [[100, T.PEDESTAL]], heaps: [{ pos: 100, kind: 'heap', items: [{ kind: 'ring.accuracy' }] }] }), 1).map((e) => e.id);
+    expect(prize.sort()).toEqual(['place.pedestal', 'place.prize']);
+    expect(scanAmbient(level({ cells: [[100, T.PEDESTAL]] }), 1)).toEqual([]);
+    expect(scanAmbient(level({ cells: [[100, T.PEDESTAL]], altar: { pos: 100, volume: 30 } }), 1)).toEqual([]);
+    // The well lies lower than the floor of its room, where the water is.
+    const well = scanAmbient(level({ cells: [[100, T.WELL]], wells: [{ pos: 100, water: 'health' }] }), 1)[0]!;
+    expect(well.lift).toBeCloseTo(WATER_Y + 0.02, 5);
+    expect(well.mode).toBe(AMBIENT_LOOP);
+  });
+
+  it('puts a glint on every shelf every 4 to 7 seconds and the dust before one in four, the same shelves every time', () => {
+    const cells: Array<[number, number]> = Array.from({ length: 200 }, (_, i) => [100 + i, T.BOOKSHELF]);
+    const a = scanAmbient(level({ cells }), 1);
+    const b = scanAmbient(level({ cells }), 1);
+    expect(a).toEqual(b);
+    const glints = a.filter((e) => e.id === data.ambient.library.fx.replace('dust', 'shelf'));
+    expect(glints).toHaveLength(200);
+    expect(glints.every((e) => e.mode === AMBIENT_CADENCE && e.every[0] === data.ambient.library.shelfEvery[0] && e.every[1] === data.ambient.library.shelfEvery[1])).toBe(true);
+    const dust = a.filter((e) => e.id === data.ambient.library.fx);
+    expect(dust.every((e) => e.mode === AMBIENT_MOTE)).toBe(true);
+    // About one in four (the dice are fixed by the cell).
+    expect(dust.length).toBeGreaterThan(200 / DUST_PER * 0.6);
+    expect(dust.length).toBeLessThan(200 / DUST_PER * 1.4);
+  });
+
+  it('lets fireflies rise over a garden\'s tall grass, about one in six cells, and nowhere else', () => {
+    const grass: Array<[number, number]> = Array.from({ length: 300 }, (_, i) => [(10 + Math.floor(i / 30)) * WIDTH + 5 + (i % 30), T.HIGH_GRASS]);
+    const garden = { left: 5, top: 10, right: 34, bottom: 19, type: RoomType.GARDEN };
+    const lit = scanAmbient(level({ cells: grass, rooms: [garden] }), 1).filter((e) => e.id === data.ambient.garden.fx);
+    expect(lit.length).toBeGreaterThan(300 / FIREFLY_PER * 0.6);
+    expect(lit.length).toBeLessThan(300 / FIREFLY_PER * 1.4);
+    expect(lit.every((e) => e.mode === AMBIENT_MOTE)).toBe(true);
+    // The tall grass of a cave or a sewer has none; nor has the grass beside the garden's room.
+    expect(scanAmbient(level({ cells: grass, rooms: [{ ...garden, type: RoomType.STANDARD }] }), 1)).toEqual([]);
+    expect(scanAmbient(level({ cells: grass }), 1)).toEqual([]);
+    expect(FIREFLY_PER).toBe(data.ambient.garden.per);
+    expect(DUST_PER).toBe(data.ambient.library.per);
+  });
+
+  it('keeps a dewdrop\'s glint where the drop lies, and the forge beside the blacksmith with its light', () => {
+    expect(scanAmbient(level({ heaps: [{ pos: 30, kind: 'heap', items: [{ kind: 'dew' }] }, { pos: 31, kind: 'heap', items: [{ kind: 'food.ration' }] }] }), 1).map((e) => [e.id, e.x])).toEqual([['place.dew', 30.5]]);
+    // To the east of him when that is open floor, else to the west, else at his feet.
+    const east = scanAmbient(level({ cells: [[501, T.EMPTY_SP]], blacksmith: 500 }), 1);
+    expect(east.map((e) => [e.id, e.x])).toEqual([[data.ambient.npc.blacksmith, 501.5 % WIDTH]]);
+    const west = scanAmbient(level({ cells: [[501, T.WALL], [499, T.EMPTY_SP]], blacksmith: 500 }), 1);
+    expect(west[0]!.x).toBeCloseTo(((499 % WIDTH) + 0.5), 5);
+    expect(scanAmbient(level({ cells: [[501, T.WALL], [499, T.WALL]], blacksmith: 500 }), 1)[0]!.x).toBeCloseTo(((500 % WIDTH) + 0.5), 5);
+    // His light is a place's own light: orange, flickering, 4 cells.
+    const spots = scanPlaces(level({ blacksmith: 500 }), 1);
+    expect(spots.map((s) => s.kind)).toEqual([P_FORGE]);
+    const look = lookOf(spots[0]!)!;
+    expect(look.reach).toBe(lib.fx['quest.forge']!.light!.radius);
+    expect(look.rgb.map((c) => Math.round(c * 255))).toEqual(lib.fx['quest.forge']!.light!.rgb);
+    expect(scanPlaces(level({}), 1)).toEqual([]);
+  });
+
+  it('gives the pot and the health well the colours of the designer\'s sheets', () => {
+    expect(POT_LOOK.rgb.map((c) => Math.round(c * 255))).toEqual(lib.fx['place.pot.amber']!.light!.rgb);
+    const health = WELL_LOOK[W_HEALTH]!.rgb.map((c) => Math.round(c * 255));
+    expect(health).toEqual(lib.fx['place.well.health']!.light!.rgb);
+    expect(WELL_LOOK[W_AWARE]!.rgb.map((c) => Math.round(c * 255))[2]).toBe(255);
+  });
+
+  it('draws nothing of its own where the designer\'s sheet draws: a well, the pot, a prize, a shelf, a sign and a garden give the hand-made motes up', async () => {
+    const places = readFileSync(new URL('../src/r3d/places3d.ts', import.meta.url), 'utf8');
+    // Each of the hand-made motes is behind the switch of the sheets (`this.art`), so the two are never drawn together.
+    for (const place of ['well', 'pot', 'pollen', 'prize', 'dust', 'glint', 'dew']) {
+      const body = places.slice(places.indexOf(`private ${place}(`));
+      expect(body.slice(0, body.indexOf('\n  }\n')), place).toContain('this.art');
+    }
   });
 });

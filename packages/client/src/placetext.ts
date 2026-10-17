@@ -1,6 +1,7 @@
 import { T, type Level } from '@pd/core';
 import { lang } from './i18n';
 import { WATER_NUMBER } from './places';
+import type { PlaceIcon } from './placeart';
 
 /*
  * What the special places say when they are examined, and what the toasts of their use say (places.ts has the places themselves). Every
@@ -10,7 +11,12 @@ import { WATER_NUMBER } from './places';
 export interface PlaceCard {
   name: string;
   lines: string[];
+  /** The designer's icon of the place (placeart.ts): the card's face. */
+  icon: PlaceIcon;
 }
+
+/** The icon of each water's well. */
+const WELL_ICON: readonly PlaceIcon[] = ['well-health', 'well-awareness', 'well-transmutation'];
 
 const ru = (): boolean => lang === 'ru';
 
@@ -59,19 +65,19 @@ export function placeCard(level: Level, altarBurning: boolean, cell: number, hea
       const well = level.wells.find((w) => w.pos === cell);
       if (!well) return null;
       const water = WATER_NUMBER[well.water];
-      return { name: WORDS.wellName(water), lines: [WORDS.wellHint(water)] };
+      return { name: WORDS.wellName(water), lines: [WORDS.wellHint(water)], icon: WELL_ICON[water]! };
     }
     case T.BOOKSHELF:
-      return { name: WORDS.shelfName, lines: [WORDS.shelfHint] };
+      return { name: WORDS.shelfName, lines: [WORDS.shelfHint], icon: 'library' };
     case T.PEDESTAL:
       if (level.altar?.pos === cell) {
         return altarBurning
-          ? { name: WORDS.altarName, lines: [WORDS.altarHint] }
-          : { name: ru() ? 'Остывший алтарь' : 'Cold altar', lines: [ru() ? 'Огонь насытился и погас.' : 'The fire is sated and has gone out.'] };
+          ? { name: WORDS.altarName, lines: [WORDS.altarHint], icon: 'altar' }
+          : { name: ru() ? 'Остывший алтарь' : 'Cold altar', lines: [ru() ? 'Огонь насытился и погас.' : 'The fire is sated and has gone out.'], icon: 'altar' };
       }
-      return { name: WORDS.pedestalName, lines: [heapHere ? WORDS.pedestalHint : WORDS.pedestalEmpty] };
+      return { name: WORDS.pedestalName, lines: [heapHere ? WORDS.pedestalHint : WORDS.pedestalEmpty], icon: 'pedestal' };
     case T.SIGN:
-      return { name: ru() ? 'Табличка' : 'Sign', lines: [WORDS.signHint] };
+      return { name: ru() ? 'Табличка' : 'Sign', lines: [WORDS.signHint], icon: 'sign' };
     default:
       return null;
   }
