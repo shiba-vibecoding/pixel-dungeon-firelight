@@ -17,7 +17,8 @@ export const SEASON_KEY = 'pd-season';
 
 /** What a season's start clears: the keys, and the prefixes (the dailies of days). */
 const KEYS = ['pd-solo', 'pd-arena', 'pd-badges', 'pd-rankings', 'pd-arena-best', 'pd-bones', 'pd-window', 'pd-quickslots', 'pd-seen-magic', 'pd-trophies-seen'];
-const PREFIXES = ['pd-daily-'];
+// ('pd-solo' as a prefix too: the twin snapshot, the journal and the lease of the run go with it.)
+const PREFIXES = ['pd-daily-', 'pd-solo'];
 
 /** The slice of the Web Storage API this needs (a test brings its own). */
 export interface Keep {

@@ -1018,6 +1018,20 @@ export const en = {
     staleRunText: (depth: number, hero: string) => `Your ${hero}'s run on depth ${depth} was saved by an older version of the game and cannot be carried on after the update. A new game will replace it.`,
     newRunYes: 'New game',
     saveFailed: 'The run could not be saved: the device is out of space.',
+    /** A run found damaged on the device (savestore.ts): what stood in for it. */
+    saveRecovered: {
+      backup: 'The run was brought back from its spare copy: the latest moves may be missing.',
+      journal: 'The run was brought back from its last full save: a few of the latest moves are missing.',
+    } as Record<string, string>,
+    saveLost: 'The saved run was damaged and could not be read: a new run was started.',
+    saveFromServer: 'The saved run was damaged on this device: it was brought back from the server.',
+    /** Two copies of the game on one run (instance.ts): the older stands aside. */
+    otherWindow: {
+      title: 'The game is open in another window',
+      window: 'This run is being played in another window. Only one can play it at a time, so that neither overwrites the other.',
+      device: 'This run is being played on another device. Only one can play it at a time, so that neither overwrites the other.',
+      take: 'Play here',
+    },
   },
   /** Checked runs and the boards (checked.ts, rankui.ts). */
   ranked: {
@@ -1025,6 +1039,13 @@ export const en = {
     offlineStart: 'No connection to the server: this run is played on the device and counts nowhere.',
     practice: 'Today’s ranked attempt is spent: this one is practice.',
     restored: 'Your run was brought back as the server keeps it.',
+    /** The run came back as the server keeps it, and why (checked.ts reasons); `lost` moves of the device were not taken. */
+    restoredBy: (reason: string, lost: number): string =>
+      reason === 'out of step' || reason === 'another run'
+        ? 'Your run went on at another device. Here it is as the server keeps it.'
+        : lost > 0
+          ? `The server did not accept ${lost} of the latest moves. The run is as the server keeps it.`
+          : 'The server did not accept the latest moves. The run is as the server keeps it.',
     checking: 'The server checks the run…',
     checked: 'Checked by the server',
     unchecked: 'Not ranked: played without the server',

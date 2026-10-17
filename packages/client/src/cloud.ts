@@ -1,4 +1,5 @@
 import { SEASON_KEY, seasonStale } from './season';
+import { onLeave } from './leave';
 import { cloudStorage } from './telegram';
 
 /*
@@ -92,7 +93,5 @@ export function pushCloud(): void {
   }
 }
 
-// Put away, the app may never come back: what changed goes up now.
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) pushCloud();
-});
+// Put away, the app may never come back: what changed goes up now (on every way of leaving, leave.ts).
+onLeave(() => pushCloud());

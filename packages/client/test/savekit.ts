@@ -17,7 +17,11 @@ export class MemStorage implements StorageLike {
   /** Counts every setItem call (failed ones too). */
   writes = 0;
   /** Called before each write; may throw (Killed) or return 'torn' (the text is cut short and stored, then the page dies) or 'drop' (the page dies before the write). */
-  fault: ((key: string, value: string, nth: number) => void | 'torn' | 'drop' | 'quota') | null = null;
+  fault: ((key: string, value: string, nth: number) => void | 'torn' | 'drop' | 'after' | 'quota') | null = null;
+  /** The page that wrote here was killed: it reads nothing, writes nothing, and removes nothing from now on. */
+  dead = false;
+  /** A fault that kills ('drop', 'torn', 'after') kills the page quietly (dead) instead of throwing Killed out of the write. */
+  quiet = false;
 
   constructor(capacity = Infinity) {
     this.capacity = capacity;
@@ -32,7 +36,7 @@ export class MemStorage implements StorageLike {
   }
 
   getItem(key: string): string | null {
-    return this.data.get(key) ?? null;
+    return this.dead ? null : (this.data.get(key) ?? null);
   }
 
   total(): number {
@@ -42,12 +46,17 @@ export class MemStorage implements StorageLike {
   }
 
   setItem(key: string, value: string): void {
+    if (this.dead) return;
     const nth = this.writes++;
     const verdict = this.fault?.(key, value, nth);
-    if (verdict === 'drop') throw new Killed(`killed before ${key}`);
-    if (verdict === 'torn') {
-      this.data.set(key, value.slice(0, Math.floor(value.length / 2)));
-      throw new Killed(`killed in ${key}`);
+    if (verdict === 'drop' || verdict === 'torn' || verdict === 'after') {
+      if (verdict === 'torn') this.data.set(key, value.slice(0, Math.floor(value.length / 2)));
+      if (verdict === 'after') this.data.set(key, value);
+      if (this.quiet) {
+        this.dead = true;
+        return;
+      }
+      throw new Killed(`killed ${verdict} ${key}`);
     }
     const old = this.data.get(key);
     const after = this.total() - (old === undefined ? 0 : key.length + old.length) + key.length + value.length;
@@ -60,7 +69,7 @@ export class MemStorage implements StorageLike {
   }
 
   removeItem(key: string): void {
-    this.data.delete(key);
+    if (!this.dead) this.data.delete(key);
   }
 
   /** A copy of what is stored now: what a reloaded page finds. */

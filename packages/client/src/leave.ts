@@ -12,18 +12,23 @@ import { onActiveChange, onViewportChange } from './telegram';
 export type LeaveReason = 'hidden' | 'pagehide' | 'beforeunload' | 'freeze' | 'deactivated' | 'viewport';
 
 const handlers = new Set<(reason: LeaveReason) => void>();
+const late = new Set<(reason: LeaveReason) => void>();
 
-/** Calls back whenever the page is being left or put away; returns a way to stop listening. */
-export function onLeave(handler: (reason: LeaveReason) => void): () => void {
-  handlers.add(handler);
-  return () => handlers.delete(handler);
+/**
+ * Calls back whenever the page is being left or put away; returns a way to stop listening. A `last` handler comes after the rest:
+ * what is only nice to keep (the bodies and blood of a fight) goes after the run itself has been written.
+ */
+export function onLeave(handler: (reason: LeaveReason) => void, last = false): () => void {
+  const set = last ? late : handlers;
+  set.add(handler);
+  return () => set.delete(handler);
 }
 
 let lastViewport = 0;
 
 /** Tells every handler (exported for the tests and for a caller that knows better, such as a crash screen). */
 export function leaving(reason: LeaveReason): void {
-  for (const handler of [...handlers]) {
+  for (const handler of [...handlers, ...late]) {
     try {
       handler(reason);
     } catch (error) {

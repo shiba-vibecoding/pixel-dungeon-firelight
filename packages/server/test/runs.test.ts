@@ -90,6 +90,65 @@ describe('checked runs', () => {
     expect(reply.seq).toBe(moves.length);
   });
 
+  it('hold a run for the copy of the game that claimed it last: an older copy is told so and nothing it sent is taken', () => {
+    const logic = player();
+    const run = logic.start({ slot: 'dungeon', heroClass: 'warrior', challenges: 0, name: 'Alice', seed: 7, id: 'r1', sid: 'phone', now: 0, today: TODAY });
+    const phone = structuredClone(run.world);
+    const first = play(phone, 10);
+    expect(logic.sync('dungeon', 'r1', 0, first, fingerprint(phone), 1, { sid: 'phone', claim: false }).reply.seq).toBe(first.length);
+    // The player opens the game on the computer: it claims the run, with the phone's ten moves behind it.
+    const computer = structuredClone(phone);
+    const claimed = logic.sync('dungeon', 'r1', first.length, [], fingerprint(computer), 2, { sid: 'desk', claim: true });
+    expect(claimed.reply.world).toBeUndefined();
+    expect(logic.runs.dungeon!.owner).toBe('desk');
+    const more = play(computer, 10);
+    logic.sync('dungeon', 'r1', first.length, more, fingerprint(computer), 3, { sid: 'desk', claim: false });
+    const seq = logic.runs.dungeon!.seq;
+    // The phone, still open, plays on and syncs: nothing of it is taken, and it is told why.
+    const stray = play(phone, 5);
+    const refused = logic.sync('dungeon', 'r1', first.length, stray, fingerprint(phone), 4, { sid: 'phone', claim: false });
+    expect(refused.reply).toEqual({ seq, reason: 'taken' });
+    expect(logic.runs.dungeon!.seq).toBe(seq);
+    expect(fingerprint(logic.runs.dungeon!.world)).toBe(fingerprint(computer));
+    // The player takes the run back on the phone: it claims, and the server, which has the computer's moves, sends its copy.
+    const back = logic.sync('dungeon', 'r1', first.length, stray, fingerprint(phone), 5, { sid: 'phone', claim: true });
+    expect(back.reply.world).toBeDefined();
+    expect(logic.runs.dungeon!.owner).toBe('phone');
+  });
+
+  it('take a claim by the first copy that names itself, and ignore the token of a client that names none', () => {
+    const logic = player();
+    const run = start(logic);
+    const device = structuredClone(run.world);
+    const moves = play(device, 8);
+    // Nobody has claimed it (a run from before): the first copy to name itself holds it.
+    expect(logic.sync('dungeon', 'r1', 0, moves.slice(0, 4), null, 1, { sid: 'a', claim: false }).reply.seq).toBe(4);
+    expect(logic.runs.dungeon!.owner).toBe('a');
+    expect(logic.sync('dungeon', 'r1', 4, moves.slice(4), null, 2, { sid: 'b', claim: false }).reply.reason).toBe('taken');
+    // An older client names no token: its moves are taken as they always were.
+    expect(logic.sync('dungeon', 'r1', 4, moves.slice(4), fingerprint(device), 3).reply.seq).toBe(moves.length);
+    // A token by itself changes nothing in a reply that is not 'taken'.
+    expect(logic.sync('dungeon', 'r1', moves.length, [], null, 4, { sid: 'a', claim: false }).reply).toEqual({ seq: moves.length });
+  });
+
+  it('keep who holds a run in storage, with the run', () => {
+    const logic = player();
+    logic.start({ slot: 'dungeon', heroClass: 'warrior', challenges: 0, name: 'Alice', seed: 7, id: 'r1', sid: 'phone', now: 0, today: TODAY });
+    const entries = toEntries(logic.profile, logic.runs);
+    const back = fromEntries(new Map(Object.entries(entries)));
+    expect(back.runs.dungeon!.owner).toBe('phone');
+    const again = new PlayerLogic(back.profile, back.runs);
+    expect(again.sync('dungeon', 'r1', 0, [], null, 1, { sid: 'tablet', claim: false }).reply.reason).toBe('taken');
+  });
+
+  it('answer a daily dungeon asked for again with a claim for the asker', () => {
+    const logic = player();
+    logic.start({ slot: 'daily', heroClass: 'warrior', challenges: 0, name: 'Alice', seed: 7, id: 'd1', sid: 'phone', now: 0, today: TODAY });
+    const again = logic.start({ slot: 'daily', heroClass: 'warrior', challenges: 0, name: 'Alice', seed: 7, id: 'd2', sid: 'desk', now: 5, today: TODAY });
+    expect(again.id).toBe('d1');
+    expect(again.owner).toBe('desk');
+  });
+
   it('score a run once it ends, keep the history, leave bones for the next ordinary run', () => {
     const logic = player();
     const run = start(logic);

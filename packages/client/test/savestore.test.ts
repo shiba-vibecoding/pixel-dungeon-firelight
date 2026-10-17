@@ -1,7 +1,7 @@
 import { fingerprint, RULES_VERSION, type World } from '@pd/core';
 import { describe, expect, it } from 'vitest';
 import {
-  BUDGET_CHARS, checksum, decodeSnapshot, encodeSnapshot, evictable, forgetSlot, JOURNAL_MAX, journalKey, putWithRoom, readSlot, SAVE_VERSION,
+  BUDGET_CHARS, checksum, decodeSnapshot, encodeSnapshot, evictable, forgetSlot, JOURNAL_MAX, journalKey, journalKey2, putWithRoom, readSlot, SAVE_VERSION,
   type SavedCheck, setEvictContext, SlotKeeper, slotOfKey, trimToBudget, twinKey, usage,
 } from '../src/savestore';
 import { Killed, MemStorage, newWorld, play, sameWorld, viaJson } from './savekit';
@@ -242,38 +242,63 @@ describe('damage', () => {
     expect(read.run && sameWorld(read.run.world, world)).toBe(true);
   });
 
+  const journalKeys = [journalKey(KEY), journalKey2(KEY)];
+  /** Rewrites what a journal says (under a good checksum). */
+  const forge = (storage: MemStorage, key: string, edit: (body: Record<string, unknown>) => void): void => {
+    const text = storage.getItem(key)!;
+    const body = JSON.parse(text.slice(text.indexOf('|') + 1)) as Record<string, unknown>;
+    edit(body);
+    const forged = JSON.stringify(body);
+    storage.data.set(key, `${checksum(forged)}|${forged}`);
+  };
+
   it('plays the snapshot alone, and says so, when the journal is damaged', () => {
     const { storage, world } = slot();
-    const journal = storage.getItem(journalKey(KEY))!;
-    storage.data.set(journalKey(KEY), journal.slice(0, -5) + '12345');
+    for (const key of journalKeys) storage.data.set(key, storage.getItem(key)!.slice(0, -5) + '12345');
     const read = readSlot(storage, KEY);
     expect(read.recovered).toBe('journal');
-    expect(read.run!.world.turn).toBeLessThan(world.turn);
     expect(read.run!.world.turn).toBe(world.turn - 6);
   });
 
-  it('plays the snapshot alone, and says so, when the journal does not come to where it said', () => {
+  it('loses only the turn in flight, and says nothing, when the last journal write was cut short', () => {
     const { storage, world } = slot();
-    // A journal under a good checksum that says another fingerprint: the play does not come to it.
-    const text = storage.getItem(journalKey(KEY))!;
-    const body = JSON.parse(text.slice(text.indexOf('|') + 1)) as { f: string };
-    body.f = 'ffffffffffffff';
-    const forged = JSON.stringify(body);
-    storage.data.set(journalKey(KEY), `${checksum(forged)}|${forged}`);
+    // The newest journal is the one written last: the 6th turn went to ~k (writes alternate from ~j: the snapshot, then turns 1..6).
+    const newest = [...journalKeys].sort((x, y) => (readSlot(storage, KEY) && storage.getItem(y)!.length - storage.getItem(x)!.length))[0]!;
+    storage.data.set(newest, storage.getItem(newest)!.slice(0, 40));
+    const read = readSlot(storage, KEY);
+    expect(read.recovered).toBeNull();
+    expect(read.run!.world.turn).toBe(world.turn - 1);
+  });
+
+  it('plays the journal before when the newest does not come to where it said, and says a move was lost', () => {
+    const { storage, world } = slot();
+    const newest = [...journalKeys].sort((x, y) => storage.getItem(y)!.length - storage.getItem(x)!.length)[0]!;
+    forge(storage, newest, (body) => {
+      body.f = 'ffffffffffffff';
+    });
+    const read = readSlot(storage, KEY);
+    expect(read.recovered).toBe('journal');
+    expect(read.run!.world.turn).toBe(world.turn - 1);
+  });
+
+  it('plays the snapshot alone, and says so, when no journal comes to where it said', () => {
+    const { storage, world } = slot();
+    for (const key of journalKeys) forge(storage, key, (body) => { body.f = 'ffffffffffffff'; });
     const read = readSlot(storage, KEY);
     expect(read.recovered).toBe('journal');
     expect(read.run!.world.turn).toBe(world.turn - 6);
-    // The snapshot is whole: the failed play did not leave its marks on it.
-    expect(fingerprint(read.run!.world)).toBe(fingerprint(decodeSnapshot(storage.getItem(KEY)!).ok ? (decodeSnapshot(storage.getItem(KEY)!) as { save: { world: World } }).save.world : read.run!.world));
+    // The snapshot is whole: the failed plays did not leave their marks on it.
+    const snapshot = decodeSnapshot(storage.getItem(KEY)!);
+    expect(snapshot.ok && fingerprint(read.run!.world) === fingerprint(snapshot.save.world)).toBe(true);
   });
 
   it('ignores a journal of an older generation (what a kill leaves between a snapshot and its journal)', () => {
     const { storage, world } = slot();
-    const oldJournal = storage.getItem(journalKey(KEY))!;
+    const old = journalKeys.map((key) => storage.getItem(key)!);
     const keeper = new SlotKeeper(storage, KEY, 2);
     keeper.snapshot(world, null);
-    // The journal the kill left behind belongs to generation 2; generation 3 is whole.
-    storage.data.set(journalKey(KEY), oldJournal);
+    // The journals the kill left behind belong to generation 2; generation 3 is whole.
+    journalKeys.forEach((key, i) => storage.data.set(key, old[i]!));
     const read = readSlot(storage, KEY);
     expect(read.recovered).toBeNull();
     expect(read.replayed).toBe(0);
@@ -282,11 +307,7 @@ describe('damage', () => {
 
   it('does not play a journal on other rules', () => {
     const { storage, world } = slot();
-    const text = storage.getItem(journalKey(KEY))!;
-    const body = JSON.parse(text.slice(text.indexOf('|') + 1)) as { r: number };
-    body.r = RULES_VERSION + 1;
-    const edited = JSON.stringify(body);
-    storage.data.set(journalKey(KEY), `${checksum(edited)}|${edited}`);
+    for (const key of journalKeys) forge(storage, key, (body) => { body.r = RULES_VERSION + 1; });
     const read = readSlot(storage, KEY);
     expect(read.recovered).toBe('journal');
     expect(read.run!.world.turn).toBe(world.turn - 6);

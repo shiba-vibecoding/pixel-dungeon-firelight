@@ -101,8 +101,12 @@ import { type HintId, hints } from './hints';
 import { lookIndex, preloadSheets, regionIndex } from './worldsheets';
 import { type ShareCard, shareCard, sharePicture, storyCard } from './share';
 import { rankings, recordRun, runScore } from './rankings';
-import { type CheckOptions, forgetSolo, loadCheck, loadSolo, type Session, soloSession, staleSolo } from './session';
-import { type BoardKind, type CircleBoardView, type Profile, type RunMeta, type RunSlot, runApi, type SyncAnswer } from './checked';
+import { carriedOn, type CheckOptions, forgetSolo, inspectSolo, loadSolo, type Session, soloSession, staleSolo } from './session';
+import { planStart } from './startplan';
+import { onLeave } from './leave';
+import { BUDGET_CHARS, setEvictContext, slotOfKey, trimToBudget, usage } from './savestore';
+import { closeSuperseded, showSuperseded, supersededShown } from './supersededui';
+import { type BoardKind, type CircleBoardView, type Profile, type RunApi, type RunMeta, type RunSlot, runApi, type SyncAnswer, unreachable } from './checked';
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
@@ -193,10 +197,25 @@ try {
 } catch {
   // No storage: it lasts the visit.
 }
-addEventListener('pagehide', () => gore.flush());
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') gore.flush();
-});
+// (Written after the run itself, on every way of leaving: leave.ts.)
+onLeave(() => gore.flush(), true);
+// The save always wins the storage (savestore.ts): the bodies and blood of the depth being played are the last to go. Over about 3 MB at
+// the start, those of other runs and depths and the caches of what the server holds are let go first.
+try {
+  setEvictContext(() => gore.where());
+  if (usage(localStorage) > BUDGET_CHARS) {
+    // (Nothing is bound yet: the run kept on the device says which record is the one in use.)
+    const kept = inspectSolo(SOLO_SLOT).run;
+    const hero = kept?.world.heroes[0];
+    if (kept && hero) {
+      const run = `${kept.world.run.seed}:${kept.check?.meta.id ?? ''}`;
+      setEvictContext(() => gore.where() ?? { run, depth: hero.depth });
+    }
+    trimToBudget(localStorage);
+  }
+} catch {
+  // No storage: nothing to trim.
+}
 // The designer's effects (fx.json and its sheets) come beside the game, never in front of it: until they have, the older ones play.
 void loadFx(`${import.meta.env.BASE_URL}assets/`);
 whenFx(({ lib }) => fxp.use(lib));
@@ -705,7 +724,8 @@ const dailySlot = (): string => `pd-daily-${new Date().toISOString().slice(0, 10
 // Runs of past days are of no use any more.
 try {
   for (const key of Object.keys(localStorage)) {
-    if (key.startsWith('pd-daily-') && key !== dailySlot()) localStorage.removeItem(key);
+    // (A slot's companions — the twin snapshot, the journal, the lease — go with it, and stay with today's.)
+    if (key.startsWith('pd-daily-') && slotOfKey(key) !== dailySlot()) localStorage.removeItem(key);
   }
 } catch {
   // Storage unavailable: nothing to clean.
@@ -767,16 +787,27 @@ async function startRun(key: string, fresh: boolean, welcome?: string): Promise<
   session?.close();
   session = null;
   if (fresh) forgetSolo(key);
-  const kept = !fresh && loadSolo(key);
-  const check = kept ? loadCheck(key) : null;
+  // What the slot holds (savestore.ts): the run to carry on, brought to the last turn taken, and whether something was stored that cannot be read.
+  const read = fresh ? null : inspectSolo(key);
+  const kept = read ? carriedOn(read) : null;
+  const check = kept?.check ?? null;
   // The daily dungeon is today's: yesterday's kept run is not carried on.
   const stale = check?.meta.date !== undefined && check.meta.date !== core.dayOf(Date.now());
-  if (kept && check && !stale && api) {
-    enterGame(soloSession(key, heroClass, randomSeed, name, 0, undefined, false, checkFor(slot, check.meta, undefined, check.log)), null, welcome);
-  } else if (kept && !check && !stale) {
+  // A save that was there and cannot be read, nor its spare: the player is told, and the server's run is looked for.
+  const damaged = !kept && Boolean(read?.damaged);
+  const plan = planStart({ kept: kept !== null, check: check !== null, stale, api: api !== null });
+  if (plan === 'resume-checked') {
+    enterGame(soloSession(key, heroClass, randomSeed, name, 0, undefined, false, checkFor(slot, check!.meta, undefined, check!.log)), null, welcome);
+  } else if (plan === 'resume-offline') {
+    // A checked run and no way to the server this time (no init data): it is not thrown away; its moves wait in the log, kept with it, for the next time.
+    const none = unreachable() as RunApi;
+    enterGame(soloSession(key, heroClass, randomSeed, name, 0, undefined, false, {
+      api: none, meta: check!.meta, log: check!.log, renew: async () => null,
+    }), null, welcome);
+  } else if (plan === 'resume-local') {
     // A run begun before runs were checked, or without the server: it goes on, counting nowhere.
     enterGame(local(), null, welcome);
-  } else if (api) {
+  } else if (plan === 'server' && api) {
     showWaiting(t.ranked.preparing);
     // Carried on from another device, or new.
     const carried = fresh || slot === 'daily' ? null : await api.get(slot);
@@ -799,6 +830,7 @@ async function startRun(key: string, fresh: boolean, welcome?: string): Promise<
           forgetSolo(key);
           enterGame(local(), null, welcome);
           dailyRun = slot === 'daily';
+          if (damaged) toast(t.meta.saveLost, { tone: 'warn' });
         },
       });
       return;
@@ -807,14 +839,19 @@ async function startRun(key: string, fresh: boolean, welcome?: string): Promise<
       toast(t.ranked.offlineStart);
       forgetSolo(key);
       enterGame(local(), null, welcome);
+      if (damaged) toast(t.meta.saveLost, { tone: 'warn' });
     } else {
       forgetSolo(key);
       enterGame(soloSession(key, heroClass, randomSeed, name, 0, undefined, false, checkFor(slot, answer.run, answer.world)), null, welcome);
-      if (!answer.run.ranked) toast(t.ranked.practice);
+      // (A run the server had in the slot is the damaged save's own, as far as the server took it.)
+      if (damaged && carried && typeof carried !== 'string' && carried.run && answer.run.id === carried.run.id) toast(t.meta.saveFromServer, { tone: 'warn' });
+      else if (damaged) toast(t.meta.saveLost, { tone: 'warn' });
+      else if (!answer.run.ranked) toast(t.ranked.practice);
     }
   } else {
     forgetSolo(key);
     enterGame(local(), null, welcome);
+    if (damaged) toast(t.meta.saveLost, { tone: 'warn' });
   }
   dailyRun = slot === 'daily';
   // A run carried on may still hold bones not yet laid (on the device's own runs; the server's lay their own).
@@ -3325,6 +3362,12 @@ function frame(now: number): void {
     guardRun(runUnderway());
     syncWindowMemo();
     syncPendingScroll();
+    // The window that says the run is held elsewhere stays up as long as it is (nothing else may put it away).
+    if (session?.superseded) {
+      if (!supersededShown()) showSuperseded(session.superseded, () => session?.takeBack?.());
+    } else if (supersededShown()) {
+      closeSuperseded();
+    }
     loopFailures = 0;
   } catch (error) {
     // A frame that fails now and then is only reported; one that fails again and again leaves the game stuck: the error screen.
@@ -4138,7 +4181,23 @@ function shareChoices(card: () => Promise<ShareCard>, text: string): ShareChoice
 
 loop(frame);
 
-addEventListener('pd-run-restored', () => toast(t.ranked.restored));
+// The server's copy took the place of the device's (checked.ts reasons): said in a few words, with why.
+addEventListener('pd-run-restored', (event) => {
+  const detail = (event as CustomEvent<{ reason?: string; lost?: number } | string>).detail;
+  const reason = typeof detail === 'string' ? detail : detail?.reason ?? '';
+  const lost = typeof detail === 'string' ? 0 : detail?.lost ?? 0;
+  toast(reason ? t.ranked.restoredBy(reason.replace(/:.*$/, ''), lost) : t.ranked.restored, { tone: 'warn' });
+});
+// The run was found damaged on the device and something older stood in for it (savestore.ts): told only then.
+addEventListener('pd-save-recovered', (event) => {
+  const how = (event as CustomEvent<string>).detail;
+  toast(t.meta.saveRecovered[how] ?? t.meta.saveRecovered.backup!, { tone: 'warn' });
+});
+// Another copy of the game took the run (on this device, or by the server's word): this one stands aside until the player takes it back.
+addEventListener('pd-superseded', (event) => {
+  const kind = (event as CustomEvent<'window' | 'device'>).detail;
+  showSuperseded(kind, () => session?.takeBack?.());
+});
 
 if (launchedForDaily()) {
   // Opened from a shared daily result: straight into today's dungeon.

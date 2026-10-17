@@ -40,7 +40,7 @@ import { seasonAt, seasonStart } from './season-clock';
  * Checked runs over HTTP (runs.ts):
  *
  *   POST /run   { initData, rules, op: 'start', slot, hero, challenges }   a new run: its id and world
- *               { initData, rules, op: 'sync', slot, run, from, actions, hash }  moves played on the device
+ *               { initData, rules, op: 'sync', slot, run, from, actions, hash, sid?, claim? }  moves played on the device; `sid` names the copy of the game, `claim` takes the run over from another copy (else a sync from a copy that does not hold the run is answered reason 'taken')
  *               { initData, rules, op: 'get', slot }                         the run as the server has it
  *   POST /me    { initData }                     the profile: records, streak, trophies, mail, places now
  *               { initData, coachDone: true }    the step tutorial is done (kept with the profile, for every device)
@@ -80,6 +80,9 @@ async function who(body: Record<string, unknown>, env: Env): Promise<Who | null>
   const id = typeof body.id === 'string' ? body.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) : '';
   return id ? { key: `dev${id}`, name: (typeof body.name === 'string' && body.name.slice(0, 32)) || 'Hero' } : null;
 }
+
+/** The token a copy of the game names itself by (checked.ts DeviceTag), cleaned; empty when it names none (an older client). */
+const deviceToken = (value: unknown): string => (typeof value === 'string' ? value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48) : '');
 
 const playerStub = (env: Env, key: string): DurableObjectStub<Player> => env.PLAYER.get(env.PLAYER.idFromName(key));
 const boardStub = (env: Env, name: string): DurableObjectStub => env.DAILY.get(env.DAILY.idFromName(boardObject(name)));
@@ -375,6 +378,7 @@ export class Player extends DurableObject<Env> {
           slot, heroClass, challenges, name: body.player.name, seed: crypto.getRandomValues(new Uint32Array(1))[0]! >>> 1,
           ...(slot === 'daily' ? { dailySeed: await secretDailySeed(this.env.DAILY_SECRET, dayOf(now)) } : {}),
           id: crypto.randomUUID(), now, today: dayOf(now), outages: slot === 'daily' ? await outageDays(this.env) : [],
+          ...(deviceToken(body.sid) ? { sid: deviceToken(body.sid) } : {}),
         });
         await this.persist(new Set([slot]), new Map());
         // The reminders hear that the streak was kept today (they keep nothing for those who did not ask).
@@ -406,7 +410,8 @@ export class Player extends DurableObject<Env> {
         const from = Number.isInteger(body.from) ? (body.from as number) : -1;
         const id = typeof body.run === 'string' ? body.run : '';
         const hash = typeof body.hash === 'string' ? body.hash : null;
-        const result = logic.sync(slot, id, from, actions, hash, now);
+        const sid = deviceToken(body.sid);
+        const result = logic.sync(slot, id, from, actions, hash, now, sid ? { sid, claim: body.claim === true } : undefined);
         await this.persist(new Set(), new Map([[slot, result.touched]]));
         if (!result.finish) return json(result.reply);
         // The run has ended: onto its boards, and the places it took there with the answer (and any asked again).

@@ -54,6 +54,12 @@ export interface Run {
   record?: boolean;
   /** Its places on the boards it went to (player.ts). */
   places?: Partial<Record<string, number | null>>;
+  /**
+   * The copy of the game that plays it now: the token a device names itself by (checked.ts DeviceTag). A newer copy takes the run
+   * over (a start, or a sync that claims it); a sync from another token is answered 'taken' and changes nothing, so two devices
+   * cannot overwrite each other's moves. Absent: no copy has named itself (a run from before, or an older client, which never does).
+   */
+  owner?: string;
   world: World;
 }
 
@@ -215,6 +221,8 @@ export interface StartOptions {
   dailySeed?: number;
   /** A fresh id for the run. */
   id: string;
+  /** The copy of the game that asks (checked.ts DeviceTag): it holds the run. */
+  sid?: string;
   now: number;
   /** Today (YYYY-MM-DD, UTC). */
   today: string;
@@ -236,6 +244,12 @@ export interface SyncReply {
   record?: boolean;
   /** Why the server's copy was sent. */
   reason?: string;
+}
+
+/** Which copy of the game talks: its token, and whether it takes the run over (checked.ts DeviceTag). */
+export interface DeviceTag {
+  sid: string;
+  claim: boolean;
 }
 
 export interface SyncResult {
@@ -265,7 +279,10 @@ export class PlayerLogic {
   start(options: StartOptions): Run {
     const { slot, now, today } = options;
     const current = this.runs[slot];
-    if (slot === 'daily' && current && current.date === today && !current.finished) return current;
+    if (slot === 'daily' && current && current.date === today && !current.finished) {
+      if (options.sid) current.owner = options.sid;
+      return current;
+    }
     const daily = slot === 'daily';
     const ranked = !daily || this.profile.dailyDate !== today;
     const seed = daily ? (options.dailySeed ?? options.seed) : options.seed;
@@ -286,7 +303,7 @@ export class PlayerLogic {
     this.profile.name = options.name;
     this.profile.games++;
     countGame(this.profile.badges, seed);
-    const run: Run = { id: options.id, slot, seed, ...(daily ? { date: today } : {}), ranked, seq: 0, startedAt: now, updatedAt: now, world };
+    const run: Run = { id: options.id, slot, seed, ...(daily ? { date: today } : {}), ranked, seq: 0, startedAt: now, updatedAt: now, ...(options.sid ? { owner: options.sid } : {}), world };
     this.runs[slot] = run;
     return run;
   }
@@ -297,13 +314,18 @@ export class PlayerLogic {
    * an action the server's copy refuses, a fingerprint that differs, or a count the server never
    * reached sends the server's copy back.
    */
-  sync(slot: RunSlot, id: string, from: number, actions: readonly Action[], hash: string | null, now: number): SyncResult {
+  sync(slot: RunSlot, id: string, from: number, actions: readonly Action[], hash: string | null, now: number, tag?: DeviceTag): SyncResult {
     const run = this.runs[slot];
     const touched = new Set<number>();
     let finish: Finish | undefined;
     if (!run) return { reply: { seq: 0, reason: 'none' }, touched };
     const resend = (reason: string): SyncResult => ({ reply: { seq: run.seq, run: describe(run), world: run.world, reason, ...ended(run) }, touched, ...(finish ? { finish } : {}) });
     if (run.id !== id) return resend('another run');
+    // Two copies of the game on one run: the one that claimed it last plays; the other is told so and nothing it sent is taken.
+    if (tag) {
+      if (tag.claim || run.owner === undefined) run.owner = tag.sid;
+      else if (run.owner !== tag.sid) return { reply: { seq: run.seq, reason: 'taken' }, touched };
+    }
     if (from > run.seq || from + actions.length < run.seq) return resend('out of step');
     const fresh: BadgeId[] = [];
     // Where the hero was and went: only those depths (and the ones beside, where things fall) can have changed.

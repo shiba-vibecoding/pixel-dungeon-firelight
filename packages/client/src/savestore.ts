@@ -10,10 +10,11 @@ import { GORE_PREFIX, goreKeyInfo } from './gore';
  *    server has not taken yet) is written under a checksum. Snapshots go alternately to `key` and `key~2`, each marked with
  *    a growing generation, so the one being written is never the one last written whole: a kill in the middle of a write
  *    leaves the previous snapshot as it was. A snapshot is read back after it is written, and only then is the journal cleared.
- *  - A turn costs a few hundred bytes, not the whole world. Between snapshots every action the world accepted is appended to a
- *    small journal (`key~j`: the actions since the snapshot, the world's fingerprint and turn after the last one). On load the
- *    journal is played on the snapshot (the core is deterministic: the server does the same) and must come to that fingerprint;
- *    else the snapshot stands alone and the player is told that a few moves were lost.
+ *  - A turn costs a few hundred bytes, not the whole world. Between snapshots every action the world accepted goes to a small
+ *    journal (the actions since the snapshot, the world's fingerprint and turn after the last one), written alternately to
+ *    `key~j` and `key~k` so that a write cut short costs the turn in flight and no more. On load the newest journal is played
+ *    on the snapshot (the core is deterministic: the server does the same) and must come to its fingerprint; else the one before
+ *    it, or the snapshot alone, stands, and the player is told that a few moves were lost.
  *  - Loading validates: the text parses, its checksum and length agree, SAVE_VERSION fits (older ones are migrated or reported
  *    as too old), and a journal is only played when it belongs to that snapshot's generation and to these RULES. A damaged
  *    snapshot falls back to the other one; a damaged pair is reported (`damaged`), so that the caller can ask the server.
@@ -51,14 +52,15 @@ interface SoloSave {
 /** The hero's id in a solo run. */
 const ME = 'me';
 
-/** Snapshots to this key and its twin; the journal; the lease (instance.ts). */
+/** Snapshots to this key and its twin; the journal, alternately in two keys; the lease (instance.ts). */
 export const twinKey = (key: string): string => `${key}~2`;
 export const journalKey = (key: string): string => `${key}~j`;
+export const journalKey2 = (key: string): string => `${key}~k`;
 export const leaseKey = (key: string): string => `${key}~o`;
 /** The slot a stored key belongs to (the key itself, or one of its companions). */
-export const slotOfKey = (key: string): string => key.replace(/~[2jo]$/, '');
+export const slotOfKey = (key: string): string => key.replace(/~[2jko]$/, '');
 /** All of a slot's keys that hold the run (not the lease). */
-const runKeys = (key: string): string[] => [key, twinKey(key), journalKey(key)];
+const runKeys = (key: string): string[] => [key, twinKey(key), journalKey(key), journalKey2(key)];
 
 /** A cheap 53-bit hash of a text (cyrb53): enough to tell a torn or damaged write from a whole one. */
 export function checksum(text: string): string {
@@ -136,6 +138,8 @@ interface Journal {
   s?: number;
   /** The run's id at the server, to be sure the log belongs to it. */
   i?: string;
+  /** Which write of the session this is: of two journals with the same turn (the server took moves since), the later wins. */
+  w?: number;
 }
 
 const encodeJournal = (journal: Journal): string => {
@@ -194,7 +198,7 @@ function upgrade(save: SoloSave): number {
 export function readSlot(s: StorageLike, key: string): SlotRead {
   const out: SlotRead = { run: null, recovered: null, damaged: false, stale: null, gen: 0, replayed: 0 };
   const raws = [read(s, key), read(s, twinKey(key))];
-  const journalRaw = read(s, journalKey(key));
+  const journalRaws = [read(s, journalKey(key)), read(s, journalKey2(key))].filter((raw): raw is string => raw !== null);
   const usable: Array<{ save: SoloSave; gen: number; raw: string }> = [];
   let invalid = 0;
   for (const raw of raws) {
@@ -215,13 +219,17 @@ export function readSlot(s: StorageLike, key: string): SlotRead {
     }
     usable.push({ save: decoded.save, gen: decoded.gen, raw });
   }
-  const journal = journalRaw === null ? null : decodeJournal(journalRaw);
-  if (journal) out.gen = Math.max(out.gen, journal.g);
+  const decodedJournals = journalRaws.map(decodeJournal);
+  const journals = decodedJournals
+    .filter((j): j is Journal => j !== null)
+    // Newest first: the later generation, then the later turn.
+    .sort((a, b) => b.g - a.g || b.t - a.t || b.a.length - a.a.length || (b.w ?? 0) - (a.w ?? 0));
+  for (const j of journals) out.gen = Math.max(out.gen, j.g);
   // The best snapshot is the one of the highest generation (a save of an older build counts as 0).
   usable.sort((a, b) => b.gen - a.gen);
   const best = usable[0];
   if (!best) {
-    out.damaged = invalid > 0 || journalRaw !== null;
+    out.damaged = invalid > 0 || journalRaws.length > 0;
     return out;
   }
   let world = best.save.world;
@@ -232,24 +240,40 @@ export function readSlot(s: StorageLike, key: string): SlotRead {
    * an older is what a kill left between the snapshot and the journal (nothing in it is new). A snapshot torn in the writing
    * never reached its journal, so it costs nothing: the journal of the one before it holds the moves.
    */
-  if (journalRaw !== null) {
-    if (!journal) {
+  if (journalRaws.length > 0) {
+    const newest = journals[0];
+    if (!newest) {
+      // Nothing of the journal can be read: what it held is gone.
       out.recovered = 'journal';
-    } else if (journal.g > best.gen) {
+    } else if (newest.g > best.gen) {
       out.recovered = 'backup';
-    } else if (journal.g === best.gen) {
-      const played = replay(best.save, journal);
-      if (played) {
-        check = played.check;
-        out.replayed = journal.a.length;
-      } else {
-        // The play changed the world on the way: the snapshot is read again, whole.
+    } else if (newest.g === best.gen) {
+      // The newest journal of the snapshot; if it will not play, the one before it (a turn short), if that will not, the snapshot alone.
+      const ofThisSnapshot = journals.filter((j) => j.g === best.gen);
+      let played: { check: SavedCheck | null } | null = null;
+      let used: Journal | null = null;
+      for (const candidate of ofThisSnapshot) {
+        // (A play changes the world: each try is on the snapshot read afresh.)
+        const again = used === null && candidate === ofThisSnapshot[0] ? best.save : (decodeSnapshot(best.raw) as { ok: true; save: SoloSave }).save;
+        played = replay(again, candidate);
+        if (played) {
+          used = candidate;
+          world = again.world;
+          check = played.check;
+          out.replayed = candidate.a.length;
+          break;
+        }
+        used = null;
+      }
+      if (!played) {
         out.recovered = 'journal';
         const again = decodeSnapshot(best.raw);
         if (again.ok) {
           world = again.save.world;
           check = again.save.check ?? null;
         }
+      } else if (used !== ofThisSnapshot[0]) {
+        out.recovered = 'journal';
       }
     }
   }
@@ -399,6 +423,8 @@ export class SlotKeeper {
   private actions: Action[] = [];
   /** A snapshot of this session is the base the journal follows. */
   private based = false;
+  /** Journals written, to alternate the two keys. */
+  private journals = 0;
   private lastFp = '';
   private lastTurn = 0;
   /** The size (characters) and time (ms) of the last write, for the tests and the diagnostics. */
@@ -484,10 +510,12 @@ export class SlotKeeper {
     const journal: Journal = {
       g: this.gen, r: RULES_VERSION, a: this.actions, t: this.lastTurn, f: this.lastFp,
       ...(check ? { s: check.meta.seq, i: check.meta.id } : {}),
+      w: this.journals,
     };
     const text = encodeJournal(journal);
     this.lastBytes = text.length;
-    return putWithRoom(this.s, journalKey(this.key), text);
+    // Alternately in the two keys, each a whole journal: a write that is cut short leaves the one before it.
+    return putWithRoom(this.s, this.journals++ % 2 === 0 ? journalKey(this.key) : journalKey2(this.key), text);
   }
 
   /** The run is over (or thrown away): nothing of it stays. */

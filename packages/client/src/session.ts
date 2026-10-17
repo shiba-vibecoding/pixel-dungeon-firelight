@@ -122,6 +122,9 @@ export function inspectSolo(key: string): SlotRead {
 /** A run is worth carrying on while it is under way, or over but with moves the server has not heard (its end is told to it first). */
 const playable = (run: NonNullable<SlotRead['run']>): boolean => !run.world.over || (run.check !== null && run.check.log.length > 0);
 
+/** The run a read of a slot gives to carry on, if any. */
+export const carriedOn = (read: SlotRead): NonNullable<SlotRead['run']> | null => (read.run && playable(read.run) ? read.run : null);
+
 /** The saved run, brought up to this version and to the last turn taken; null if there is none, it is over, or it is too old to carry on. */
 export function loadSolo(key: string): World | null {
   const run = inspectSolo(key).run;
@@ -152,10 +155,11 @@ export function forgetSolo(key: string): void {
 /**
  * @param challenges the challenges of a fresh run (a bit mask; see Challenges in the core)
  * @param bones a fallen hero's bones for a fresh run to hold (bones.ts), read when the run starts
+ * @param copy which copy of the game this is (the page's own token; the tests bring their own): the lease on the device and the server's owner token are named by it
  */
 export function soloSession(
   key: string | null, heroClass: HeroClass, newSeed: () => number, name = 'Hero', challenges = 0,
-  bones: () => Bones | null = () => null, live = false, checkOptions?: CheckOptions, daily?: string,
+  bones: () => Bones | null = () => null, live = false, checkOptions?: CheckOptions, daily?: string, copy: string = INSTANCE,
 ): Session {
   // A problem report's log is of the run played now.
   resetActions();
@@ -174,7 +178,7 @@ export function soloSession(
   /** Another copy of the game takes the run: this one stands aside. */
   let superseded: 'window' | 'device' | null = null;
   let closed = false;
-  const lease = key && storage ? new Lease(storage, key, () => supersede('window'), browserBuses()) : null;
+  const lease = key && storage ? new Lease(storage, key, () => supersede('window'), browserBuses(), copy) : null;
   // The newer copy takes over: whoever starts playing a run holds it.
   lease?.claim();
   const read = key && storage ? readSlot(storage, key) : null;
@@ -252,7 +256,7 @@ export function soloSession(
     const claiming = claim;
     let reply: SyncAnswer | 'offline' | 'unauthorized' | 'rules';
     try {
-      reply = await checkOptions!.api.sync(meta, batch, whole ? fingerprint(session.world!) : null, keepalive, { sid: INSTANCE, claim: claiming });
+      reply = await checkOptions!.api.sync(meta, batch, whole ? fingerprint(session.world!) : null, keepalive, { sid: copy, claim: claiming });
     } finally {
       inflight--;
       if (keepalive) keepaliveOut = false;
@@ -331,7 +335,8 @@ export function soloSession(
       if (finished()) keeper.drop();
       else if (!keeper.ack(session.world!, check)) failed();
     }
-    if (check.log.length > 0) syncSoon(check.log.length >= SYNC_BATCH ? 0 : SYNC_DELAY_MS);
+    // (A run that is over has no reason to wait: its end is what the boards are waiting for.)
+    if (check.log.length > 0) syncSoon(check.log.length >= SYNC_BATCH || session.world?.over ? 0 : SYNC_DELAY_MS);
   };
   /** The network came back (the browser says so): the waiting moves go at once. */
   const back = (): void => {

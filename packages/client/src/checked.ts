@@ -327,6 +327,15 @@ export interface RunApi {
   hide(on: boolean): Promise<boolean | null>;
 }
 
+/**
+ * A way to the server that is never there: for a kept checked run opened with no means of reaching the server (no init data this
+ * time). The run is carried on as a checked one whose moves wait in its log, kept with the run for the next time.
+ */
+export const unreachable = (): Pick<RunApi, 'sync' | 'start'> => ({ sync: async () => 'offline', start: async () => 'offline' });
+
+/** How long a request may take before it is taken for lost (the moves go again, which the server skips if it has them). */
+export const REQUEST_TIMEOUT_MS = 25_000;
+
 /** The server's HTTP address, from its WebSocket one. */
 export const httpBase = (server: string): string => server.replace(/^ws(s?):/, 'http$1:');
 
@@ -336,10 +345,14 @@ export function runApi(server: string, identity: () => Identity, development: bo
   const base = httpBase(server);
   const post = async <T>(path: string, body: Record<string, unknown>, keepalive = false): Promise<T | Trouble> => {
     const text = JSON.stringify({ ...identity(), rules: RULES_VERSION, ...body });
+    // A line gone half open answers nothing and fails nothing: without a limit, the one request on it would hold up every one after it
+    // (the moves of a run are sent one request at a time). A keepalive request outlives the page and is left to the browser.
+    const limit = !keepalive && typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = limit ? setTimeout(() => limit.abort(), REQUEST_TIMEOUT_MS) : 0;
     try {
       let response: Response;
       try {
-        response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text, keepalive });
+        response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text, keepalive, ...(limit ? { signal: limit.signal } : {}) });
       } catch (error) {
         // A page that is going: a keepalive request refused outright (no fetch for it, a body too big) goes as a beacon, which the browser
         // sends after the page is gone (plain text, so that it needs no preflight; the server reads the body as JSON all the same).
@@ -354,6 +367,8 @@ export function runApi(server: string, identity: () => Identity, development: bo
       return (await response.json()) as T;
     } catch {
       return 'offline';
+    } finally {
+      clearTimeout(timer);
     }
   };
   const quiet = async <T>(path: string, body: Record<string, unknown>): Promise<T | null> => {
