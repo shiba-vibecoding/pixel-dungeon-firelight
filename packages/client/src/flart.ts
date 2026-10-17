@@ -99,6 +99,9 @@ export function onFlChange(listener: () => void): () => void {
 
 export const flVersion = (): number => version;
 
+/** Tells whoever draws from the art that something new has come (the weapon sheets of heldart.ts load through here too). */
+export const flChanged = (): void => bump();
+
 /** Fetches catalog.json (once); null if it cannot be had (the shop then shows placeholders). */
 export function loadFl(): Promise<FlCatalog | null> {
   loading ??= Promise.all([

@@ -24,6 +24,8 @@ export interface RunMeta {
 export interface RunSummary extends RunOutcome {
   /** The tier of the armour worn at the end, from the server's final world (absent from runs before it). */
   armor?: number;
+  /** The weapon in the hand at the end, from the final world (an item kind; absent: bare hands, or a run from before it was kept). */
+  weapon?: string;
   slot: RunSlot;
   ranked: boolean;
   at: number;
@@ -230,6 +232,8 @@ export interface BoardEntry {
 export interface BoardWorn {
   /** The tier of the armour worn at the end of the run: the row of the hero's sheet (absent: cloth). */
   a?: number;
+  /** The weapon in the hand at the end of the run (an item kind), from the verified final world. */
+  wp?: string;
   l?: string;
   h?: string;
   p?: string;

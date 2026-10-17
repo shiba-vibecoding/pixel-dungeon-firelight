@@ -1,6 +1,6 @@
 import type { Profile } from './checked';
 import { compete, loadCompete, tierOf } from './compete';
-import { art, competeShell, lastArmor, nameNode, number, stage, titleBadge, tx, txn, wide } from './compete-ui';
+import { art, competeShell, lastArmor, lastWeapon, nameNode, number, stage, titleBadge, tx, txn, wide } from './compete-ui';
 import { lang } from './i18n';
 import { ladder } from './leagueui';
 import { cosmetics } from './cosmetics';
@@ -40,7 +40,7 @@ function build(options: ProfileOptions, shell: ReturnType<typeof competeShell>):
   shell.head(tx('profile'), null, options.onBack);
 
   // The card: the hero as he is dressed now, big, and who he is.
-  const { node: box } = stage(() => myLook(options.heroClass, lastArmor(options.profile, options.heroClass)), 'big', true);
+  const { node: box } = stage(() => myLook(options.heroClass, lastArmor(options.profile, options.heroClass), lastWeapon(options.profile, options.heroClass)), 'big', true);
   const who = el('div', { className: 'who' }, nameNode(options.name, cosmetics.nameColor?.id));
   const title = titleBadge(cosmetics.title?.id, false);
   if (title) who.append(title);

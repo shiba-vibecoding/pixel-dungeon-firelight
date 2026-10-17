@@ -27,6 +27,8 @@ export interface Worn {
   nc?: string;
   /** The tier of the armour worn at the end of the run (the row of the hero's sheet: 1 cloth ... 6 the class armour), from the verified final world. Absent: cloth. */
   a?: number;
+  /** The weapon in the hero's hand at the end of the run (an item kind, `weapon.sword`, or a held `missile.*`), from the verified final world; drawn in the hand on the card. Absent: bare hands (and every entry from before it was kept). */
+  wp?: string;
   /** The step of the weekly league the player stood on (league-rules.ts): the hero card's frame when no other is worn. Absent: the first league's. */
   lg?: string;
 }
@@ -162,8 +164,10 @@ export class Leaderboard {
       if (entry.owner !== owner) continue;
       // The armour is the run's own (the final world), not the wallet's: it stays.
       const armor = entry.w?.a;
+      const weapon = entry.w?.wp;
       const base = byClass[entry.heroClass];
-      const worn: Worn | undefined = base || armor !== undefined ? { ...base, ...(armor !== undefined ? { a: armor } : {}) } : undefined;
+      const worn: Worn | undefined = base || armor !== undefined || weapon !== undefined
+        ? { ...base, ...(armor !== undefined ? { a: armor } : {}), ...(weapon !== undefined ? { wp: weapon } : {}) } : undefined;
       // What the entry should say: `w`, and the old per-field values (a client of before `w` reads those).
       const want = { w: worn, nc: worn?.nc, tt: worn?.tt, fr: worn?.fr };
       if (JSON.stringify(want) === JSON.stringify({ w: entry.w, nc: entry.nc, tt: entry.tt, fr: entry.fr })) continue;

@@ -1,3 +1,4 @@
+import { type HeldFigure, heldOnCard } from './heldart';
 import { image as campImage, ready as campReady, SHEET } from './camp';
 import { itemById, type Slot } from './catalog';
 import { cosmetics } from './cosmetics';
@@ -27,12 +28,12 @@ import { quality } from './quality';
 export { type CardLook, lookOfEntry } from './cardlook';
 
 /** This player's own hero of a class, as they wear it now (owned things only: cosmetics.ts). */
-/** `armor`: the tier of the armour he wears (the row of his sheet); absent, cloth. */
-export function myLook(heroClass: string, armor?: number): CardLook {
+/** `armor`: the tier of the armour he wears (the row of his sheet); absent, cloth. `weapon`: the kind of the weapon in his hand; absent, bare hands. */
+export function myLook(heroClass: string, armor?: number, weapon?: string): CardLook {
   const id = (slot: Slot): string | undefined => cosmetics.inSlot(slot)?.id;
   const look = id(`look.${heroClass}` as Slot);
   const [hat, pet, fire, frame] = [id('hat'), id('pet'), id('campfire'), id('frame')];
-  return { heroClass, ...(armor !== undefined ? { a: armor } : {}), ...(look ? { l: look } : {}), ...(hat ? { h: hat } : {}), ...(pet ? { p: pet } : {}), ...(fire ? { f: fire } : {}), ...(frame ? { fr: frame } : {}) };
+  return { heroClass, ...(armor !== undefined ? { a: armor } : {}), ...(weapon ? { wp: weapon } : {}), ...(look ? { l: look } : {}), ...(hat ? { h: hat } : {}), ...(pet ? { p: pet } : {}), ...(fire ? { f: fire } : {}), ...(frame ? { fr: frame } : {}) };
 }
 
 /* ---- What is shown less on a phone that saves data, and when nothing moves ---- */
@@ -94,6 +95,13 @@ export function fireColour(look: CardLook): string {
 }
 
 /* ---- Composing ---- */
+
+/** The weapon's cell (and the trail of a blow) in a hero's frame whose top left is at (x, y). */
+function drawCardHeld(g: CanvasRenderingContext2D, h: HeldFigure, x: number, y: number): void {
+  const at = h.held;
+  g.drawImage(h.image, at.sx, at.sy, at.w, at.h, x + at.left, y + at.top, at.w, at.h);
+  if (at.trailSx >= 0) g.drawImage(h.image, at.trailSx, at.trailSy, at.w, at.h, x + at.left, y + at.top, at.w, at.h);
+}
 
 /** The hero's class sheet; a class this build does not know has none. */
 const sheetOf = (heroClass: string): string | undefined => (SHEET[heroClass] ? `${SHEET[heroClass]}.png` : undefined);
@@ -194,6 +202,12 @@ function compose(g: CanvasRenderingContext2D, look: CardLook, layout: SceneLayou
     if (aura) g.drawImage(aura.image, (moving ? Math.floor(t / aura.ms) % aura.frames : 0) * aura.w, 0, aura.w, aura.h, hx - aura.feetX, hy - aura.feetY, aura.w, aura.h);
     g.fillStyle = 'rgba(0,0,0,.5)';
     g.fillRect(hx - 4, hy, 8, 1);
+    // The weapon he held at the end (design part 9): behind the body or in front of it, at his hand in this frame.
+    const weapon = heldOnCard(cls, row, frame, look.wp);
+    if (weapon.pending) complete = false;
+    const held = weapon.figure;
+    const behind = held !== null && held.held.layer === 'back';
+    if (held && behind) drawCardHeld(g, held, hx - cellW / 2, hy - cellH);
     g.drawImage(sheet, frame * cellW, row * cellH, cellW, cellH, hx - cellW / 2, hy - cellH, cellW, cellH);
     const hat = layer(look.h, 'hat', () => hatArt(look.h!, cls));
     if (hat.pending) complete = false;
@@ -217,6 +231,7 @@ function compose(g: CanvasRenderingContext2D, look: CardLook, layout: SceneLayou
       g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
     }
+    if (held && !behind) drawCardHeld(g, held, hx - cellW / 2, hy - cellH);
   } else if (own) {
     complete = false;
   }

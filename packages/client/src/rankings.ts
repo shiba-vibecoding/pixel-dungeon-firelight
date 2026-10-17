@@ -23,6 +23,8 @@ export interface RunRecord {
   mode: 'solo' | 'daily' | 'coop';
   /** The tier of the armour the hero wore at the end (the row of his sheet: 1 cloth ... 6 class armour); records from before it was kept draw cloth. */
   armor?: number;
+  /** The weapon the hero held at the end (an item kind); records from before it was kept show bare hands. */
+  weapon?: string;
   /** The server checked the run (checked.ts), so it stands on the boards too; runs of before checked runs have none. */
   checked?: boolean;
   date: number;

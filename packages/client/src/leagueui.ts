@@ -1,7 +1,7 @@
 import { audio } from './audio';
 import type { BoardEntry, LeagueResult, LeagueView, Profile, RunApi } from './checked';
 import { compete, loadCompete, tierOf } from './compete';
-import { art, competeShell, lastArmor, number, rowOf, type RowData, tx, txn } from './compete-ui';
+import { art, competeShell, lastArmor, lastWeapon, number, rowOf, type RowData, tx, txn } from './compete-ui';
 import { heroCard, myLook } from './herocard';
 import { lang } from './i18n';
 import { countdown } from './rankui';
@@ -140,7 +140,7 @@ export function showWeek(options: WeekOptions): void {
     if (kind !== 'stay') head.append(el('span', { className: 'arrow', textContent: '→' }), art(to.badge, kind === 'up' ? 5 : 3));
     const title = kind === 'up' ? tx('up', { t: to.name[lang] }) : kind === 'down' ? tx('down', { t: to.name[lang] }) : tx('stay', { t: from.name[lang] });
     const text = kind === 'up' ? tx('upText', { n: zoneSize }) : kind === 'down' ? tx('downText', { n: zoneSize, t: from.name[lang] }) : tx('stayText', { n: zoneSize });
-    const card = heroCard(() => ({ ...myLook(options.heroClass, lastArmor(options.profile, options.heroClass)), lg: result.to }), { kind: 'big', animate: true, scale: 2, className: 'pd-card-row' });
+    const card = heroCard(() => ({ ...myLook(options.heroClass, lastArmor(options.profile, options.heroClass), lastWeapon(options.profile, options.heroClass)), lg: result.to }), { kind: 'big', animate: true, scale: 2, className: 'pd-card-row' });
     const buttons = el('div', { className: 'fl-week-buttons' });
     const done = (): void => {
       options.onSeen();

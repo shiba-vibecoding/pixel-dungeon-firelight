@@ -13,7 +13,7 @@ describe('the hero card (cardlook.ts)', () => {
   it('keeps a composed card under class|look|hat|pet|fire, the same for the same combination whatever the frame', () => {
     const a = { heroClass: 'mage', l: 'skin.mage.ember', h: 'hat.crown', fr: 'frame.ember' };
     const b = { heroClass: 'mage', l: 'skin.mage.ember', h: 'hat.crown', fr: 'frame.stars' };
-    expect(cardKey(a)).toBe('mage|1|skin.mage.ember|hat.crown||');
+    expect(cardKey(a)).toBe('mage|1|skin.mage.ember|hat.crown|||');
     expect(cardKey(a)).toBe(cardKey(b));
     expect(cardKey({ heroClass: 'mage' })).not.toBe(cardKey({ heroClass: 'warrior' }));
     expect(cardKey({ heroClass: 'mage', p: 'pet.bat' })).not.toBe(cardKey({ heroClass: 'mage', f: 'pet.bat' }));
@@ -31,6 +31,17 @@ describe('the hero card (cardlook.ts)', () => {
     expect(tierOf({ heroClass: 'mage', a: 2.5 })).toBe(DEFAULT_TIER);
     expect(cardKey({ heroClass: 'mage', a: 2 })).not.toBe(cardKey({ heroClass: 'mage', a: 4 }));
     expect(cardKey({ heroClass: 'mage' })).toBe(cardKey({ heroClass: 'mage', a: DEFAULT_TIER }));
+  });
+
+  it('draws the weapon he held at the end: from the snapshot, part of the key, and nothing for bare hands or a word that is not a kind', () => {
+    expect(lookOfEntry({ heroClass: 'rogue', w: { a: 2, wp: 'weapon.dagger' } })).toEqual({ heroClass: 'rogue', a: 2, wp: 'weapon.dagger' });
+    expect(lookOfEntry({ heroClass: 'rogue', w: { a: 2 } })).toEqual({ heroClass: 'rogue', a: 2 });
+    expect(lookOfEntry({ heroClass: 'rogue', w: { wp: '' } })).toEqual({ heroClass: 'rogue' });
+    expect(lookOfEntry({ heroClass: 'rogue', w: { wp: 'x'.repeat(60) } })).toEqual({ heroClass: 'rogue' });
+    expect(lookOfEntry({ heroClass: 'rogue', w: { wp: 7 as unknown as string } })).toEqual({ heroClass: 'rogue' });
+    expect(cardKey({ heroClass: 'rogue', wp: 'weapon.dagger' })).not.toBe(cardKey({ heroClass: 'rogue', wp: 'weapon.sword' }));
+    expect(cardKey({ heroClass: 'rogue', wp: 'weapon.dagger' })).not.toBe(cardKey({ heroClass: 'rogue' }));
+    expect(cardKey({ heroClass: 'rogue', wp: 'weapon.dagger' })).toBe('rogue|1|||||weapon.dagger');
   });
 
   it('forgets the card used least recently, and a card looked at again is spared', () => {

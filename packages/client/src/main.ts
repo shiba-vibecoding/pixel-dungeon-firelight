@@ -49,7 +49,7 @@ import {
 import { rankingBlock, trophyText } from './rankui';
 import { showBoards } from './boardsui';
 import { showProfile } from './profileui';
-import { lastArmor } from './compete-ui';
+import { lastArmor, lastWeapon } from './compete-ui';
 import { showSeason } from './seasonui';
 import { showLeague, showWeek } from './leagueui';
 import { showCircles, showInvite } from './circleui';
@@ -1044,7 +1044,7 @@ function openHall(): void {
 /** The player's own hero as the pictures to send show him (sharecards.ts): the place on the day's board only if he has played it. */
 function myHeroPicture(): import('./sharecards').HeroPicture {
   return {
-    name: profile?.name || (inTelegram ? telegramName() : playerName.trim()) || t.heroDefault, look: myLook(heroClass, lastArmor(profile, heroClass)), heroClass,
+    name: profile?.name || (inTelegram ? telegramName() : playerName.trim()) || t.heroDefault, look: myLook(heroClass, lastArmor(profile, heroClass), lastWeapon(profile, heroClass)), heroClass,
     place: profile?.dailyDone ? (profile.places.daily ?? null) : null, depth: profile?.deepest ?? 1, streak: profile?.streak.count ?? 0,
     ...(profile?.league && profile.league.best > 0 ? { tier: profile.league.tier } : {}),
   };
@@ -1271,6 +1271,8 @@ const homeDress = (): CampDress => ({
   fire: fireArt(cosmetics.fire?.id ?? 'fire.classic') ?? null,
   decor: cosmetics.decor.map((item) => item.id),
   wear: (heroClass) => wornFor(heroClass as HeroClass),
+  // The weapon of his last run, else the one he sets out with.
+  weapon: (heroClass) => lastWeapon(profile, heroClass) ?? core.HERO_CLASSES[heroClass as HeroClass]?.weapon,
 });
 cosmetics.onChange(() => activeCamp?.dress(homeDress()));
 // The designer's art arrives as it is asked for: the camp and the dungeon are drawn again with it.
@@ -3654,7 +3656,7 @@ function tick(now: number): void {
         title: dailyRun ? undefined : t.gameName,
         // The pictures of the hero by his fire (sharecards.ts), with the day's place when this was the daily dungeon; never the seed.
         hero: {
-          name: me.name || playerName || telegramName() || t.heroLabel, look: myLook(me.heroClass, armorTier(me)), heroClass: me.heroClass,
+          name: me.name || playerName || telegramName() || t.heroLabel, look: myLook(me.heroClass, armorTier(me), me.weapon?.kind), heroClass: me.heroClass,
           place: dailyRun ? (reply?.places?.daily ?? null) : null, depth: deepestNow, streak: profile?.streak.count ?? 0,
           ...(profile?.league && profile.league.best > 0 ? { tier: profile.league.tier } : {}),
         },
@@ -3671,6 +3673,7 @@ function tick(now: number): void {
         key: `${world.run.seed}:${me.id}:${world.turn}`,
         checked: Boolean(session.checked),
         armor: armorTier(me),
+        ...(me.weapon ? { weapon: me.weapon.kind } : {}),
         score: scoreNow,
         name: me.name || playerName || telegramName() || t.heroLabel,
         heroClass: me.heroClass,
@@ -3712,7 +3715,7 @@ function tick(now: number): void {
 
 /** The hero card of a run's end: this hero in the armour he wears now, and what the player has put on him. */
 function endCard(hero: Hero): HTMLElement {
-  const card = heroCard(myLook(hero.heroClass, armorTier(hero)), { kind: 'row', animate: true, scale: 2, className: 'pd-card-row' });
+  const card = heroCard(myLook(hero.heroClass, armorTier(hero), hero.weapon?.kind), { kind: 'row', animate: true, scale: 2, className: 'pd-card-row' });
   const box = document.createElement('span');
   box.className = 'fl-stage row pd-runend-card';
   box.append(card.canvas);

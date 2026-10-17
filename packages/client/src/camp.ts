@@ -1,5 +1,6 @@
 import type { EffectId, SkinVariant } from '@pd/core';
 import { audio } from './audio';
+import { type HeldFigure, heldOnCard } from './heldart';
 import { type DecorArt, decorArt, type DigitsArt, type FireArt, type FxArt } from './flart';
 import { t } from './i18n';
 import { quality } from './quality';
@@ -62,9 +63,10 @@ const PLACES: Record<CampScene, Place> = {
 /** The armour tier the camp shows (the sheets' row 1: the first armour, as a new hero wears it). */
 export const TIER_ROW = 1;
 /** The hero's canvas: his frame at (6, 12) in it. */
-const SIL_W = 24;
-const SIL_H = 32;
-const SIL_X = 6;
+// (Room round the hero for an aura, a hat and a weapon held out: the margins left and right are the same, so that the mirror keeps him in place.)
+const SIL_W = 36;
+const SIL_H = 40;
+const SIL_X = 12;
 const SIL_Y = 12;
 
 const BASE = `${import.meta.env.BASE_URL}assets/`;
@@ -182,6 +184,8 @@ export interface CampDress {
   decor?: readonly string[];
   /** What a class's hero wears (flart look, hat, pet, trail): by the class's name. */
   wear?: (heroClass: string) => Worn;
+  /** The kind of the weapon a class's hero holds in the camp (design part 9), or undefined for bare hands. */
+  weapon?: (heroClass: string) => string | undefined;
   /** The try-on plays an effect or shows a number style on the spot (a kill's, a fall's, damage digits): these loop beside the hero. */
   demo?: { kill?: FxArt; death?: FxArt; digits?: DigitsArt } | null;
   extras?: readonly CampExtra[];
@@ -582,6 +586,13 @@ export class Camp {
     return canvas;
   }
 
+  /** The weapon's cell (and the trail of a blow) on the hero's canvas, where his frame stands at (SIL_X, SIL_Y). */
+  private drawHeld(sg: CanvasRenderingContext2D, h: HeldFigure): void {
+    const at = h.held;
+    sg.drawImage(h.image, at.sx, at.sy, at.w, at.h, SIL_X + at.left, SIL_Y + at.top, at.w, at.h);
+    if (at.trailSx >= 0) sg.drawImage(h.image, at.trailSx, at.trailSy, at.w, at.h, SIL_X + at.left, SIL_Y + at.top, at.w, at.h);
+  }
+
   private drawHero(t: number, now: number): void {
     const { ctx } = this;
     let src = this.source(this.hero);
@@ -627,6 +638,12 @@ export class Camp {
     // A legendary look's aura behind him (its feet at (12, 26), his at (6, 14)).
     const aura = worn.look?.aura;
     if (aura) sg.drawImage(aura.image, (Math.floor(now / aura.ms) % aura.frames) * aura.w, 0, aura.w, aura.h, SIL_X + 6 - aura.feetX, SIL_Y + 14 - aura.feetY, aura.w, aura.h);
+    // The weapon in his hand (design part 9): behind the body or in front of it; the tap swings it.
+    const cls = this.classes[this.hero] ?? '';
+    const weapon = heldOnCard(cls, src.row, f, this.dressing.weapon?.(cls), this.mode === 'tap');
+    const held = weapon.figure;
+    const behind = held !== null && held.held.layer === 'back';
+    if (held && behind) this.drawHeld(sg, held);
     const blinked = blink && f === 0 ? this.blinkFrame(src) : null;
     if (blinked) sg.drawImage(blinked, SIL_X, SIL_Y);
     else if (ready(src.img)) sg.drawImage(src.img, f * 12, src.row * 15, 12, 15, SIL_X, SIL_Y, 12, 15);
@@ -651,6 +668,7 @@ export class Camp {
         sg.globalCompositeOperation = 'source-over';
       }
     }
+    if (held && !behind) this.drawHeld(sg, held);
     if (dark) {
       sg.globalCompositeOperation = 'source-atop';
       sg.fillStyle = `rgba(6,6,10,${Math.min(1, dark).toFixed(2)})`;

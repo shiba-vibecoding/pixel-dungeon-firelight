@@ -4,7 +4,7 @@
  * this is the loading, and the one question both renderers ask: what does this figure hold in this frame?
  */
 import type { Facing, Figure } from './dirs';
-import { picture } from './dirs';
+import { flChanged, flImage, flReady } from './flart';
 import { type Held, type HeldData, heldOf } from './held';
 import type { Puppet } from './view';
 
@@ -26,6 +26,8 @@ export function heldData(): HeldData | undefined {
     .then((response) => (response.ok ? (response.json() as Promise<HeldData>) : Promise.reject(new Error(String(response.status)))))
     .then((json) => {
       data = json;
+      // The cards and the 2D loop draw again when it arrives.
+      flChanged();
     })
     .catch(() => {
       failures++;
@@ -35,6 +37,12 @@ export function heldData(): HeldData | undefined {
       loading = false;
     });
   return undefined;
+}
+
+/** A weapon's sheet (a path inside assets/), once it has come; it is fetched the first time it is asked for, with the build's mark. */
+export function heldSheet(path: string): HTMLImageElement | undefined {
+  const image = flImage(path);
+  return flReady(image) ? image : undefined;
 }
 
 /** What a figure holds in a frame: the weapon's cell (held.ts) and its sheet. One object, reused. */
@@ -63,9 +71,44 @@ export function heldFigure(puppet: Puppet, fig: Figure, frame: number, now: numb
   if (!data) return null;
   const held = heldFor(data, puppet, fig.facing, frame, now);
   if (!held) return null;
-  const image = picture(held.sheet);
+  const image = heldSheet(held.sheet);
   if (!image) return null;
   OUT.held = held;
   OUT.image = image;
   return OUT;
+}
+
+/** The weapon on a hero card: what is held in the idle frame of the side view, and whether it is still on its way. */
+export interface CardHeld {
+  figure: HeldFigure | null;
+  /** held.json or the weapon's sheet has not come yet: draw what there is, and again when it arrives. */
+  pending: boolean;
+}
+
+const CARD: CardHeld = { figure: null, pending: false };
+
+/**
+ * The weapon in the hand of a card's hero (design part 9): frame `frame` of his sheet in the armour's row `tier`, in the side view the cards
+ * keep, at rest. A kind the hand sheets do not know (an old record, a device's word) is simply not drawn. One object, reused.
+ */
+export function heldOnCard(heroClass: string, tier: number, frame: number, kind: string | undefined, attack = false): CardHeld {
+  CARD.figure = null;
+  CARD.pending = false;
+  if (!kind) return CARD;
+  const data = heldData();
+  if (!data) {
+    CARD.pending = typeof fetch !== 'undefined';
+    return CARD;
+  }
+  const held = heldOf(data, heroClass, 'side', tier, frame, kind, attack);
+  if (!held) return CARD;
+  const image = heldSheet(held.sheet);
+  if (!image) {
+    CARD.pending = true;
+    return CARD;
+  }
+  OUT.held = held;
+  OUT.image = image;
+  CARD.figure = OUT;
+  return CARD;
 }

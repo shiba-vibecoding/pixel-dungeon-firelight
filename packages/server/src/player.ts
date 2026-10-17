@@ -478,7 +478,7 @@ export class Player extends DurableObject<Env> {
     // A player who asked to be hidden is «Hero» there, without the colour and the title that would say who.
     const profile = this.logic!.profile;
     const week = weekOf(now);
-    const worn = wornOnBoards(profile, wornOf(wallet ? shopOf(wallet) : emptyShop(), summary.heroClass, summary.armor, profile.league ? currentTier(profile.league, week) : undefined));
+    const worn = wornOnBoards(profile, wornOf(wallet ? shopOf(wallet) : emptyShop(), summary.heroClass, summary.armor, profile.league ? currentTier(profile.league, week) : undefined, summary.weapon));
     const shownName = nameOnBoards(profile, player.name);
     let weekEntry: DailyEntry | null = null;
     let weekPlayed = 0;

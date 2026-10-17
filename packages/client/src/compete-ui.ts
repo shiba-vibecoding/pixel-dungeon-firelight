@@ -185,11 +185,7 @@ export function nameNode(name: string, colourId: string | undefined, tag: 'b' | 
   return node;
 }
 
-/** The armour of the player's last run (of this class, else of the last at all): he is shown in what he died or finished in. */
-export function lastArmor(profile: Profile | null, heroClass: string): number | undefined {
-  const runs = profile?.history ?? [];
-  return (runs.find((run) => run.heroClass === heroClass && run.armor !== undefined) ?? runs.find((run) => run.armor !== undefined))?.armor;
-}
+export { lastArmor, lastRun, lastWeapon } from './cardlook';
 
 /* ---- A hero's stage ---- */
 
