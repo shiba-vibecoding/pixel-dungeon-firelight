@@ -100,6 +100,12 @@ function segments<V extends string>(choices: ReadonlyArray<readonly [V, string]>
   return box;
 }
 
+/** The choices one under another: long words do not fit side by side on a phone. */
+const stacked = (box: HTMLElement): HTMLElement => {
+  box.classList.add('col');
+  return box;
+};
+
 /** A row that turns something on or off. */
 function switchRow(label: string, note: string | null, on: boolean, onChange: (on: boolean) => void): HTMLElement {
   const row = el(
@@ -221,7 +227,7 @@ export function showSettings(options: SettingsOptions): void {
       'div',
       { className: 'pd-set-row stack' },
       el('span', { className: 'pd-info', textContent: t.input.settings.pathConfirm }),
-      segments(CONFIRM_MODES.map((m) => [m, t.input.settings.pathModes[m]] as const), pathConfirm.mode, (mode) => pathConfirm.set(mode)),
+      stacked(segments(CONFIRM_MODES.map((m) => [m, t.input.settings.pathModes[m]] as const), pathConfirm.mode, (mode) => pathConfirm.set(mode))),
       info(t.input.settings.pathConfirmNote, 'pd-note'),
     ),
     switchRow(t.input.settings.loupe, t.input.settings.loupeNote, loupeSetting.on, (on) => loupeSetting.set(on)),

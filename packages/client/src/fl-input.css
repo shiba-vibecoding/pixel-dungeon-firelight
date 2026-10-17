@@ -28,3 +28,5 @@
 .fl-loupe.muted .fl-loupe-lens { border-color: var(--stone-300); filter: saturate(.4) brightness(.8); }
 .fl-loupe.muted .fl-loupe-label { color: var(--ink-muted); border-color: var(--stone-300); }
 .fl-hover-label { position: fixed; z-index: var(--z-overlay, 50); pointer-events: none; white-space: nowrap; font: var(--text-caption); }
+/* A choice of long words: one under another (the settings' route confirmation). */
+.pd-seg.col { flex-direction: column; }
