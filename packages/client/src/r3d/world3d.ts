@@ -28,6 +28,7 @@ import { type BurstOptions, fx } from '../fx';
 import { knockback, LUNGE_MS } from '../render';
 import { FALL_MS, type Puppet, TILE, type View } from '../view';
 import { figureOf } from '../dirs';
+import { type HeldFigure, heldFigure } from '../heldart';
 import { puppetAlpha } from '../puppetfade';
 import { ATLAS_H, ATLAS_W, Atlas } from './atlas';
 import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrain, loadKit, loadRegion, propCutout } from './assets3d';
@@ -1448,6 +1449,10 @@ export class World3D {
       this.gnd.gap = gap;
       this.gnd.wade = wading ? WADE_ROWS : 0;
     }
+    // The weapon in the hand (held.ts): behind the body when the pose says so, in front of the hat when it does not.
+    const held = puppet.isHero ? heldFigure(puppet, fig, frame, now) : null;
+    const heldBack = held !== null && held.held.layer === 'back';
+    if (held && heldBack) this.heldQuad(held, sheet.w, sheet.h, fig.flip, tx, by, bz, scale * fw, scale * fh, tint, scale);
     this.sprite(fig.image, sx, sy, sheet.w, sheet.h, fig.flip, tx, by, bz, (sheet.w / TILE) * scale * fw, (sheet.h / TILE) * scale * fh, tint, LEANED, 0, fig.glow, blend);
     this.toDead = false;
     if (spectral) this.effects.halo(tx, 0.55 + lift, tz, COLD, 1.7, 0.2 + 0.05 * Math.sin(now / 520 + puppet.to));
@@ -1461,6 +1466,10 @@ export class World3D {
       const row = Math.floor(frame / sheet.cols) + puppet.row;
       this.sprite(fig.hat, col * hat.w, row * hat.h, hat.w, hat.h, fig.flip, tx, by, bz, (hat.w / TILE) * scale * fw, (hat.h / TILE) * scale * fh, tint, LEANED, 0, fig.hatGlow);
       if (fig.hatGlow) this.glowLast(0.9);
+      this.rimLast(tx, tz, fig.flip);
+    }
+    if (held && !heldBack) {
+      this.heldQuad(held, sheet.w, sheet.h, fig.flip, tx, by, bz, scale * fw, scale * fh, tint, scale);
       this.rimLast(tx, tz, fig.flip);
     }
     if (puppet.alive || !puppet.laid) {
@@ -1496,6 +1505,24 @@ export class World3D {
     mark.puppet = puppet;
     mark.x = pos.x;
     mark.y = pos.y;
+  }
+
+  /**
+   * The weapon's cell in the hero's hand: a quad of the figure's own scale in the same leaned plane, so its pixels sit on the hero's. `sw`, `sh`
+   * are the hero frame's size; `kx`, `ky` the figure's width and height scale (a landing's squash).
+   */
+  private heldQuad(h: HeldFigure, sw: number, sh: number, flip: boolean, tx: number, by: number, bz: number, kx: number, ky: number, tint: number, scale: number): void {
+    const held = h.held;
+    const right = held.left + held.w / 2 - sw / 2;
+    const up = sh - (held.top + held.h);
+    const k = scale / TILE;
+    const wx = tx + (flip ? -right : right) * k;
+    const wy = by + up * k * LEAN_STRETCH * Math.cos(LEAN);
+    const wz = bz - up * k * LEAN_STRETCH * Math.sin(LEAN);
+    const width = (held.w / TILE) * kx;
+    const height = (held.h / TILE) * ky;
+    this.sprite(h.image, held.sx, held.sy, held.w, held.h, flip, wx, wy, wz, width, height, tint, LEANED);
+    if (held.trailSx >= 0) this.sprite(h.image, held.trailSx, held.trailSy, held.w, held.h, flip, wx, wy, wz, width, height, tint, LEANED);
   }
 
   /**

@@ -22,6 +22,10 @@ import { haptic } from './telegram';
  */
 
 export const STEP_MS = 110;
+/** The weapon leaves the hand of a throw at frame 14 of 15 fps, a frame after the arm is up. */
+const HAND_OPEN_MS = 70;
+/** How fast the boomerang flies (fx.json thrown.boomerang speed), cells a second. */
+const BOOMERANG_SPEED = 12;
 /**
  * How long after a step ends a walker still counts as walking: the next step
  * of a walk starts within a frame or two, and the legs should not stop for it.
@@ -81,6 +85,11 @@ export interface Puppet extends Turnable {
   moveDur?: number;
   /** A hero's Pixel-Mart look (effect, the patron's star); undefined for monsters. */
   look?: Look;
+  /** The weapon in a hero's hand (an item kind; a held thrown stack or the boomerang too), drawn in the hand (held.ts); undefined for bare fists and for monsters. */
+  weapon?: ItemKind;
+  /** A boomerang thrown is not in the hand from `heldAwayFrom` until it is back (`heldAwayUntil`). */
+  heldAwayFrom?: number;
+  heldAwayUntil?: number;
   /** What the player's own hero wears, as pictures (a look's glow and aura, a hat); undefined for anyone else. */
   worn?: Worn;
   /** Hero class or monster kind. */
@@ -480,6 +489,7 @@ export class View {
         puppet.poisoned = hero.poison > 0;
         puppet.levitating = (hero.levitating ?? 0) > 0;
         puppet.row = hero.armor ? itemDef(hero.armor.kind).tier ?? 0 : 0;
+        puppet.weapon = hero.weapon?.kind;
         puppet.label = hero.id === myId ? '' : hero.name;
       }
     }
@@ -580,9 +590,21 @@ export class View {
   }
 
   /** A hero who zaps or throws turns to face the cell it goes to (dirs.ts: the view of that direction). */
-  private faceAway(from: number, to: number, now: number): void {
+  private faceAway(from: number, to: number, now: number, thrown?: ItemKind): void {
     for (const puppet of this.puppets.values()) {
-      if (puppet.isHero && puppet.alive && puppet.to === from) turnAt(puppet, from, to, WIDTH, now);
+      if (!puppet.isHero || !puppet.alive || puppet.to !== from) continue;
+      turnAt(puppet, from, to, WIDTH, now);
+      // Throwing the weapon in the hand (a stone of the stack, the boomerang) is the attack animation: it leaves the hand at frame 14. A
+      // boomerang is not back in the hand until it has flown there and back (fx.json speed 12 cells a second, twice the way).
+      if (thrown !== undefined && puppet.weapon === thrown && puppet.anim !== 'attack') {
+        puppet.anim = 'attack';
+        puppet.animStart = now;
+        if (thrown === 'missile.boomerang') {
+          const way = Math.hypot(cellX(to) - cellX(from), cellY(to) - cellY(from));
+          puppet.heldAwayFrom = now + HAND_OPEN_MS;
+          puppet.heldAwayUntil = now + HAND_OPEN_MS + (2 * way / BOOMERANG_SPEED) * 1000 + 120;
+        }
+      }
     }
   }
 
@@ -963,7 +985,7 @@ export class View {
           }
           break;
         case 'thrown':
-          if (effect.depth === this.depth) this.faceAway(effect.from, effect.to, now);
+          if (effect.depth === this.depth) this.faceAway(effect.from, effect.to, now, effect.item);
           // The designer's flights (fx.json: boomerang, shuriken, tomahawk, javelin; the stones) take the place of the item in an arc.
           if (effect.depth === this.depth && !fxp.launch(effect, this.depth, now)) {
             this.shoot(effect.from, effect.to, itemSprite({ kind: effect.item, qty: 1, level: 0 }, world.run.labels), now);

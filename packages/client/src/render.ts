@@ -6,6 +6,8 @@ import { HEIGHT, type Level, LENGTH, T, WIDTH } from '@pd/core';
 import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
 import { type Figure, figureOf } from './dirs';
+import { heldFigure } from './heldart';
+import type { Held } from './held';
 import { puppetAlpha } from './puppetfade';
 import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
 
@@ -237,8 +239,13 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   // A legendary look's aura stands behind the hero (24 x 28, its feet at (12, 26); the hero's at (6, 14)).
   const aura = worn?.look?.aura;
   if (aura) ctx.drawImage(aura.image, (Math.floor(now / aura.ms) % aura.frames) * aura.w, 0, aura.w, aura.h, 6 - aura.feetX, 14 - aura.feetY, aura.w, aura.h);
+  // The weapon in the hand (held.ts): behind the body, or in front of it and its hat; at the cell's place in this frame (the mirror is the
+  // context's).
+  const held = puppet.isHero ? heldFigure(puppet, fig, frame, now) : null;
+  if (held && held.held.layer === 'back') drawHeld(ctx, held.image, held.held);
   ctx.drawImage(fig.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
   if (worn) drawWorn(ctx, puppet, fig, frame, now);
+  if (held && held.held.layer === 'front') drawHeld(ctx, held.image, held.held);
   if (now < puppet.flashUntil) {
     // Hit flash: adding the sprite onto itself brightens only its own pixels.
     ctx.globalCompositeOperation = 'lighter';
@@ -251,6 +258,12 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
     ctx.drawImage(fig.image, sx, sy, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h);
   }
   ctx.restore();
+}
+
+/** The weapon's cell (and the trail of a blow) in the hero's frame, the context at the frame's corner (mirrored if it faces left). */
+function drawHeld(ctx: CanvasRenderingContext2D, image: HTMLImageElement, h: Held): void {
+  ctx.drawImage(image, h.sx, h.sy, h.w, h.h, h.left, h.top, h.w, h.h);
+  if (h.trailSx >= 0) ctx.drawImage(image, h.trailSx, h.trailSy, h.w, h.h, h.left, h.top, h.w, h.h);
 }
 
 /**

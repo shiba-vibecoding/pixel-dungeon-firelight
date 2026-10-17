@@ -67,7 +67,7 @@ describe('the sprite atlas packer', () => {
     expect(run()).toEqual(run());
   });
 
-  it('holds every sheet the game can draw, and a hero in all her views, looks and hats, in any order of arrival', () => {
+  it('holds every sheet the game can draw, and a hero in all her views, looks and hats and every weapon in the hand, in any order of arrival', () => {
     // Every sheet of the original that goes on the atlas (the monsters, the heroes, the items, the plants) and the props cut from the tiles.
     const sheets: Array<[number, number]> = readdirSync(assets('.'))
       .filter((file) => file.endsWith('.png') && !/^(avatars|badges|banner|buffs|icons|tiles|ui-|water|stones)/.test(file))
@@ -83,6 +83,8 @@ describe('the sprite atlas packer', () => {
     for (let i = 0; i < 2 + 3 * 3; i++) dirs.push(hero);
     for (let i = 0; i < 3 * 3; i++) dirs.push(hat);
     for (let i = 0; i < 3; i++) dirs.push(pet);
+    // Part 9: the sheets of all 19 weapons in the hand (136 x 34), each drawn as soon as it is held or thrown.
+    for (const file of readdirSync(assets('weapons/held')).filter((f) => f.endsWith('.png'))) dirs.push(pngSize(`weapons/held/${file}`));
     dirs.push([192, 24], [192, 24], [192, 24], pngSize('mart/fl/legendary/warrior-forgeborn-aura.png'));
     const random = lcg(42);
     for (let trial = 0; trial < 300; trial++) {

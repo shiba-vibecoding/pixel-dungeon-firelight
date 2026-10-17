@@ -106,7 +106,7 @@ const BASE = `${import.meta.env?.BASE_URL ?? '/'}assets/`;
 const loaded = new Map<string, { img: HTMLImageElement | null; failed: boolean }>();
 
 /** The picture at a path inside assets/, once it has come; it is fetched the first time it is asked for (and tried again a few times). */
-function picture(path: string, attempt = 0): HTMLImageElement | undefined {
+export function picture(path: string, attempt = 0): HTMLImageElement | undefined {
   let entry = loaded.get(path);
   if (!entry) {
     entry = { img: null, failed: false };
