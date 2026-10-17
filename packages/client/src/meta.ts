@@ -1,4 +1,4 @@
-import { challengeMultiplier, createItem, HEAP_SPRITES, type Hero, type Item, itemDef, type ItemKind, ITEMS, itemSprite, RoomType, T, type World } from '@pd/core';
+import { challengeMultiplier, createItem, HEAP_SPRITES, type Hero, type Item, type ItemKind, itemSprite, RoomType, T, type World } from '@pd/core';
 import { audio } from './audio';
 import { BRIGHTNESS_DEFAULT, BRIGHTNESS_MAX, BRIGHTNESS_MIN, brightness } from './brightness';
 import { CHALLENGE_MASKS, countChallenges } from './challenge-info';
@@ -16,6 +16,12 @@ import { confirmRisky } from './riskyuse';
 import { touchGuardSetting } from './touchguard';
 import { loupeSetting } from './loupe';
 import { CONFIRM_MODES, pathConfirm } from './pathpreview';
+import { bestiaryView, chronicleView, collectionView } from './growknow';
+import { mechList, showMechanic } from './growmech';
+import { grow } from './growmem';
+import { G } from './i18n-grow';
+import type { KnowCategory } from './growth';
+import type { MobKind } from '@pd/core';
 
 /*
  * The windows around the game rather than in it (design system v9): the
@@ -515,14 +521,6 @@ function roomSeen(room: { left: number; top: number; right: number; bottom: numb
   return false;
 }
 
-/** What the catalog lists, by tab, and the silhouette an unknown one shows (items.png). */
-const CATALOG: ReadonlyArray<{ category: 'potion' | 'scroll' | 'ring' | 'wand'; silhouette: number }> = [
-  { category: 'potion', silhouette: 56 },
-  { category: 'scroll', silhouette: 40 },
-  { category: 'ring', silhouette: 72 },
-  { category: 'wand', silhouette: 68 },
-];
-
 export interface JournalOptions {
   world: World;
   hero: Hero;
@@ -530,31 +528,62 @@ export interface JournalOptions {
 }
 
 /** WndJournal and WndCatalogus in one window: the notes, and every potion, scroll, ring and wand. */
-export function showJournal(options: JournalOptions, tab: 'notes' | 'catalog' | 'guide' = 'notes', category = 0, entry?: string): void {
+export type JournalTab = 'notes' | 'catalog' | 'beasts' | 'chronicle' | 'guide';
+
+/** What the books remember of how they were left (the collection's view, the bestiary's pick): for the visit. */
+const book: { mode: 'shelf' | 'elim'; beast: MobKind | null } = { mode: 'shelf', beast: null };
+
+/** The journal's tabs: the notes, the collection, the bestiary, the chronicle of the run, and the guide (with «how it works»). */
+export function showJournal(options: JournalOptions, tab: JournalTab = 'notes', category = 0, entry?: string): void {
   const { world, hero } = options;
-  const reopen = (nextTab: 'notes' | 'catalog' | 'guide', nextCategory = category): void => showJournal(options, nextTab, nextCategory);
+  const reopen = (nextTab: JournalTab, nextCategory = category): void => showJournal(options, nextTab, nextCategory);
   // A guide entry has a page of its own, with the way back to the list in this tab.
   if (tab === 'guide' && entry) {
     showGuideEntry(entry, () => reopen('guide'), options.onClose);
     return;
   }
-  const tabs = el('div', { className: 'pd-tabs' });
+  const tabs = el('div', { className: 'pd-tabs fl-journal-tabs' });
   tabs.setAttribute('role', 'tablist');
-  for (const [id, label] of [['notes', t.meta.notes], ['catalog', t.meta.catalog], ['guide', t.guide.tab]] as const) {
+  const labels: ReadonlyArray<readonly [JournalTab, string]> = [
+    ['notes', t.meta.notes], ['catalog', G.know.collection], ['beasts', G.know.beastsTab], ['chronicle', G.know.chronicle], ['guide', t.guide.tab],
+  ];
+  for (const [id, label] of labels) {
     const node = el('button', { className: 'pd-tab', textContent: label, onclick: () => (click(), reopen(id)) });
     node.setAttribute('role', 'tab');
     node.setAttribute('aria-selected', String(id === tab));
     tabs.append(node);
   }
   if (tab === 'guide') {
-    show(windowOf({ title: t.meta.journal, onClose: options.onClose, className: 'wide pd-guide-window' }, tabs, ...guideList((id) => showJournal(options, 'guide', category, id))), options.onClose);
+    const mechanic = mechList(world, hero, (id) => showMechanic(id, world, hero, () => reopen('guide'), options.onClose));
+    show(windowOf({ title: t.meta.journal, onClose: options.onClose, className: 'wide pd-guide-window' }, tabs, mechanic, ...guideList((id) => showJournal(options, 'guide', category, id))), options.onClose);
     return;
   }
-  const body = tab === 'notes' ? notesView(world, hero) : catalogView(options, category, (next) => reopen('catalog', next));
+  const body =
+    tab === 'notes' ? notesView(world, hero)
+    : tab === 'catalog' ? collectionBody(options, category, reopen)
+    : tab === 'beasts' ? bestiaryView(grow.data, book.beast, (kind) => { book.beast = kind; reopen('beasts'); })
+    : chronicleView(world, grow.data, `${t.classes[hero.heroClass]} · ${t.newDepth(hero.depth)}`);
   show(
     windowOf({ title: t.meta.journal, onClose: options.onClose, className: 'wide' }, tabs, el('div', { className: 'pd-scroll' }, body)),
     options.onClose,
   );
+}
+
+const COLLECTION: readonly KnowCategory[] = ['potion', 'scroll', 'ring', 'wand'];
+
+function collectionBody(options: JournalOptions, category: number, reopen: (tab: JournalTab, category?: number) => void): HTMLElement {
+  const { world } = options;
+  const current = COLLECTION[category] ?? 'potion';
+  return collectionView({
+    world,
+    category: current,
+    mode: book.mode,
+    onCategory: (next) => reopen('catalog', COLLECTION.indexOf(next)),
+    onMode: (mode) => { book.mode = mode; reopen('catalog', category); },
+    // A tap on an identified kind reads its page, and comes back here.
+    onKind: (kind) => showItemText(options, { kind, qty: 1, level: 0 } as Item, () => showJournal(options, 'catalog', category)),
+    redraw: () => reopen('catalog', category),
+  });
 }
 
 /** The guide alone, as the camp opens it (the journal's «Памятка» tab, without the world a run has). */
@@ -699,64 +728,6 @@ function notesView(world: World, hero: Hero): HTMLElement {
     );
   }
   return list;
-}
-
-function catalogView(options: JournalOptions, category: number, choose: (category: number) => void): HTMLElement {
-  const { world, hero } = options;
-  const tabs = el('div', { className: 'pd-tabs compact' });
-  tabs.setAttribute('role', 'tablist');
-  t.meta.categories.forEach((label, i) => {
-    const node = el('button', { className: 'pd-tab', textContent: label, onclick: () => (click(), choose(i)) });
-    node.setAttribute('role', 'tab');
-    node.setAttribute('aria-selected', String(i === category));
-    tabs.append(node);
-  });
-  const { category: kind, silhouette } = CATALOG[category]!;
-  const kinds = (Object.keys(ITEMS) as ItemKind[]).filter((k) => itemDef(k).category === kind);
-  const known = kinds.filter((k) => world.known.includes(k));
-  const detail = el('div', { className: 'pd-cat-detail' });
-  const grid = el('div', { className: 'pd-grid pd-catalog' });
-  grid.setAttribute('role', 'listbox');
-  const pick = (k: ItemKind, slot: HTMLElement): void => {
-    grid.querySelectorAll('.selected').forEach((node) => node.classList.remove('selected'));
-    slot.classList.add('selected');
-    const isKnown = world.known.includes(k);
-    const item = { kind: k, qty: 1, level: 0 } as Item;
-    detail.className = `pd-cat-detail${isKnown ? '' : ' unknown'}`;
-    detail.replaceChildren(
-      itemIcon(isKnown ? itemSprite(item, world.run.labels) : silhouette, !isKnown),
-      el('span', {}, el('b', { textContent: t.items[k] }), el('small', { textContent: isKnown ? t.meta.identified : t.meta.notIdentified })),
-    );
-    sprites(detail);
-  };
-  for (const k of kinds) {
-    const isKnown = world.known.includes(k);
-    const item = { kind: k, qty: 1, level: 0 } as Item;
-    const slot = el('button', {
-      className: `pd-slot${isKnown ? '' : ' unknown'}`,
-      ariaLabel: t.items[k],
-      onclick: () => {
-        click();
-        if (isKnown && slot.classList.contains('selected')) {
-          // A second tap on a known one reads it, and comes back here.
-          showItemText(options, item, () => showJournal(options, 'catalog', category));
-          return;
-        }
-        pick(k, slot);
-      },
-    }, itemIcon(isKnown ? itemSprite(item, world.run.labels) : silhouette, !isKnown));
-    slot.setAttribute('role', 'option');
-    grid.append(slot);
-  }
-  void hero;
-  return el(
-    'div',
-    {},
-    tabs,
-    el('div', { className: 'pd-cat-count', textContent: t.meta.known(known.length, kinds.length) }),
-    grid,
-    detail,
-  );
 }
 
 function itemIcon(sprite: number, silhouette: boolean): HTMLElement {

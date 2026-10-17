@@ -16,7 +16,7 @@ def launch(p, width=375, height=812, dpr=2, query='lang=ru', gpu=False):
     browser = p.chromium.launch(args=args)
     page = browser.new_page(viewport={'width': width, 'height': height}, device_scale_factor=dpr)
     # No hints, no tutorial: they would stand in front of the screens.
-    page.add_init_script("localStorage.setItem('pd-hints', 'off'); localStorage.setItem('pd-coach-done', '1'); localStorage.setItem('pd-moved', '1');")
+    page.add_init_script("localStorage.setItem('pd-hints', 'off'); localStorage.setItem('pd-coach-done', '1'); localStorage.setItem('pd-moved', '1'); localStorage.setItem('pd-fx', 'full');")
     page.logs = []
     page.on('console', lambda m: page.logs.append(m.type + ': ' + m.text))
     page.on('pageerror', lambda e: page.logs.append('ERR ' + str(e)))

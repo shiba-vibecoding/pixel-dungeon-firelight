@@ -73,6 +73,7 @@ const RU = {
   know: {
     collection: 'Коллекция',
     bestiary: 'Бестиарий',
+    beastsTab: 'Звери',
     chronicle: 'Летопись',
     notes: 'Записи',
     guide: 'Памятка',
@@ -120,7 +121,7 @@ const RU = {
     firstUpgrade: (item: string) => `Первое улучшение: ${item}`,
     upgrade: (item: string) => `Улучшено: ${item}`,
     enchant: (what: string) => `Наложены чары: ${what}`,
-    boss: (name: string) => `${name} повержен`,
+    boss: (name: string) => `Босс побеждён: ${name}`,
     mastery: (way: string) => `Путь выбран: ${way}`,
     classArmor: 'Классовая броня сделана',
     learned: (what: string) => `Опознано: ${what}`,
@@ -220,6 +221,7 @@ const EN: GrowWords = {
   know: {
     collection: 'Collection',
     bestiary: 'Bestiary',
+    beastsTab: 'Beasts',
     chronicle: 'Chronicle',
     notes: 'Notes',
     guide: 'Guide',
@@ -267,7 +269,7 @@ const EN: GrowWords = {
     firstUpgrade: (item) => `First upgrade: ${item}`,
     upgrade: (item) => `Upgraded: ${item}`,
     enchant: (what) => `Enchanted: ${what}`,
-    boss: (name) => `${name} is dead`,
+    boss: (name) => `Boss slain: ${name}`,
     mastery: (way) => `Way chosen: ${way}`,
     classArmor: 'Class armour made',
     learned: (what) => `Identified: ${what}`,

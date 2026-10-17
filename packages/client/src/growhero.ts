@@ -21,6 +21,14 @@ const ui = (): HTMLElement | null => document.getElementById('ui');
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const SHOWN_MS = 3400;
 
+/** A card of ours stands under the game's own one-line toast when that is up, else right under the HUD (css: --fl-below). */
+function placeBelowToast(node: HTMLElement): void {
+  const plain = document.getElementById('toast');
+  if (!plain || plain.hidden) return;
+  const box = plain.getBoundingClientRect();
+  if (box.height > 0) node.style.setProperty('--fl-below', `${Math.round(box.bottom + 6)}px`);
+}
+
 interface Shown {
   node: HTMLElement;
   timer: number;
@@ -65,6 +73,7 @@ export function showLevelUp(hero: Hero, onPassport: () => void, pop: () => void)
     levelToast = drop(levelToast);
     onPassport();
   };
+  placeBelowToast(node);
   root.append(node);
   levelToast = { node, timer: window.setTimeout(() => (levelToast = drop(levelToast)), SHOWN_MS) };
 }
@@ -90,6 +99,7 @@ export function showStrength(hero: Hero, slotOf: (item: Item) => HTMLElement, na
     if (light.length > 3) rows.append(h('span', 'pd-note', G.hero.more(light.length - 3)));
     node.append(rows);
   }
+  placeBelowToast(node);
   root.append(node);
   strengthToast = { node, timer: window.setTimeout(() => (strengthToast = drop(strengthToast)), SHOWN_MS) };
   return light;

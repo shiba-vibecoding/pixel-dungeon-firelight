@@ -289,7 +289,7 @@
 .fl-book-tabs { display: flex; gap: 2px; }
 .fl-book-tabs .pd-tab { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .fl-book-tabs .pd-tab small { font: var(--text-digits); color: var(--ink-muted); }
-.fl-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: var(--space-2) var(--space-1); }
+.fl-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--space-2) var(--space-1); }
 .fl-shelf-cell { display: grid; justify-items: center; gap: 2px; text-align: center; font: var(--text-digits); color: var(--ink-muted); }
 .fl-shelf-cell .pd-slot { --slot: 52px; }
 .fl-shelf-cell.known .pd-slot { box-shadow: inset 0 0 0 var(--u) var(--lit-mid), inset 0 calc(-2 * var(--u)) 0 var(--glow-1); }
@@ -297,7 +297,7 @@
 .fl-shelf-cell.guess .nm { color: var(--fire-gold); font-style: italic; }
 .fl-shelf-cell.unseen .pd-item { filter: brightness(0) opacity(.35); }
 .fl-shelf-cell.unseen .nm { color: var(--stone-400); }
-.fl-shelf-cell .nm { max-width: 100%; overflow-wrap: normal; word-break: keep-all; hyphens: manual; line-height: 16px; }
+.fl-shelf-cell .nm { max-width: 100%; overflow-wrap: anywhere; line-height: 16px; }
 .fl-count-line { display: flex; align-items: center; gap: var(--space-2); font: var(--text-caption); color: var(--ink-muted); }
 .fl-count-line b { font-weight: 400; color: var(--fire-gold); }
 .fl-booklist { display: flex; flex-direction: column; }
@@ -385,7 +385,7 @@
 /* ---------- In the game: what the real markup needs besides the designer's mock ---------- */
 /* The toasts of a level and of strength sit just under the HUD (main.ts --hud-bottom), a tap on the level's opens the passport. */
 .pd-toast.fl-lvl-toast, .pd-toast.fl-str-toast {
-  top: calc(max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))) + var(--net-strip, 0px));
+  top: max(var(--fl-below, 0px), calc(max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))) + var(--net-strip, 0px)));
   max-width: min(360px, calc(100% - 2 * var(--space-3)));
 }
 .pd-toast.fl-lvl-toast { flex-direction: column; align-items: stretch; gap: 0; pointer-events: auto; cursor: pointer; }
@@ -424,6 +424,39 @@
 /* The passport. */
 .fl-pass-head .pd-portrait { grid-row: 1 / 4; }
 .fl-tip { margin: 0; }
+
+/* The journal's five tabs share a line. */
+.pd-tabs.fl-journal-tabs { gap: 0; }
+.pd-tabs.fl-journal-tabs .pd-tab { flex: 1 1 auto; padding: 0 3px; white-space: nowrap; font: 400 13px/20px var(--font-small); min-width: 0; }
+/* The collection */
+.fl-collection { display: flex; flex-direction: column; gap: var(--space-2); }
+.fl-modes { display: flex; gap: var(--space-1); }
+.fl-shelf-cell .use { font: var(--text-digits); color: var(--ink-muted); text-align: center; }
+.fl-shelf-cell[role="button"] { cursor: pointer; }
+.fl-shelf-cell .pd-slot { position: relative; }
+.pd-slot.mini { --slot: 40px; width: 40px; height: 40px; }
+.fl-elim .cell { cursor: pointer; border: 0; padding: 0; }
+.fl-elim .cell.q { color: var(--fire-gold); }
+.fl-elim .colhead { writing-mode: vertical-rl; height: 150px; }
+/* The bestiary */
+.fl-bestiary { display: flex; flex-direction: column; gap: var(--space-2); }
+.fl-beast { cursor: pointer; border: 0; }
+.fl-beast.picked { box-shadow: inset 0 0 0 2px var(--fire-gold), inset 0 0 0 4px var(--void); }
+.fl-beast.unmet { cursor: default; }
+.fl-beast.unmet canvas { filter: brightness(0) opacity(.4); }
+.fl-beast .pd-portrait { background: transparent; box-shadow: none; }
+.fl-beast { min-width: 0; overflow: hidden; }
+.fl-beast .nm { max-width: 100%; overflow-wrap: anywhere; }
+/* The nine cards of «how it works» */
+.fl-mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); }
+.fl-mcard { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2); text-align: left; background: var(--stone-800); clip-path: var(--notch); box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark); cursor: pointer; }
+.fl-mhead { display: flex; align-items: center; gap: var(--space-2); }
+.fl-mnow { font: var(--text-caption); color: var(--fire-gold); }
+.fl-mcard .fl-mech-state { font: var(--text-body); }
+.fl-mechs { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.fl-traps td .pd-trapc { width: 24px; height: 24px; background-size: 216px 24px; background-position: calc(var(--c, 0) * -24px) 0; }
+.fl-traps td.n { text-align: left; white-space: normal; color: var(--ink); }
+.fl-mech-state { font: var(--text-title); color: var(--ink); }
 
 /* ---------- Motion: keyframes in steps, ≤ 400 ms ---------- */
 @keyframes fl-pop { 0% { scale: 1; } 40% { scale: 1.33; } 70% { scale: .92; } 100% { scale: 1; } }

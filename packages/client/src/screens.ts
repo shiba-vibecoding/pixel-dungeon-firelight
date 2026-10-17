@@ -16,6 +16,7 @@ import { knowLine, wasteLine } from './infolines';
 import { slotMarks } from './growth';
 import { gi, enchantRgb, glyphRgb } from './growicons';
 import { grow } from './growmem';
+import { G } from './i18n-grow';
 import { CHIPS, chipOf, type ChipId, chipCounts, chipsRow, type SortId, sortFresh } from './growchips';
 import { compareBlock, noteBlock } from './growcard';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
@@ -547,8 +548,9 @@ export function showHero(options: HeroOptions): void {
   show(
     windowOf(
       {
-        title: t.heroTitle(hero.subclass ? capitalize(t.subclasses[hero.subclass]) : t.classes[hero.heroClass], hero.lvl),
-        icon: portrait(hero.heroClass, armorTier(hero), options.skin),
+        // (The passport has the portrait and the class in its own head.)
+        title: options.passport ? G.passport.title : t.heroTitle(hero.subclass ? capitalize(t.subclasses[hero.subclass]) : t.classes[hero.heroClass], hero.lvl),
+        icon: options.passport ? null : portrait(hero.heroClass, armorTier(hero), options.skin),
         onClose: options.onClose,
       },
       options.passport ?? stats([
@@ -1035,6 +1037,8 @@ export interface EndOptions {
   score: number;
   /** How the server scored it (rankui.ts rankingBlock). */
   ranking?: HTMLElement;
+  /** The growth card of part 11 (growend.ts): «was → is», the best worn, the finds. */
+  growth?: HTMLElement;
   /** The ways to share the result (shareButton). */
   share?: readonly ShareChoice[];
   /** Opens the boards; absent without checked runs. */
@@ -1075,6 +1079,7 @@ export function showRunEnd(options: EndOptions): void {
           options.card ?? el('div', { className: 'pd-avatar' }, avatar),
           el('div', { className: 'pd-info', textContent: `${hero.name} · ${t.classes[hero.heroClass]}` }),
         ),
+        options.growth,
         stats(rows),
         options.ranking,
       ),

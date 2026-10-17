@@ -61,6 +61,8 @@ import { tx } from './compete-ui';
 import { heroCard, myLook } from './herocard';
 import { growArrive, growEffects, growSight, setGrowHooks } from './growflow';
 import { passportNode } from './growhero';
+import { growthCard } from './growend';
+import { sigilFlash } from './r3d/growth3d';
 import { grow, GrowStore } from './growmem';
 import { chatPicture, circlePicture, savePicture } from './sharecards';
 import { mart } from './mart';
@@ -149,7 +151,7 @@ const metaMod = lazy(() => import('./meta'));
 const windowFailed = (): void => toast(t.offline.windowFailed, { tone: 'warn' });
 const showSettings = (options: SettingsOptions): void => load(metaMod, (m) => m.showSettings(options), windowFailed);
 const showChallenges = (options: ChallengesOptions): void => load(metaMod, (m) => m.showChallenges(options), windowFailed);
-const showJournal = (options: JournalOptions, tab?: 'notes' | 'catalog' | 'guide', category?: number, entry?: string): void =>
+const showJournal = (options: JournalOptions, tab?: import('./meta').JournalTab, category?: number, entry?: string): void =>
   load(metaMod, (m) => m.showJournal(options, tab, category, entry), windowFailed);
 const showGuide = (onClose: () => void, entry?: string): void => load(metaMod, (m) => m.showGuide(onClose, entry), windowFailed);
 /** The information windows (the hunger card, the alchemy pot's calculator: infoui.ts) are a chunk of their own too. */
@@ -316,7 +318,7 @@ setGrowHooks({
   slotOf: (world, hero, item) => slot(world, item, { hero }),
   nameOf: (world, item) => capitalize(itemName(world, item)),
   bagMoment,
-  sigil: () => undefined,
+  sigil: (id) => sigilFlash(id),
 });
 /**
  * The middle of where a level actually lies, world pixels: the grid is bigger than a level for
@@ -4122,6 +4124,11 @@ function tick(now: number): void {
         hero: { name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, lvl: me.lvl, depth: me.depth, gold: me.gold, kills: me.kills },
         // The hero as he fell or won, in the armour worn at the end and the look, hat, pet and fire he wears (herocard.ts).
         card: endCard(me),
+        // Part 11: how the hero grew, the best he wore, the finds of the run.
+        growth: growthCard({
+          world, hero: me, mem: grow.data, start: core.HERO_CLASSES[me.heroClass],
+          slotOf: (item) => slot(world, item, { hero: me, equipped: true }), nameOf: (item) => capitalize(itemName(world, item)),
+        }),
         restartLabel: victory ? t.newRun : solo ? t.tryAgain : t.restartRun,
         onRestart: () => {
           session?.restart();
