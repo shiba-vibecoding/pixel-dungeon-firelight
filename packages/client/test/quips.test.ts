@@ -149,7 +149,7 @@ describe('the lines', () => {
     expect(ruQuips.clean.kill.mage).toContain('Элементарно.');
     expect(ruQuips.foul.shared.streak).toContain('Конвейер, нахуй!');
     expect(enQuips.foul.kill.mage).toContain('Science, motherfucker.');
-    expect(enQuips.clean.shared.trivial).toContain('Rat. Terrifying.');
+    expect(enQuips.clean.shared.trivialRat).toContain('Rat. Terrifying.');
     expect(ruQuips.foul.shared.nearDeath).toContain('Блядь… ещё дышу.');
   });
 });
@@ -188,7 +188,7 @@ describe('the picker', () => {
   });
 
   it('speaks the other moments about half the time, and a new depth rarely', () => {
-    for (const moment of ['trivial', 'oneHit', 'ranged', 'wand', 'thief', 'cursed'] as const) {
+    for (const moment of ['trivial', 'trivialRat', 'trivialCrab', 'oneHit', 'ranged', 'wand', 'thief', 'cursed'] as const) {
       expect(rate(moment), moment).toBeGreaterThan(0.45);
       expect(rate(moment), moment).toBeLessThan(0.55);
     }
@@ -243,6 +243,26 @@ describe('the picker', () => {
       expect(fromOwn + fromGeneral, moment).toBe(600);
       expect(fromOwn, moment).toBeGreaterThan(600 * 0.65);
       expect(fromGeneral, moment).toBeGreaterThan(600 * 0.1);
+    }
+  });
+
+  it("says a rat's or a crab's own lines most of the time and the lines for both alike now and then", () => {
+    for (const moment of ['trivialRat', 'trivialCrab'] as const) {
+      expect(GENERAL[moment]?.[0], moment).toBe('trivial');
+      const own = new Set(poolOf(ruQuips.foul, moment, 'warrior'));
+      const general = new Set(poolOf(ruQuips.foul, 'trivial', 'warrior'));
+      const p = picker('foul', dice(13));
+      let fromOwn = 0;
+      let fromGeneral = 0;
+      for (let i = 0; i < 1000; i++) {
+        const line = p.offer(moment, 'warrior', i * 10_000);
+        if (line === null) continue;
+        if (own.has(line)) fromOwn++;
+        else if (general.has(line)) fromGeneral++;
+      }
+      expect(fromOwn + fromGeneral, moment).toBeGreaterThan(400);
+      expect(fromGeneral / (fromOwn + fromGeneral), moment).toBeGreaterThan(0.2);
+      expect(fromGeneral / (fromOwn + fromGeneral), moment).toBeLessThan(0.4);
     }
   });
 
@@ -336,11 +356,18 @@ const watch = () => new QuipWatch();
 
 describe('what the hero\'s turn was', () => {
 
-  it('knows an ordinary kill, a rat and a boss', () => {
+  it('knows an ordinary kill, a rat, a crab and a boss', () => {
     expect(watch().read([hit('#1'), hit('#1'), died('#1', 'gnoll')], me, 10)).toBe('kill');
-    expect(watch().read([hit('#1'), died('#1', 'rat')], me, 10)).toBe('trivial');
-    expect(watch().read([hit('#1'), died('#1', 'albino')], me, 10)).toBe('trivial');
-    expect(watch().read([hit('#1'), died('#1', 'crab')], me, 10)).toBe('trivial');
+    // A rat of any kind has the rat's moment, a crab its own: no line about a rat is ever said after a crab.
+    expect(watch().read([hit('#1'), died('#1', 'rat')], me, 10)).toBe('trivialRat');
+    expect(watch().read([hit('#1'), died('#1', 'albino')], me, 10)).toBe('trivialRat');
+    expect(watch().read([hit('#1'), died('#1', 'fetidRat')], me, 10)).toBe('trivialRat');
+    expect(watch().read([hit('#1'), died('#1', 'crab')], me, 10)).toBe('trivialCrab');
+    // A rat and a crab dying together: the plain trivial, whose lines fit both; a rat and a rat, the rat's.
+    expect(watch().read([hit('#1'), died('#1', 'rat'), hit('#2'), died('#2', 'crab')], me, 10)).toBe('trivial');
+    expect(watch().read([hit('#1'), died('#1', 'rat'), hit('#2'), died('#2', 'albino')], me, 10)).toBe('trivialRat');
+    // A rat with a gnoll: a rat did die, and the line may say so.
+    expect(watch().read([hit('#1'), died('#1', 'rat'), hit('#2'), hit('#2'), died('#2', 'gnoll')], me, 10)).toBe('trivialRat');
     const bosses = { goo: 'goo', tengu: 'tengu', dm300: 'dm300', king: 'king', yog: 'yog' } as const;
     for (const [kind, moment] of Object.entries(bosses)) expect(watch().read([hit('#9'), hit('#9'), died('#9', kind)], me, 10), kind).toBe(moment);
   });
@@ -361,7 +388,7 @@ describe('what the hero\'s turn was', () => {
 
   it('knows the first blood of a run', () => {
     expect(watch().read([hit('#1'), hit('#1'), died('#1', 'rat')], { ...me, kills: 1 }, 2)).toBe('firstBlood');
-    expect(watch().read([hit('#1'), hit('#1'), died('#1', 'rat')], { ...me, kills: 2 }, 2)).toBe('trivial');
+    expect(watch().read([hit('#1'), hit('#1'), died('#1', 'rat')], { ...me, kills: 2 }, 2)).toBe('trivialRat');
   });
 
   it('knows three kills within ten turns, and starts the count again after', () => {
@@ -382,7 +409,7 @@ describe('what the hero\'s turn was', () => {
 
   it('knows a kill in one blow, but not a rat\'s or a long fight\'s', () => {
     expect(watch().read([hit('#1', 30), died('#1', 'gnoll')], me, 10)).toBe('oneHit');
-    expect(watch().read([hit('#1', 30), died('#1', 'rat')], me, 10)).toBe('trivial');
+    expect(watch().read([hit('#1', 30), died('#1', 'rat')], me, 10)).toBe('trivialRat');
     const w = watch();
     w.read([hit('#1', 5)], me, 9);
     expect(w.read([hit('#1', 5), died('#1', 'gnoll')], me, 10)).toBe('kill');
