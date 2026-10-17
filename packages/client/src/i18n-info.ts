@@ -31,6 +31,14 @@ export interface Words {
     wasteCharges: string;
     close: string;
   };
+  know: {
+    label: string;
+    hits: (done: number, of: number) => string;
+    taken: (done: number, of: number) => string;
+    zaps: (done: number, of: number) => string;
+    turns: (done: number, of: number) => string;
+    idle: Record<'hits' | 'taken' | 'turns', string>;
+  };
 }
 
 const ruTurns = (n: number): string => `${n} ${plural(n, 'ход', 'хода', 'ходов')}`;
@@ -66,6 +74,18 @@ const RU: Words = {
     wasteCharges: 'Зато еда подзарядит палочки.',
     close: 'Закрыть',
   },
+  know: {
+    label: 'Опознание',
+    hits: (d, o) => `${d} из ${o} ударов`,
+    taken: (d, o) => `${d} из ${o} полученных ударов`,
+    zaps: (d, o) => `${d} из ${o} применений`,
+    turns: (d, o) => `${d} из ${o} ходов в носке`,
+    idle: {
+      hits: 'Счёт идёт, пока оружие в руке.',
+      taken: 'Счёт идёт, пока броня надета.',
+      turns: 'Счёт идёт, пока кольцо надето.',
+    },
+  },
 };
 
 const EN: Words = {
@@ -94,6 +114,18 @@ const EN: Words = {
     wasteHeals: 'But it will heal you.',
     wasteCharges: 'But it will charge your wands.',
     close: 'Close',
+  },
+  know: {
+    label: 'Identifying',
+    hits: (d, o) => `${d} of ${o} hits`,
+    taken: (d, o) => `${d} of ${o} hits taken`,
+    zaps: (d, o) => `${d} of ${o} uses`,
+    turns: (d, o) => `${d} of ${o} turns worn`,
+    idle: {
+      hits: 'It counts while the weapon is in your hand.',
+      taken: 'It counts while the armour is worn.',
+      turns: 'It counts while the ring is worn.',
+    },
   },
 };
 

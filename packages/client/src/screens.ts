@@ -10,8 +10,9 @@ import { chooseQuickslot, quickItem, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
+import { I } from './i18n-info';
 import { P } from './i18n-photo';
-import { wasteLine } from './infolines';
+import { knowLine, wasteLine } from './infolines';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import { mart } from './mart';
 import { labelWords } from './labels';
@@ -334,8 +335,8 @@ export function markWear(node: HTMLElement): void {
 
 /** An item's description, its curse and weight set apart as warnings, and how worn it is under its numbers. */
 function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
-  // What a meal would waste (infolines.ts).
-  const extra = [itemDef(item.kind).category === 'food' && inPack(hero, item) ? wasteLine(hero, item) : null].filter((n): n is HTMLElement => n !== null);
+  // How near a thing carried is to being known (a count, nothing hidden), and what a meal would waste (infolines.ts).
+  const extra = [knowLine(world, hero, item), itemDef(item.kind).category === 'food' && inPack(hero, item) ? wasteLine(hero, item) : null].filter((n): n is HTMLElement => n !== null);
   const base = described(itemInfo(world, hero, item));
   // Right after the first paragraph, so that it is in view without scrolling the panel.
   const nodes = [...base.slice(0, 1), ...extra, ...base.slice(1)];
