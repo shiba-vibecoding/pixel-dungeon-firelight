@@ -15,6 +15,7 @@ import { type AirUniforms } from './fogofwar';
 import { K_FLOOR, K_WATER, type LevelGeom } from './levelgeom';
 import { QuadBatch } from './quadbatch';
 import { Fx3D } from './fx3d';
+import { Growth3D } from './growth3d';
 import { chunkSize, SPECK_GROW, stainSize } from './bloodsize';
 import { ATLAS } from '../fxsheet';
 import type { SharedImages } from './assets3d';
@@ -182,6 +183,8 @@ export class Effects3D {
   readonly texture: CanvasTexture;
   /** The designer's effects (fx3d.ts), drawn into the same two batches. */
   readonly sheets: Fx3D;
+  /** The hero's growth on his figure (part 11: sparks, runes, wisps), the same two batches again. */
+  readonly growth: Growth3D;
   private geom: LevelGeom | null = null;
   private region = 0;
   /** The region's and the arena's particles, with their colours and the rate each is made at. */
@@ -232,6 +235,7 @@ export class Effects3D {
     this.soft = new QuadBatch({ capacity: 900, texture: this.texture, additive: false, fog: air.tFog, renderOrder: 2 });
     this.glow = new QuadBatch({ capacity: 560, texture: this.texture, additive: true, fog: air.tFog, renderOrder: 4 });
     this.sheets = new Fx3D(this.soft, this.glow, this.texture, { w: ATLAS_W, h: ATLAS_H, regions: ATLAS.free });
+    this.growth = new Growth3D(this.glow, this.soft, this.texture, { x: ATLAS.growth.x, y: ATLAS.growth.y, atlasW: ATLAS_W, atlasH: ATLAS_H }, UV_DOT);
     scene.add(this.soft.mesh, this.glow.mesh);
   }
 
