@@ -21,6 +21,7 @@ import { quickItem, quickRef, quickUse } from './quickslot';
 import { fx } from './fx';
 import { fxp } from './fxplayer';
 import { gore, GoreStore } from './gore';
+import { idleFx } from './idlefx';
 import { loadFx, whenFx } from './fxsheet';
 import { hideBossCard } from './bosscard';
 import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
@@ -1954,6 +1955,15 @@ function act(type: 'wait' | 'search'): void {
   const world = session?.world;
   if (!world || session!.busy) return;
   walk.reset();
+  // What the hero does while it waits and searches (idlefx.ts): visual only, and the next key is taken at once.
+  const hero = heroById(world, session!.myId);
+  if (hero && isAlive(hero)) {
+    if (type === 'wait') idleFx.wait(fx.now, view, session!.myId);
+    else {
+      const level = levelAt(world, hero.depth);
+      idleFx.search(fx.now, view, session!.myId, level.map, (cell) => hasFlag(level.map[cell]!, F.SOLID));
+    }
+  }
   send({ type }, performance.now());
 }
 
@@ -3172,6 +3182,7 @@ function tick(now: number): void {
     view.reset(me.depth);
     fx.reset();
     fxp.clear();
+    idleFx.clear();
     hideBossCard();
     // The bodies and blood of this depth come back as they were left (gore.ts): kept per run and depth on this device.
     gore.bind(runKey(world), me.depth, world.turn === 0);
@@ -3300,6 +3311,7 @@ function tick(now: number): void {
   }
   fx.update(vnow, dt);
   fxp.update(vnow);
+  idleFx.frame(vnow, view, me.id, walk.resting, threats.size > 0, me.hp, level.map[me.pos]! >= T.WATER_TILES && level.map[me.pos]! <= T.WATER);
   ambientFx(view, vnow, dt);
   regionFx(level, visible, vnow, dt);
 
@@ -3366,7 +3378,7 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || idleFx.busy(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.

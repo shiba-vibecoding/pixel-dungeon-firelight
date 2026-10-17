@@ -13,6 +13,7 @@ import { wornFor, type Worn } from './wear';
 import { type WearQuad, WearFx } from './wearfx';
 import { seenCells } from './sight';
 import { fxp } from './fxplayer';
+import { idleFx } from './idlefx';
 import { haptic } from './telegram';
 
 /*
@@ -128,6 +129,8 @@ export interface Puppet extends Turnable {
   fadeMs?: number;
   /** Its arrival (the cloud of curse) has been shown. */
   arrived?: boolean;
+  /** How tall it stands now, 1 when whole: lower when it crouches to search or settles to rest (idlefx.ts). */
+  squash?: number;
   /** Burning or poisoned: embers or bubbles rise off it. */
   burning?: boolean;
   poisoned?: boolean;
@@ -722,8 +725,10 @@ export class View {
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.cell, start: now });
           if (!discovered) {
             this.say(t.found, COLORS.highlight, now);
-            audio.play('secret');
+            // The found chime when my own search found it; the old secret's chime for what turned up by itself.
+            audio.play(searchedByMe ? 'found' : 'secret');
           }
+          idleFx.noteFound(now);
           discovered = true;
           break;
         case 'searched': {

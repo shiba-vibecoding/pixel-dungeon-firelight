@@ -1409,7 +1409,8 @@ export class World3D {
     // put right), and the squash of a landing: the figure is a pixel lower and a half pixel wider.
     const gap = standing ? gapRows(fig.image, sx, sy, sheet.w, sheet.h) : 0;
     const fw = 1 + (0.5 * squash) / sheet.w;
-    const fh = 1 - squash / sheet.h;
+    // (And the crouch of a search, the settling of a rest: how tall it stands, idlefx.ts.)
+    const fh = (1 - squash / sheet.h) * (puppet.squash ?? 1);
     const down = (gap / sheet.h) * (sheet.h / TILE) * scale * fh * LEAN_STRETCH;
     const by = lift - down * Math.cos(LEAN);
     const bz = tz + down * Math.sin(LEAN);
