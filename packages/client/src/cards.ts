@@ -308,18 +308,31 @@ export function slainCard(ctx: CanvasRenderingContext2D, text: string, x: number
  */
 export function floatNumber(
   ctx: CanvasRenderingContext2D, text: string, kind: 'damage' | 'heal' | 'big' | 'kill' | 'word', color: string, x: number, y: number, t: number, px: number,
+  icon?: FloatIcon,
 ): boolean {
   const k = step(TIMELINES.number, t);
   // A heavy blow's number lands big, a killing blow's bigger still.
   const scale = kind === 'kill' ? 4 : kind === 'big' ? 3 : 2;
   if (k.a > 0) {
-    fxText(ctx, text, x, y - 2 * scale * px + k.dy * scale * px, px, {
+    const base = y - 2 * scale * px + k.dy * scale * px;
+    const width = fxText(ctx, text, x, base, px, {
       font: 'small', scale, alpha: k.a, shadow: 0,
       color: kind === 'heal' ? FX_COLORS.heal : kind === 'word' ? color : FX_COLORS.damage,
     });
+    if (icon) {
+      const size = Math.round(FLOAT_ICON * scale * px);
+      ctx.globalAlpha = k.a;
+      icon(ctx, snap(x - width / 2, 1) - size - Math.round(scale * px), Math.round(base - size * 1.15), size);
+      ctx.globalAlpha = 1;
+    }
   }
   return t < TIMELINES.number.dur;
 }
+
+/** Draws the little picture beside a number: its top-left corner and its side, device pixels (render.ts, srcicon.ts). */
+export type FloatIcon = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => void;
+/** A source icon is this many art pixels a number's scale: 7.5 for the small font's 10. */
+const FLOAT_ICON = 7;
 
 /**
  * A number as the glyphs of a damage-digits style (Pixel-Mart: 7 x 9 pixels a glyph, `0123456789-+!`, an advance of 6), rising and fading
@@ -327,7 +340,7 @@ export function floatNumber(
  */
 export function floatGlyphs(
   ctx: CanvasRenderingContext2D, art: { image: HTMLImageElement; w: number; h: number; glyphs: string; advance: number }, text: string,
-  kind: 'damage' | 'heal' | 'big' | 'kill', x: number, y: number, t: number, px: number,
+  kind: 'damage' | 'heal' | 'big' | 'kill', x: number, y: number, t: number, px: number, icon?: FloatIcon,
 ): void {
   const k = step(TIMELINES.number, t);
   if (k.a <= 0) return;
@@ -342,6 +355,10 @@ export function floatGlyphs(
     const index = art.glyphs.indexOf(text[i]!);
     if (index < 0) continue;
     ctx.drawImage(art.image, index * art.w, 0, art.w, art.h, left + i * art.advance * scale, top, art.w * scale, art.h * scale);
+  }
+  if (icon) {
+    const size = Math.min(art.h * scale, Math.round(FLOAT_ICON * (scale / px) * px));
+    icon(ctx, left - size - scale, top + Math.round((art.h * scale - size) / 2), size);
   }
   ctx.restore();
 }

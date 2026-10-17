@@ -15,6 +15,7 @@ import './fl-fx.css';
 import './fl-mart.css';
 import './fl-mart-ext.css';
 import './fl-compete.css';
+import './fl-input.css';
 import './photo.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickItem, quickRef, quickUse } from './quickslot';
@@ -64,6 +65,9 @@ import { idle, lazy, load } from './lazy';
 import { QUIP_LOG_COLOR, quipSys } from './quipsys';
 import { loop, onPause, onResume } from './lifecycle';
 import { type Screen, TouchGuard, touchGuardSetting } from './touchguard';
+import { conditionsOf, type HurtEntry, HurtLog } from './hurtlog';
+import { type Conditions, type Source, sourcesOf } from './hurtsrc';
+import { showFeed } from './feedui';
 import { reloadForUpdate } from './update';
 import { type Camp, type CampDress, campClasses } from './camp';
 import { type DailyRulesView, showCamp } from './campui';
@@ -222,6 +226,7 @@ const feedback = new Feedback();
 const scenery = new Scenery();
 const hud = new Hud({
   hero: () => openHero(),
+  feed: () => openFeed(),
   menu: () => openMenu(),
   wait: () => {
     aim = null;
@@ -2139,8 +2144,19 @@ function openHero(): void {
   aim = null;
   showHero({
     hero: me, buffs: heroBuffs(me), onClose: hideOverlay, skin: session?.looks[me.id]?.skin,
+    onFeed: () => openFeed(openHero),
     looks: looksRows(me.heroClass, (shelf) => showMart({ heroClass: me.heroClass, shelf, onClose: openHero })),
   });
+}
+
+/** What the hero's last wounds were and what dealt them (feedui.ts); `back` is where closing it goes (the window it was opened from). */
+function openFeed(back: () => void = hideOverlay): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  walk.reset();
+  aim = null;
+  showFeed({ world, hero: me, assets, entries: hurtLog.recent(), onClose: back });
 }
 
 function openBackpack(): void {
@@ -3079,8 +3095,49 @@ function flushAnswers(world: World, me: Hero, now: number, vnow: number, force =
   takeEffects(held.effects, world, me, now, vnow);
 }
 
+/** The wounds the hero took lately (hurtlog.ts), the conditions they were under at the last look, and the run these belong to. */
+const hurtLog = new HurtLog();
+let hurtConditions: Conditions | null = null;
+let hurtGeneration = -1;
+
+/**
+ * What dealt each damage in a batch (hurtsrc.ts), for the little pictures by the numbers; the hero's own wounds also go to the
+ * feed. Read from the effects and the hero's state: the core's `hurt` carries no cause (and the rules are not to change).
+ */
+const conditionsNow = (world: World, me: Hero): Conditions => conditionsOf(me, isStarving(me), gasKindAt(world.floors[me.depth], me.pos) === 'toxic');
+
+function readSources(effects: readonly Effect[], world: World, me: Hero): ReadonlyMap<number, Source> {
+  if (session!.generation !== hurtGeneration) {
+    hurtGeneration = session!.generation;
+    hurtLog.reset();
+    hurtConditions = null;
+  }
+  const after = conditionsNow(world, me);
+  const found = sourcesOf(effects, {
+    myId: session!.myId,
+    mobKind: (id) => mobById(world, me.depth, id)?.kind ?? (id.startsWith('#') ? (view.puppets.get(id)?.kind as MobKind | undefined) : undefined),
+    heroClass: (id) => heroById(world, id)?.heroClass,
+    before: hurtConditions,
+    after,
+    depth: me.depth,
+  });
+  for (const [index, source] of found) {
+    const effect = effects[index]!;
+    const mine = (effect.type === 'hurt' && effect.who === session!.myId) || (effect.type === 'attack' && effect.target === session!.myId);
+    if (!mine) continue;
+    const entry: HurtEntry = { turn: world.turn, depth: effect.type === 'hurt' || effect.type === 'attack' ? effect.depth : me.depth, amount: effect.type === 'hurt' || effect.type === 'attack' ? effect.damage : 0, source };
+    hurtLog.push(entry);
+  }
+  hurtConditions = after;
+  return found;
+}
+
 function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: number, vnow: number): void {
-  if (effects.length === 0) return;
+  if (effects.length === 0) {
+    // A quiet frame: a condition that has worn off must not be counted among those that tick (hurtsrc.ts).
+    if (hurtConditions && Object.values(hurtConditions).some(Boolean)) hurtConditions = conditionsNow(world, me);
+    return;
+  }
   // What was held back to follow an earlier blow comes first, so the order of events never turns round.
   flushAnswers(world, me, now, vnow, true);
   // A monster's blow in the same turn as mine answers it a beat later, as the original's actors wait for each other's
@@ -3094,7 +3151,7 @@ function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: nu
   }
   drawPace.effect(now);
   const lastLine = view.log[view.log.length - 1];
-  view.apply(effects, world, session!.myId, vnow);
+  view.apply(effects, world, session!.myId, vnow, readSources(effects, world, me));
   // What an action done in the open backpack came to is told in the backpack too (the log is behind it).
   if (backpackOpen()) bagSay(view.log.slice(view.log.lastIndexOf(lastLine!) + 1).map((line) => line.text).slice(-2).join(' '));
   // The backpack, if open, shows the pack as it is now (an item put on, dropped, picked up).
@@ -3660,14 +3717,15 @@ function tick(now: number): void {
       });
       // The table and the badges follow the account (cloud.ts).
       pushCloud();
-      showRunEnd({
+      // The death window comes back after the feed of the last wounds («What happened»): shown again from the same figures.
+      const endScreen = (): void => showRunEnd({
         place,
         victory,
         title: victory ? (world.ending === 'surface' ? t.happyEnd : t.victory) : solo ? t.youDied : t.partyFell,
         cause: victory ? (world.ending === 'surface' ? t.happyEndText : t.victoryText) : [t.soloFell(me.depth), cause ? t.killedBy(cause) : ''].filter(Boolean).join(' '),
         // What the cause means when it was no monster's blow, and what the pack held (deathcopy.ts).
         ...(victory ? {} : { notes: [causeNote(me.killedBy), packLine(me)] }),
-        ...(solo ? { label: labelWords(runLabel({ checked: !!session.checked, ranked: session.checked?.meta.ranked ?? true })) } : {}),
+        ...(solo ? { label: labelWords(runLabel({ checked: !!session?.checked, ranked: session?.checked?.meta.ranked ?? true })) } : {}),
         hero: { name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, lvl: me.lvl, depth: me.depth, gold: me.gold, kills: me.kills },
         // The hero as he fell or won, in the armour worn at the end and the look, hat, pet and fire he wears (herocard.ts).
         card: endCard(me),
@@ -3681,7 +3739,9 @@ function tick(now: number): void {
         ranking: rankingBlock(answer),
         onBoards: api ? () => openBoards(dailyRun ? 'daily' : 'week') : undefined,
         share,
+        ...(victory ? {} : { onWhat: () => openFeed(endScreen) }),
       });
+      endScreen();
     }, 1200 + quipSys.deathDelay());
   }
 }

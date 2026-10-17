@@ -7,7 +7,8 @@ import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
 import { type Figure, figureOf } from './dirs';
 import { puppetAlpha } from './puppetfade';
-import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
+import { bossCard, depthCard, type FloatIcon, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
+import { drawSourceIcon, type Icon } from './srcicon';
 
 import { fx } from './fx';
 import { drawFx2D } from './fxdraw2d';
@@ -391,6 +392,7 @@ export function render(
 ): void {
   const { level, baked, visible, explored } = scene;
   const { canvas } = ctx;
+  assetsNow = assets;
   ctx.imageSmoothingEnabled = false;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
@@ -684,6 +686,7 @@ export function renderOverlay3D(
   marks: ReadonlyArray<{ puppet: Puppet; x: number; y: number }>, count: number,
 ): void {
   const { canvas } = ctx;
+  assetsNow = assets;
   const ys = camera.ys ?? 1;
   const { zoom } = camera;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -709,6 +712,13 @@ export function renderOverlay3D(
   }
   screenLayer(ctx, scene, view, camera, now, marks, count);
 }
+
+/** The damage number's source icon being drawn (see screenLayer): set before each, read by `drawFloaterIcon`, so nothing is allocated per frame. */
+const pen: { icon: Icon | null; assets: Assets | null; depth: number } = { icon: null, assets: null, depth: 1 };
+let assetsNow: Assets | null = null;
+const drawFloaterIcon: FloatIcon = (ctx, x, y, size) => {
+  if (pen.icon && pen.assets) drawSourceIcon(ctx, pen.assets, pen.icon, x, y, size, pen.depth);
+};
 
 /** Where a character's head is on the screen (device pixels), for names and marks; `y` is the top of its cell. */
 function headY(camera: Camera, y: number, spriteH: number): number {
@@ -768,8 +778,16 @@ function screenLayer(
     const kind = floater.word ? 'word' : numeric ? (scale >= 2 ? 'kill' : scale > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
     // The damage-digits style my hero wears draws numbers in its glyphs; words stay words.
     const glyphs = digits && kind !== 'word' && /^\+?\d+$/.test(floater.text) ? digits : undefined;
-    if (glyphs && kind !== 'word') floatGlyphs(ctx, glyphs, floater.text, kind, sx, sy, now - floater.start, px);
-    else floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px);
+    // A tiny picture of what dealt the damage goes beside the number (no allocation here: the icon was made with the floater).
+    let icon: FloatIcon | undefined;
+    if (floater.icon && assetsNow) {
+      pen.icon = floater.icon;
+      pen.assets = assetsNow;
+      pen.depth = view.depth;
+      icon = drawFloaterIcon;
+    }
+    if (glyphs && kind !== 'word') floatGlyphs(ctx, glyphs, floater.text, kind, sx, sy, now - floater.start, px, icon);
+    else floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px, icon);
   }
   ctx.globalAlpha = 1;
 

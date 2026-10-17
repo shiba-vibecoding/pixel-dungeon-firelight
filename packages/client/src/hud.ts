@@ -61,6 +61,8 @@ export function heroBuffs(me: Hero): Array<{ name: BuffName; turns?: number }> {
 
 export interface HudHandlers {
   hero(): void;
+  /** A tap on the health bar: the last wounds and what dealt them. */
+  feed(): void;
   menu(): void;
   /** A tap on the hourglass: wait a turn. */
   wait(): void;
@@ -237,6 +239,17 @@ export class Hud {
     // The wound's trace: a pale stretch where health was, melting away a moment after a blow.
     this.hpLag = el('span', 'pd-bar-lag');
     this.hp = el('div', 'pd-bar', this.hpLag, this.hpText);
+    // The bar opens «what was»: the last wounds (feedui.ts).
+    this.hp.setAttribute('role', 'button');
+    this.hp.tabIndex = 0;
+    this.hp.ariaLabel = t.input.feed.open;
+    this.hp.onclick = tap(() => handlers.feed());
+    this.hp.onkeydown = (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        tap(() => handlers.feed())();
+      }
+    };
     this.xp = el('div', 'pd-bar thin xp');
     this.food = el('div', 'pd-bar thin food');
     this.depth = document.createTextNode('');
