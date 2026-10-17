@@ -1,0 +1,61 @@
+/* The mock's own scaffolding (not for the game): the viewport, the 3D frame behind, the variant's stamp. */
+html, body { margin: 0; height: 100%; background: var(--void); overflow: hidden; }
+body { font: var(--text-body); color: var(--ink); }
+.mk-ui { position: fixed; inset: 0; overflow: hidden; --hud-h: 120px; }
+.mk-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+.mk-dim { position: absolute; inset: 0; background: var(--scrim); z-index: 40; }
+.mk-ui .pd-overlay.static { z-index: 50; }
+.mk-stamp { position: fixed; right: 6px; bottom: 4px; z-index: 999; font: 400 12px/14px var(--font-small); color: rgba(232, 226, 200, .55); text-shadow: 0 1px 0 #000; pointer-events: none; }
+.mk-stamp b { color: var(--fire-gold); font-weight: 400; }
+@media (min-width: 700px) {
+  .mk-ui .pd-hud { right: auto; width: 470px; background: none; }
+  .mk-ui .pd-hud-main { background: rgba(11, 11, 9, .78); clip-path: var(--notch); padding: 6px; box-shadow: inset 0 0 0 var(--u) var(--stone-500); }
+  .mk-ui .pd-toolbar.mk-desk-bar { left: 50%; right: auto; transform: translateX(-50%); width: 520px; bottom: 12px; background: rgba(11, 11, 9, .78); clip-path: var(--notch); padding: 6px; }
+  .mk-ui .pd-log { left: 12px; right: auto; width: 520px; bottom: 96px; background: none; }
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; }
+.mk-hint { display: block; text-align: right; font: var(--text-digits); color: var(--ink-muted); margin-top: -2px; }
+.mk-flare { position: absolute; z-index: 20; left: 194px; top: 360px; animation: fl-stamp var(--m-max) steps(5, jump-none) both; }
+@media (min-width: 700px) { .mk-flare { left: 676px; top: 380px; } }
+.fl-seal .pd-scroll { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; }
+.mk-cols { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); column-gap: var(--space-3); align-items: start; }
+.mk-main { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; max-width: 360px; }
+.mk-side { display: flex; flex-direction: column; gap: var(--space-2); padding-left: var(--space-3); border-left: var(--u) solid var(--stone-600); min-width: 0; }
+.pd-scroll { display: flex; flex-direction: column; gap: var(--space-2); }
+.mk-rail-wrap { display: flex; gap: var(--space-2); align-items: flex-start; }
+.mk-rail-wrap > :last-child { display: flex; flex-direction: column; gap: var(--space-2); }
+.mk-fx { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.mk-buttons { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.mk-buttons .pd-button { flex: 1; }
+.mk-glow { box-shadow: inset 0 0 0 2px var(--fire-gold), inset 0 0 0 4px var(--void), 0 0 0 2px var(--glow-1) !important; }
+.mk-glow > .fl-gi { position: absolute; right: 4px; top: 4px; }
+.mk-card-pop { animation: fl-pop var(--m-reveal) steps(4, jump-none) both; }
+.mk-new { animation: fl-stamp var(--m-reveal) steps(4, jump-none) both; }
+.mk-more { display: block; } .mk-more summary { list-style: none; cursor: pointer; } .mk-more summary::before { content: "▸ "; color: var(--lit-mid); }
+.mk-truth-head { color: var(--fire-gold); text-transform: uppercase; letter-spacing: .08em; }
+.pd-bag .pd-bagrow { justify-content: start; }
+.mk-mini { --slot: 40px; width: 40px; height: 40px; }
+.fl-beast.mk-picked { box-shadow: inset 0 0 0 2px var(--fire-gold), inset 0 0 0 4px var(--void); }
+.mk-p { width: 44px; height: 44px; }
+.mk-unmet canvas { filter: brightness(0) opacity(.4); }
+.mk-kbar { grid-column: auto; margin-top: 4px; }
+.mk-boss { color: var(--fire-gold) !important; }
+.mk-here { color: var(--fire-gold); margin-left: auto; }
+.mk-pages { display: flex; flex-direction: column; gap: var(--space-2); }
+.mk-closed { opacity: .7; } .mk-closed p { display: none; }
+.fl-bookrow .pd-slot { --slot: 44px; width: 44px; height: 44px; }
+.mk-mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); }
+.mk-mcard { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2); background: var(--stone-800); clip-path: var(--notch); box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark); }
+.mk-mhead { display: flex; align-items: center; gap: var(--space-2); }
+.mk-s { font: var(--text-label); color: var(--fire-light); }
+.mk-now { font: var(--text-caption); color: var(--fire-gold); }
+.mk-wrap { flex-wrap: wrap; overflow: visible; }
+.mk-dense td, .mk-dense th { padding: 2px 3px; }
+.mk-b { color: var(--fire-light); font-weight: 400; }
+.fl-table td img.fl-mech-pic { width: 32px !important; height: 32px !important; box-shadow: none; }
+.fl-chip img.fl-mech-pic { width: 24px !important; height: 24px !important; box-shadow: none; }
+.mk-endp { width: 84px; height: 96px; background: radial-gradient(closest-side, var(--glow-1), transparent), var(--stone-900); }
+.mk-share { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; z-index: 60; }
+.mk-share > * { width: min(100%, 420px); }
+.pd-runend .pd-scroll { gap: var(--space-2); }
+.mk-face { display: flex; flex-direction: column; gap: var(--space-2); background: var(--stone-800); }

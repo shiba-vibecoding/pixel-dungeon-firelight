@@ -1,0 +1,590 @@
+{
+ "curse": {
+  "bg": "#3a2126",
+  "light": "#a070e0",
+  "shade": "#5a2c8c"
+ },
+ "enchant": {
+  "death": "40, 40, 40",
+  "fire": "255, 68, 0",
+  "horror": "90, 90, 90",
+  "instability": "255, 255, 255",
+  "leech": "170, 0, 40",
+  "luck": "0, 255, 0",
+  "paralysis": "255, 255, 68",
+  "poison": "68, 0, 170",
+  "shock": "255, 255, 255",
+  "slow": "0, 68, 255",
+  "tempering": "204, 136, 136"
+ },
+ "fx": {
+  "burst": {
+   "frames": 4,
+   "h": 16,
+   "w": 16,
+   "y": 48
+  },
+  "glint": {
+   "frames": 4,
+   "h": 16,
+   "w": 16,
+   "y": 64
+  },
+  "pillar": {
+   "frames": 4,
+   "h": 32,
+   "w": 16,
+   "y": 96
+  },
+  "rune": {
+   "frames": 4,
+   "h": 16,
+   "w": 16,
+   "y": 16
+  },
+  "sigil": {
+   "frames": 4,
+   "h": 16,
+   "w": 16,
+   "y": 80
+  },
+  "spark": {
+   "frames": 4,
+   "h": 16,
+   "w": 16,
+   "y": 0
+  },
+  "wisp": {
+   "frames": 4,
+   "h": 16,
+   "w": 16,
+   "y": 32
+  }
+ },
+ "glyph": "94, 200, 192",
+ "icons": {
+  "12": {
+   "acc": [
+    24,
+    16,
+    12,
+    12
+   ],
+   "aware": [
+    96,
+    16,
+    12,
+    12
+   ],
+   "depth": [
+    144,
+    16,
+    12,
+    12
+   ],
+   "dmg": [
+    60,
+    16,
+    12,
+    12
+   ],
+   "dr": [
+    48,
+    16,
+    12,
+    12
+   ],
+   "eva": [
+    36,
+    16,
+    12,
+    12
+   ],
+   "gold": [
+    132,
+    16,
+    12,
+    12
+   ],
+   "hp": [
+    0,
+    16,
+    12,
+    12
+   ],
+   "ident": [
+    180,
+    16,
+    12,
+    12
+   ],
+   "kills": [
+    168,
+    16,
+    12,
+    12
+   ],
+   "lvl": [
+    72,
+    16,
+    12,
+    12
+   ],
+   "ring": [
+    108,
+    16,
+    12,
+    12
+   ],
+   "speed": [
+    192,
+    16,
+    12,
+    12
+   ],
+   "str": [
+    12,
+    16,
+    12,
+    12
+   ],
+   "turns": [
+    156,
+    16,
+    12,
+    12
+   ],
+   "wand": [
+    120,
+    16,
+    12,
+    12
+   ],
+   "xp": [
+    84,
+    16,
+    12,
+    12
+   ]
+  },
+  "16": {
+   "bestiary": [
+    160,
+    32,
+    16,
+    16
+   ],
+   "boss": [
+    208,
+    32,
+    16,
+    16
+   ],
+   "catalog": [
+    144,
+    32,
+    16,
+    16
+   ],
+   "chronicle": [
+    176,
+    32,
+    16,
+    16
+   ],
+   "filter": [
+    240,
+    32,
+    16,
+    16
+   ],
+   "hunger": [
+    0,
+    32,
+    16,
+    16
+   ],
+   "key": [
+    112,
+    32,
+    16,
+    16
+   ],
+   "passport": [
+    192,
+    32,
+    16,
+    16
+   ],
+   "pot": [
+    64,
+    32,
+    16,
+    16
+   ],
+   "rest": [
+    16,
+    32,
+    16,
+    16
+   ],
+   "search": [
+    32,
+    32,
+    16,
+    16
+   ],
+   "shop": [
+    96,
+    32,
+    16,
+    16
+   ],
+   "sigil": [
+    224,
+    32,
+    16,
+    16
+   ],
+   "sort": [
+    256,
+    32,
+    16,
+    16
+   ],
+   "strength": [
+    128,
+    32,
+    16,
+    16
+   ],
+   "traps": [
+    48,
+    32,
+    16,
+    16
+   ],
+   "well": [
+    80,
+    32,
+    16,
+    16
+   ]
+  },
+  "8": {
+   "cursed": [
+    32,
+    0,
+    8,
+    8
+   ],
+   "down": [
+    72,
+    0,
+    8,
+    8
+   ],
+   "enchant": [
+    40,
+    0,
+    8,
+    8
+   ],
+   "fire": [
+    80,
+    0,
+    8,
+    8
+   ],
+   "fits": [
+    16,
+    0,
+    8,
+    8
+   ],
+   "glyph": [
+    48,
+    0,
+    8,
+    8
+   ],
+   "heavy": [
+    8,
+    0,
+    8,
+    8
+   ],
+   "new": [
+    0,
+    0,
+    8,
+    8
+   ],
+   "note": [
+    56,
+    0,
+    8,
+    8
+   ],
+   "seen": [
+    88,
+    0,
+    8,
+    8
+   ],
+   "unknown": [
+    24,
+    0,
+    8,
+    8
+   ],
+   "up": [
+    64,
+    0,
+    8,
+    8
+   ]
+  }
+ },
+ "marks": {
+  "order": [
+   "cursed",
+   "new",
+   "enchant",
+   "glyph",
+   "note"
+  ],
+  "scale": 2,
+  "size": 8
+ },
+ "masks": [
+  "enchant",
+  "glyph"
+ ],
+ "motion": {
+  "easing": "steps",
+  "fps": 15,
+  "hold": 1200,
+  "max": 400,
+  "moments": {
+   "classArmor": {
+    "frames": 4,
+    "ms": 400,
+    "reduced": "the new armour row at once",
+    "sound": "equip",
+    "then": "badge"
+   },
+   "enchant": {
+    "frames": 4,
+    "ms": 360,
+    "reduced": "the rune shown whole",
+    "sound": "evoke"
+   },
+   "expTick": {
+    "frames": 3,
+    "ms": 160,
+    "reduced": "the bar is set, no flash",
+    "sound": null
+   },
+   "identify": {
+    "frames": 5,
+    "ms": 320,
+    "reduced": "the card face changes at once",
+    "sound": "found"
+   },
+   "levelUp": {
+    "frames": 6,
+    "ms": 360,
+    "reduced": "badge and card shown at once, the card held 2.4 s",
+    "sound": "levelup"
+   },
+   "mastery": {
+    "frames": 4,
+    "ms": 400,
+    "reduced": "the sigil and title shown still",
+    "sound": "badge"
+   },
+   "newItem": {
+    "frames": 4,
+    "ms": 240,
+    "reduced": "the spark mark only",
+    "sound": null
+   },
+   "shine": {
+    "note": "the 3D sparks: one twinkle per period per tier 1..3; tier 4 keeps its orbit lit",
+    "period": [
+     1600,
+     1200,
+     900,
+     0
+    ]
+   },
+   "strength": {
+    "frames": 6,
+    "ms": 400,
+    "reduced": "the red tags turn plain at once, the feathers shown 1.2 s",
+    "sound": "thump",
+    "then": "sparkle"
+   },
+   "uncurse": {
+    "frames": 6,
+    "ms": 360,
+    "reduced": "the violet frame gone at once",
+    "sound": "shatter"
+   },
+   "upgrade": {
+    "frames": 5,
+    "ms": 320,
+    "reduced": "the new number at once, gold for 1.2 s",
+    "sound": "hammer",
+    "then": "sparkle"
+   }
+  },
+  "pop": 160,
+  "reveal": 320,
+  "stagger": 40
+ },
+ "palette": {
+  "1": "#4a3424",
+  "2": "#74583c",
+  "3": "#a8804e",
+  "4": "#e0b878",
+  "5": "#3b3e36",
+  "6": "#555950",
+  "7": "#7a8173",
+  "8": "#9fa896",
+  "B": "#2e7c78",
+  "G": "#7ad05a",
+  "H": "#992e2e",
+  "R": "#c24a4a",
+  "V": "#5a2c8c",
+  "a": "#1a0a06",
+  "b": "#5ec8c0",
+  "c": "#b22a2a",
+  "d": "#6e161a",
+  "e": "#e8641f",
+  "f": "#ff9a3a",
+  "g": "#ffcc66",
+  "h": "#bf5039",
+  "i": "#e8e2c8",
+  "k": "#0b0b09",
+  "l": "#ffeba4",
+  "m": "#b0b5a3",
+  "r": "#ff8585",
+  "s": "#fffad6",
+  "v": "#a070e0",
+  "w": "#ffffff"
+ },
+ "part": 11,
+ "sheets": {
+  "fx": "growth-fx.png",
+  "icons": "growth-icons.png"
+ },
+ "shine": {
+  "A": {
+   "halo": [
+    0,
+    0,
+    0.1,
+    0.18
+   ],
+   "sparks": [
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  "B": {
+   "glintEvery": [
+    2400,
+    1600,
+    1000,
+    600
+   ]
+  },
+  "C": {
+   "radius": 0.42,
+   "segments": 10
+  },
+  "from": [
+   1,
+   3,
+   6,
+   10
+  ]
+ },
+ "variants": {
+  "bestiary": {
+   "A": "Cards",
+   "B": "By region",
+   "C": "Trophies"
+  },
+  "card": {
+   "A": "Was / will be",
+   "B": "Side by side",
+   "C": "Verdict"
+  },
+  "catalog": {
+   "A": "Showcase",
+   "B": "Alchemist's book",
+   "C": "Elimination"
+  },
+  "ceremony": {
+   "A": "Seal",
+   "B": "By the fire",
+   "C": "Chapter"
+  },
+  "chronicle": {
+   "A": "Ribbon",
+   "B": "Descent map",
+   "C": "Pages"
+  },
+  "end": {
+   "A": "Growth card",
+   "B": "Scroll",
+   "C": "Was / is"
+  },
+  "filters": {
+   "A": "Chips",
+   "B": "Rail",
+   "C": "Lenses"
+  },
+  "growth": {
+   "A": "Spark",
+   "B": "Hearth",
+   "C": "Chronicle"
+  },
+  "mechanic": {
+   "A": "Card",
+   "B": "Diagram",
+   "C": "Cheat sheet"
+  },
+  "passport": {
+   "A": "Passport",
+   "B": "Paper doll",
+   "C": "By depth"
+  },
+  "shine": {
+   "A": "Sparks",
+   "B": "Glint",
+   "C": "Floor ring"
+  },
+  "slot": {
+   "A": "Corners",
+   "B": "Frames",
+   "C": "Tags"
+  },
+  "strength": {
+   "A": "Feathers",
+   "B": "Ladder",
+   "C": "Weight"
+  },
+  "truth": {
+   "A": "Slot",
+   "B": "Card",
+   "C": "Quiet"
+  }
+ },
+ "version": 1
+}
