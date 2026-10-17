@@ -1,5 +1,6 @@
 import type { Hero, Item, World } from '@pd/core';
 import { familiarity } from './familiar';
+import { segsBar } from './growcard';
 import { mealBonus, wasteIfEaten } from './hungerinfo';
 import { I } from './i18n-info';
 import './info.css';
@@ -16,18 +17,15 @@ function node<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, 
   return element;
 }
 
-/** «Identifying: 13 of 20 hits» with a small bar; null for what is known, or not the hero's. */
+/** «Identifying: 13 of 20 hits» with ten segments (part 11: a segment is a whole number of steps); null for what is known, or not the hero's. */
 export function knowLine(world: World, hero: Hero, item: Item): HTMLElement | null {
   const f = familiarity(world, hero, item);
   if (!f) return null;
-  const bar = node('div', 'pd-bar thin xp pd-know-bar');
-  bar.style.setProperty('--v', String(f.of > 0 ? f.done / f.of : 0));
-  bar.setAttribute('role', 'progressbar');
-  bar.setAttribute('aria-valuemin', '0');
-  bar.setAttribute('aria-valuemax', String(f.of));
-  bar.setAttribute('aria-valuenow', String(f.done));
-  const line = node('div', 'pd-know', undefined);
-  line.append(node('p', 'pd-info pd-know-text', `${I.know.label}: ${I.know[f.unit === 'zaps' ? 'zaps' : f.unit](f.done, f.of)}`), bar);
+  const line = node('div', 'pd-know fl-know');
+  line.append(
+    node('p', 'pd-info pd-know-text', `${I.know.label}: ${I.know[f.unit === 'zaps' ? 'zaps' : f.unit](f.done, f.of)}`),
+    segsBar(f.done, f.of),
+  );
   if (!f.inUse && f.unit !== 'zaps') line.append(node('p', 'pd-note pd-know-idle', I.know.idle[f.unit]));
   return line;
 }

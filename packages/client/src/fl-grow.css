@@ -382,6 +382,49 @@
 .fl-spread h4 { margin: 0; font: var(--text-label); color: var(--ink-muted); }
 .fl-spread > div.is h4 { color: var(--fire-gold); }
 
+/* ---------- In the game: what the real markup needs besides the designer's mock ---------- */
+/* The toasts of a level and of strength sit just under the HUD (main.ts --hud-bottom), a tap on the level's opens the passport. */
+.pd-toast.fl-lvl-toast, .pd-toast.fl-str-toast {
+  top: calc(max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))) + var(--net-strip, 0px));
+  max-width: min(360px, calc(100% - 2 * var(--space-3)));
+}
+.pd-toast.fl-lvl-toast { flex-direction: column; align-items: stretch; gap: 0; pointer-events: auto; cursor: pointer; }
+.fl-hint { align-self: flex-end; font: var(--text-digits); color: var(--ink-muted); padding: 0 var(--space-2) var(--u); }
+/* The quick slot's bolt stands at the top centre: the bottom left belongs to the one mark of the slot. */
+.pd-slot > .pd-mark.quick { left: 50%; bottom: auto; top: 2px; translate: -50% 0; }
+.pd-slot.has-dur > .pd-mark.quick, .pd-slot:has(> .pd-dur) > .pd-mark.quick { bottom: auto; }
+/* The mark and the corner digits sit above a durability bar. */
+.pd-slot.has-dur > .fl-mark, .pd-slot:has(> .pd-dur) > .fl-mark { bottom: 9px; }
+.pd-slot.fl-moment { position: relative; }
+/* Bursts of a moment live inside the slot and take no clicks. */
+.fl-sparks, .fl-shatter { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: visible; }
+.fl-shatter i { background: var(--grow-curse); box-shadow: 0 0 0 var(--u) var(--grow-curse-lo); }
+.fl-sparks i, .fl-shatter i { animation-delay: calc(var(--age, 0) * -1ms); }
+.pd-slot.fl-reveal { animation: fl-flip var(--m-reveal) steps(6, jump-none) both; animation-delay: calc(var(--age, 0) * -1ms); }
+.fl-tickup, .fl-runedraw { animation-delay: calc(var(--age, 0) * -1ms); }
+.pd-slot.fl-moment .fl-tickup { animation-delay: calc(var(--age, 0) * -1ms); }
+/* The pack's chips: a row that scrolls sideways under the title. */
+.fl-chips.pd-bag-filter { padding: 0 var(--space-1) 2px; margin: 0; }
+.fl-chip { cursor: pointer; }
+.fl-chip .fl-gi { margin-right: 2px; }
+.fl-chip.fl-sort { margin-left: auto; }
+/* The item card's pieces. */
+.fl-cmp-verdict { display: flex; align-items: center; gap: 4px; }
+.fl-cmp-verdict.up { color: var(--good); } .fl-cmp-verdict.down { color: var(--bad); }
+.fl-cmp-heavy { display: flex; align-items: flex-start; gap: 4px; }
+.fl-cmp-heavy .fl-gi, .fl-tip .fl-gi { margin-top: 2px; }
+.fl-cmp-row.unknown .num { color: var(--ink-muted); }
+.fl-know { display: flex; flex-direction: column; gap: 4px; }
+.fl-note-box { display: flex; flex-direction: column; gap: var(--space-1); }
+.fl-note { width: 100%; text-align: left; cursor: pointer; }
+.fl-note.editing { cursor: default; }
+.fl-note-input { flex: 1; min-width: 0; font: var(--text-caption); color: var(--fire-light); background: transparent; border: 0; border-bottom: var(--u) solid var(--lit-mid); padding: 2px 0; }
+.fl-note-input:focus { outline: none; border-bottom-color: var(--fire-gold); }
+.fl-note-actions { display: flex; gap: var(--space-1); }
+/* The passport. */
+.fl-pass-head .pd-portrait { grid-row: 1 / 4; }
+.fl-tip { margin: 0; }
+
 /* ---------- Motion: keyframes in steps, ≤ 400 ms ---------- */
 @keyframes fl-pop { 0% { scale: 1; } 40% { scale: 1.33; } 70% { scale: .92; } 100% { scale: 1; } }
 @keyframes fl-drop { 0% { opacity: 0; translate: 0 -12px; } 100% { opacity: 1; translate: 0 0; } }

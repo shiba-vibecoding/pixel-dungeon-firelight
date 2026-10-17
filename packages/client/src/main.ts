@@ -17,6 +17,7 @@ import './fl-mart-ext.css';
 import './fl-compete.css';
 import './fl-input.css';
 import './photo.css';
+import './fl-grow.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickItem, quickRef, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -46,7 +47,7 @@ import { brightness } from './brightness';
 import {
   armorTier, closeOverlay, hideOverlay, overlayOpen, windowOverMap, portrait, setAssets, showBackpack, showConfirm, showReforge, showHelp, showHero,
   askDrink, askKnownScroll, askPendingScroll, onWindow, reopenWindow, type WindowState, windowState,
-  backpackOpen, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
+  backpackOpen, bagMoment, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
 import { rankingBlock, trophyText } from './rankui';
 import { showBoards } from './boardsui';
@@ -58,6 +59,9 @@ import { showCircles, showInvite } from './circleui';
 import { showHall } from './hallui';
 import { tx } from './compete-ui';
 import { heroCard, myLook } from './herocard';
+import { growArrive, growEffects, growSight, setGrowHooks } from './growflow';
+import { passportNode } from './growhero';
+import { grow, GrowStore } from './growmem';
 import { chatPicture, circlePicture, savePicture } from './sharecards';
 import { mart } from './mart';
 import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta';
@@ -195,6 +199,8 @@ const progressText = document.createElement('p');
 // What a fight leaves (bodies, blood) is kept on this device per run and depth, and written out when the page goes away.
 try {
   gore.setStore(new GoreStore(localStorage));
+  // (What part 11 remembers of the run — new things, notes, looks met, the chronicle — sits beside it, under a small key of its own.)
+  grow.setStore(new GrowStore(localStorage));
 } catch {
   // No storage: it lasts the visit.
 }
@@ -203,6 +209,7 @@ try {
 setMirror(idbMirror());
 // (Written after the run itself, on every way of leaving: leave.ts.)
 onLeave(() => gore.flush(), true);
+onLeave(() => grow.flush(), true);
 // The save always wins the storage (savestore.ts): the bodies and blood of the depth being played are the last to go. Over about 3 MB at
 // the start, those of other runs and depths and the caches of what the server holds are let go first.
 try {
@@ -301,6 +308,15 @@ const hud = new Hud({
     const hero = session?.world && heroById(session.world, id);
     if (hero) toast(`${hero.name} · ${t.classes[hero.heroClass]} · ${t.newDepth(hero.depth)}`, { tone: 'ally' });
   },
+});
+// Part 11, «the joy of growing»: what the effects of a level, a point of strength, a way chosen and the like show (growflow.ts).
+setGrowHooks({
+  levelPop: () => hud.levelPop(),
+  openPassport: () => openHero(),
+  slotOf: (world, hero, item) => slot(world, item, { hero }),
+  nameOf: (world, item) => capitalize(itemName(world, item)),
+  bagMoment,
+  sigil: () => undefined,
 });
 /**
  * The middle of where a level actually lies, world pixels: the grid is bigger than a level for
@@ -1870,6 +1886,7 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
   const me = world && heroById(world, myId);
   if (world && me) announceBadges([...countGame(world.run.seed), ...checkBadges(world, me, effects)]);
   if (world && me) quipSys.effects(effects, me, world.turn, performance.now());
+  if (world && me) growEffects(effects, world, me, myId);
   for (const effect of effects) {
     if (effect.type === 'yell' && effect.line === 'notice' && MUSIC_BOSSES.has(effect.kind) && session && me && effect.depth === me.depth) {
       bossFight = { session, generation: session.generation, depth: effect.depth };
@@ -2284,6 +2301,13 @@ function openHero(): void {
   aim = null;
   showHero({
     hero: me, buffs: heroBuffs(me), onClose: hideOverlay, skin: session?.looks[me.id]?.skin,
+    // The passport (part 11): the numbers since the start of the run, what is worn.
+    passport: passportNode({
+      world, hero: me, start: core.HERO_CLASSES[me.heroClass], turn: world.turn,
+      portrait: portrait(me.heroClass, armorTier(me), session?.looks[me.id]?.skin),
+      slotOf: (item) => slot(world, item, { hero: me, equipped: true }),
+      itemName: (item) => capitalize(itemName(world, item)),
+    }),
     onFeed: () => openFeed(openHero),
     looks: looksRows(me.heroClass, (shelf) => showMart({ heroClass: me.heroClass, shelf, onClose: openHero })),
   });
@@ -3616,6 +3640,8 @@ function tick(now: number): void {
     hideBossCard();
     // The bodies and blood of this depth come back as they were left (gore.ts): kept per run and depth on this device.
     gore.bind(runKey(world), me.depth, world.turn === 0);
+    grow.bind(runKey(world), world.turn === 0);
+    growArrive(me, world.turn);
     heroWasAlive = true;
     walk.reset();
     bakedKey = '';
@@ -3676,6 +3702,7 @@ function tick(now: number): void {
     drawPace.force();
 
     learnFromSight(world, me, level, visible);
+    if (isAlive(me)) growSight(world, me, visible);
     // Hero.checkVisibleMobs: a newly seen enemy (asleep or not), or one that wakes, stops a walk.
     const enemies = isAlive(me) ? seenEnemies(world, me) : [];
     const awake = new Set(enemies.filter((m) => m.state !== 'sleeping').map((m) => m.id));

@@ -13,6 +13,11 @@ import { capitalize, locale, t } from './i18n';
 import { I } from './i18n-info';
 import { P } from './i18n-photo';
 import { knowLine, wasteLine } from './infolines';
+import { slotMarks } from './growth';
+import { gi, enchantRgb, glyphRgb } from './growicons';
+import { grow } from './growmem';
+import { CHIPS, chipOf, type ChipId, chipCounts, chipsRow, type SortId, sortFresh } from './growchips';
+import { compareBlock, noteBlock } from './growcard';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import { mart } from './mart';
 import { labelWords } from './labels';
@@ -261,6 +266,9 @@ interface SlotOptions {
   placeholder?: number;
 }
 
+/** The order the feathers of a point of strength turn over in, 40 ms apart (reset when the pack is drawn). */
+let featherOrder = 0;
+
 /** A 52×52 slot: the sprite and up to three corner labels (level, strength, quantity). */
 export function slot(world: World, item: Item | undefined, options: SlotOptions = {}): HTMLElement {
   if (!item) {
@@ -284,7 +292,13 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
   } else if (item.qty > 1) {
     node.append(el('span', { className: 'pd-qty', textContent: String(item.qty) }));
   }
-  if (item.level !== 0 && levelKnown(item)) {
+  // Part 11, corners: the level («?» while hidden), the strength, one mark at the bottom left (growth.ts slotMarks).
+  const marks = options.hero
+    ? slotMarks(world, options.hero, item, { fresh: grow.isFresh(world, item), noted: grow.noteOf(world, item) !== undefined, light: grow.isLight(item) })
+    : null;
+  if (marks) {
+    if (marks.level) node.append(el('span', { className: `pd-lvl ${marks.level.tone}`, textContent: marks.level.text }));
+  } else if (item.level !== 0 && levelKnown(item)) {
     node.append(el('span', { className: `pd-lvl ${item.level > 0 ? 'up' : 'down'}`, textContent: `${item.level > 0 ? '+' : '−'}${Math.abs(item.level)}` }));
   }
   // WndBag's durability bars: how worn an upgraded item is; a broken one's level is struck through (it works as +0).
@@ -294,12 +308,31 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
     markWear(node);
   }
   // ItemSlot's top right: the strength it wants, or the typical one with a «?» while its level is unknown.
-  const strength = strengthOf(item);
-  if (strength && !options.equipped) {
-    const { str, known } = strength;
-    node.append(el('span', { className: `pd-tag${options.hero && options.hero.str < str ? ' bad' : ''}`, textContent: known ? String(str) : `${str}?` }));
+  if (marks) {
+    if (marks.strength && !options.equipped) {
+      const { heft, light, text } = marks.strength;
+      const tag = el('span', { className: `pd-tag${heft === 'heavy' ? ' bad' : ''}${light ? ' light fl-str-flip' : ''}`, textContent: text });
+      if (light) {
+        tag.style.setProperty('--k', String(featherOrder++));
+        node.classList.add('fl-moment');
+      }
+      node.append(tag);
+    }
+    if (marks.mark) {
+      const tint = marks.mark === 'enchant' && marks.enchant ? enchantRgb(marks.enchant) : marks.mark === 'glyph' ? glyphRgb() : undefined;
+      const mark = gi(marks.mark, 8, 2, tint);
+      mark.classList.add('fl-mark');
+      node.append(mark);
+      if (marks.mark === 'new') node.classList.add('fl-new');
+    }
+  } else {
+    const strength = strengthOf(item);
+    if (strength && !options.equipped) {
+      const { str, known } = strength;
+      node.append(el('span', { className: 'pd-tag', textContent: known ? String(str) : `${str}?` }));
+    }
+    if (cursed) node.append(gi('cursed', 8, 2));
   }
-  if (cursed) node.append(el('span', { className: 'pd-mark curse' }));
   if (options.hero && inQuickslot(options.hero, item)) node.append(el('span', { className: 'pd-mark quick' }));
   node.onclick = () => {
     audio.play('click');
@@ -336,10 +369,14 @@ export function markWear(node: HTMLElement): void {
 /** An item's description, its curse and weight set apart as warnings, and how worn it is under its numbers. */
 function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
   // How near a thing carried is to being known (a count, nothing hidden), and what a meal would waste (infolines.ts).
-  const extra = [knowLine(world, hero, item), itemDef(item.kind).category === 'food' && inPack(hero, item) ? wasteLine(hero, item) : null].filter((n): n is HTMLElement => n !== null);
+  // Part 11: gear from the pack is set beside what is worn (was / will be), and the player's own note stays on it.
+  const mine = inPack(hero, item) || hero.weapon === item || hero.armor === item || hero.rings.includes(item);
+  const compared = inPack(hero, item) ? compareBlock(hero, item) : null;
+  const extra = [knowLine(world, hero, item), compared, itemDef(item.kind).category === 'food' && inPack(hero, item) ? wasteLine(hero, item) : null].filter((n): n is HTMLElement => n !== null);
+  const noted = mine && !['gold', 'key', 'quest'].includes(itemDef(item.kind).category) ? noteBlock(world, item) : null;
   const base = described(itemInfo(world, hero, item));
   // Right after the first paragraph, so that it is in view without scrolling the panel.
-  const nodes = [...base.slice(0, 1), ...extra, ...base.slice(1)];
+  const nodes = [...base.slice(0, 1), ...extra, ...base.slice(1), ...(noted ? [noted] : [])];
   const wear = wearOf(world, item);
   if (!wear) return nodes;
   const line = el('div', { className: `pd-durability${wear.left > 0 && wear.left / wear.max <= 0.25 ? ' low' : ''}` },
@@ -485,6 +522,8 @@ export interface HeroOptions {
   buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
   /** Opens the feed of the last wounds (feedui.ts); a row under the health. */
   onFeed?: () => void;
+  /** The hero's passport (growhero.ts, part 11): the numbers «since the start of the run» and what is worn; without it, the old rows stand. */
+  passport?: HTMLElement;
   onClose(): void;
 }
 
@@ -512,7 +551,7 @@ export function showHero(options: HeroOptions): void {
         icon: portrait(hero.heroClass, armorTier(hero), options.skin),
         onClose: options.onClose,
       },
-      stats([
+      options.passport ?? stats([
         [t.strength, String(hero.str)],
         [t.health, `${Math.max(0, hero.hp)}/${hero.ht}`],
         [t.experience, `${hero.exp}/${maxExp(hero)}`],
@@ -1130,7 +1169,9 @@ export interface BackpackOptions {
 type BagChoice = Place;
 
 /** The backpack's filters (design system v10): the rest dims but stays where it is. */
-type BagFilter = 'all' | 'potions' | 'scrolls' | 'gear';
+type BagFilter = ChipId;
+/** The pack's order in the grid (growchips.ts): the game's own, or the new things first. Kept for the session. */
+let bagSort: SortId = 'type';
 
 /** The backpack open now, what is chosen in it and how it is filtered, so it can be drawn again as the world changes. */
 let openBag: { options: BackpackOptions; choice: BagChoice | null; filter: BagFilter; adjacent: ReadonlySet<string> } | null = null;
@@ -1146,6 +1187,8 @@ function pauseBag(): void {
 
 /** The backpack is closed for good (the dungeon answers, or the player left). */
 function closeBag(): void {
+  // The pack was looked at: what was new in it is new no more, and the feathers of a point of strength have been seen.
+  if (openBag) grow.seenAll();
   openBag = null;
   pausedFilter = null;
 }
@@ -1184,13 +1227,21 @@ type FxKind =
   /** An item used: its icon pops, the count ticks down; if it is gone, its icon pops and fades where it was. */
   | 'used'
   /** A flourish over the slot of the thing a scroll was read on, with a flash. */
-  | 'plus';
+  | 'plus'
+  /** Part 11, the moments of truth (≤ 400 ms): the level ticks up with sparks, the face turns over, the rune is drawn, the curse shatters. */
+  | 'upgrade'
+  | 'reveal'
+  | 'enchant'
+  | 'uncurse';
 
 interface BagFx {
   kind: FxKind;
   /** The item whose slot it is, as the core holds it (the world is changed in place, so it is the same object after the action). */
   item?: Item;
   text?: string;
+  /** A moment that belongs to every thing of a kind (a kind learned), and, for an uncurse, the things that were cursed before it. */
+  kindOf?: string;
+  cursed?: readonly Item[];
   /** For a used item that is gone: its sprite and where its slot was among the loose ones. */
   sprite?: number;
   pos?: number;
@@ -1207,6 +1258,18 @@ let bagNote: { text: string; at: number } | null = null;
 const addFx = (fx: Omit<BagFx, 'at'>): void => {
   bagFx.push({ ...fx, at: performance.now() });
 };
+
+/** The things drawn as known-cursed the last time the pack was drawn (an uncurse shatters what has stopped being one). */
+let lastCursed: Item[] = [];
+
+/**
+ * A moment of truth for the pack (part 11): the item (or every item of a kind) and what happened to it. Shown on the slot when the pack
+ * is open; when it is not, it is gone with its 400 ms. The open pack is drawn again at once to show it.
+ */
+export function bagMoment(kind: 'upgrade' | 'reveal' | 'enchant' | 'uncurse', item: Item | null, kindOf?: string): void {
+  addFx({ kind, ...(item ? { item } : {}), ...(kindOf ? { kindOf } : {}), ...(kind === 'uncurse' ? { cursed: lastCursed } : {}) });
+  if (openBag && backpackOpen()) refreshBackpack(openBag.options.world, openBag.options.hero);
+}
 
 /** Says what happened in the backpack's own line, for a moment. */
 export function bagSay(text: string): void {
@@ -1359,13 +1422,9 @@ function chosenItem(hero: Hero, choice: BagChoice | null): Item | undefined {
   return (choice.worn === 'weapon' ? hero.weapon : hero.armor) ?? undefined;
 }
 
-/** Whether an item passes a filter: «gear» is weapons, armour, rings, wands and thrown weapons. */
-function passes(filter: BagFilter, item: Item): boolean {
-  const category = itemDef(item.kind).category;
-  if (filter === 'potions') return category === 'potion';
-  if (filter === 'scrolls') return category === 'scroll';
-  if (filter === 'gear') return ['weapon', 'armor', 'ring', 'wand', 'missile'].includes(category);
-  return true;
+/** Whether an item passes a chip (growchips.ts); a filter an older window memo kept («potions», «gear») counts as «all». */
+function passes(filter: BagFilter, item: Item, world: World): boolean {
+  return chipOf(filter, world, item, (one) => grow.isFresh(world, one));
 }
 
 /**
@@ -1377,11 +1436,14 @@ function passes(filter: BagFilter, item: Item): boolean {
  */
 export function showBackpack(options: BackpackOptions, choice: BagChoice | null = null): void {
   const { world, hero, pick } = options;
+  featherOrder = 0;
   const targets = new Set((pick?.targets ?? []).map(String));
-  const filter: BagFilter = pick ? 'all'
+  const wanted: BagFilter = pick ? 'all'
     : openBag && openBag.options.hero === hero ? openBag.filter
     : pausedFilter && pausedFilter.hero === hero ? pausedFilter.filter
     : 'all';
+  // (A window memo of an older build may name a filter that is no more.)
+  const filter: BagFilter = CHIPS.includes(wanted) ? wanted : 'all';
   if (!pick) {
     openBag = { options, choice, filter, adjacent: new Set(adjacentFoes(world, hero)) };
     pausedFilter = null;
@@ -1406,7 +1468,7 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
     if (pick) node.classList.add(targets.has(String(ref)) ? 'can' : 'dim');
     else {
       if (same(choice, here)) node.classList.add('selected');
-      if (!passes(filter, item)) node.classList.add('dim');
+      if (!passes(filter, item, world)) node.classList.add('dim');
       const opts = { ...options, item, ...where(here) };
       holdToUse(node, () => firstActionName(opts), () => firstAction(opts));
       // What can be dragged: anything in the pack, and anything worn (to take it off).
@@ -1417,8 +1479,10 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
   };
   // The backpack's own slots; keys go on the key ring, and other bags' contents in a row below.
   const entries = hero.items.map((item, index) => ({ item, index, bagged: inBag(hero, item) }));
+  lastCursed = [...entries.map((entry) => entry.item), ...(hero.weapon ? [hero.weapon] : []), ...(hero.armor ? [hero.armor] : []), ...hero.rings].filter(visiblyCursed);
   const keys = entries.filter((entry) => itemDef(entry.item.kind).category === 'key');
-  const loose = entries.filter((entry) => !entry.bagged);
+  const looseOrder = entries.filter((entry) => !entry.bagged);
+  const loose = bagSort === 'fresh' ? sortFresh(looseOrder, (entry) => grow.isFresh(world, entry.item)) : looseOrder;
   const bagged = entries.filter((entry) => entry.bagged && itemDef(entry.item.kind).category !== 'key');
   const grid = el('div', { className: 'pd-bag-grid' });
   for (let i = 0; i < Math.max(BACKPACK_SIZE, loose.length); i++) {
@@ -1454,9 +1518,20 @@ export function showBackpack(options: BackpackOptions, choice: BagChoice | null 
       el('span', { textContent: pick.title }),
       button(t.cancel, pick.onCancel, 'quiet'),
     )
-    : bagFilters(filter, (next) => {
-      if (openBag) openBag.filter = next;
-      showBackpack(options, choice);
+    : chipsRow({
+      current: filter,
+      sort: bagSort,
+      counts: chipCounts(world, hero, (one) => grow.isFresh(world, one)),
+      onFilter: (next) => {
+        audio.play('click');
+        if (openBag) openBag.filter = next;
+        showBackpack(options, choice);
+      },
+      onSort: (next) => {
+        audio.play('click');
+        bagSort = next;
+        showBackpack(options, choice);
+      },
     });
   if (pick) bar.setAttribute('role', 'status');
   const worn = (item: Item | undefined, placeholder: number, ref: ItemRef, here: BagChoice): HTMLElement =>
@@ -1548,13 +1623,45 @@ interface Float {
   age: number;
 }
 
+/** Six sparks, scattered by fixed numbers (the same every time, so a drawing in the middle of one carries it on). */
+const SPARKS: ReadonlyArray<readonly [number, number, number]> = [[-18, -22, 0], [-8, -28, 20], [4, -24, 0], [14, -30, 30], [22, -20, 10], [0, -16, 40]];
+const SHARDS: ReadonlyArray<readonly [number, number, number]> = [[-20, 8, 0], [-12, 20, 20], [-4, 14, 0], [6, 24, 30], [14, 12, 10], [22, 22, 40], [0, 10, 50], [18, 16, 0]];
+
+function burst(slotNode: HTMLElement, kind: 'fl-sparks' | 'fl-shatter', spec: ReadonlyArray<readonly [number, number, number]>): HTMLElement {
+  const box = el('span', { className: kind });
+  spec.forEach(([dx, dy, delay], k) => {
+    const i = el('i');
+    i.style.setProperty('--dx', `${dx}px`);
+    i.style.setProperty('--dy', `${dy}px`);
+    i.style.left = `${14 + ((k * 7) % 22)}px`;
+    i.style.top = `${18 + ((k * 5) % 16)}px`;
+    i.style.animationDelay = `calc(${delay}ms - var(--age, 0) * 1ms)`;
+    box.append(i);
+  });
+  void slotNode;
+  return box;
+}
+const shards = (slotNode: HTMLElement): HTMLElement => burst(slotNode, 'fl-shatter', SHARDS);
+
+/** An upgrade or an enchantment shown on its slot: the number ticks, the rune is drawn, sparks fly, the slot flashes (once). */
+function truth(node: HTMLElement, kind: 'upgrade' | 'enchant', age: number): void {
+  node.classList.add('fl-moment');
+  node.style.setProperty('--age', String(age));
+  if (!node.classList.contains('fx-plus')) node.classList.add('fl-flashcell');
+  if (kind === 'upgrade') node.querySelector('.pd-lvl')?.classList.add('fl-tickup');
+  else node.querySelector('.fl-mark')?.classList.add('fl-runedraw');
+  node.append(burst(node, 'fl-sparks', SPARKS));
+}
+
 /**
  * Applies the live feedback (bagFx) to the slots just drawn: classes on the slot the animation runs on, each started at its
  * age so a drawing in the middle of one carries it on instead of starting it over; the pack's note of the last result.
  */
 function showFx(body: HTMLElement, slotOf: ReadonlyMap<Item, HTMLElement>, grid: HTMLElement, note: { text: string; at: number } | null): Float[] {
   const now = performance.now();
-  bagFx = bagFx.filter((fx) => now - fx.at < FX_MS);
+  // (Under reduced motion the highlight is held a little longer, so that it is seen: there is no movement to catch the eye.)
+  const life = quality.reducedMotion ? 1200 : FX_MS;
+  bagFx = bagFx.filter((fx) => now - fx.at < life);
   const floats: Float[] = [];
   for (const fx of bagFx) {
     const age = Math.round(now - fx.at);
@@ -1565,6 +1672,22 @@ function showFx(body: HTMLElement, slotOf: ReadonlyMap<Item, HTMLElement>, grid:
     else if (fx.kind === 'plus' && node) {
       node.classList.add('fx-plus');
       if (fx.text) floats.push({ node, text: fx.text, age });
+    } else if (fx.kind === 'upgrade' || fx.kind === 'enchant') {
+      if (node) truth(node, fx.kind, age);
+    } else if (fx.kind === 'reveal') {
+      const hit = fx.kindOf ? [...slotOf].filter(([item]) => item.kind === fx.kindOf).map(([, n]) => n) : node ? [node] : [];
+      for (const n of hit) {
+        n.classList.add('fl-moment', 'fl-reveal');
+        n.style.setProperty('--age', String(age));
+      }
+    } else if (fx.kind === 'uncurse') {
+      for (const item of fx.cursed ?? []) {
+        const n = slotOf.get(item);
+        if (!n || visiblyCursed(item)) continue;
+        n.classList.add('fl-moment');
+        n.style.setProperty('--age', String(age));
+        n.append(shards(n));
+      }
     } else if (fx.kind === 'used') {
       if (node) node.classList.add('fx-used');
       else if (fx.sprite !== undefined && fx.pos !== undefined && grid.children[fx.pos]) {
@@ -1773,19 +1896,6 @@ function dragAndDrop(box: HTMLElement, options: BackpackOptions): void {
   });
 }
 
-/** The filter tabs: All, Potions, Scrolls, Gear. */
-function bagFilters(current: BagFilter, onChange: (filter: BagFilter) => void): HTMLElement {
-  const tabs = el('div', { className: 'pd-tabs compact pd-bag-filter' });
-  tabs.setAttribute('role', 'tablist');
-  for (const [id, label] of [['all', t.bagAll], ['potions', t.bagPotions], ['scrolls', t.bagScrolls], ['gear', t.bagGear]] as const) {
-    const tab = el('button', { className: 'pd-tab', textContent: label, onclick: () => (audio.play('click'), onChange(id)) });
-    tab.setAttribute('role', 'tab');
-    tab.setAttribute('aria-selected', String(id === current));
-    tabs.append(tab);
-  }
-  return tabs;
-}
-
 /** The key ring's picture. */
 function keyringIcon(): HTMLElement {
   const icon = el('i', { className: 'pd-icon' });
@@ -1882,6 +1992,8 @@ function itemDetail(options: ItemOptions): HTMLElement {
   );
   const drop = danger[0];
   drop?.classList.add('pd-pick-dropbtn');
+  // Opening the card is looking at the thing: it is new no more.
+  grow.seenItem(world, item);
   const box = el(
     'div',
     { className: 'pd-pick' },

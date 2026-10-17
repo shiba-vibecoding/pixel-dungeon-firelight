@@ -1,6 +1,7 @@
 import { act, type Action, fingerprint, RULES_VERSION, type World } from '@pd/core';
 import type { RunMeta } from './checked';
 import { GORE_PREFIX, goreKeyInfo } from './gore';
+import { growKeyInfo } from './growmem';
 import type { Mirror } from './mirror';
 
 /*
@@ -350,7 +351,7 @@ const size = (s: StorageLike, key: string): number => (read(s, key)?.length ?? 0
 /**
  * What may be let go to make room, best first: the bodies and blood of other runs, then of other depths of this run (the farthest
  * from the depth being played first), then the caches of what the server holds, and last the bodies and blood of the depth being
- * played. Never a saved run (any slot's), never the badges, the rankings or the settings.
+ * played; what part 11 remembers of other runs is the very first to go, of this run the very last. Never a saved run (any slot's), never the badges, the rankings or the settings.
  */
 export function evictable(s: StorageLike): string[] {
   const here = where();
@@ -367,12 +368,19 @@ export function evictable(s: StorageLike): string[] {
   // With no run known (nothing is bound yet), no record is spared but the order of size.
   const unknown = here === null ? gore.sort((a, b) => size(s, b.key) - size(s, a.key)) : [];
   const current = sameRun.filter((g) => here !== null && g.depth === here.depth);
+  // What the screens of part 11 remember (growmem.ts): another run's go before anything, this run's after the bodies and blood.
+  const grown = keys.flatMap((key) => {
+    const info = growKeyInfo(key);
+    return info ? [{ key, run: info.run }] : [];
+  });
   return [
+    ...grown.filter((g) => here === null || g.run !== here.run).map((g) => g.key),
     ...otherRuns.map((g) => g.key),
     ...otherDepths.map((g) => g.key),
     ...unknown.map((g) => g.key),
     ...CACHES.filter((key) => keys.includes(key)),
     ...current.map((g) => g.key),
+    ...grown.filter((g) => here !== null && g.run === here.run).map((g) => g.key),
   ];
 }
 

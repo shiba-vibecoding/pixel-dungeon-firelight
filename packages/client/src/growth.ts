@@ -309,10 +309,12 @@ export function descent(depth: number, turn: number, log: readonly ChronicleEntr
 
 /**
  * The hero as far as the player may know him (as hungerinfo.ts does): a worn ring whose kind or level is still hidden is left out,
- * or the passport's accuracy and evasion would give away what the ring is and how good.
+ * or the passport's accuracy and evasion would give away what the ring is and how good; a weapon or armour of hidden level is a plain one.
  */
 export function knownHero(world: World, hero: Hero): Hero {
-  return { ...hero, rings: hero.rings.filter((ring) => kindKnown(world, ring) && levelKnown(ring)) };
+  // A weapon or armour whose level is hidden counts as a plain one: its strength decides whether the hero is slowed, and that would give the level away.
+  const plain = (item: Item | null): Item | null => (item && !levelKnown(item) ? { ...item, level: 0, durability: undefined, glyph: undefined } : item);
+  return { ...hero, rings: hero.rings.filter((ring) => kindKnown(world, ring) && levelKnown(ring)), weapon: plain(hero.weapon), armor: plain(hero.armor) };
 }
 
 export interface Passport {

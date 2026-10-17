@@ -3,6 +3,8 @@ import { audio } from './audio';
 import { t } from './i18n';
 import { P } from './i18n-photo';
 import { AVATAR, durabilityBar, markWear, sprites } from './screens';
+import { gi } from './growicons';
+import { EXP_PIP } from './growth';
 import type { LogLine } from './view';
 
 /*
@@ -193,6 +195,7 @@ export class Hud {
   private readonly band: HTMLElement;
   private readonly avatar: HTMLElement;
   private readonly level: HTMLElement;
+  private sigil: HTMLElement | null = null;
   private readonly hp: HTMLElement;
   private readonly hpText: HTMLElement;
   private readonly hpLag: HTMLElement;
@@ -252,7 +255,8 @@ export class Hud {
         tap(() => handlers.feed())();
       }
     };
-    this.xp = el('div', 'pd-bar thin xp');
+    // Part 11: the thin bar is notched every five points (a pip: maxExp = 5 + 5 × level).
+    this.xp = el('div', 'pd-bar thin xp fl-pips');
     this.food = el('div', 'pd-bar thin food');
     this.depth = document.createTextNode('');
     this.keys = document.createTextNode('');
@@ -449,6 +453,16 @@ export class Hud {
     this.root.hidden = !on;
   }
 
+  /** A new level: the level's coal pops and the experience bar flashes (≤ 400 ms, in steps; part 11). */
+  levelPop(): void {
+    for (const [node, cls] of [[this.level, 'fl-pop'], [this.xp, 'fl-flash']] as const) {
+      node.classList.remove(cls);
+      void node.offsetWidth;
+      node.classList.add(cls);
+      window.setTimeout(() => node.classList.remove(cls), 420);
+    }
+  }
+
   /** The measured band (freeZone), when, at what window height, and whether the HUD has changed since. */
   private readonly zone = { top: 0, bottom: 0 };
   private bandBottom = 0;
@@ -488,7 +502,20 @@ export class Hud {
       this.hp.classList.toggle('poisoned', me.poison > 0);
       this.hpText.textContent = `${hp}/${me.ht}`;
     }
-    if (this.changed('xp', `${me.exp}/${maxExp(me)}`)) this.xp.style.setProperty('--v', String(Math.min(1, me.exp / maxExp(me))));
+    if (this.changed('xp', `${me.exp}/${maxExp(me)}`)) {
+      this.xp.style.setProperty('--v', String(Math.min(1, me.exp / maxExp(me))));
+      this.xp.style.setProperty('--pips', String(maxExp(me) / EXP_PIP));
+    }
+    // The sign of the way chosen after the Tome of Mastery stands by the level.
+    if (this.changed('sigil', me.subclass ?? '')) {
+      this.sigil?.remove();
+      this.sigil = null;
+      if (me.subclass) {
+        this.sigil = gi('sigil', 16, 1.5);
+        this.sigil.classList.add('fl-sigil-badge');
+        this.avatar.parentElement!.parentElement!.append(this.sigil);
+      }
+    }
     if (this.changed('food', String(Math.round(me.hunger)))) {
       this.food.style.setProperty('--v', String(Math.max(0, 1 - me.hunger / STARVING)));
       this.food.classList.toggle('hungry', isHungry(me) && !isStarving(me));
