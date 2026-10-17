@@ -19,7 +19,7 @@ import { CORS, json, jsonBody } from './http';
 import { boardRoute, circleRoute, leagueRoute, mailRoute, meRoute, patchWorn, Player, problemRoute, runRoute } from './player';
 import type { AdminOps } from './admin';
 import { changeOutages, normalizeDays } from './outages';
-import { adminNotice, KEEP_PROBLEMS, newId, type Problem, type StoredProblem } from './problem';
+import { adminNotice, KEEP_PROBLEMS, newId, type Problem, SAME_PROBLEM_MS, type StoredProblem } from './problem';
 import { photoRoute } from './photos';
 import { Card, cardRoute, challengeRoute } from './sharing';
 import { freezeDueHall, hallRoute } from './hall';
@@ -212,6 +212,10 @@ export class ReportStore extends DurableObject<Env> {
   private async keepProblem(request: Request): Promise<Response> {
     const { problem, by } = (await request.json()) as { problem: Omit<Problem, 'id'>; by: string };
     const kept = (await this.ctx.storage.get<StoredProblem[]>('problems')) ?? [];
+    // The same words from the same player within a day are one report (a send button pressed twice, a send retried): its code is
+    // given back, nothing more is kept and the admin is not told again.
+    const twin = kept.find((p) => p.by === by && p.text.trim() === problem.text.trim() && problem.at - p.at < SAME_PROBLEM_MS && problem.at >= p.at);
+    if (twin) return json({ id: twin.id });
     let id = newId();
     while (kept.some((p) => p.id === id)) id = newId();
     const stored: StoredProblem = { ...problem, id, by };

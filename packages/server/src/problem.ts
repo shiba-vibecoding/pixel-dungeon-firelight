@@ -27,6 +27,8 @@ const ERROR_CHARS = 300;
 const FACT_CHARS = 120;
 /** Reports kept at most (the oldest go first). */
 export const KEEP_PROBLEMS = 200;
+/** A player's report with the very words of one they sent within this long is the same report (a double press, a retry). */
+export const SAME_PROBLEM_MS = 24 * 3_600_000;
 /** An id as the admin types it: six letters and digits without the look-alikes (no 0/O, 1/I/L). */
 export const ID_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const ID_LENGTH = 6;
