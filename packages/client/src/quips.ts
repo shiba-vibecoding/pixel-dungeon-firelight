@@ -17,9 +17,17 @@ export const QUIP_MODES: readonly QuipMode[] = ['foul', 'clean', 'off'];
 export type Register = 'foul' | 'clean';
 export type QuipLang = 'ru' | 'en';
 
-/** Everything but the plain kill, which has its own lines for each class. */
+/**
+ * Everything but the plain kill, which has its own lines for each class.
+ *
+ * The rule of the lines: a line must be TRUE for every event that can bring its moment. It may name a creature, a boss, a trap,
+ * a food, a place or a hunger stage only if the moment is that very one; otherwise it is kept neutral (no weapon, no species, no
+ * sewers: a plain kill is any monster, on any floor, with whatever weapon is in hand). So a moment is split wherever its lines
+ * want to say who or what: `trivialRat` and `trivialCrab` for the kills hardly worth the breath (`trivial` is the pool both of
+ * them draw on now and then: lines that fit a rat and a crab alike). test/quipsense.test.ts keeps the rule.
+ */
 export const OCCASIONS = [
-  'trivial', 'goo', 'tengu', 'dm300', 'king', 'yog', 'nearDeath', 'firstBlood', 'streak', 'oneHit', 'ranged', 'wand', 'thief',
+  'trivial', 'trivialRat', 'trivialCrab', 'goo', 'tengu', 'dm300', 'king', 'yog', 'nearDeath', 'firstBlood', 'streak', 'oneHit', 'ranged', 'wand', 'thief',
   'descend', 'cursed', 'hungry', 'amulet', 'death',
   // Hunger in its stages: starving (health is going), the reminder while it lasts, and a meal at last (with a line or two for each of PD's foods).
   'starving', 'starvingNag', 'ate', 'ateRation', 'ateOverpriced', 'atePasty', 'ateMeat', 'ateSteak', 'ateCarpaccio',
@@ -42,7 +50,7 @@ export type QuipData = Record<Register, QuipSet>;
 /** How often the moment is spoken of when it comes. The sure ones also break the cooldown (see COOLDOWN_OVERRIDE). */
 export const CHANCE: Record<Moment, number> = {
   kill: 0.25,
-  trivial: 0.5, oneHit: 0.5, ranged: 0.5, wand: 0.5, thief: 0.5, cursed: 0.5,
+  trivial: 0.5, trivialRat: 0.5, trivialCrab: 0.5, oneHit: 0.5, ranged: 0.5, wand: 0.5, thief: 0.5, cursed: 0.5,
   ate: 0.5, ateRation: 0.5, ateOverpriced: 0.5, atePasty: 0.5, ateMeat: 0.5, ateSteak: 0.5, ateCarpaccio: 0.5,
   descend: 0.2,
   goo: 1, tengu: 1, dm300: 1, king: 1, yog: 1, nearDeath: 1, firstBlood: 1, streak: 1, amulet: 1, death: 1,
@@ -66,9 +74,10 @@ export const COOLDOWN_OVERRIDE: Partial<Record<Moment, number>> = {
 
 /**
  * Moments that have a general pool to fall back on: this share of the time the line comes from there instead of from the
- * moment's own pool (a trap's own lines are about what it does; the general ones fit any trap, any food).
+ * moment's own pool (a trap's own lines are about what it does; the general ones fit any trap, any food, a rat and a crab alike).
  */
 export const GENERAL: Partial<Record<Moment, readonly [Moment, number]>> = {
+  trivialRat: ['trivial', 0.3], trivialCrab: ['trivial', 0.3],
   trapPoison: ['trap', 0.25], trapFire: ['trap', 0.25], trapToxic: ['trap', 0.25], trapParalytic: ['trap', 0.25],
   trapLightning: ['trap', 0.25], trapGripping: ['trap', 0.25], trapAlarm: ['trap', 0.25], trapSummoning: ['trap', 0.25],
   ateRation: ['ate', 0.4], ateOverpriced: ['ate', 0.4], atePasty: ['ate', 0.4], ateMeat: ['ate', 0.4], ateSteak: ['ate', 0.4],

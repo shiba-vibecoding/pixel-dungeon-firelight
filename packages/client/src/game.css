@@ -872,3 +872,18 @@ body.pd-3d canvas#game { position: relative; z-index: 1; }
 .fl-card-art .fl-title-plate { max-width: calc(100% - 8px); box-sizing: border-box; font-size: 15px; padding-right: 6px; }
 .fl-card-art .fl-title-plate > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fl-card-name { overflow-wrap: anywhere; hyphens: auto; }
+
+/* The ways to share a result (death and victory windows, the week's results): two by two, so no word is cut. */
+.pd-share-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.pd-share-row > .pd-btn,
+.pd-share-row > button {
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.15;
+  padding-left: 6px;
+  padding-right: 6px;
+}

@@ -35,8 +35,14 @@ export const NAG_MAX_TURNS = 250;
 
 /** Bosses, each with a moment of their own. */
 const BOSSES: Partial<Record<MobKind, Moment>> = { goo: 'goo', tengu: 'tengu', dm300: 'dm300', king: 'king', yog: 'yog' };
-/** Rats, crabs and the like: a kill hardly worth the breath. */
-export const TRIVIAL: ReadonlySet<MobKind> = new Set<MobKind>(['rat', 'albino', 'crab', 'fetidRat']);
+/**
+ * Rats and crabs: a kill hardly worth the breath. Each has its own moment, so its lines may speak of a rat (an albino and a fetid
+ * rat are rats) or of a crab; a turn that kills both takes the plain `trivial`, whose lines fit either.
+ */
+export const TRIVIAL_MOMENT: Partial<Record<MobKind, Occasion>> = {
+  rat: 'trivialRat', albino: 'trivialRat', fetidRat: 'trivialRat', crab: 'trivialCrab',
+};
+export const TRIVIAL: ReadonlySet<MobKind> = new Set(Object.keys(TRIVIAL_MOMENT) as MobKind[]);
 /** Whose death is nobody's triumph: the peaceful, the conjured and the cursed ghost. */
 const NO_QUIP: ReadonlySet<MobKind> = new Set<MobKind>([
   'sheep', 'mirror', 'ghost', 'shopkeeper', 'wandmaker', 'blacksmith', 'imp', 'impShopkeeper', 'ratKing', 'curse', 'statue',
@@ -49,7 +55,7 @@ const PRIORITY: readonly Moment[] = [
   'trapAlarm', 'trapSummoning', 'trapLightning', 'trapGripping', 'trapFire', 'trapToxic', 'trapParalytic', 'trapPoison', 'trap',
   'goo', 'tengu', 'dm300', 'king', 'yog', 'nearDeath', 'firstBlood', 'streak',
   'thief', 'wand', 'ranged', 'oneHit', 'cursed', 'starving', 'hungry',
-  'ateMeat', 'ateCarpaccio', 'ateSteak', 'ateOverpriced', 'atePasty', 'ateRation', 'ate', 'starvingNag', 'trivial', 'kill',
+  'ateMeat', 'ateCarpaccio', 'ateSteak', 'ateOverpriced', 'atePasty', 'ateRation', 'ate', 'starvingNag', 'trivial', 'trivialRat', 'trivialCrab', 'kill',
 ];
 
 /** «Near death» is a win with less than this part of the health left. */
@@ -96,6 +102,8 @@ export class QuipWatch {
     // The kills of this turn, in order, to number them: the last one is the hero's latest kill.
     const mine = effects.filter((e) => e.type === 'died' && e.by === me.id && e.who.startsWith('#') && here(e.depth)).length;
     let seen = 0;
+    // The trivial kills of this turn (a rat and a crab together: neither one's word fits both).
+    const trivials = new Set<Occasion>();
     for (const effect of effects) {
       switch (effect.type) {
         case 'attack':
@@ -160,13 +168,17 @@ export class QuipWatch {
           if (zapped) found.add('wand');
           else if (thrown) found.add('ranged');
           else if (melee && hits === 1 && !TRIVIAL.has(kind)) found.add('oneHit');
-          found.add(TRIVIAL.has(kind) ? 'trivial' : 'kill');
+          const trivial = TRIVIAL_MOMENT[kind];
+          if (trivial) trivials.add(trivial);
+          else found.add('kill');
           break;
         }
         default:
           break;
       }
     }
+    if (trivials.size === 1) found.add([...trivials][0]!);
+    else if (trivials.size > 1) found.add('trivial');
     // The hunger after the turn: a reminder while starving (health is going), and whether a meal would be a relief.
     if (me.hunger !== undefined) {
       this.hungry = me.hunger >= HUNGRY;
