@@ -23,7 +23,7 @@
  * and from cell to cell.
  */
 import { F, HEIGHT, LENGTH, T, terrainFlags, WIDTH } from '@pd/core';
-import { type DoorKit, type DoorLook, type DoorQuad, doorQuads, shoulderHeight, uvOf } from './doorkit';
+import { type DoorKit, type DoorLook, type DoorQuad, doorQuads, fitKit, shoulderHeight, uvOf } from './doorkit';
 import { poseOf } from './doorswing';
 import { PITCH } from './project';
 import { CAP_FIRST, EDGE_LIP, EDGE_ROCK, FACE_DECO, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from './tilemap';
@@ -94,6 +94,8 @@ export function shapesFor(kit: GeomKit): readonly Shape[] {
     else if (flags & F.PIT) shape = { kind: K_CHASM, h: kit.chasm, side: t, lowerH: 0, upper: -1, top: t };
     // A barricade, a bookshelf, a statue: a low stone base, and the prop itself a card of its tile at its true pixel scale standing on it
     // (world3d.ts addProps). The tile on the faces of a block 1.2 high was squeezed by the camera into a strip a few pixels deep.
+    // The boss floor's locked exit: its steps, with the grate of doorscene.ts over them (not a block: the grate lies on the floor).
+    else if (t === T.LOCKED_EXIT) shape = { kind: K_FLOOR, h: 0, side: t, lowerH: 0, upper: -1, top: t };
     else if (t === T.BOOKSHELF) shape = { kind: K_LOW, h: kit.base, side: FACE_WALL, lowerH: kit.base, upper: -1, top: -2 };
     else if (flags & F.SOLID && flags & F.LOS_BLOCKING) {
       const door = t === T.DOOR || t === T.LOCKED_DOOR || t === T.BARRICADE;
@@ -453,14 +455,17 @@ export class LevelGeom {
   /** Counts for tests and the perf overlay. */
   quads = { floor: 0, boxes: 0, water: 0, decals: 0 };
   private readonly shapes: readonly Shape[];
+  /** The door kit fitted to this level's cut walls (doorkit.ts fitKit), or null: the doors have no dressing. */
+  readonly doorKit: DoorKit | null;
 
   constructor(
     map: ArrayLike<number>, readonly cols: number, readonly rows: number, readonly kit: GeomKit = DEFAULT_GEOM,
     /** Terrain that stands over the floor as a card (high grass, a sign), and the plain floor tile under it. */
     private readonly under: ReadonlyMap<number, number> = new Map(),
     /** The designer's door kit (assets/doors/doors.json): without it a level has no thresholds, frames or leaves (tests that do not draw doors). */
-    readonly doorKit: DoorKit | null = null,
+    doorKit: DoorKit | null = null,
   ) {
+    this.doorKit = doorKit ? fitKit(doorKit, kit.cut) : null;
     this.shapes = kit === DEFAULT_GEOM ? SHAPES : shapesFor(kit);
     this.build(map);
   }
@@ -1048,7 +1053,7 @@ export class LevelGeom {
       tiles = true;
       // Boxes and water are rewritten when one comes or goes, or a box's art or height changes; a floor tile alone is patched in place.
       const box = now.kind === K_WALL || now.kind === K_LOW;
-      if (was.kind !== now.kind || (box && (was.side !== now.side || was.top !== now.top || was.h !== now.h))) solids = true;
+      if (was.kind !== now.kind || (box && (was.side !== now.side || was.top !== now.top || was.h !== now.h)) || ((isStairs(prev) || isStairs(next)) && prev !== next)) solids = true;
       // A door's frame and threshold follow its state (locked, open, burnt), and the wall south of a door its shoulder.
       if (isDoorLike(prev) || isDoorLike(next)) solids = true;
     }
