@@ -483,6 +483,8 @@ export interface HeroOptions {
   /** The look the hero wears, for their portrait. */
   skin?: string;
   buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
+  /** Opens the feed of the last wounds (feedui.ts); a row under the health. */
+  onFeed?: () => void;
   onClose(): void;
 }
 
@@ -517,6 +519,7 @@ export function showHero(options: HeroOptions): void {
         [t.goldLabel, String(hero.gold), 'gold'],
         [t.slain, String(hero.kills)],
       ]),
+      options.onFeed && button(t.input.feed.open, options.onFeed, 'quiet'),
       el('h3', { className: 'pd-heading', textContent: t.conditions }),
       ...(buffs.length > 0 ? buffs : [info(t.noConditions, 'pd-note')]),
       options.looks && el('h3', { className: 'pd-subhead', textContent: t.looksTitle }),
@@ -997,6 +1000,8 @@ export interface EndOptions {
   share?: readonly ShareChoice[];
   /** Opens the boards; absent without checked runs. */
   onBoards?: () => void;
+  /** «What happened»: opens the feed of the last wounds, and comes back here when it is closed. */
+  onWhat?: () => void;
 }
 
 /** The end of a run: the whole party fell, or it won. */
@@ -1036,7 +1041,11 @@ export function showRunEnd(options: EndOptions): void {
       ),
       actions(
         [button(options.restartLabel, options.onRestart, 'primary')],
-        [...(options.share?.length ? [shareButton(options.share)] : []), ...(options.onBoards ? [button(t.ranked.title, options.onBoards)] : [])],
+        [
+          ...(options.onWhat ? [button(t.input.feed.deathLink, options.onWhat)] : []),
+          ...(options.share?.length ? [shareButton(options.share)] : []),
+          ...(options.onBoards ? [button(t.ranked.title, options.onBoards)] : []),
+        ],
       ),
       button(t.toMenu, options.onExit, 'quiet'),
     ),

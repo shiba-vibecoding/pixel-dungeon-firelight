@@ -352,6 +352,25 @@ export const SFX = {
     { wave: 'noise', filter: bp(2600, 1800, 3), decay: 0.025, scatter: [6, 0.4] },
     { wave: 'sine', freq: 700, decay: 0.02, scatter: [6, 0.4, 8], gain: 0.4 },
     { wave: 'sine', freq: 150, decay: 0.1, gain: 0.2 }),
+  // A pocket watch: tick, and a softer tock.
+  watch: fx(0.4,
+    { wave: 'square', freq: 2300, slide: -8, decay: 0.012, crush: 6, gain: 0.6 },
+    { wave: 'sine', freq: 1500, decay: 0.03, gain: 0.25 },
+    { wave: 'square', freq: 1800, slide: -8, delay: 0.17, decay: 0.012, crush: 6, gain: 0.4 },
+    { wave: 'sine', freq: 1100, delay: 0.17, decay: 0.03, gain: 0.2 }),
+  // A soft breath out: a little noise, hushed and low, rising and dying away.
+  breath: fx(0.35,
+    { wave: 'noise', filter: lp(900, 380, 0.6), attack: 0.18, hold: 0.12, decay: 0.5, shape: 1.6, gain: 0.7 },
+    { wave: 'sine', freq: 150, slide: -3, trem: [4, 0.6], attack: 0.2, decay: 0.5, gain: 0.12 }),
+  // A search: a swish of the lantern passing over, a rising whisper.
+  swish: fx(0.4,
+    { wave: 'noise', filter: bp(900, 4200, 1.2), attack: 0.07, hold: 0.06, decay: 0.2, gain: 0.8 },
+    { wave: 'sine', freq: 520, slide: 8, curve: 0.7, attack: 0.08, decay: 0.2, gain: 0.12 }),
+  // Found: three clear bells, rising, with a sparkle on the last.
+  found: fx(0.55,
+    ...run([880, 1108.7, 1318.5], 0.07, { wave: 'sine', attack: 0.003, decay: 0.16 }, 0.5),
+    { wave: 'triangle', freq: 2637, delay: 0.14, attack: 0.003, decay: 0.3, gain: 0.2 },
+    { wave: 'sine', freq: 3520, delay: 0.17, decay: 0.2, gain: 0.08 }),
   sparkle: fx(0.45, ...run([1568, 2093, 2637], 0.06, { wave: 'sine', attack: 0.004, decay: 0.12 }, 0.4)),
   secret: fx(0.55,
     ...run([659.3, 830.6, 987.8, 1244.5], 0.09, { wave: 'sine', vib: [6, 0.15], attack: 0.004, decay: 0.2 }, 0.7),

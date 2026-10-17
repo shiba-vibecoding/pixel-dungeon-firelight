@@ -100,12 +100,13 @@ const url = `${SERVER_URL.replace(/\/+$/, '')}/telegram/webhook`;
 await call('setWebhook', {
   url,
   secret_token: WEBHOOK_SECRET,
-  allowed_updates: ['message', 'pre_checkout_query'],
+  // inline_query and callback_query: the guide in any chat (inline mode also needs /setinline in BotFather).
+  allowed_updates: ['message', 'pre_checkout_query', 'inline_query', 'callback_query'],
   drop_pending_updates: false,
 });
 for (const [language, commands] of [
-  ['', [['start', 'Play'], ['paysupport', 'Help with a purchase'], ['terms', 'Terms of Pixel-Mart']]],
-  ['ru', [['start', 'Играть'], ['paysupport', 'Помощь с покупкой'], ['terms', 'Условия Пиксель-Марта']]],
+  ['', [['start', 'Play'], ['paysupport', 'Help with a purchase'], ['terms', 'Terms of Pixel-Mart'], ['guide', 'The guide: hunger, ankh, curses…']]],
+  ['ru', [['start', 'Играть'], ['paysupport', 'Помощь с покупкой'], ['terms', 'Условия Пиксель-Марта'], ['guide', 'Памятка: голод, анкх, проклятия…']]],
 ]) {
   await call('setMyCommands', {
     commands: commands.map(([command, description]) => ({ command, description })),
@@ -127,7 +128,7 @@ if (process.env.PD_APP_URL) {
 }
 const info = await call('getWebhookInfo', {});
 console.log(`Webhook: ${info.url}`);
-console.log('Commands set: /start, /paysupport, /terms.');
+console.log('Commands set: /start, /paysupport, /terms, /guide.');
 
 // An empty update with the secret: the server answers 200 only if its
 // WEBHOOK_SECRET matches (a new secret can take a few seconds to reach it).

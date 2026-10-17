@@ -13,6 +13,9 @@ import { canFullscreen, haptics, isFullscreen, openExternal, setFullscreen } fro
 import { hints } from './hints';
 import { confirmDanger } from './mistap';
 import { confirmRisky } from './riskyuse';
+import { touchGuardSetting } from './touchguard';
+import { loupeSetting } from './loupe';
+import { CONFIRM_MODES, pathConfirm } from './pathpreview';
 
 /*
  * The windows around the game rather than in it (design system v9): the
@@ -96,6 +99,12 @@ function segments<V extends string>(choices: ReadonlyArray<readonly [V, string]>
   paint(value);
   return box;
 }
+
+/** The choices one under another: long words do not fit side by side on a phone. */
+const stacked = (box: HTMLElement): HTMLElement => {
+  box.classList.add('col');
+  return box;
+};
 
 /** A row that turns something on or off. */
 function switchRow(label: string, note: string | null, on: boolean, onChange: (on: boolean) => void): HTMLElement {
@@ -214,6 +223,15 @@ export function showSettings(options: SettingsOptions): void {
     options.name ? nameRow(options.name) : null,
     switchRow(t.safe.settings.danger, t.safe.settings.dangerNote, confirmDanger.on, (on) => confirmDanger.set(on)),
     switchRow(t.safe.settings.risky, t.safe.settings.riskyNote, confirmRisky.on, (on) => confirmRisky.set(on)),
+    el(
+      'div',
+      { className: 'pd-set-row stack' },
+      el('span', { className: 'pd-info', textContent: t.input.settings.pathConfirm }),
+      stacked(segments(CONFIRM_MODES.map((m) => [m, t.input.settings.pathModes[m]] as const), pathConfirm.mode, (mode) => pathConfirm.set(mode))),
+      info(t.input.settings.pathConfirmNote, 'pd-note'),
+    ),
+    switchRow(t.input.settings.loupe, t.input.settings.loupeNote, loupeSetting.on, (on) => loupeSetting.set(on)),
+    switchRow(t.input.settings.touchGuard, t.input.settings.touchGuardNote, touchGuardSetting.on, (on) => touchGuardSetting.set(on)),
     switchRow(t.meta.hints, t.meta.hintsNote, hints.enabled, (on) => hints.setEnabled(on)),
     options.reminders ? switchRow(t.ranked.remindersSwitch, t.ranked.remindersNote, options.reminders.on, (on) => options.reminders!.set(on)) : null,
     options.hideBoards ? switchRow(options.hideBoards.label, options.hideBoards.note, options.hideBoards.on, (on) => options.hideBoards!.set(on)) : null,

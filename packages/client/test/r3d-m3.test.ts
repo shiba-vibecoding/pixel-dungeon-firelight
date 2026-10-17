@@ -4,7 +4,7 @@ import { LENGTH, T, WIDTH, createWorld, levelAt } from '@pd/core';
 import { bloomWeights } from '../src/r3d/post';
 import { TIERS } from '../src/r3d/governor';
 import { blankMirror, makeMirrorUniforms, Mirror } from '../src/r3d/mirror';
-import { K_FLOOR, K_WALL, K_WATER, LevelGeom, tileRect } from '../src/r3d/levelgeom';
+import { FRONT_WALL_H, K_FLOOR, K_WALL, K_WATER, LevelGeom, tileRect } from '../src/r3d/levelgeom';
 import { FOLD_MS, Grass, crossedQuads, grassHeight } from '../src/r3d/grass3d';
 import { makeAir } from '../src/r3d/fogofwar';
 import { GOLD_ORE, GOLD_REGION, orePixels } from '../src/r3d/ore';
@@ -366,5 +366,61 @@ describe('the haze of the demon halls', () => {
     const air = makeAir(new Texture());
     expect(air.uMist.value.x).toBe(0);
     expect(air.uMist.value.y).toBeGreaterThan(0);
+  });
+});
+
+describe('the front walls are lower (levelgeom.ts isCut)', () => {
+  /** Floor in x 3..15, z 3..8 with a wall two cells thick at z 9 and 10 below it, and walls all round. */
+  const room = (): number[] => {
+    const map = new Array<number>(LENGTH).fill(T.WALL);
+    for (let z = 3; z <= 8; z++) for (let x = 3; x <= 15; x++) map[x + z * WIDTH] = T.EMPTY;
+    return map;
+  };
+  const topOf = (geom: LevelGeom, x: number, z: number): number => {
+    const { pos, normal, verts } = geom.boxes;
+    let top = -Infinity;
+    for (let v = 0; v < verts; v++) {
+      if (normal[v * 3 + 1] !== 1) continue;
+      const px = pos[v * 3]!;
+      const pz = pos[v * 3 + 2]!;
+      if (px >= x && px <= x + 1 && pz >= z && pz <= z + 1) top = Math.max(top, pos[v * 3 + 1]!);
+    }
+    return top;
+  };
+
+  it('cuts down a wall with floor to its north and wall to its south, and nothing else', () => {
+    const geom = new LevelGeom(room(), 16, 16);
+    // The room's south wall (floor north, wall south): cut. The row under it (wall north): whole.
+    expect(geom.isCut(9 * WIDTH + 8)).toBe(true);
+    expect(topOf(geom, 8, 9)).toBeCloseTo(FRONT_WALL_H, 6);
+    expect(geom.isCut(10 * WIDTH + 8)).toBe(false);
+    // The side walls and the north wall keep their height (their back is wall, or their face is the one the camera sees).
+    expect(geom.isCut(6 * WIDTH + 2)).toBe(false);
+    expect(topOf(geom, 2, 6)).toBeCloseTo(1.5, 6);
+    expect(topOf(geom, 8, 2)).toBeCloseTo(1.5, 6);
+    expect(FRONT_WALL_H).toBeLessThan(1.5);
+    expect(FRONT_WALL_H).toBeGreaterThan(0.5);
+  });
+
+  it('leaves a thin wall between two rooms whole: its south face is the one the camera sees', () => {
+    const map = room();
+    for (let z = 11; z <= 14; z++) for (let x = 3; x <= 15; x++) map[x + z * WIDTH] = T.EMPTY;
+    map[9 * WIDTH + 8] = T.EMPTY;
+    const geom = new LevelGeom(map, 16, 16);
+    // (Row 9 is floor here, so the wall at row 10 has floor to its north and south.)
+    expect(geom.isCut(10 * WIDTH + 8)).toBe(false);
+    expect(topOf(geom, 8, 10)).toBeCloseTo(1.5, 6);
+  });
+
+  it('cuts the leaf of a door in a cut wall line with it, and no other', () => {
+    const map = room();
+    map[9 * WIDTH + 8] = T.DOOR;
+    const geom = new LevelGeom(map, 16, 16);
+    expect(geom.doorScale(8, 9)).toBeCloseTo(FRONT_WALL_H / 1.5, 6);
+    // A door in a wall that runs north to south (its jambs are wall to the north and south of it) is whole.
+    const side = room();
+    side[6 * WIDTH + 2] = T.DOOR;
+    const g2 = new LevelGeom(side, 16, 16);
+    expect(g2.doorScale(2, 6)).toBe(1);
   });
 });

@@ -3,6 +3,7 @@ import type { BuffName } from './hud';
 import { CAMP_EN } from './i18n-camp';
 import { GUIDE_EN } from './i18n-guide';
 import { SAFETY_EN } from './i18n-safety';
+import { INPUT_EN } from './i18n-input';
 
 /* Interface text in English: a chunk of its own, fetched only when the page is in English (i18n.ts). */
 
@@ -846,6 +847,7 @@ export const en = {
   } as Record<BuffName, string>,
   /** The safety stream's questions, labels and death notes (i18n-safety.ts). */
   safe: SAFETY_EN,
+  input: INPUT_EN,
   /** The camp, the mail, the tutorial, the news, the problem report, the offline window (i18n-camp.ts). */
   camp: CAMP_EN.camp,
   mail: CAMP_EN.mail,

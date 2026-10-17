@@ -5,6 +5,10 @@ import { SEASON } from './boards';
 import { type InvoiceText, invoiceText, itemInvoiceText, speaksRussian } from './catalogue';
 import type { WindowLimiter } from './limits';
 import { connect } from './friends';
+import {
+  articleForCallback, botNameOf, guideReply, type GuideLimits, guideSlowDown, inlineAnswer, type InlineQuery, mayAnswer, parseGuideCommand,
+} from './guide';
+import { guideLanguage } from '../../client/src/guide-lookup';
 import { type GiftTarget, onceTaken, recentCharges, shopOf, type WalletChange, type WalletView } from './wallet';
 
 /*
@@ -188,6 +192,15 @@ ${link}`,
 const textFor = (language?: string): BotText => (speaksRussian(language) ? RU : EN);
 
 export interface TelegramUpdate {
+  /** Inline mode: someone typing `@bot <query>` in any chat (the guide, guide.ts). */
+  inline_query?: InlineQuery;
+  /** A press on one of the guide's topic buttons. */
+  callback_query?: {
+    id: string;
+    from: { id: number; language_code?: string; is_bot?: boolean };
+    message?: { message_id: number; chat: { id: number; type: string } };
+    data?: string;
+  };
   pre_checkout_query?: { id: string; from: { id: number }; currency: string; total_amount: number; invoice_payload: string };
   message?: {
     message_id?: number;
@@ -222,6 +235,8 @@ export interface BotConfig {
   supportLimiter?: WindowLimiter;
   /** What /bughunter and /outage do (the Worker's); without it they say they cannot. */
   ops?: AdminOps;
+  /** How often the guide answers one person, one group and inline queries; unlimited without it. */
+  guideLimits?: GuideLimits;
 }
 
 /** Handles one webhook update. */
@@ -241,6 +256,14 @@ export async function handleUpdate(update: TelegramUpdate, api: BotApi, wallets:
       : { pre_checkout_query_id: checkout.id, ok: false, error_message: 'This offer is no longer available.' });
     return;
   }
+  if (update.inline_query) {
+    await answerInline(update.inline_query, api, config, now);
+    return;
+  }
+  if (update.callback_query) {
+    await answerCallback(update.callback_query, api, config, now);
+    return;
+  }
   const message = update.message;
   if (!message || message.from?.is_bot) return;
 
@@ -251,6 +274,12 @@ export async function handleUpdate(update: TelegramUpdate, api: BotApi, wallets:
       await runAdminCommand(command, message.chat.id, api, wallets, config.ops, now);
       return;
     }
+  }
+  // The guide is asked for in groups as well as in private; nothing else of the bot is.
+  const asked = message.from ? parseGuideCommand(message.text ?? '', botNameOf(config.appLink)) : null;
+  if (asked && message.from) {
+    await answerGuideCommand(message, message.from, asked.topic, api, config, now);
+    return;
   }
   if (message.chat.type !== 'private') return;
   const text = textFor(message.from?.language_code);
@@ -298,6 +327,54 @@ export async function handleUpdate(update: TelegramUpdate, api: BotApi, wallets:
     : command === '/terms' ? (config.termsUrl ? `${text.terms}\n\n${text.fullTerms} ${config.termsUrl}` : text.terms)
     : text.greeting(message.from?.first_name ?? '');
   await api('sendMessage', { chat_id: message.chat.id, text: reply, ...playButton(text, config.appLink) });
+}
+
+/**
+ * Answers an inline query with the guide's articles. A person over the allowance is not answered (their client just waits); a bot's
+ * query is never answered.
+ */
+async function answerInline(query: InlineQuery, api: BotApi, config: BotConfig, now: number): Promise<void> {
+  if (query.from.is_bot) return;
+  if (config.guideLimits && !config.guideLimits.inline.allow(`i${query.from.id}`, now)) return;
+  await api('answerInlineQuery', inlineAnswer(query, config.appLink));
+}
+
+/** Answers /guide and /памятка: one article, or the topics as buttons. In a group as a reply, and only within the group's allowance. */
+async function answerGuideCommand(
+  message: Message, from: NonNullable<Message['from']>, topic: string, api: BotApi, config: BotConfig, now: number,
+): Promise<void> {
+  if (!mayAnswer(config.guideLimits, from.id, message.chat, now)) return;
+  const reply = guideReply(topic, from.language_code, config.appLink);
+  const grouped = message.chat.type !== 'private';
+  await api('sendMessage', {
+    chat_id: message.chat.id,
+    text: reply.text,
+    ...(reply.html ? { parse_mode: 'HTML', link_preview_options: { is_disabled: true } } : {}),
+    ...(reply.markup ? { reply_markup: reply.markup } : {}),
+    ...(grouped && message.message_id !== undefined ? { reply_parameters: { message_id: message.message_id, allow_sending_without_reply: true } } : {}),
+  });
+}
+
+/** Answers a press on a topic button with that article; every press is acknowledged so the button stops spinning. */
+async function answerCallback(query: NonNullable<TelegramUpdate['callback_query']>, api: BotApi, config: BotConfig, now: number): Promise<void> {
+  const chat = query.message?.chat;
+  const reply = query.from.is_bot ? null : articleForCallback(query.data, query.from.language_code, config.appLink);
+  if (!chat || !reply) {
+    await api('answerCallbackQuery', { callback_query_id: query.id });
+    return;
+  }
+  if (!mayAnswer(config.guideLimits, query.from.id, chat, now)) {
+    await api('answerCallbackQuery', { callback_query_id: query.id, text: guideSlowDown(guideLanguage('', query.from.language_code)) });
+    return;
+  }
+  await api('answerCallbackQuery', { callback_query_id: query.id });
+  await api('sendMessage', {
+    chat_id: chat.id,
+    text: reply.text,
+    parse_mode: 'HTML',
+    link_preview_options: { is_disabled: true },
+    ...(reply.markup ? { reply_markup: reply.markup } : {}),
+  });
 }
 
 /** A player's own words (or picture, or file), not a sticker or a service message. */

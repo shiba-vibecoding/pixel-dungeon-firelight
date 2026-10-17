@@ -34,7 +34,7 @@ import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrai
 import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, type MistKit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
-import { type Buffers, doorLeafBuffers, type GeomKit, K_WALL, K_WATER, LevelGeom } from './levelgeom';
+import { type Buffers, doorLeafBuffers, FRONT_WALL_H, type GeomKit, K_WALL, K_WATER, LevelGeom } from './levelgeom';
 import { DoorSwing, writeLeafMatrix } from './doorswing';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
 import { TIERS, type Tier } from './governor';
@@ -653,7 +653,7 @@ export class World3D {
     const stairs = (key: string, fallback: number): number => (this.kit.materials[key] ? m(key) : fallback);
     return {
       wall: m('wall_face'), door: m('door'), statue: m('statue'), bookshelf: m('bookshelf'), barricade: m('barricade'), well: m('well'), chasm: m('chasm'), water: m('water'),
-      stairsDown: stairs('stairs_down', -0.5), stairsUp: stairs('stairs_up', 0.5),
+      stairsDown: stairs('stairs_down', -0.5), stairsUp: stairs('stairs_up', 0.5), cut: FRONT_WALL_H,
     };
   }
 
@@ -950,8 +950,9 @@ export class World3D {
     const leaves = this.swing.leaves;
     for (let i = 0; i < leaves.length; i++) {
       const l = leaves[i]!;
-      writeLeafMatrix(a, i * 16, l.px, l.pz, l.angle, l.locked ? 0 : 1);
-      writeLeafMatrix(b, i * 16, l.px, l.pz, l.angle, l.locked ? 1 : 0);
+      const low = this.geom!.doorScale(l.cell % WIDTH, Math.trunc(l.cell / WIDTH));
+      writeLeafMatrix(a, i * 16, l.px, l.pz, l.angle, l.locked ? 0 : 1, low);
+      writeLeafMatrix(b, i * 16, l.px, l.pz, l.angle, l.locked ? 1 : 0, low);
       if (l.locked) locked++;
     }
     leaf.visible = locked < leaves.length;
@@ -1424,7 +1425,8 @@ export class World3D {
     // put right), and the squash of a landing: the figure is a pixel lower and a half pixel wider.
     const gap = standing ? gapRows(fig.image, sx, sy, sheet.w, sheet.h) : 0;
     const fw = 1 + (0.5 * squash) / sheet.w;
-    const fh = 1 - squash / sheet.h;
+    // (And the crouch of a search, the settling of a rest: how tall it stands, idlefx.ts.)
+    const fh = (1 - squash / sheet.h) * (puppet.squash ?? 1);
     const down = (gap / sheet.h) * (sheet.h / TILE) * scale * fh * LEAN_STRETCH;
     const by = lift - down * Math.cos(LEAN);
     const bz = tz + down * Math.sin(LEAN);
@@ -1680,6 +1682,7 @@ export class World3D {
     this.measureBegin();
     const r0 = performance.now();
     const post = this.post;
+    this.air.uGlowOut.value = post ? 1 : 0;
     if (post) {
       const mirror = this.mirror;
       if (mirror && this.ortho) {

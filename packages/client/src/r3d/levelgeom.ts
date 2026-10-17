@@ -5,7 +5,8 @@
  *
  *   floor   - one quad per cell that is not plain wall (a door may open, a barricade burn), the tile of its terrain, darkened at
  *             the corners the walls touch. Patched in place when a cell's tile changes (grass trampled, a trap found).
- *   boxes   - walls and closed doors 1.5 cells high (a cap chosen by which sides have floor, a face of a cell and a half, the
+ *   boxes   - walls and closed doors 1.5 cells high (a wall that has floor to its north and none to its south is cut down to `kit.cut`: the
+ *             camera sees its back, which hid the floor behind it) (a cap chosen by which sides have floor, a face of a cell and a half, the
  *             door's leaf), statues, shelves and wells as lower blocks, and the edges of chasms that fall away three cells. Only
  *             what can be seen or cast a shadow, and only beside open ground. Rewritten, into the same arrays, when a box
  *             appears or goes (a door opens).
@@ -45,9 +46,18 @@ export interface GeomKit {
   /** How far the exit's steps go down (negative) and the entrance's rise, in cells. */
   stairsDown: number;
   stairsUp: number;
+  /** How high a cut-away wall stands (see `LevelGeom.isCut`), cells. */
+  cut: number;
 }
 
-export const DEFAULT_GEOM: GeomKit = { wall: 1.5, door: 1.25, statue: 1.2, bookshelf: 1.4, barricade: 1.0, well: 0.4, chasm: -3, water: -0.06, stairsDown: -0.5, stairsUp: 0.5 };
+/**
+ * How high a front wall stands (levelgeom.ts isCut): the wall cells with floor to their north, whose back the camera sees. The owner chose a
+ * moderate lowering («чуть ниже передние стены»), so it is a little under the full height; the figure of a deep cut-away (0.42) read too
+ * much like a diorama. One number to tune.
+ */
+export const FRONT_WALL_H = 0.95;
+
+export const DEFAULT_GEOM: GeomKit = { cut: FRONT_WALL_H, wall: 1.5, door: 1.25, statue: 1.2, bookshelf: 1.4, barricade: 1.0, well: 0.4, chasm: -3, water: -0.06, stairsDown: -0.5, stairsUp: 0.5 };
 
 /** How high a wall's lower face goes: the kit's face is a cell, and the rest of the wall's height is the upper half cell. */
 const FACE_CELL = 1;
@@ -487,6 +497,30 @@ export class LevelGeom {
     b.uv[t + 6] = rect[0]!; b.uv[t + 7] = rect[3]!;
   }
 
+  /**
+   * Whether a wall is cut down: it has floor (or a door's gap) to its north and wall to its south. The camera looks from the south, so what
+   * it sees of such a wall is its back, and a wall of a cell and a half hides about half of the cell north of it (the owner's «почти не
+   * видны предметы, которые прям за стеной»). It is drawn short, a cap at `kit.cut`, as the cut-away walls of a diorama are. A wall whose south
+   * side faces floor keeps its height: that face is the one the camera sees, and a thin wall between two rooms is that too.
+   */
+  isCut(cell: number): boolean {
+    if (this.kinds[cell] !== K_WALL || isGapDoor(this.terrain[cell]!)) return false;
+    const z = Math.trunc(cell / WIDTH);
+    if (z <= 0) return false;
+    const solid = (c: number): boolean => this.kinds[c] === K_WALL && !isGapDoor(this.terrain[c]!);
+    return !solid(cell - WIDTH) && (z + 1 >= HEIGHT || solid(cell + WIDTH));
+  }
+
+  /**
+   * How tall the leaf of a door at (x, z) stands, as a share of a wall's height: the doors in a cut wall line are cut with it (a leaf standing
+   * a cell and a half over its low jambs would be a post), the others are whole.
+   */
+  doorScale(x: number, z: number): number {
+    if (!this.doorAcross(x, z)) return 1;
+    const cut = (cx: number): boolean => cx >= 0 && cx < WIDTH && this.isCut(cx + z * WIDTH);
+    return cut(x - 1) || cut(x + 1) ? this.kit.cut / this.kit.wall : 1;
+  }
+
   /** The mask of a cell's sides that have floor beside them (the kit's caps: 1 north, 2 east, 4 south, 8 west). */
   capMask(x: number, z: number): number {
     const open = (cx: number, cz: number): number =>
@@ -748,7 +782,7 @@ export class LevelGeom {
     const x = cell % WIDTH;
     const z = Math.trunc(cell / WIDTH);
     const shape = this.shapes[this.terrain[cell]!]!;
-    const h = shape.h;
+    const h = this.isCut(cell) ? this.kit.cut : shape.h;
     // The top: a cap by the sides that have floor (darker if none does), or the block's own.
     let tile = shape.top;
     let shade = 1;
