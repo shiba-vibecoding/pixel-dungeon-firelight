@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LENGTH, T, WIDTH } from '@pd/core';
 import { BUMP_MS, CLOSE_MS, DoorSwing, easeOutBack, OPEN_MS, poseOf, REDUCED_MS, swingAngle, writeLeafMatrix, type Leaf } from '../src/r3d/doorswing';
-import { doorLeafBuffers, K_WALL, LEAF_REACH, LevelGeom } from '../src/r3d/levelgeom';
+import { doorLeafBuffers, FRONT_WALL_H, K_WALL, LEAF_REACH, LevelGeom } from '../src/r3d/levelgeom';
 
 const mapOf = (carve: ReadonlyArray<readonly [number, number, number]>): number[] => {
   const map = new Array<number>(LENGTH).fill(T.WALL);
@@ -173,10 +173,11 @@ describe('a secret door found, a door burnt, a wall mined', () => {
     const { pos, verts } = geom.boxes;
     for (let v = 0; v < verts; v += 4) {
       const ys = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 1]!);
-      if (ys.some((y) => Math.abs(y - 1.5) > 1e-6)) continue;
+      if (ys.some((y) => Math.abs(y - FRONT_WALL_H) > 1e-6)) continue;
       const xs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3]!);
       const zs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 2]!);
-      if (Math.min(...xs) === x && Math.max(...xs) === x + 1 && Math.min(...zs) === z && Math.max(...zs) === z + 1) return true;
+      // (A cut wall's cap is two quads, the stone and the lip: any quad of the cap's height over the cell is the cap.)
+      if (Math.min(...xs) === x && Math.max(...xs) === x + 1 && Math.min(...zs) >= z && Math.max(...zs) <= z + 1) return true;
     }
     return false;
   };

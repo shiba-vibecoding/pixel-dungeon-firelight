@@ -379,16 +379,20 @@ describe('the front walls are lower (levelgeom.ts isCut)', () => {
   const topOf = (geom: LevelGeom, x: number, z: number): number => {
     const { pos, normal, verts } = geom.boxes;
     let top = -Infinity;
-    for (let v = 0; v < verts; v++) {
+    for (let v = 0; v < verts; v += 4) {
       if (normal[v * 3 + 1] !== 1) continue;
-      const px = pos[v * 3]!;
-      const pz = pos[v * 3 + 2]!;
-      if (px >= x && px <= x + 1 && pz >= z && pz <= z + 1) top = Math.max(top, pos[v * 3 + 1]!);
+      let inside = true;
+      for (let k = 0; k < 4; k++) {
+        const px = pos[(v + k) * 3]!;
+        const pz = pos[(v + k) * 3 + 2]!;
+        if (px < x - 1e-6 || px > x + 1 + 1e-6 || pz < z - 1e-6 || pz > z + 1 + 1e-6) inside = false;
+      }
+      if (inside) top = Math.max(top, pos[v * 3 + 1]!);
     }
     return top;
   };
 
-  it('cuts down a wall with floor to its north and wall to its south, and nothing else', () => {
+  it('cuts down a wall with floor to its north, and nothing else', () => {
     const geom = new LevelGeom(room(), 16, 16);
     // The room's south wall (floor north, wall south): cut. The row under it (wall north): whole.
     expect(geom.isCut(9 * WIDTH + 8)).toBe(true);
@@ -399,17 +403,38 @@ describe('the front walls are lower (levelgeom.ts isCut)', () => {
     expect(topOf(geom, 2, 6)).toBeCloseTo(1.5, 6);
     expect(topOf(geom, 8, 2)).toBeCloseTo(1.5, 6);
     expect(FRONT_WALL_H).toBeLessThan(1.5);
-    expect(FRONT_WALL_H).toBeGreaterThan(0.5);
+    expect(FRONT_WALL_H).toBeGreaterThan(0.3);
   });
 
-  it('leaves a thin wall between two rooms whole: its south face is the one the camera sees', () => {
+  it('cuts a thin wall between two rooms too: the face the room south of it sees is the same half cell', () => {
     const map = room();
     for (let z = 11; z <= 14; z++) for (let x = 3; x <= 15; x++) map[x + z * WIDTH] = T.EMPTY;
     map[9 * WIDTH + 8] = T.EMPTY;
     const geom = new LevelGeom(map, 16, 16);
     // (Row 9 is floor here, so the wall at row 10 has floor to its north and south.)
-    expect(geom.isCut(10 * WIDTH + 8)).toBe(false);
-    expect(topOf(geom, 8, 10)).toBeCloseTo(1.5, 6);
+    expect(geom.isCut(10 * WIDTH + 8)).toBe(true);
+    expect(topOf(geom, 8, 10)).toBeCloseTo(FRONT_WALL_H, 6);
+    // Its south face goes from the floor up to the cut, no higher.
+    const { pos, normal, verts } = geom.boxes;
+    let high = 0;
+    for (let v = 0; v < verts; v += 4) {
+      if (normal[v * 3 + 2] !== 1) continue;
+      const xs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3]!);
+      const zs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 2]!);
+      if (Math.min(...xs) < 8 - 1e-6 || Math.max(...xs) > 9 + 1e-6 || Math.abs(zs[0]! - 11) > 1e-6) continue;
+      high = Math.max(high, ...[0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 1]!));
+    }
+    expect(high).toBeCloseTo(FRONT_WALL_H, 6);
+    // A wall with wall to its north keeps its height (the room's back wall).
+    expect(geom.isCut(2 * WIDTH + 8)).toBe(false);
+    expect(topOf(geom, 8, 2)).toBeCloseTo(1.5, 6);
+  });
+
+  it('puts no torch on a cut wall', () => {
+    const map = room();
+    for (let z = 11; z <= 14; z++) for (let x = 3; x <= 15; x++) map[x + z * WIDTH] = T.EMPTY;
+    const geom = new LevelGeom(map, 16, 16);
+    for (const cell of geom.torches) expect(geom.isCut(cell), `torch at ${cell}`).toBe(false);
   });
 
   it('cuts the leaf of a door in a cut wall line with it, and no other', () => {
