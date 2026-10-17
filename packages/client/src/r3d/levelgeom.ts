@@ -56,11 +56,13 @@ export interface GeomKit {
 }
 
 /**
- * How high a front wall stands (levelgeom.ts isCut): the wall cells with floor to their north, whose back the camera sees. The owner chose a
- * moderate lowering («чуть ниже передние стены»), so it is a little under the full height; the figure of a deep cut-away (0.42) read too
- * much like a diorama. One number to tune.
+ * How high a front wall stands (levelgeom.ts isCut): every wall with floor to its north, whose back the camera sees. 0.95 still hid about a third
+ * of a cell of the floor behind it (items on the bottom row of a room were half under it); 0.5 hides about 0.18, and a flat item or a figure's
+ * feet are whole. One number to tune.
  */
-export const FRONT_WALL_H = 0.95;
+export const FRONT_WALL_H = 0.5;
+/** The brightness of the lip along a cut wall's cap. */
+const CUT_LIP = 1.35;
 
 /** The stone base a statue, a bookshelf or a barricade stands on, cells: low, so that the figure (a card of its tile) is what is seen. */
 export const PROP_BASE = 0.1;
@@ -299,6 +301,9 @@ export function pickTorches(map: ArrayLike<number>): number[] {
     const south = map[cell + WIDTH]!;
     if (SHAPES[south]!.kind !== K_FLOOR || !((terrainFlags[south] ?? 0) & F.PASSABLE)) continue;
     if (SHAPES[map[cell - 1]!]!.kind !== K_WALL || SHAPES[map[cell + 1]!]!.kind !== K_WALL) continue;
+    // (Not on a cut wall, a half cell high, with floor to its north: a torch hangs on a wall that stands.)
+    const north = map[cell - WIDTH]!;
+    if (SHAPES[north]!.kind !== K_WALL || isGapDoor(north)) continue;
     if ((Math.imul(cell, 2654435761) >>> 20) % 2 !== 0) continue;
     const cy = Math.trunc(cell / WIDTH);
     if (picked.some((other) => Math.max(Math.abs((other % WIDTH) - x), Math.abs(Math.trunc(other / WIDTH) - cy)) < TORCH_SPACING)) continue;
@@ -547,17 +552,18 @@ export class LevelGeom {
   }
 
   /**
-   * Whether a wall is cut down: it has floor (or a door's gap) to its north and wall to its south. The camera looks from the south, so what
-   * it sees of such a wall is its back, and a wall of a cell and a half hides about half of the cell north of it (the owner's «почти не
-   * видны предметы, которые прям за стеной»). It is drawn short, a cap at `kit.cut`, as the cut-away walls of a diorama are. A wall whose south
-   * side faces floor keeps its height: that face is the one the camera sees, and a thin wall between two rooms is that too.
+   * Whether a wall is cut down: it has floor (or a door's gap) to its north, whatever lies to its south. The camera looks from the south, so
+   * what it sees of such a wall is its back (and its cap), and a wall of a cell and a half hides about half of the cell north of it (the
+   * owner's «почти не видны предметы, которые прям за стеной»). It is drawn a half cell high, a clean cap at `kit.cut` (FRONT_WALL_H), as the cut-away
+   * walls of a diorama are; a thin wall between two rooms is cut too, and the face the room south of it sees is the same half cell. A wall
+   * with wall to its north (a room's back wall, the edge of the level) keeps its height, and so do the rooms' mood and the torches on them.
    */
   isCut(cell: number): boolean {
     if (this.kinds[cell] !== K_WALL || isGapDoor(this.terrain[cell]!)) return false;
     const z = Math.trunc(cell / WIDTH);
     if (z <= 0) return false;
     const solid = (c: number): boolean => this.kinds[c] === K_WALL && !isGapDoor(this.terrain[c]!);
-    return !solid(cell - WIDTH) && (z + 1 >= HEIGHT || solid(cell + WIDTH));
+    return !solid(cell - WIDTH);
   }
 
   /**
@@ -850,9 +856,22 @@ export class LevelGeom {
       if (mask === 0) shade = BURIED_SHADE;
     } else if (tile === -2) tile = CAP_FIRST;
     tileRect(tile, this.cols, this.rows, rect);
-    set12(x, h, z + 1, x + 1, h, z + 1, x + 1, h, z, x, h, z);
+    const cut = h < shape.h - 0.001;
     shades.fill(shade);
-    quad(b, corners, 0, 1, 0, shades, tint, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+    if (cut) {
+      // A cut wall's cap: the stone, and along the cut (the north edge, the side the room is on) a row of lighter pixels, a clean lip.
+      const lip = 1 / 16;
+      const dv = rect[3]! - rect[1]!;
+      set12(x, h, z + 1, x + 1, h, z + 1, x + 1, h, z + lip, x, h, z + lip);
+      quad(b, corners, 0, 1, 0, shades, tint, rect[0]!, rect[1]!, rect[2]!, rect[3]! - dv * lip);
+      set12(x, h, z + lip, x + 1, h, z + lip, x + 1, h, z, x, h, z);
+      shades.fill(shade * CUT_LIP);
+      quad(b, corners, 0, 1, 0, shades, tint, rect[0]!, rect[3]! - dv * lip, rect[2]!, rect[3]!);
+      shades.fill(shade);
+    } else {
+      set12(x, h, z + 1, x + 1, h, z + 1, x + 1, h, z, x, h, z);
+      quad(b, corners, 0, 1, 0, shades, tint, rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+    }
     for (const [dx, dz, side] of SIDES) {
       const nx = x + dx;
       const nz = z + dz;
@@ -863,7 +882,9 @@ export class LevelGeom {
       const bottom = Math.max(0, low);
       const lowerTop = Math.min(h, shape.lowerH);
       if (lowerTop > bottom) {
-        tileRect(shape.side, this.cols, this.rows, rect);
+        // (A cut wall's face is a few pixels deep on the screen: whole rows of the tile's top, not the whole tile squeezed into them.)
+        if (cut) this.pixels(shape.side, 0, 0, 16, LevelGeom.rowsOf(lowerTop - bottom));
+        else tileRect(shape.side, this.cols, this.rows, rect);
         this.face(dx, dz, x, z, bottom, lowerTop);
         shades[0] = shades[1] = side * FACE_FOOT;
         shades[2] = shades[3] = side;
