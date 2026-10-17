@@ -2741,11 +2741,7 @@ canvas.addEventListener('pointermove', (event) => {
   hideHover();
   hover.cell = cell;
   if (cell < 0) return;
-  // The mouse's loupe: what a click here would do, in words by the cursor.
-  if (loupeSetting.on) {
-    const tapped = describeAt(cell);
-    if (tapped && session.world) hoverLabel.show(tapLabel(session.world, tapped), event.clientX, event.clientY);
-  }
+  // (No words follow the mouse: the owner found a label hanging by the cursor all the time in the way. The loupe is a finger's.)
   const kind = hoverKind(cell);
   hover.frame.className = `pd-hover${kind === 'foe' ? ' foe' : ''}`;
   // No frame follows the mouse (the owner's wish): the cell is still tracked for the right button, not drawn.
