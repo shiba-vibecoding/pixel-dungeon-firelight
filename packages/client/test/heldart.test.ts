@@ -15,7 +15,7 @@ const hero = (over: Partial<Puppet> = {}): Puppet => ({ isHero: true, alive: tru
 
 describe('what a puppet holds in its hand', () => {
   it('holds the weapon in hand in every view, class and armour row, in the frames that carry a hand', () => {
-    const kinds = Object.keys(ITEMS).filter((k) => k.startsWith('weapon.') || k.startsWith('missile.'));
+    const kinds = Object.keys(ITEMS).filter((k) => k.startsWith('weapon.') || k.startsWith('missile.')) as Array<NonNullable<Puppet['weapon']>>;
     for (const cls of CLASSES) {
       for (const facing of FACINGS) {
         for (let row = 0; row < 7; row++) {
