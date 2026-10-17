@@ -24,8 +24,8 @@ function pngSize(path: string): { w: number; h: number } | null {
 }
 
 describe('fx.json', () => {
-  it('has the designer\'s 78 effects and 62 events, and parses whole', () => {
-    expect(Object.keys(designer.fx)).toHaveLength(78);
+  it('has the designer\'s 148 effects (part 6: 78; part 13: 70) and 62 events, and parses whole', () => {
+    expect(Object.keys(designer.fx)).toHaveLength(148);
     expect(Object.keys(designer.events)).toHaveLength(62);
     expect(Object.keys(designer.bossCards.bosses).sort()).toEqual(['dm300', 'goo', 'king', 'tengu', 'yog']);
   });

@@ -4,7 +4,7 @@ import {
   HEAP_SPRITES,
   type Hero, type Item, type Level,
   type Bones, hasAmulet, heroById, type HeroClass, leaveBones, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
-  ORE_WANTED, type PlanStep, PLANT_KINDS, type SmithLine, T,
+  type PlanStep, PLANT_KINDS, type SmithLine, T,
   chargesKnown, WIDTH, itemAt,
   type World, charAt, swapsWithHero,
 } from '@pd/core';
@@ -19,6 +19,8 @@ import './fl-compete.css';
 import './fl-input.css';
 import './photo.css';
 import './fl-grow.css';
+import './fl-quest.css';
+import './fl-p13.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickItem, quickRef, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -30,6 +32,10 @@ import { hideBossCard } from './bosscard';
 import { bossFx } from './bossfx';
 import { figureShown } from './figuresight';
 import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
+import { placeSink, placesBatch, placesFrame, updatePlaces } from './placefx';
+import { placeStore } from './places';
+import { stamps } from './stamps';
+import { placeCard } from './placetext';
 /** The visual clock's last reading, for frame-to-frame particle steps. */
 let lastVisual = 0;
 /** When my hero fell, on the visual clock, or 0 while alive. */
@@ -53,6 +59,11 @@ import {
   backpackOpen, bagMoment, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
 import { rankingBlock, trophyText } from './rankui';
+import { showTalk, smithTalk, type TalkOptions } from './questui';
+import { ghostPlan, impPlan, smithPlan, type TalkPlan, wandmakerPlan } from './questtalk';
+import { Q, registerNow } from './quest-text';
+import { QuestChip } from './questcardui';
+import { questTake, releaseFarewells } from './questfx';
 import { showBoards } from './boardsui';
 import { showProfile } from './profileui';
 import { lastArmor, lastWeapon } from './compete-ui';
@@ -152,6 +163,8 @@ const SERVER: string = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ?
  */
 const metaMod = lazy(() => import('./meta'));
 const windowFailed = (): void => toast(t.offline.windowFailed, { tone: 'warn' });
+// What the special places say when they are used (placefx.ts): a toast in the HUD's own voice.
+placeSink.toast = (text, tone) => toast(text, tone ? { tone } : {});
 const showSettings = (options: SettingsOptions): void => load(metaMod, (m) => m.showSettings(options), windowFailed);
 const showChallenges = (options: ChallengesOptions): void => load(metaMod, (m) => m.showChallenges(options), windowFailed);
 const showJournal = (options: JournalOptions, tab?: import('./meta').JournalTab, category?: number, entry?: string): void =>
@@ -506,6 +519,8 @@ hints.suppress = (id) => tutorial.active && (id === 'monster' || id === 'stairs'
 hints.hold = () => tutorial.visible;
 
 const finds = new Finds(document.getElementById('ui')!);
+// The errand that stands, as a chip on the HUD (questcardui.ts): a tap opens the journal at its notes.
+const questChip = new QuestChip(document.getElementById('ui')!, () => openJournal());
 /** Something was picked up since the backpack was last opened. */
 let newLoot = false;
 
@@ -1820,9 +1835,13 @@ function takeHere(world: World, me: Hero, now: number): void {
 
 function openTrade(world: World, me: Hero, item: Item): void {
   walk.reset();
+  // The ring of haggler shows its discount only once the ring is known (the price asked is the lower one either way).
+  const haggling = me.rings.some((ring) => ring.kind === 'ring.haggler');
+  const known = world.known.includes(item.kind);
   showTrade({
     world, hero: me, item,
-    price: buyPrice(item, me.depth, world.known.includes(item.kind), me.rings.some((ring) => ring.kind === 'ring.haggler')),
+    price: buyPrice(item, me.depth, known, haggling),
+    ...(haggling && world.known.includes('ring.haggler') ? { was: buyPrice(item, me.depth, known, false) } : {}),
     onBuy: () => send({ type: 'buy' }, performance.now()),
     onClose: hideOverlay,
   });
@@ -1940,30 +1959,29 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
   }
 }
 
+/** A word with a quest giver (questui.ts): the plan of the moment (questtalk.ts) in the language and register of now. */
+function talkWith(plan: TalkPlan, world: World, me: Hero, extra: Partial<TalkOptions> = {}): void {
+  showTalk({
+    world, hero: me, id: plan.id, kind: plan.kind, text: plan.text, replies: plan.replies, offers: plan.offers, complete: plan.complete,
+    ...(plan.bye ? { bye: plan.bye } : {}),
+    // The wandmaker and the imp go once the farewell is read: the leave-taking is seen on the map (questfx.ts).
+    onClose: plan.bye ? () => { hideOverlay(); releaseFarewells(view, fx.time(performance.now())); } : hideOverlay, ...extra,
+  });
+}
+
 function talkWithGhost(line: 'intro' | 'remind' | 'reward' | 'farewell', errand: 'rose' | 'rat' | 'curse'): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!world || !me) return;
   audio.play('ghost');
   walk.reset();
-  const quest = world.quest;
   // Each errand has its own words; the curse is only taken on if the hero says yes.
-  const text =
-    line === 'farewell' ? t.ghost.farewell
-    : errand === 'rat' ? t.ghostRat[line]
-    : errand === 'curse' ? (line === 'reward' ? t.ghostCurse.reward(t.classes[me.heroClass]) : t.ghostCurse.intro)
-    : t.ghost[line];
-  showQuest({
-    world,
-    hero: me,
-    who: 'ghost',
-    text,
-    offers: line === 'reward' && quest ? [quest.weapon, quest.armor] : [],
+  const plan = ghostPlan(Q, world, me, line, errand, registerNow(), t.classes[me.heroClass]);
+  talkWith(plan, world, me, {
     onChoose: (index) => send({ type: 'reward', choice: index === 0 ? 'weapon' : 'armor' }, performance.now()),
     ...(errand === 'curse' && line === 'intro'
       ? { answers: [{ label: t.ghostCurse.yes, onAnswer: () => send({ type: 'faceCurse' }, performance.now()) }, { label: t.ghostCurse.no, onAnswer: () => undefined }] }
       : {}),
-    onClose: hideOverlay,
   });
 }
 
@@ -1981,20 +1999,9 @@ function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): vo
   const me = world && heroById(world, session!.myId);
   if (!world || !me) return;
   walk.reset();
-  const quest = world.wandQuest;
-  showQuest({
-    world,
-    hero: me,
-    who: 'wandmaker',
-    // He may be after a rotberry seed rather than corpse dust.
-    text: quest?.wants === 'berry' && line === 'intro' ? t.wandmaker.introBerry
-      : quest?.wants === 'berry' && line === 'remind' ? t.wandmaker.remindBerry
-      : quest?.wants === 'fish' && line === 'intro' ? t.wandmaker.introFish
-      : quest?.wants === 'fish' && line === 'remind' ? t.wandmaker.remindFish
-      : t.wandmaker[line],
-    offers: line === 'reward' && quest ? [quest.battle, quest.utility] : [],
+  // He may be after a rotberry seed or a phantom fish rather than corpse dust: the plan knows.
+  talkWith(wandmakerPlan(Q, world, me, line, registerNow()), world, me, {
     onChoose: (index) => send({ type: 'wandReward', choice: index === 0 ? 'battle' : 'utility' }, performance.now()),
-    onClose: hideOverlay,
   });
 }
 
@@ -2004,20 +2011,17 @@ function talkWithSmith(line: SmithLine): void {
   const quest = world?.smithQuest;
   if (!world || !me || !quest) return;
   walk.reset();
-  const text =
-    line === 'intro' ? t.smith.intro[quest.wants]
-    : line === 'noGold' ? t.smith.noGold(ORE_WANTED)
-    : t.smith[line];
+  const plan = smithPlan(Q, world, me, line, registerNow());
   // Done with the errand: his services are on offer at once.
   if (line === 'completed' || line === 'reforge') {
     showReforge({
-      world, hero: me, text,
+      world, hero: me, text: plan.text, talk: smithTalk(plan.id, plan.kind, plan.text, plan.complete),
       onReforge: (first, second) => send({ type: 'reforge', first, second }, performance.now()),
       onClose: hideOverlay,
     });
     return;
   }
-  showQuest({ world, hero: me, who: 'blacksmith', text, onClose: hideOverlay });
+  talkWith(plan, world, me);
 }
 
 function talkWithImp(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
@@ -2026,20 +2030,7 @@ function talkWithImp(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
   const quest = world?.impQuest;
   if (!world || !me || !quest) return;
   walk.reset();
-  const text =
-    line === 'intro' ? t.imp.intro[quest.prey]
-    : line === 'remind' ? t.imp.remind[quest.prey]
-    : line === 'reward' ? t.imp.reward
-    : t.imp.farewell(t.classes[me.heroClass]);
-  showQuest({
-    world,
-    hero: me,
-    who: 'imp',
-    text,
-    offers: line === 'reward' ? [quest.reward] : [],
-    onChoose: () => send({ type: 'impReward' }, performance.now()),
-    onClose: hideOverlay,
-  });
+  talkWith(impPlan(Q, world, me, line, registerNow(), t.classes[me.heroClass]), world, me, { onChoose: () => send({ type: 'impReward' }, performance.now()) });
 }
 
 /* Input */
@@ -3034,10 +3025,19 @@ function examineCell(pos: number): void {
     return;
   }
   const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === pos && h.kind !== 'hidden');
-  if (heap && (seen || heap.kind !== 'heap')) {
+  const heapShown = heap !== undefined && (seen || heap.kind !== 'heap');
+  // A special place (a well, the altar's fire, a pedestal, a shelf, a sign): what it is and what it does, from the rules themselves.
+  const here = levelAt(world, me.depth);
+  const card = placeCard(here, (world.floors[me.depth]?.altar?.volume ?? 0) > 0, pos, heapShown);
+  if (card && !(heapShown && here.map[pos] === T.PEDESTAL)) {
+    const well = here.map[pos] === T.WELL ? here.wells.find((w) => w.pos === pos) : undefined;
+    showInfo(card.name, well ? [wellText(well.water), ...card.lines] : card.lines, hideOverlay);
+    return;
+  }
+  if (heap && heapShown) {
     if (heap.kind === 'heap' || heap.kind === 'forSale') {
       const item = heap.items[0]!;
-      showInfo(itemName(world, item), itemInfo(world, me, item), hideOverlay, { icon: slot(world, item, { hero: me }) });
+      showInfo(itemName(world, item), [...itemInfo(world, me, item), ...(card ? card.lines : [])], hideOverlay, { icon: slot(world, item, { hero: me }) });
     } else {
       showInfo(t.heapNames[heap.kind] ?? '', [], hideOverlay);
     }
@@ -3541,6 +3541,14 @@ function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: nu
   const mine = session!.myId;
   if (effects.some((e) => ('hero' in e && e.hero === mine) || ('who' in e && e.who === mine))) refreshBackpack(world, me);
   for (const effect of effects) effectFx(effect, view, world, session!.myId, vnow);
+  // The ore that pops out of a vein, the toast with the count of ore and tokens (questfx.ts).
+  questTake(effects, world, me, vnow, {
+    toast: (text, options) => toast(text, options),
+    find: (key, sprite, name) => finds.show(key, sprite, name, true),
+    launch: (sprite, x, y, at) => launches.push({ sprite, x, y, at, gold: false }),
+    oreName: () => capitalize(itemName(world, core.createItem('quest.ore'))),
+  });
+  placesBatch(effects, view, world, session!.myId, vnow);
   motion.effects(effects, world, me.depth, (e) => itemSprite(e.item, world.run.labels));
   scenery.effects(effects, me.depth, vnow);
   handleMyEffects(effects, session!.myId);
@@ -3564,6 +3572,11 @@ function footfall(level: Level, me: Hero, from: number, vnow: number): void {
   // Stepping onto a sign reads it.
   // Below the last shop the signs burst into flames as one reads them (Sign.read).
   const tip = t.signs[me.depth - 1] ?? t.signBurns;
+  if (terrain === T.SIGN) {
+    // The parchment, a glint of dust off it.
+    audio.play('pages', 1.1, 0.6);
+    fx.burst(cellX(me.pos) * 16 + 8, cellY(me.pos) * 16 + 6, vnow, { count: 6, colors: ['#ffe9b0', '#ffffff', '#d6ccae'], glow: true, speed: [4, 16], life: [500, 900], rise: 14, size: [1, 1], spread: 4 });
+  }
   if (terrain === T.SIGN && tip) {
     if (walk.queue.length > 0 || held.code) {
       // Passed over on the way somewhere: read in passing, into the log, and the walk goes on.
@@ -3642,6 +3655,7 @@ function tick(now: number): void {
     view.reset(me.depth);
     fx.reset();
     fxp.clear();
+    stamps.clear();
     idleFx.clear();
     hideBossCard();
     // The bodies and blood of this depth come back as they were left (gore.ts): kept per run and depth on this device.
@@ -3704,6 +3718,8 @@ function tick(now: number): void {
       patchLevel(baked, bakedMap, level, assets);
     }
     visible = seenCells(world, me.depth);
+    // The special places of the floor (wells, the altar's fire, the pot, prizes on pedestals): listed again each turn, for the scene's light and life.
+    updatePlaces(world, me.depth, key);
     bakedKey = key;
     drawPace.force();
 
@@ -3732,7 +3748,10 @@ function tick(now: number): void {
       governor.hold(1500);
     }
     if (fresh || r3Turn !== key) {
-      if (!fresh) r3.patch(level);
+      if (!fresh) {
+        r3.patch(level);
+        r3.refreshPlaces();
+      }
       r3.setSight(visible, exploredCells(world, me.depth), fresh);
       r3Turn = key;
     }
@@ -3779,6 +3798,7 @@ function tick(now: number): void {
   idleFx.frame(vnow, view, me.id, walk.resting, threats.size > 0, me.hp, level.map[me.pos]! >= T.WATER_TILES && level.map[me.pos]! <= T.WATER);
   ambientFx(view, vnow, dt);
   regionFx(level, visible, vnow, dt);
+  placesFrame(view, world, me, vnow);
 
   const mine = view.puppets.get(me.id);
   const at = mine ? view.position(mine, vnow) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
@@ -3845,7 +3865,7 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || bossFx.busy(vnow) || idleFx.busy(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || bossFx.busy(vnow) || idleFx.busy(vnow) || stamps.busy(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
@@ -4071,6 +4091,8 @@ function tick(now: number): void {
       },
       walk.resting,
     );
+    // The errand that stands, on the HUD's own beat.
+    questChip.update(world, me, me.depth, !isAlive(me));
   }
   placeToasts();
   // Bones laid on their depth are this run's now: the device forgets them.
@@ -4316,5 +4338,5 @@ if (import.meta.env.DEV) {
     }
   };
   Object.assign(window, { __release: { news: () => showNews({ release: CURRENT, onClose: () => toTitle(false) }), report: () => api && showReport({ api, run: runFacts, onClose: () => toTitle(false) }), crash: showCrash } });
-  Object.assign(window, { __pd: { cellClient, preview, touchGuard, hurtLog, cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
+  Object.assign(window, { __pd: { openTrade, examineCell, stamps, placeStore, cellClient, preview, touchGuard, hurtLog, cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
 }

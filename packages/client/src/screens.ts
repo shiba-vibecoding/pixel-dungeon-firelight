@@ -10,6 +10,7 @@ import { chooseQuickslot, quickItem, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
+import { WORDS } from './placetext';
 import { I } from './i18n-info';
 import { P } from './i18n-photo';
 import { knowLine, wasteLine } from './infolines';
@@ -26,7 +27,7 @@ import { confirmRisky, drinkRisk, enchantLossChance, equipRisk, hasMagic, target
 import { quality } from './quality';
 import { countChallenges } from './challenge-info';
 import type { RunRecord } from './rankings';
-import { type Assets, heroSprite } from './sprites';
+import { type Assets, type CharSprite, heroSprite } from './sprites';
 import type { LogLine } from './view';
 
 /*
@@ -44,6 +45,11 @@ let assets: Assets | null = null;
 /** The sprite sheets portraits are cut from. */
 export function setAssets(loaded: Assets): void {
   assets = loaded;
+}
+
+/** A monster's sprite (the sheet and its animations), once the assets have loaded: the dialogue frames of questui.ts are cut from it. */
+export function mobSprite(kind: MobKind): CharSprite | undefined {
+  return assets?.mobs[kind];
 }
 
 export type Child = Node | string | null | undefined | false;
@@ -575,6 +581,8 @@ export interface TradeOptions {
   hero: Hero;
   item: Item;
   price: number;
+  /** The price without the ring of haggler, when the ring is known: shown struck through beside the price asked. */
+  was?: number;
   onBuy(): void;
   onClose(): void;
 }
@@ -593,10 +601,14 @@ export function showTrade(options: TradeOptions): void {
     // A long description scrolls; the price and «Buy» stay in reach.
     el('div', { className: 'pd-scroll pd-stack' }, ...describedItem(world, hero, item)),
     actions([buy], []),
+    options.was !== undefined && options.was > price ? info(WORDS.haggled(Math.round((1 - price / options.was) * 100)), 'pd-note center pd-haggle') : null,
     info(t.yourGold(hero.gold), 'pd-note center'),
   );
   titleFor(world, item, head);
-  head.querySelector('.pd-titles')!.append(el('span', { className: `pd-price${short ? ' short' : ''}`, textContent: String(price) }));
+  const titles = head.querySelector('.pd-titles')!;
+  // The ring of haggler, known: what the ware would cost without it, struck through, and then what it costs.
+  if (options.was !== undefined && options.was > price) titles.append(el('span', { className: 'pd-price-was', textContent: String(options.was) }));
+  titles.append(el('span', { className: `pd-price${short ? ' short' : ''}`, textContent: String(price) }));
   show(head, options.onClose);
 }
 
@@ -745,6 +757,8 @@ export interface ReforgeOptions {
   world: World;
   hero: Hero;
   text: string;
+  /** The blacksmith's word as the dialogue draws it (questui.ts: a portrait frame, a typewriter): in place of the plain portrait and text. */
+  talk?: { icon: HTMLElement; speech: HTMLElement; sub?: string };
   onReforge(first: ItemRef, second: ItemRef): void;
   onClose(): void;
 }
@@ -791,11 +805,11 @@ export function showReforge(options: ReforgeOptions): void {
     );
   show(
     windowOf(
-      { title: capitalize(t.mobs.blacksmith), icon: portrait('blacksmith'), onClose: options.onClose },
+      { title: capitalize(t.mobs.blacksmith), ...(options.talk?.sub ? { sub: options.talk.sub } : {}), icon: options.talk?.icon ?? portrait('blacksmith'), onClose: options.onClose, ...(options.talk ? { className: 'fl-smith-window' } : {}) },
       el(
         'div',
         { className: 'pd-scroll pd-stack' },
-        info(options.text, 'pd-speech'),
+        options.talk?.speech ?? info(options.text, 'pd-speech'),
         pairs.length === 0 ? info(t.nothingToReforge, 'pd-note') : el('div', { className: 'pd-rewards pd-reforges' }, ...pairs.map(card)),
       ),
     ),

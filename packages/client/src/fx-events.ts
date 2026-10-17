@@ -10,6 +10,7 @@ import { showBossCard } from './bosscard';
 import { bossFx } from './bossfx';
 import { addFxLights } from './fxdraw2d';
 import { regionIndex } from './worldsheets';
+import { minedFx } from './questfx';
 import {
   bloodRgb, chunkCount, chunksOf, FLOOR as FLOOR_LAYER, gore as record, levelSpatterMap, NO_BLOOD, NO_BODY, poolSplat, shade as shadeOf, spatterOf,
   type SpatterMap,
@@ -563,8 +564,9 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
           return;
         case 'psionic':
           if (!own) {
-            fx.wave(at.x, at.y, now, { colors: '#ffffff', rings: 1, tiles: 8, duration: 350, width: 3 });
-            if (mine && !quality.reducedMotion) fx.flash('255, 255, 255', 0.45, 220, now);
+            // The warning comes first (placefx.ts: a rising whine, an amber flash at the edge); the blast itself is a beat later.
+            fx.wave(at.x, at.y, now + 170, { colors: '#ffffff', rings: 2, tiles: 8, duration: 380, stagger: 90, width: 3 });
+            if (mine && !quality.reducedMotion) window.setTimeout(() => fx.flash('255, 255, 255', 0.5, 260, fx.now), 170);
           }
           return;
         default:
@@ -730,9 +732,10 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     }
     case 'mined': {
       if (!here(effect.depth)) return;
+      // Sparks and rock chips thrown back at whoever struck, the ore's gleam, a little shake (questfx.ts).
       const at = cellCentre(effect.pos);
-      fx.burst(at.x, at.y, now, { count: 14, colors: [...GOLD, ...DUST], glow: true, speed: [30, 90], life: [250, 550], gravity: 300 });
-      fx.shake(1.5, 120, now);
+      const from = centreOf(view, effect.hero, now);
+      minedFx(at, from ? Math.atan2(from.y - at.y, from.x - at.x) : -Math.PI / 2, now);
       return;
     }
     case 'wraiths': {

@@ -56,7 +56,8 @@ export interface HeldFigure {
  * hands, a weapon thrown and not yet back (a boomerang in flight), and a frame with the hands busy. The pictures are not looked at here.
  */
 export function heldFor(data: HeldData, puppet: Puppet, facing: Facing, frame: number, now: number): Held | null {
-  const kind = puppet.weapon;
+  // A tool taken up for a moment (the pickaxe at a vein) is in the hand whatever the hero wields.
+  const kind = puppet.tool !== undefined && now < (puppet.toolUntil ?? 0) ? puppet.tool : puppet.weapon;
   if (!kind || !puppet.isHero || !puppet.alive) return null;
   if (puppet.heldAwayUntil !== undefined && now < puppet.heldAwayUntil && now >= (puppet.heldAwayFrom ?? 0)) return null;
   return heldOf(data, puppet.kind, facing, puppet.row, frame, kind, puppet.anim === 'attack');
@@ -66,7 +67,7 @@ const OUT = { held: undefined as unknown as Held, image: undefined as unknown as
 
 /** `heldFor` with the loading: null until held.json and the weapon's sheet have come. The one object is reused. */
 export function heldFigure(puppet: Puppet, fig: Figure, frame: number, now: number): HeldFigure | null {
-  if (!puppet.weapon) return null;
+  if (!puppet.weapon && !(puppet.tool !== undefined && now < (puppet.toolUntil ?? 0))) return null;
   const data = heldData();
   if (!data) return null;
   const held = heldFor(data, puppet, fig.facing, frame, now);

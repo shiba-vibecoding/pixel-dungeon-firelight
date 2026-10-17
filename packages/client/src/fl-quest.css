@@ -1,0 +1,164 @@
+/*
+ * The quests, staged (questui.ts, questcardui.ts): the giver's frame and its speech, the replies, the reward's reveal; the quest card of
+ * the journal; the chip on the HUD. Built from the design system's tokens (ui.css). Presentation only.
+ */
+
+/* ---------- The dialogue ---------- */
+
+.fl-qframe {
+  --q-accent: #bfe9ff; --q-bg1: #31404f; --q-bg2: #121921; --q-glow: rgba(150, 210, 255, 0.28);
+  position: relative; flex: none; width: 92px; height: 92px; display: grid; place-items: center;
+  clip-path: var(--notch);
+  background: radial-gradient(circle at 50% 78%, var(--q-bg1) 0, var(--q-bg2) 78%);
+  box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--void), inset 0 0 22px var(--q-glow);
+}
+.fl-qframe.wandmaker { --q-accent: #d3c0ff; --q-bg1: #3b3354; --q-bg2: #17121f; --q-glow: rgba(185, 150, 255, 0.3); }
+.fl-qframe.smith { --q-accent: #ffb060; --q-bg1: #5a3418; --q-bg2: #1c0f08; --q-glow: rgba(255, 140, 50, 0.38); }
+.fl-qframe.imp { --q-accent: #ff8a66; --q-bg1: #54221f; --q-bg2: #1c0a0a; --q-glow: rgba(255, 90, 60, 0.34); }
+/* the corners of the frame: four gold pixels */
+.fl-qframe::before {
+  content: ""; position: absolute; inset: 3px; pointer-events: none;
+  background:
+    linear-gradient(var(--gold), var(--gold)) 0 0 / 5px 2px no-repeat, linear-gradient(var(--gold), var(--gold)) 0 0 / 2px 5px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) 100% 0 / 5px 2px no-repeat, linear-gradient(var(--gold), var(--gold)) 100% 0 / 2px 5px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) 0 100% / 5px 2px no-repeat, linear-gradient(var(--gold), var(--gold)) 0 100% / 2px 5px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) 100% 100% / 5px 2px no-repeat, linear-gradient(var(--gold), var(--gold)) 100% 100% / 2px 5px no-repeat;
+}
+.fl-qstage { position: relative; display: grid; place-items: end center; width: 100%; height: 100%; padding-bottom: 10px; }
+.fl-qstage::after {
+  content: ""; position: absolute; left: 50%; bottom: 8px; width: 54px; height: 8px; transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.5) 0, rgba(0, 0, 0, 0) 70%); pointer-events: none;
+}
+.fl-qstage canvas { position: relative; z-index: 1; image-rendering: pixelated; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.fl-qframe.ghost .fl-qstage canvas { opacity: 0.88; animation: fl-qfloat 2.6s ease-in-out infinite; }
+.fl-qframe.talking .fl-qstage canvas { animation: fl-qbob 0.26s steps(2) infinite; }
+.fl-qframe.ghost.talking .fl-qstage canvas { animation: fl-qbob 0.26s steps(2) infinite; }
+@keyframes fl-qfloat { 50% { transform: translateY(-4px); } }
+@keyframes fl-qbob { 50% { transform: translateY(-2px); } }
+/* a few motes of the giver's colour drifting up behind it */
+.fl-qmote { position: absolute; z-index: 0; bottom: 12px; width: 2px; height: 2px; background: var(--q-accent); opacity: 0; animation: fl-qmote 3.2s linear infinite; }
+.fl-qmote.a { left: 24%; animation-delay: 0s; }
+.fl-qmote.b { left: 58%; animation-delay: 1.1s; }
+.fl-qmote.c { left: 78%; animation-delay: 2.1s; }
+@keyframes fl-qmote { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 0.9; } 100% { transform: translateY(-62px); opacity: 0; } }
+
+.fl-talk-window .pd-heading { font-size: 22px; line-height: 26px; }
+.fl-talk-window .pd-window-head .pd-note { color: var(--q-sub, var(--ink-muted)); font-style: normal; }
+.fl-talk-window.ghost { --q-sub: #a6cbe0; }
+.fl-talk-window.wandmaker { --q-sub: #c2b0ee; }
+.fl-talk-window.smith, .fl-smith-window { --q-sub: #e8b070; }
+.fl-smith-window .pd-window-head .pd-note { color: var(--q-sub); }
+.fl-talk-window.imp { --q-sub: #f09a80; }
+
+.fl-speech { cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
+.fl-speech-rest { visibility: hidden; }
+.fl-speech-hint { text-align: right; opacity: 0.6; }
+.fl-speech-hint.gone { visibility: hidden; }
+
+/* the replies: laid out from the start (so the window does not grow) and shown once the words are out */
+.fl-replies { display: flex; flex-direction: column; gap: var(--space-2); }
+.fl-replies:not(.shown) { visibility: hidden; pointer-events: none; }
+.fl-replies.shown { animation: fl-qrise 0.18s ease-out both; }
+.fl-replies:empty { display: none; }
+.fl-reply-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.fl-reply-grid > .pd-button { min-width: 0; white-space: normal; line-height: 20px; padding-top: 4px; padding-bottom: 4px; }
+.fl-reply-grid > .pd-button:only-child { grid-column: 1 / -1; }
+@keyframes fl-qrise { from { opacity: 0; transform: translateY(5px); } }
+
+/* the reward's reveal */
+.fl-qbanner {
+  display: flex; align-items: center; justify-content: center; gap: var(--space-3); padding: 6px var(--space-3);
+  font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); text-shadow: var(--text-outline);
+  background: linear-gradient(90deg, rgba(255, 204, 102, 0) 0, rgba(255, 204, 102, 0.2) 50%, rgba(255, 204, 102, 0) 100%);
+  border-top: var(--u) solid var(--gold-deep); border-bottom: var(--u) solid var(--gold-deep);
+}
+.fl-qstar { width: 9px; height: 9px; background: var(--gold); transform: rotate(45deg); box-shadow: 0 0 6px 1px rgba(255, 204, 102, 0.7); }
+.fl-talk > .fl-qbanner { margin-top: var(--space-2); }
+.fl-talk-window:not(.revealed) .fl-qbanner, .smith-talk:not(.revealed) > .fl-qbanner { opacity: 0; }
+.fl-talk-window.revealed .fl-qbanner, .smith-talk.revealed > .fl-qbanner { animation: fl-qbanner 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.fl-talk-window.revealed .fl-qstar, .smith-talk.revealed .fl-qstar { animation: fl-qtwinkle 1.1s ease-in-out 0.3s 2 both; }
+@keyframes fl-qbanner { from { opacity: 0; transform: scale(0.8); } }
+@keyframes fl-qtwinkle { 50% { transform: rotate(135deg) scale(1.5); } }
+.fl-talk-window:not(.revealed) .fl-reveal { opacity: 0; }
+.fl-talk-window.revealed .fl-reveal { animation: fl-qpop 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; animation-delay: calc(0.2s + var(--n, 0) * 0.16s); }
+.fl-reveal { position: relative; overflow: hidden; }
+.fl-talk-window.revealed .fl-reveal::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 244, 190, 0.38) 50%, rgba(255, 255, 255, 0) 65%);
+  transform: translateX(-120%); animation: fl-qsweep 0.8s ease-out both; animation-delay: calc(0.45s + var(--n, 0) * 0.16s);
+}
+@keyframes fl-qpop { from { opacity: 0; transform: translateY(10px) scale(0.94); } }
+@keyframes fl-qsweep { to { transform: translateX(120%); } }
+.fl-qflash { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 30%, rgba(255, 236, 160, 0.55), rgba(255, 236, 160, 0) 70%); animation: fl-qflash 0.9s ease-out both; }
+@keyframes fl-qflash { from { opacity: 1; } to { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fl-qframe.ghost .fl-qstage canvas, .fl-qframe.talking .fl-qstage canvas, .fl-qmote, .fl-replies.shown, .fl-qflash,
+  .fl-talk-window.revealed .fl-qbanner, .fl-talk-window.revealed .fl-qstar, .fl-talk-window.revealed .fl-reveal, .fl-talk-window.revealed .fl-reveal::after { animation: none; }
+  .fl-qmote { display: none; }
+  .fl-talk-window.revealed .fl-reveal::after { display: none; }
+}
+
+/* ---------- The quest card (journal, notes) ---------- */
+
+.fl-notes { display: flex; flex-direction: column; gap: var(--space-3); }
+.fl-quests { display: flex; flex-direction: column; gap: var(--space-2); }
+.fl-quests-title { font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold-deep); padding: 0 2px; }
+.fl-qcard {
+  --q-accent: #bfe9ff;
+  display: flex; flex-direction: column; gap: 6px; padding: var(--space-2) var(--space-3) var(--space-3);
+  background: var(--stone-800); clip-path: var(--notch);
+  box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--stone-500), inset 3px 0 0 0 var(--q-accent);
+}
+.fl-qcard.wandmaker { --q-accent: #c2a8ff; }
+.fl-qcard.smith { --q-accent: #ffa850; }
+.fl-qcard.imp { --q-accent: #ff7a5a; }
+.fl-qcard-head { display: flex; align-items: center; gap: var(--space-2); }
+.fl-qcard-head .pd-portrait { width: 48px; height: 48px; }
+.fl-qcard-head .pd-portrait canvas { max-width: 44px; max-height: 44px; }
+.fl-qcard-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fl-qcard-name { font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--gold); }
+.fl-qtag { flex: none; font: var(--text-caption, 400 15px/20px var(--font-small)); padding: 0 8px; clip-path: var(--notch); background: var(--stone-700); color: var(--ink); }
+.fl-qtag.ready { background: var(--gold-deep); color: var(--void); animation: fl-qpulse 1.4s ease-in-out infinite; }
+.fl-qtag.done { color: var(--good); }
+.fl-qgoal { font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--ink); }
+.fl-qprogress { font: var(--text-label, 400 18px/20px var(--font-ui)); color: var(--gold); }
+.fl-qcard.ready .fl-qprogress { color: var(--good); }
+.fl-qback { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--good); }
+.fl-qwarn { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--warn); }
+.fl-qreward { font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+.fl-qreward b { font-weight: 400; color: var(--gold-deep); }
+.fl-qcard.done { opacity: 0.72; }
+.fl-qcard.done .fl-qgoal { color: var(--ink-muted); }
+.fl-qbar { position: relative; height: 12px; background: var(--hp-track); box-shadow: inset 0 0 0 2px var(--void), inset 0 0 0 3px var(--stone-600); }
+.fl-qbar > i { display: block; height: 100%; background: linear-gradient(var(--gold), var(--gold-deep)); box-shadow: 2px 0 0 0 rgba(255, 235, 164, 0.5); }
+.fl-qbar:not(.single)::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) calc(100% / var(--need, 1) - 2px), rgba(0, 0, 0, 0.7) calc(100% / var(--need, 1) - 2px), rgba(0, 0, 0, 0.7) calc(100% / var(--need, 1)));
+}
+.fl-qcard.ready .fl-qbar > i { background: linear-gradient(#8cff8c, var(--good)); }
+@keyframes fl-qpulse { 50% { filter: brightness(1.35); } }
+
+/* ---------- The HUD chip ---------- */
+
+.fl-qchip {
+  position: absolute; z-index: var(--z-hud, 10); pointer-events: auto;
+  left: calc(var(--safe-l, 0px) + var(--space-2));
+  top: var(--fl-qtop, calc(max(calc(var(--safe-t, 0px) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-1))) + var(--net-strip, 0px)));
+  max-width: min(260px, calc(100% - 96px));
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px 0 4px;
+  font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink); text-shadow: var(--text-outline);
+  background: rgba(31, 33, 28, 0.9); clip-path: var(--notch);
+  box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--stone-500);
+}
+.fl-qchip[hidden] { display: none; }
+.fl-qchip-face { flex: none; display: grid; place-items: center; width: 24px; height: 24px; overflow: hidden; }
+.fl-qchip-face .pd-portrait { width: 24px; height: 24px; background: none; box-shadow: none; clip-path: none; }
+.fl-qchip-face .pd-portrait canvas { max-width: 24px; max-height: 24px; width: auto !important; height: auto !important; }
+.fl-qchip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-qchip-more { flex: none; color: var(--gold-deep); }
+.fl-qchip[data-stage="ready"] { color: var(--good); box-shadow: inset var(--u) var(--u) 0 var(--void), inset calc(-1 * var(--u)) calc(-1 * var(--u)) 0 var(--good); }
+.fl-qchip.pop { animation: fl-qchip-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+@keyframes fl-qchip-pop { from { transform: scale(0.85); filter: brightness(1.8); } }
+@media (prefers-reduced-motion: reduce) { .fl-qchip.pop, .fl-qtag.ready { animation: none; } }
+.pd-ui .fl-qchip { left: var(--gap); }

@@ -1667,7 +1667,7 @@
     "ru": "Тревога"
    },
    "legend": "red",
-   "then": null
+   "then": "minor.alarm"
   },
   "trap.fire": {
    "sheet": "fx/traps/traps.png",
@@ -2031,6 +2031,1581 @@
     "en": "Miss",
     "ru": "Промах"
    }
+  },
+  "quest.ore.hit": {
+   "sheet": "fx/quest/ore-hit.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 2,
+    "radius": 2,
+    "ms": 220,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 1,
+    "ms": 120
+   },
+   "name": {
+    "en": "Ore struck",
+    "ru": "Удар по руде"
+   },
+   "then": "quest.ore.nugget"
+  },
+  "quest.ore.nugget": {
+   "sheet": "fx/quest/nugget.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 6,
+   "fps": 8,
+   "loop": false,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "floor",
+   "name": {
+    "en": "Dark gold",
+    "ru": "Тёмное золото"
+   },
+   "note": "the nugget on the floor for a moment (the item is the game's own after it); the gleam crosses it"
+  },
+  "quest.forge": {
+   "sheet": "fx/quest/forge.png",
+   "w": 16,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ff8a3a",
+    "intensity": 2.4,
+    "radius": 4,
+    "ms": 0,
+    "curve": "flicker"
+   },
+   "name": {
+    "en": "Forge",
+    "ru": "Горн"
+   },
+   "note": "a loop at the blacksmith's side"
+  },
+  "quest.anvil": {
+   "sheet": "fx/quest/anvil.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 5,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ffeba4",
+    "intensity": 3,
+    "radius": 3,
+    "ms": 180,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 1,
+    "ms": 100
+   },
+   "name": {
+    "en": "Anvil",
+    "ru": "Наковальня"
+   }
+  },
+  "quest.reward.ghost.weapon": {
+   "sheet": "fx/quest/reward.png",
+   "w": 32,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#bfe0ff",
+    "intensity": 2.2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "The ghost's weapon",
+    "ru": "Оружие призрака"
+   }
+  },
+  "quest.reward.ghost.armor": {
+   "sheet": "fx/quest/reward.png",
+   "w": 32,
+   "h": 48,
+   "row": 1,
+   "frames": 8,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#bfe0ff",
+    "intensity": 2.2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "The ghost's armour",
+    "ru": "Броня призрака"
+   }
+  },
+  "quest.reward.wandmaker.battle": {
+   "sheet": "fx/quest/reward.png",
+   "w": 32,
+   "h": 48,
+   "row": 2,
+   "frames": 8,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 2.2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "A battle wand",
+    "ru": "Боевая палочка"
+   }
+  },
+  "quest.reward.wandmaker.utility": {
+   "sheet": "fx/quest/reward.png",
+   "w": 32,
+   "h": 48,
+   "row": 3,
+   "frames": 8,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#c8b0ff",
+    "intensity": 2.2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "A utility wand",
+    "ru": "Палочка-помощник"
+   }
+  },
+  "quest.reward.blacksmith.reforge": {
+   "sheet": "fx/quest/reward.png",
+   "w": 32,
+   "h": 48,
+   "row": 4,
+   "frames": 8,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffaa5a",
+    "intensity": 2.2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "Reforged",
+    "ru": "Перековано"
+   }
+  },
+  "quest.reward.imp.ring": {
+   "sheet": "fx/quest/reward.png",
+   "w": 32,
+   "h": 48,
+   "row": 5,
+   "frames": 8,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#9aff8a",
+    "intensity": 2.2,
+    "radius": 3,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "The imp's ring",
+    "ru": "Кольцо беса"
+   }
+  },
+  "place.well.awareness": {
+   "sheet": "fx/places/wells.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 6,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#7fd0ff",
+    "intensity": 1.2,
+    "radius": 2.5,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 0,
+    "thick": 0
+   },
+   "volume": {
+    "thin": [
+     1,
+     null
+    ],
+    "mid": [
+     1,
+     null
+    ],
+    "thick": [
+     1,
+     null
+    ]
+   },
+   "lift": 0.06,
+   "name": {
+    "en": "Well of awareness",
+    "ru": "Колодец знания"
+   },
+   "note": "the water inside the well's rim, a loop; one row a kind of water"
+  },
+  "place.well.health": {
+   "sheet": "fx/places/wells.png",
+   "w": 16,
+   "h": 16,
+   "row": 1,
+   "frames": 6,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#ff8a9a",
+    "intensity": 1.2,
+    "radius": 2.5,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 0,
+    "thick": 0
+   },
+   "volume": {
+    "thin": [
+     1,
+     null
+    ],
+    "mid": [
+     1,
+     null
+    ],
+    "thick": [
+     1,
+     null
+    ]
+   },
+   "lift": 0.06,
+   "name": {
+    "en": "Well of health",
+    "ru": "Колодец здоровья"
+   },
+   "note": "the water inside the well's rim, a loop; one row a kind of water"
+  },
+  "place.well.transmutation": {
+   "sheet": "fx/places/wells.png",
+   "w": 16,
+   "h": 16,
+   "row": 2,
+   "frames": 6,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "tile",
+   "blend": "normal",
+   "anchor": "floor",
+   "light": {
+    "color": "#b88aff",
+    "intensity": 1.2,
+    "radius": 2.5,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "rows": {
+    "thin": 0,
+    "mid": 0,
+    "thick": 0
+   },
+   "volume": {
+    "thin": [
+     1,
+     null
+    ],
+    "mid": [
+     1,
+     null
+    ],
+    "thick": [
+     1,
+     null
+    ]
+   },
+   "lift": 0.06,
+   "name": {
+    "en": "Well of transmutation",
+    "ru": "Колодец превращения"
+   },
+   "note": "the water inside the well's rim, a loop; one row a kind of water"
+  },
+  "place.well.awareness.beam": {
+   "sheet": "fx/places/well-beam.png",
+   "w": 16,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#7fd0ff",
+    "intensity": 4,
+    "radius": 5,
+    "ms": 900,
+    "curve": "flash"
+   },
+   "tint": {
+    "color": "#7fd0ff",
+    "alpha": 0.1,
+    "ms": 500
+   }
+  },
+  "place.well.health.beam": {
+   "sheet": "fx/places/well-beam.png",
+   "w": 16,
+   "h": 48,
+   "row": 1,
+   "frames": 8,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ff8a9a",
+    "intensity": 4,
+    "radius": 5,
+    "ms": 900,
+    "curve": "flash"
+   },
+   "tint": {
+    "color": "#ff8a9a",
+    "alpha": 0.1,
+    "ms": 500
+   }
+  },
+  "place.well.transmutation.beam": {
+   "sheet": "fx/places/well-beam.png",
+   "w": 16,
+   "h": 48,
+   "row": 2,
+   "frames": 8,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#b88aff",
+    "intensity": 4,
+    "radius": 5,
+    "ms": 900,
+    "curve": "flash"
+   },
+   "tint": {
+    "color": "#b88aff",
+    "alpha": 0.1,
+    "ms": 500
+   }
+  },
+  "place.pot.amber": {
+   "sheet": "fx/places/pot.png",
+   "w": 16,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 7,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffb84a",
+    "intensity": 1.4,
+    "radius": 2.5,
+    "ms": 0,
+    "curve": "flicker"
+   },
+   "name": {
+    "en": "Alchemy pot",
+    "ru": "Котёл"
+   }
+  },
+  "place.pot.green": {
+   "sheet": "fx/places/pot.png",
+   "w": 16,
+   "h": 32,
+   "row": 1,
+   "frames": 6,
+   "fps": 7,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "feet",
+   "light": {
+    "color": "#8ae05a",
+    "intensity": 1.4,
+    "radius": 2.5,
+    "ms": 0,
+    "curve": "flicker"
+   },
+   "name": {
+    "en": "Alchemy pot (green)",
+    "ru": "Котёл (зелёное варево)"
+   }
+  },
+  "place.pot.crimson": {
+   "sheet": "fx/places/pot.png",
+   "w": 16,
+   "h": 32,
+   "row": 2,
+   "frames": 6,
+   "fps": 7,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "feet",
+   "light": {
+    "color": "#ff5a5a",
+    "intensity": 1.4,
+    "radius": 2.5,
+    "ms": 0,
+    "curve": "flicker"
+   },
+   "name": {
+    "en": "Alchemy pot (crimson)",
+    "ru": "Котёл (алое варево)"
+   }
+  },
+  "place.pot.azure": {
+   "sheet": "fx/places/pot.png",
+   "w": 16,
+   "h": 32,
+   "row": 3,
+   "frames": 6,
+   "fps": 7,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "feet",
+   "light": {
+    "color": "#6ab0ff",
+    "intensity": 1.4,
+    "radius": 2.5,
+    "ms": 0,
+    "curve": "flicker"
+   },
+   "name": {
+    "en": "Alchemy pot (azure)",
+    "ru": "Котёл (лазурное варево)"
+   }
+  },
+  "place.statue.wake": {
+   "sheet": "fx/places/statue.png",
+   "w": 16,
+   "h": 32,
+   "row": 0,
+   "frames": 4,
+   "fps": 8,
+   "loop": false,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "feet",
+   "hold": 200,
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 500,
+    "curve": "flash"
+   },
+   "then": "place.statue.dust",
+   "name": {
+    "en": "A statue wakes",
+    "ru": "Статуя оживает"
+   }
+  },
+  "place.statue.dust": {
+   "sheet": "fx/places/dust.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 5,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "feet",
+   "shake": {
+    "px": 1,
+    "ms": 200
+   }
+  },
+  "place.firefly": {
+   "sheet": "fx/places/motes.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 5,
+   "loop": true,
+   "behaviour": "particle",
+   "blend": "add",
+   "anchor": "center",
+   "life": [
+    1800,
+    3200
+   ],
+   "rise": 6,
+   "light": {
+    "color": "#f0ff8a",
+    "intensity": 0.4,
+    "radius": 1,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "Fireflies",
+    "ru": "Светлячки"
+   }
+  },
+  "place.dust": {
+   "sheet": "fx/places/motes.png",
+   "w": 16,
+   "h": 16,
+   "row": 1,
+   "frames": 4,
+   "fps": 4,
+   "loop": true,
+   "behaviour": "particle",
+   "blend": "normal",
+   "anchor": "center",
+   "life": [
+    2400,
+    4000
+   ],
+   "rise": -4,
+   "name": {
+    "en": "Dust",
+    "ru": "Пыль"
+   }
+  },
+  "place.dew": {
+   "sheet": "fx/places/motes.png",
+   "w": 16,
+   "h": 16,
+   "row": 2,
+   "frames": 4,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "floor",
+   "name": {
+    "en": "Dew",
+    "ru": "Роса"
+   }
+  },
+  "place.shelf": {
+   "sheet": "fx/places/glints.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 6,
+   "fps": 10,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "center",
+   "name": {
+    "en": "Bookshelf",
+    "ru": "Книжная полка"
+   },
+   "note": "plays once every 4-7 s on a lit shelf; the frames run the light over the spines"
+  },
+  "place.sign": {
+   "sheet": "fx/places/glints.png",
+   "w": 16,
+   "h": 16,
+   "row": 1,
+   "frames": 6,
+   "fps": 4,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "center",
+   "name": {
+    "en": "Sign",
+    "ru": "Табличка"
+   }
+  },
+  "place.prize": {
+   "sheet": "fx/places/glints.png",
+   "w": 16,
+   "h": 16,
+   "row": 2,
+   "frames": 6,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "center"
+  },
+  "place.pedestal": {
+   "sheet": "fx/places/pedestal.png",
+   "w": 16,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 1.6,
+    "radius": 2.5,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "Pedestal",
+    "ru": "Постамент"
+   }
+  },
+  "minor.sheep.appear": {
+   "sheet": "fx/minor/sheep.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "feet",
+   "name": {
+    "en": "Sheep",
+    "ru": "Овца"
+   }
+  },
+  "minor.sheep.vanish": {
+   "sheet": "fx/minor/sheep.png",
+   "w": 16,
+   "h": 16,
+   "row": 1,
+   "frames": 6,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "feet"
+  },
+  "minor.thorns": {
+   "sheet": "fx/minor/thorns.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 16,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ff8585",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 160,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Thorns",
+    "ru": "Шипы"
+   }
+  },
+  "minor.sleep": {
+   "sheet": "fx/minor/sleep.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 6,
+   "fps": 4,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "head",
+   "name": {
+    "en": "Asleep",
+    "ru": "Спит"
+   }
+  },
+  "minor.mirror": {
+   "sheet": "fx/minor/mirror.png",
+   "w": 16,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "name": {
+    "en": "Mirror image",
+    "ru": "Зеркальный образ"
+   }
+  },
+  "minor.purity": {
+   "sheet": "fx/minor/purity.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "wave",
+   "blend": "add",
+   "anchor": "feet-floor",
+   "radius": 2,
+   "scaleSteps": [
+    1,
+    2
+   ],
+   "rings": 1,
+   "stagger": 0,
+   "light": {
+    "color": "#fff6c8",
+    "intensity": 2.5,
+    "radius": 4,
+    "ms": 600,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Purity",
+    "ru": "Очищение"
+   }
+  },
+  "minor.levitate": {
+   "sheet": "fx/minor/levitate.png",
+   "w": 32,
+   "h": 16,
+   "row": 0,
+   "frames": 6,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "floor",
+   "name": {
+    "en": "Levitation",
+    "ru": "Левитация"
+   }
+  },
+  "minor.alarm": {
+   "sheet": "fx/minor/alarm.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "head",
+   "hold": 600,
+   "name": {
+    "en": "Alarm bell",
+    "ru": "Колокол тревоги"
+   }
+  },
+  "status.slow": {
+   "sheet": "fx/minor/status.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 6,
+   "fps": 4,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "floor",
+   "name": {
+    "en": "Slowed",
+    "ru": "Замедлен"
+   }
+  },
+  "status.poison": {
+   "sheet": "fx/minor/status.png",
+   "w": 16,
+   "h": 16,
+   "row": 1,
+   "frames": 6,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "center",
+   "name": {
+    "en": "Poisoned",
+    "ru": "Отравлен"
+   }
+  },
+  "status.teleport.out": {
+   "sheet": "fx/minor/status.png",
+   "w": 16,
+   "h": 16,
+   "row": 2,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#b88aff",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 200,
+    "curve": "flash"
+   }
+  },
+  "status.teleport.in": {
+   "sheet": "fx/minor/status.png",
+   "w": 16,
+   "h": 16,
+   "row": 3,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#d8b0ff",
+    "intensity": 1.5,
+    "radius": 2,
+    "ms": 200,
+    "curve": "flash"
+   }
+  },
+  "glyph.bounce": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#cfe6ff",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Bounce",
+    "ru": "Отскок"
+   }
+  },
+  "glyph.affection": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 1,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ff7ab0",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Affection",
+    "ru": "Привязанность"
+   }
+  },
+  "glyph.antiEntropy": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 2,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#bfe8ff",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Anti-entropy",
+    "ru": "Антиэнтропия"
+   }
+  },
+  "glyph.potential": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 3,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ffff8a",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Potential",
+    "ru": "Потенциал"
+   }
+  },
+  "glyph.metabolism": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 4,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#7ad05a",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Metabolism",
+    "ru": "Метаболизм"
+   }
+  },
+  "glyph.stench": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 5,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#8aa83a",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Stench",
+    "ru": "Зловоние"
+   }
+  },
+  "glyph.viscosity": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 6,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#a070e0",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Viscosity",
+    "ru": "Вязкость"
+   }
+  },
+  "glyph.displacement": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 7,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#b88aff",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Displacement",
+    "ru": "Смещение"
+   }
+  },
+  "glyph.entanglement": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 8,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#8a6a3a",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Entanglement",
+    "ru": "Опутывание"
+   }
+  },
+  "glyph.multiplicity": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 9,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#e8f4ff",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Multiplicity",
+    "ru": "Множественность"
+   }
+  },
+  "glyph.autoRepair": {
+   "sheet": "fx/minor/glyphs.png",
+   "w": 32,
+   "h": 32,
+   "row": 10,
+   "frames": 6,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 240,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Auto-repair",
+    "ru": "Самопочинка"
+   }
+  },
+  "arena.dm300.damage1": {
+   "sheet": "fx/boss/dm300.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 4,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "center",
+   "name": {
+    "en": "DM-300, damaged 1",
+    "ru": "DM-300, повреждение 1"
+   }
+  },
+  "arena.dm300.damage2": {
+   "sheet": "fx/boss/dm300.png",
+   "w": 32,
+   "h": 32,
+   "row": 1,
+   "frames": 4,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "center",
+   "light": {
+    "color": "#ff9a3a",
+    "intensity": 1.2,
+    "radius": 2,
+    "ms": 0,
+    "curve": "flicker"
+   },
+   "name": {
+    "en": "DM-300, damaged 2",
+    "ru": "DM-300, повреждение 2"
+   }
+  },
+  "arena.dm300.damage3": {
+   "sheet": "fx/boss/dm300.png",
+   "w": 32,
+   "h": 32,
+   "row": 2,
+   "frames": 4,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "center",
+   "light": {
+    "color": "#ff9a3a",
+    "intensity": 1.7999999999999998,
+    "radius": 2,
+    "ms": 0,
+    "curve": "flicker"
+   },
+   "name": {
+    "en": "DM-300, damaged 3",
+    "ru": "DM-300, повреждение 3"
+   }
+  },
+  "arena.steam": {
+   "sheet": "fx/boss/steam.png",
+   "w": 16,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 8,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "normal",
+   "anchor": "feet",
+   "name": {
+    "en": "Steam",
+    "ru": "Пар"
+   }
+  },
+  "arena.dm300.explode": {
+   "sheet": "fx/boss/explode.png",
+   "w": 64,
+   "h": 64,
+   "row": 0,
+   "frames": 8,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 6,
+    "radius": 7,
+    "ms": 900,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 3,
+    "ms": 600
+   },
+   "tint": {
+    "color": "#ff9a3a",
+    "alpha": 0.18,
+    "ms": 500
+   },
+   "then": "arena.dm300.debris",
+   "name": {
+    "en": "DM-300 bursts",
+    "ru": "DM-300 взрывается"
+   }
+  },
+  "arena.dm300.debris": {
+   "sheet": "fx/boss/debris.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 4,
+   "fps": 10,
+   "loop": true,
+   "behaviour": "drop",
+   "blend": "normal",
+   "anchor": "center",
+   "fall": 1.2,
+   "ms": 900,
+   "reroll": true,
+   "note": "pieces thrown out of the burst: rows 0 plate, 1 gear, 2 bolt; the player picks a row a piece"
+  },
+  "arena.tengu.smoke": {
+   "sheet": "fx/boss/tengu.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 14,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "feet",
+   "name": {
+    "en": "Tengu's smoke",
+    "ru": "Дым Тенгу"
+   },
+   "note": "at both ends of the jump"
+  },
+  "arena.tengu.mark": {
+   "sheet": "fx/boss/shuriken.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 1,
+   "fps": 1,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "stay": {
+    "frame": 0,
+    "ms": 20000
+   },
+   "note": "where a shuriken struck the floor; rows 0-2 are three marks"
+  },
+  "arena.throne": {
+   "sheet": "fx/boss/throne.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 6,
+   "loop": true,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "feet",
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 2.6,
+    "radius": 5,
+    "ms": 0,
+    "curve": "pulse"
+   },
+   "name": {
+    "en": "Throne light",
+    "ru": "Свет трона"
+   }
+  },
+  "arena.king.undead": {
+   "sheet": "fx/boss/undead.png",
+   "w": 16,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "feet",
+   "light": {
+    "color": "#b88aff",
+    "intensity": 2,
+    "radius": 2.5,
+    "ms": 600,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Undead rising",
+    "ru": "Нежить из-под земли"
+   },
+   "note": "before the undead dwarf's own sprite appears on the cell"
+  },
+  "arena.king.crown": {
+   "sheet": "fx/boss/crown.png",
+   "w": 16,
+   "h": 16,
+   "row": 0,
+   "frames": 6,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "stay": {
+    "frame": 5,
+    "ms": 6000
+   },
+   "name": {
+    "en": "The King falls",
+    "ru": "Падение короля"
+   }
+  },
+  "arena.goo.splash": {
+   "sheet": "fx/boss/goo.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 16,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "center",
+   "name": {
+    "en": "Goo splashes",
+    "ru": "Брызги Жижи"
+   }
+  },
+  "arena.goo.pop": {
+   "sheet": "fx/boss/goo-pop.png",
+   "w": 48,
+   "h": 48,
+   "row": 0,
+   "frames": 8,
+   "fps": 12,
+   "loop": false,
+   "behaviour": "splat",
+   "blend": "normal",
+   "anchor": "floor",
+   "stay": {
+    "frame": 7,
+    "ms": 8000
+   },
+   "shake": {
+    "px": 2,
+    "ms": 300
+   },
+   "light": {
+    "color": "#7fdc4a",
+    "intensity": 3,
+    "radius": 4,
+    "ms": 500,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Goo bursts",
+    "ru": "Жижа лопается"
+   }
+  },
+  "arena.yog.glint": {
+   "sheet": "fx/boss/yog.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "hang",
+   "blend": "add",
+   "anchor": "center",
+   "light": {
+    "color": "#ff2a4a",
+    "intensity": 2,
+    "radius": 3,
+    "ms": 400,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Yog's eye",
+    "ru": "Глаз Йога"
+   }
+  },
+  "arena.yog.fist.rotting": {
+   "sheet": "fx/boss/fist.png",
+   "w": 32,
+   "h": 32,
+   "row": 0,
+   "frames": 6,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "normal",
+   "anchor": "feet",
+   "shake": {
+    "px": 1,
+    "ms": 300
+   },
+   "name": {
+    "en": "Rotting fist",
+    "ru": "Гниющий кулак"
+   }
+  },
+  "arena.yog.fist.burning": {
+   "sheet": "fx/boss/fist.png",
+   "w": 32,
+   "h": 32,
+   "row": 1,
+   "frames": 6,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "shake": {
+    "px": 1,
+    "ms": 300
+   },
+   "light": {
+    "color": "#ff9a3a",
+    "intensity": 3,
+    "radius": 4,
+    "ms": 600,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "Burning fist",
+    "ru": "Горящий кулак"
+   }
+  },
+  "arena.yog.death": {
+   "sheet": "fx/boss/yog-death.png",
+   "w": 64,
+   "h": 64,
+   "row": 0,
+   "frames": 8,
+   "fps": 10,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet-floor",
+   "light": {
+    "color": "#ff2a4a",
+    "intensity": 6,
+    "radius": 8,
+    "ms": 1200,
+    "curve": "flash"
+   },
+   "shake": {
+    "px": 4,
+    "ms": 800
+   },
+   "tint": {
+    "color": "#ff2a4a",
+    "alpha": 0.22,
+    "ms": 700
+   },
+   "then": "arena.yog.amulet",
+   "name": {
+    "en": "Yog falls",
+    "ru": "Падение Йога"
+   }
+  },
+  "arena.yog.amulet": {
+   "sheet": "fx/boss/amulet.png",
+   "w": 32,
+   "h": 64,
+   "row": 0,
+   "frames": 8,
+   "fps": 8,
+   "loop": false,
+   "behaviour": "flash",
+   "blend": "add",
+   "anchor": "feet",
+   "hold": 1600,
+   "light": {
+    "color": "#ffcc66",
+    "intensity": 5,
+    "radius": 6,
+    "ms": 2400,
+    "curve": "flash"
+   },
+   "name": {
+    "en": "The Amulet of Yendor",
+    "ru": "Амулет Йендора"
+   }
   }
  },
  "bossCards": {
@@ -2211,5 +3786,231 @@
   "attack.hit": "hit",
   "attack.crit": "hit.crit",
   "attack.miss": "hit.miss"
+ },
+ "moments": {
+  "note": "part 13: event keys for eventKey to learn (migration-p13.md), each to the effect it plays",
+  "mined": "quest.ore.hit",
+  "smith": "quest.anvil",
+  "flock": "minor.sheep.appear",
+  "faded": "minor.sheep.vanish",
+  "mirrored": "minor.mirror",
+  "teleported": "status.teleport.in",
+  "jumped": "arena.tengu.smoke",
+  "yell.summon.king": "arena.king.undead",
+  "died.king": "arena.king.crown",
+  "died.goo": "arena.goo.pop",
+  "hurt.goo": "arena.goo.splash",
+  "died.dm300": "arena.dm300.explode",
+  "died.yog": "arena.yog.death",
+  "spawn.rottingFist": "arena.yog.fist.rotting",
+  "spawn.burningFist": "arena.yog.fist.burning",
+  "burst.purity.wave": "minor.purity",
+  "well.awareness": "place.well.awareness.beam",
+  "well.health": "place.well.health.beam",
+  "well.transmutation": "place.well.transmutation.beam",
+  "statue.wake": "place.statue.wake",
+  "thorns": "minor.thorns",
+  "glyph.bounce": "glyph.bounce",
+  "glyph.affection": "glyph.affection",
+  "glyph.antiEntropy": "glyph.antiEntropy",
+  "glyph.potential": "glyph.potential",
+  "glyph.metabolism": "glyph.metabolism",
+  "glyph.stench": "glyph.stench",
+  "glyph.viscosity": "glyph.viscosity",
+  "glyph.displacement": "glyph.displacement",
+  "glyph.entanglement": "glyph.entanglement",
+  "glyph.multiplicity": "glyph.multiplicity",
+  "glyph.autoRepair": "glyph.autoRepair"
+ },
+ "ambient": {
+  "note": "loops the 3D view keeps while their cause is in sight; a key a terrain or a state, the value the effect (and its row)",
+  "terrain": {
+   "WELL": {
+    "awareness": "place.well.awareness",
+    "health": "place.well.health",
+    "transmutation": "place.well.transmutation"
+   },
+   "ALCHEMY": "place.pot.amber",
+   "PEDESTAL": "place.pedestal",
+   "SIGN": "place.sign",
+   "BOOKSHELF": "place.shelf",
+   "HIGH_GRASS": "place.firefly"
+  },
+  "garden": {
+   "fx": "place.firefly",
+   "per": 6,
+   "note": "a firefly every 6 cells of high grass in a garden room, at night lights"
+  },
+  "library": {
+   "fx": "place.dust",
+   "per": 4,
+   "shelfEvery": [
+    4000,
+    7000
+   ]
+  },
+  "heap": {
+   "dew": "place.dew",
+   "pedestalPrize": "place.prize"
+  },
+  "npc": {
+   "blacksmith": "quest.forge"
+  },
+  "state": {
+   "levitating": "minor.levitate",
+   "slowed": "status.slow",
+   "poisoned": "status.poison",
+   "asleep": "minor.sleep",
+   "mirrorImage": "minor.mirror"
+  },
+  "arena": {
+   "dm300": {
+    "steam": {
+     "fx": "arena.steam",
+     "cells": "the vents of the arena walls (pipes): every 3rd wall cell facing the arena"
+    }
+   },
+   "king": {
+    "throne": "arena.throne"
+   }
+  }
+ },
+ "bosses": {
+  "note": "the staging of the bosses: what the 3D view does that is not a sheet",
+  "goo": {
+   "squash": {
+    "onHit": [
+     [
+      1.25,
+      0.75,
+      60
+     ],
+     [
+      0.9,
+      1.12,
+      60
+     ],
+     [
+      1,
+      1,
+      80
+     ]
+    ],
+    "note": "[scaleX, scaleY, ms] of the sprite, feet fixed"
+   },
+   "hit": "arena.goo.splash",
+   "death": "arena.goo.pop"
+  },
+  "tengu": {
+   "jump": "arena.tengu.smoke",
+   "mark": "arena.tengu.mark",
+   "markRows": 3
+  },
+  "dm300": {
+   "stages": [
+    {
+     "from": 0.66,
+     "fx": "arena.dm300.damage1"
+    },
+    {
+     "from": 0.4,
+     "fx": "arena.dm300.damage2"
+    },
+    {
+     "from": 0.2,
+     "fx": "arena.dm300.damage3"
+    }
+   ],
+   "note": "a stage while health ≤ its share of the maximum (dents and black smoke at the last)",
+   "death": "arena.dm300.explode",
+   "debris": 6
+  },
+  "king": {
+   "throne": "arena.throne",
+   "summon": "arena.king.undead",
+   "fall": {
+    "rotate": 90,
+    "ms": 600,
+    "steps": 4,
+    "then": "arena.king.crown"
+   }
+  },
+  "yog": {
+   "glintEvery": [
+    2200,
+    3600
+   ],
+   "glint": "arena.yog.glint",
+   "fists": {
+    "rotting": "arena.yog.fist.rotting",
+    "burning": "arena.yog.fist.burning"
+   },
+   "death": "arena.yog.death",
+   "amulet": "arena.yog.amulet",
+   "amuletLight": {
+    "color": "#ffcc66",
+    "intensity": 3,
+    "radius": 5,
+    "ms": 0,
+    "curve": "pulse"
+   }
+  }
+ },
+ "bossBar": {
+  "sheet": "ui/boss/bar.png",
+  "frameSheet": "ui/boss/bar-frame.png",
+  "frame": [
+   0,
+   0,
+   64,
+   16
+  ],
+  "slice": 6,
+  "fill": {
+   "hp": [
+    64,
+    0,
+    16,
+    16
+   ],
+   "trace": [
+    80,
+    0,
+    16,
+    16
+   ],
+   "armor": [
+    96,
+    0,
+    16,
+    16
+   ]
+  },
+  "skull": [
+   112,
+   0,
+   16,
+   16
+  ],
+  "icons": {
+   "sheet": "ui/boss/icons.png",
+   "order": [
+    "goo",
+    "tengu",
+    "dm300",
+    "king",
+    "yog"
+   ],
+   "size": 16
+  },
+  "trace": {
+   "ms": 600,
+   "note": "the lost health stays pale this long, then shrinks in 4 steps (as the HUD's wound trace)"
+  },
+  "show": "from the boss card's end (bossCards.timeline.out) until the boss dies or leaves sight; the name and the icon from bossCards",
+  "scale": {
+   "phone": 2,
+   "monitor": 3
+  }
  }
 }

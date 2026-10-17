@@ -8,6 +8,8 @@
  * `renderSfx` returns plain samples (it is tested in node), and `makeBuffer` wraps them for the browser.
  */
 
+import { QUEST_SFX } from './sfx-quest';
+
 export type Wave = 'sine' | 'triangle' | 'saw' | 'square' | 'noise';
 
 /** One voice. Times are seconds, pitches Hz, pitch changes semitones. */
@@ -536,9 +538,14 @@ export const SFX = {
     { wave: 'saw', freq: 120, slide: 12, filter: lp(800), trem: [8, 0.4], attack: 0.15, decay: 0.5 },
     { wave: 'sine', freq: 880, vib: [6, 0.8], delay: 0.2, attack: 0.1, decay: 0.5, gain: 0.3 },
     { wave: 'noise', filter: bp(700, undefined, 1), attack: 0.2, decay: 0.4, gain: 0.3 }),
-  alarm: fx(0.4,
-    { wave: 'square', freq: 740, hold: 0.06, decay: 0.01, crush: 6, repeat: [4, 0.16] },
-    { wave: 'square', freq: 988, delay: 0.08, hold: 0.06, decay: 0.01, crush: 6, repeat: [4, 0.16] }),
+  // The alarm: a struck bell, three times, each softer than the last (its partials are not whole multiples, as a bell's are not).
+  alarm: fx(0.6,
+    { wave: 'noise', filter: bp(3200, undefined, 2), attack: 0.001, decay: 0.012, shape: 3, gain: 0.5, repeat: [3, 0.34, 0.8] },
+    { wave: 'sine', freq: 740, attack: 0.002, decay: 0.8, shape: 2.5, repeat: [3, 0.34, 0.8] },
+    { wave: 'sine', freq: 740 * 2.01, attack: 0.002, decay: 0.55, shape: 2.5, gain: 0.55, repeat: [3, 0.34, 0.8] },
+    { wave: 'sine', freq: 740 * 2.76, attack: 0.002, decay: 0.4, shape: 2.5, gain: 0.4, repeat: [3, 0.34, 0.8] },
+    { wave: 'sine', freq: 740 * 5.4, attack: 0.002, decay: 0.22, shape: 3, gain: 0.22, repeat: [3, 0.34, 0.8] },
+    { wave: 'sine', freq: 370, attack: 0.002, decay: 0.9, shape: 2, gain: 0.3, repeat: [3, 0.34, 0.8] }),
 
   // The cry of a boss and of champions about to come: a brassy blare falling away over a growl, the hall answering.
   boss: fx(0.9,
@@ -611,6 +618,115 @@ export const SFX = {
   ember: fx(0.4,
     { wave: 'noise', filter: bp(2500, 900, 1.5), decay: 0.05, shape: 3 },
     { wave: 'sine', freq: 600, slide: -10, decay: 0.04, gain: 0.3 }),
+
+  // The quests': a pick on rock, ore gleaming, a reward's fanfare, a giver's voice (sfx-quest.ts).
+  ...QUEST_SFX,
+  /* Searching: what the walls answer. */
+  // Behind the wall there is a space: a soft knock with a hollow body, and the room answering after it.
+  knockHollow: fx(0.6,
+    { wave: 'sine', freq: 190, slide: -9, attack: 0.002, decay: 0.12, shape: 2.5 },
+    { wave: 'noise', filter: bp(1100, undefined, 1.6), attack: 0.001, decay: 0.025, shape: 3, gain: 0.45 },
+    { wave: 'sine', freq: 320, slide: -6, delay: 0.035, attack: 0.004, decay: 0.2, shape: 2.2, gain: 0.35 },
+    { wave: 'sine', freq: 245, slide: -5, delay: 0.1, attack: 0.01, decay: 0.28, shape: 2, gain: 0.16 }),
+  // Solid stone: a short dull tap, nothing under it, nothing after it.
+  knockSolid: fx(0.5,
+    { wave: 'noise', filter: lp(1500, 300), attack: 0.001, decay: 0.045, shape: 3 },
+    { wave: 'sine', freq: 120, slide: -14, attack: 0.001, decay: 0.05, shape: 3, gain: 0.5 }),
+
+  /* Weak things made vivid. */
+  // A sheep: a nasal, wavering baa that sags at the end.
+  bleat: fx(0.55,
+    { wave: 'saw', freq: 360, slide: -3, jump: [0.55, -2], vib: [26, 2.4], filter: bp(950, 640, 3.2), attack: 0.03, hold: 0.16, decay: 0.2 },
+    { wave: 'saw', freq: 372, slide: -3, jump: [0.55, -2], vib: [24, 2], filter: bp(1500, 1000, 3), attack: 0.03, hold: 0.14, decay: 0.18, gain: 0.35 },
+    { wave: 'noise', filter: bp(2200, undefined, 1.5), attack: 0.04, hold: 0.12, decay: 0.2, gain: 0.08 }),
+  // A spike from the ring: a thin tick and a short bright ping.
+  thorns: fx(0.5,
+    { wave: 'noise', filter: hp(4500), attack: 0.001, decay: 0.012, shape: 3 },
+    { wave: 'triangle', freq: 2300, slide: -10, attack: 0.001, decay: 0.07, shape: 3, gain: 0.5 },
+    { wave: 'sine', freq: 3400, delay: 0.012, attack: 0.001, decay: 0.12, gain: 0.2 }),
+  // The psionic blast gathering: a whine that climbs and tightens, before the blast itself.
+  psiWarn: fx(0.65,
+    { wave: 'sine', freq: 380, slide: 28, curve: 1.6, trem: [22, 0.5], attack: 0.01, hold: 0.1, decay: 0.08 },
+    { wave: 'triangle', freq: 760, slide: 28, curve: 1.6, attack: 0.03, hold: 0.1, decay: 0.06, gain: 0.35 }),
+  // Purity: air clearing, bells rising through it.
+  purify: fx(0.5,
+    { wave: 'noise', filter: bp(1800, 5200, 0.9), attack: 0.1, hold: 0.1, decay: 0.45, shape: 1.6, gain: 0.35 },
+    ...run([1046.5, 1318.5, 1568, 2093], 0.08, { wave: 'sine', attack: 0.004, decay: 0.2, gain: 0.5 }, 0.55, 0.05)),
+  // A mirror image arriving: glass shivering in, a bright shimmer settling.
+  shimmer: fx(0.5,
+    { wave: 'sine', freq: 2600, slide: -8, fm: [1.5, 2], attack: 0.04, hold: 0.06, decay: 0.3, gain: 0.5 },
+    { wave: 'sine', freq: 3300, decay: 0.12, scatter: [8, 0.35, 8], gain: 0.25 },
+    { wave: 'sine', freq: 1320, slide: 6, delay: 0.1, decay: 0.3, gain: 0.3 }),
+  // Floating up: a soft rising breath with a little air in it.
+  levitate: fx(0.45,
+    { wave: 'sine', freq: 330, slide: 14, trem: [6, 0.3], attack: 0.1, hold: 0.1, decay: 0.4 },
+    { wave: 'noise', filter: bp(700, 1800, 1), attack: 0.15, hold: 0.1, decay: 0.35, gain: 0.25 }),
+  // An armour's glyph flaring: a short rune-chime, two tones and a spark.
+  glyph: fx(0.45,
+    { wave: 'triangle', freq: 1175, slide: 4, attack: 0.002, decay: 0.09 },
+    { wave: 'sine', freq: 1760, delay: 0.045, attack: 0.002, decay: 0.16, gain: 0.5 },
+    { wave: 'noise', filter: hp(5000), decay: 0.008, delay: 0.04, gain: 0.2 }),
+  // A heavy sheet of stillness slowing a creature: a low sag with a sticky drip in it.
+  slowed: fx(0.45,
+    { wave: 'triangle', freq: 520, slide: -26, fm: [1, 1.2], decay: 0.4 },
+    { wave: 'sine', freq: 260, slide: -18, delay: 0.04, decay: 0.45, gain: 0.5 }),
+
+  /* The places. */
+  // The three wells, each its own: warm and low (health), clear and glassy (awareness), swirling and odd (transmutation).
+  wellHealth: fx(0.5,
+    ...run([392, 523.3, 659.3], 0.11, { wave: 'sine', attack: 0.01, decay: 0.5, gain: 0.55 }, 0.9),
+    { wave: 'triangle', freq: 196, attack: 0.05, hold: 0.2, decay: 0.7, gain: 0.3 }),
+  wellAware: fx(0.5,
+    ...run([1318.5, 1760, 2349], 0.09, { wave: 'sine', attack: 0.003, decay: 0.45, gain: 0.5 }, 0.8),
+    { wave: 'sine', freq: 3136, delay: 0.12, decay: 0.2, scatter: [4, 0.5, 5], gain: 0.15 }),
+  wellChange: fx(0.5,
+    { wave: 'sine', freq: 440, slide: 12, fm: [1.41, 3], vib: [5, 1.5], attack: 0.05, hold: 0.25, decay: 0.55 },
+    { wave: 'sine', freq: 660, slide: -9, fm: [1.41, 2], vib: [6, 1.2], delay: 0.08, attack: 0.05, hold: 0.2, decay: 0.5, gain: 0.5 },
+    { wave: 'sine', freq: 1900, decay: 0.07, scatter: [5, 0.7, 12], gain: 0.15 }),
+  // The pot bubbling: a low gurgle and a handful of pops, each higher than it began.
+  bubble: fx(0.45,
+    { wave: 'noise', filter: lp(500, 250, 1), attack: 0.1, hold: 0.25, decay: 0.3, trem: [14, 0.6], gain: 0.5 },
+    { wave: 'sine', freq: 420, slide: 16, attack: 0.001, decay: 0.07, scatter: [5, 0.7, 9], gain: 0.7 }),
+  // The brew done: the bubbling, then a clear rising chime.
+  brewDone: fx(0.55,
+    { wave: 'sine', freq: 380, slide: 16, attack: 0.001, decay: 0.07, scatter: [4, 0.3, 8], gain: 0.5 },
+    ...run([784, 987.8, 1175, 1568], 0.07, { wave: 'sine', attack: 0.004, decay: 0.18, gain: 0.5 }, 0.5, 0.25)),
+  // The altar's fire: a low roar with crackle in it.
+  altarFire: fx(0.5,
+    { wave: 'noise', filter: lp(420, 260, 0.8), attack: 0.2, hold: 0.4, decay: 0.6, shape: 1.6, trem: [9, 0.35] },
+    { wave: 'sine', freq: 62, attack: 0.2, hold: 0.4, decay: 0.6, gain: 0.5 },
+    { wave: 'noise', filter: hp(2400), decay: 0.01, shape: 2.5, scatter: [7, 1], gain: 0.4 }),
+  // The fire takes the offering: a deep chord and a rise of sparks.
+  altarAccept: fx(0.7,
+    { wave: 'sine', freq: 130.8, attack: 0.02, hold: 0.2, decay: 1.1, gain: 0.8 },
+    { wave: 'sine', freq: 196, attack: 0.04, hold: 0.2, decay: 1, gain: 0.5 },
+    { wave: 'triangle', freq: 261.6, attack: 0.06, hold: 0.2, decay: 0.9, gain: 0.35 },
+    ...run([784, 1046.5, 1318.5, 1568], 0.1, { wave: 'sine', attack: 0.004, decay: 0.3, gain: 0.25 }, 0.6, 0.15),
+    { wave: 'noise', filter: hp(2600), decay: 0.01, scatter: [10, 0.9], gain: 0.3 }),
+  // Refused: the flame gutters, a low sour note.
+  altarRefuse: fx(0.55,
+    { wave: 'saw', freq: 110, slide: -6, filter: lp(600, 220), attack: 0.02, hold: 0.1, decay: 0.5, gain: 0.7 },
+    { wave: 'noise', filter: lp(800, 200), attack: 0.02, decay: 0.4, gain: 0.5 }),
+  // The statue stirring: stone grinding, cracks snapping through it, a rumble underneath.
+  stoneCrack: fx(0.75,
+    { wave: 'noise', filter: bp(900, 280, 2.5), attack: 0.05, hold: 0.45, decay: 0.3, trem: [34, 0.7], gain: 0.7 },
+    { wave: 'noise', filter: hp(2500), decay: 0.012, shape: 3, scatter: [9, 0.7], gain: 0.7 },
+    { wave: 'sine', freq: 52, slide: 4, attack: 0.1, hold: 0.45, decay: 0.4, gain: 0.8 },
+    { wave: 'sine', freq: 1500, decay: 0.03, scatter: [4, 0.6, 14], gain: 0.15 }),
+  // The statue awake: stone breaking away, a heavy step.
+  stoneAwake: fx(0.9,
+    { wave: 'noise', filter: lp(2200, 150), attack: 0.002, hold: 0.04, decay: 0.55, shape: 2.2 },
+    { wave: 'sine', freq: 70, slide: -28, attack: 0.002, decay: 0.45, gain: 0.9 },
+    { wave: 'noise', filter: bp(1500, undefined, 1), decay: 0.03, scatter: [10, 0.5], delay: 0.03, gain: 0.5 },
+    { wave: 'sine', freq: 392, delay: 0.02, decay: 0.5, gain: 0.12 }),
+  // Pages turned: two dry flaps of paper.
+  pages: fx(0.3,
+    { wave: 'noise', filter: bp(3200, 1800, 1.1), attack: 0.012, decay: 0.07, shape: 1.8, repeat: [2, 0.13, 0.6] }),
+  // The prize on its pedestal: a slow, thin shimmer.
+  shine: fx(0.35,
+    { wave: 'sine', freq: 2093, attack: 0.02, decay: 0.55, shape: 2.5 },
+    { wave: 'sine', freq: 3136, delay: 0.08, attack: 0.02, decay: 0.45, shape: 2.5, gain: 0.5 },
+    { wave: 'sine', freq: 4186, delay: 0.17, attack: 0.02, decay: 0.3, shape: 2.5, gain: 0.25 }),
 } as const satisfies Record<string, Sfx>;
 
 export type SfxName = keyof typeof SFX;

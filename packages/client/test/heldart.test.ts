@@ -39,6 +39,18 @@ describe('what a puppet holds in its hand', () => {
     expect(heldFor(data, hero({ weapon: 'weapon.notAThing' as never }), 'side', 0, 0)).toBeNull();
   });
 
+  it('takes up the pickaxe for a moment at a vein, whatever is wielded or not', () => {
+    for (const weapon of [undefined, 'weapon.sword' as const]) {
+      const swing = hero({ weapon, anim: 'attack', tool: 'weapon.pickaxe', toolUntil: 900 });
+      const held = heldFor(data, swing, 'side', 14, 500);
+      expect(held, String(weapon)).not.toBeNull();
+      expect(held!.sheet).toContain('pickaxe');
+      // Past its moment the hand holds what it held before.
+      const later = heldFor(data, swing, 'side', 14, 1000);
+      expect(later === null ? null : later.sheet).toBe(weapon ? held!.sheet.replace('pickaxe', 'sword') : null);
+    }
+  });
+
   it('swings in the attack animation, and holds still in every other one', () => {
     const angle = (anim: string, frame: number): number | undefined => {
       const held = heldFor(data, hero({ anim: anim as never }), 'side', frame, 0);

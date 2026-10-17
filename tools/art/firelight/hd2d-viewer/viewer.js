@@ -414,6 +414,7 @@ if (FXS) {
   /** one frame of an effect at a cell (x, z in cells, may be fractional): flat on the floor or standing, with its light */
   async function put(id, frame, x, z, o = {}) {
     const e = FX.fx[id]; const img = await sheetImg(e.sheet);
+    frame = (frame + +(Q.get('fo') || 0)) % e.frames;
     const tex = cellTexture(img, frame * e.w, (o.row ?? e.row) * e.h, e.w, e.h);
     const sc = o.scale || 1; const w = e.w / 16 * sc, h = e.h / 16 * sc;
     const add = e.blend === 'add';
@@ -477,6 +478,124 @@ if (FXS) {
     },
     ankh: async () => { await put('hero.ankh', 4, hxp + 0.5, hzp + 0.55, { tint: true }); },
     amulet: async () => { await put('hero.amulet', 3, hxp + 0.5, hzp + 0.55, { tint: false }); },
+    /* ---------- part 13: quests, places, the small magic, the bosses' stagings (&fo=<n> moves every frame on by n, for the GIFs) ---------- */
+    ...(() => {
+      const tilesP = loadImg(`assets/tiles${R}.png`);
+      const decal = async (id, x, z, sz = 1, y = 0.025) => {     // a tile of the region laid on the floor (wells, pot, pedestal, sign)
+        const tex = cellTexture(await tilesP, (id % 16) * 16, Math.floor(id / 16) * 16, 16, 16);
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(sz, sz), new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.4, roughness: 0.9 }));
+        m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); scene.add(m); return m;
+      };
+      const stand = async (id, x, z, h = 1) => {                  // a tile stood up as a card (bookshelf, statue)
+        const tex = cellTexture(await tilesP, (id % 16) * 16, Math.floor(id / 16) * 16, 16, 16);
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1, h * STRETCH), rimMaterial(tex, 16, 16));
+        m.geometry.translate(0, h * STRETCH / 2, 0); m.rotation.x = -LEAN; m.position.set(x, 0.01, z); scene.add(m); return m;
+      };
+      const itemTex = (i) => cellTexture(itemsImg, (i % 8) * 16, Math.floor(i / 8) * 16, 16, 16);
+      const floatItem = async (i, x, z, y = 0.75) => {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemTex(i), transparent: true })); s.scale.set(0.8, 0.8, 1); s.position.set(x, y, z); scene.add(s); return s;
+      };
+      const who = (n, fw, fh, fr, x, z, sc = 1, row = 0) => charSprite(n, fw, fh, fr, row, [x, z], sc);
+      const holding = async (w, f, x, z, cls = 'warrior', facing = 'side', tier = 3, anim = 'attack') => heldSprite(await heldCanvas(cls, facing, tier, f, w, anim, null, null), [x, z], false);
+      const B = boss || [hxp, hzp - 4];
+      return {
+        npc: async () => {      // a quest-giver beside the hero (&who=ghost|wandmaker|blacksmith|imp): the dialog's backdrop
+          const N = { ghost: [14, 15, 0], wandmaker: [12, 14, 0], blacksmith: [13, 16, 2], imp: [12, 14, 0] }[Q.get('who') || 'ghost'];
+          await who(Q.get('who') || 'ghost', N[0], N[1], N[2], hxp + 1, hzp - 1);
+          if (Q.get('who') === 'blacksmith') await put('quest.forge', 1, hxp + 2.6, hzp - 1.1, {});
+        },
+        smith: async () => {    // caves close: the troll at his forge, the anvil's sparks; the hero mining dark gold at the wall
+          await who('blacksmith', 13, 16, 2, hxp + 2, hzp - 1);
+          await put('quest.forge', 2, hxp + 3.5, hzp - 1.2, {}); await put('quest.anvil', 1, hxp + 2.6, hzp - 0.6, { scale: 1 });
+          window.__late = () => holding('pickaxe', 14, hxp - 2, hzp);
+          await put('quest.ore.hit', 1, hxp - 2.6, hzp - 0.2, {}); await put('quest.ore.nugget', 0, hxp - 1.4, hzp + 0.8, { at: 'floor' });
+          await floatItem(102, hxp - 0.4, hzp + 1.3, 0.25);
+        },
+        rewards: async () => {  // prison: the six rewards on their podiums, each in its giver's light
+          const items = [20, 26, 48, 53, 27, 32];
+          const ids = ['ghost.weapon', 'ghost.armor', 'wandmaker.battle', 'wandmaker.utility', 'blacksmith.reforge', 'imp.ring'];
+          for (let i = 0; i < 6; i++) {
+            const x = hxp - 4.2 + i * 1.7, z = hzp - 1.2 + (i % 2) * 0.6;
+            await put('quest.reward.' + ids[i], i, x, z, { lk: 0.6 }); await floatItem(items[i], x, z + 0.1, 0.95);
+          }
+        },
+        wells: async () => {    // sewers: the three wells, their waters; the well of health in use
+          const W = [['awareness', -2.5], ['health', 0.5], ['transmutation', 3.5]];
+          for (const [k, dx] of W) { await decal(34, hxp + dx, hzp - 1.5); await put('place.well.' + k, 2, hxp + dx, hzp - 1.5, {}); }
+          await put('place.well.health.beam', 3, hxp + 0.5, hzp - 1.3, { tint: false });
+        },
+        pot: async () => {      // caves: the pot bubbling green, seeds beside it
+          await decal(42, hxp + 1.5, hzp - 1); await put('place.pot.green', 2, hxp + 1.5, hzp - 1, {});
+          await floatItem(92, hxp + 0.4, hzp - 0.4, 0.2); await floatItem(88, hxp + 2.6, hzp - 0.5, 0.2);
+          await decal(42, hxp - 2.5, hzp + 1); await put('place.pot.crimson', 4, hxp - 2.5, hzp + 1, {});
+        },
+        garden: async () => {   // sewers: fireflies over the grass, dew on it
+          const pts = [[-3, -1.5], [-2.2, -0.6], [-1.4, -1.8], [2.2, -0.9], [3.4, -1.6], [1.6, -2.0], [-3.6, -2.4], [3.0, -0.4], [0.4, -2.6], [-0.8, -0.8]];
+          for (let i = 0; i < pts.length; i++) await put('place.firefly', i % 4, hxp + 0.5 + pts[i][0], hzp + pts[i][1], { y: 0.4 + (i % 3) * 0.25 });
+          await put('place.dew', 0, hxp - 1.5, hzp - 1.5, { scale: 1.5 }); await put('place.dew', 1, hxp + 2.5, hzp - 0.5, { scale: 1.5 });
+        },
+        statue: async () => {   // city: two statues, one waking — cracks glow, dust bursts; the other already a living statue
+          await stand(35, hxp - 2.5, hzp - 1.2, 1); await put('place.statue.wake', 2, hxp - 2.5, hzp - 1.1, { scale: 1 });
+          await stand(35, hxp + 1.5, hzp - 1.2, 1); await put('place.statue.dust', 2, hxp + 1.5, hzp - 1, {});
+          await who('statue', 12, 15, 2, hxp + 1, hzp - 1, 1.1);
+        },
+        library: async () => {  // prison: shelves with light running over the spines, dust turning; a sign; a prize on its pedestal
+          for (let i = 0; i < 4; i++) { await stand(41, hxp - 3.5 + i, hzp - 2.3, 1.3); }
+          await put('place.shelf', 2, hxp - 2.5, hzp - 2.0, { y: 0.4 }); await put('place.shelf', 4, hxp - 0.5, hzp - 2.0, { y: 0.4, light: false });
+          for (let i = 0; i < 5; i++) await put('place.dust', i % 4, hxp - 3 + i * 0.9, hzp - 1.2 + (i % 2) * 0.4, { y: 0.4 + i * 0.12 });
+          await decal(29, hxp + 2.5, hzp - 0.5); await put('place.sign', 0, hxp + 2.5, hzp - 0.4, { y: 0.1 });
+          await decal(11, hxp + 1.5, hzp + 1.5); await put('place.pedestal', 2, hxp + 1.5, hzp + 1.5, {}); await floatItem(32, hxp + 1.5, hzp + 1.6, 0.8);
+          await put('place.prize', 1, hxp + 1.5, hzp + 1.6, { y: 0.3 });
+        },
+        minor: async () => {    // prison: sheep out of the wand of flock, thorns round the hero, a gnoll asleep, two mirror images
+          for (let i = 0; i < 3; i++) { await who('sheep', 16, 15, i, hxp + 2 + i, hzp - 1.5); }
+          await put('minor.sheep.appear', 2, hxp + 2.5, hzp - 1.4, {}); await put('minor.sheep.vanish', 3, hxp + 5.5, hzp - 1.4, {});
+          await put('minor.thorns', 2, hxp + 0.5, hzp + 0.55, {});
+          await who('gnoll', 12, 15, 0, hxp - 3, hzp - 1); await put('minor.sleep', 2, hxp - 2.5, hzp - 0.9, { y: 0.55 });
+          for (const dx of [-2, 2]) { await who('warrior', 12, 15, 0, hxp + dx, hzp + 2, 1, 1); await put('minor.mirror', 1 + dx, hxp + dx + 0.5, hzp + 2.55, {}); }
+        },
+        status: async () => {   // caves: a slowed bat... a spinner slowed, a poisoned one, a teleport out and in, the hero floating, the alarm
+          await who('spinner', 16, 16, 0, hxp - 3, hzp - 1); await put('status.slow', 2, hxp - 2.5, hzp - 0.45, {});
+          await who('spinner', 16, 16, 0, hxp - 1, hzp - 2); await put('status.poison', 1, hxp - 0.5, hzp - 1.6, { y: 0.1 });
+          await put('status.teleport.out', 2, hxp + 2.5, hzp - 1.5, {}); await put('status.teleport.in', 4, hxp + 4.5, hzp - 1.5, {});
+          await put('minor.levitate', 2, hxp + 0.5, hzp + 0.5, {});
+          await put('trap.alarm', 2, hxp - 2.5, hzp + 2.5, {}); await put('minor.alarm', 2, hxp - 2.5, hzp + 2.4, { y: 0.6 });
+        },
+        glyphs: async () => {   // city: six warriors, a glyph going off on each
+          const G = ['bounce', 'affection', 'antiEntropy', 'potential', 'viscosity', 'entanglement', 'stench', 'metabolism', 'displacement', 'multiplicity', 'autoRepair'];
+          const set = Q.get('g') === '2' ? G.slice(6) : G.slice(0, 6);
+          for (let i = 0; i < set.length; i++) {
+            const x = hxp - 3.4 + i * 1.5, z = hzp + (i % 2) * 0.4;
+            await who('warrior', 12, 15, 0, x - 0.5, z - 0.5, 1, 3); await put('glyph.' + set[i], 3, x, z + 0.05, {});
+          }
+        },
+        dm300: async () => {    // caves arena: DM-300 damaged (&st=1|2|3), steam out of the pipes
+          const st = +(Q.get('st') || 2);
+          await put('arena.dm300.damage' + st, 1, B[0] + 0.5, B[1] + 0.5, { scale: 1.9, y: 0.1 });
+          for (const [dx, dz] of [[-5, -4], [5, -4], [-6, 0], [6, 0]]) await put('arena.steam', (dx + 7) % 6, B[0] + 0.5 + dx, B[1] + 0.5 + dz, {});
+        },
+        dm300x: async () => {   // DM-300 bursts: the blast, plates and gears thrown out
+          await put('arena.dm300.explode', 3, B[0] + 0.5, B[1] + 0.55, { scale: 1.4, tint: true });
+          for (let i = 0; i < 6; i++) await put('arena.dm300.debris', i % 4, B[0] + 0.5 + Math.cos(i) * 2.4, B[1] + 0.5 + Math.sin(i) * 1.6, { row: i % 3, y: 0.3 + (i % 2) * 0.3, light: false });
+        },
+        tengu: async () => {    // prison arena: Tengu's smoke at both ends of the jump, shuriken marks on the floor
+          await put('arena.tengu.smoke', 2, B[0] + 0.5, B[1] + 0.55, {}); await put('arena.tengu.smoke', 4, B[0] - 2.5, B[1] + 2.55, {});
+          for (let i = 0; i < 4; i++) await put('arena.tengu.mark', 0, hxp + 0.5 + (i - 1.5) * 1.3, hzp - 1.5 + (i % 2), { row: i % 3 });
+        },
+        king: async () => {     // city arena: the throne's light round the King, the dead rising
+          await put('arena.throne', 2, B[0] + 0.5, B[1] + 0.55, { scale: 1.5 });
+          for (let i = 0; i < 3; i++) await put('arena.king.undead', 2 + i, B[0] + 0.5 + (i - 1) * 2.2, B[1] + 2.5, { scale: 1.5 });
+        },
+        kingx: async () => { await put('arena.king.crown', 4, B[0] + 0.5, B[1] + 1.2, { scale: 1.6 }); await put('place.statue.dust', 3, B[0] + 0.5, B[1] + 0.8, { scale: 1.4 }); },
+        goo: async () => { await put('arena.goo.splash', 2, B[0] + 0.5, B[1] + 0.5, { scale: 1.3 }); },
+        goox: async () => { await put('arena.goo.pop', 4, B[0] + 0.5, B[1] + 0.6, { scale: 1.3 }); },
+        yog: async () => {      // halls arena: the glint of the eye, a rotting fist and a burning one coming up
+          await put('arena.yog.glint', 2, B[0] + 0.5, B[1] + 0.5, { scale: 1.6, y: 0.4 });
+          await put('arena.yog.fist.rotting', 3, B[0] - 2.5, B[1] + 2.5, {}); await put('arena.yog.fist.burning', 3, B[0] + 3.5, B[1] + 2.5, {});
+        },
+        yogx: async () => { await put('arena.yog.death', 4, B[0] + 0.5, B[1] + 0.6, { scale: 1.5, tint: true }); await put('arena.yog.amulet', 4, B[0] + 0.5, B[1] + 0.8, {}); },
+      };
+    })(),
   };
   await S[FXS]?.();
 }
@@ -636,6 +755,7 @@ if (DIRS === 'held' || DIRS === 'strike') {
   }
 }
 
+if (window.__late) await window.__late();   // part 13: what needs the held weapons, defined after the effects
 /* ---------- the rim of the strongest light on each figure ---------- */
 if (RULES && SP.rim.on && !Q.has('norim')) {
   const lights = []; scene.traverse((o) => { if (o.isPointLight || o.isSpotLight) lights.push(o); });

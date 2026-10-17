@@ -49,8 +49,9 @@ export type Tier = 0 | 1 | 2 | 3 | 4;
 
 /** How many sparks a step shows: none for 0; half (rounded up) in the light mode or where particles are off. */
 export function sparkCount(tier: number, halved: boolean): number {
-  if (tier < 1) return 0;
-  const n = SPARKS[Math.min(4, tier) - 1]!;
+  // Only from the second step, and at most two: a gleam on what he holds, never a swarm of specks round him (the owner's word).
+  if (tier < 2) return 0;
+  const n = Math.min(2, SPARKS[Math.min(4, tier) - 1]!);
   return halved ? Math.ceil(n / 2) : n;
 }
 

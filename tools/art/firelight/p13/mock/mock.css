@@ -1,0 +1,16 @@
+/* The mock's scaffolding only (not for the game). */
+html, body { margin: 0; height: 100%; background: var(--void); overflow: hidden; }
+.mk-ui { position: fixed; inset: 0; overflow: hidden; --hud-h: 112px; }
+.mk-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+.mk-dim { position: absolute; inset: 0; background: var(--scrim); z-index: 40; }
+.mk-ui .pd-overlay.static { z-index: 50; }
+.mk-stamp { position: fixed; right: 6px; bottom: 4px; z-index: 999; font: 400 12px/14px var(--font-small); color: rgba(232, 226, 200, .55); text-shadow: 0 1px 0 #000; }
+.pd-scroll { display: flex; flex-direction: column; gap: var(--space-2); }
+.mk-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.mk-buttons { display: flex; gap: var(--space-2); } .mk-buttons .pd-button { flex: 1; }
+@media (min-width: 700px) {
+  .mk-ui .pd-hud { right: auto; width: 470px; background: none; }
+  .mk-ui .pd-hud-main { background: rgba(11, 11, 9, .78); clip-path: var(--notch); padding: 6px; box-shadow: inset 0 0 0 var(--u) var(--stone-500); }
+  .mk-ui .pd-toolbar { left: 50%; right: auto; transform: translateX(-50%); width: 520px; bottom: 12px; background: rgba(11, 11, 9, .78); clip-path: var(--notch); padding: 6px; }
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; }

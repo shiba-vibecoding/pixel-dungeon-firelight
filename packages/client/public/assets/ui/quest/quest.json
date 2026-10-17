@@ -1,0 +1,226 @@
+{
+ "version": 1,
+ "portraits": {
+  "sheet": "ui/quest/portraits.png",
+  "size": 48,
+  "rows": [
+   "ghost",
+   "wandmaker",
+   "blacksmith",
+   "imp"
+  ],
+  "moods": [
+   "calm",
+   "pleased",
+   "annoyed"
+  ],
+  "frame": {
+   "sheet": "ui/quest/portrait-frame.png",
+   "size": 64,
+   "inset": 8
+  },
+  "mood": {
+   "calm": "the greeting, the reminder",
+   "pleased": "the quest done, the reward given",
+   "annoyed": "not yet / not enough / refused (noGold, noPickaxe, noBlood, a busy smith)"
+  },
+  "scale": {
+   "phone": 1,
+   "monitor": 2
+  }
+ },
+ "dialog": {
+  "sheet": "ui/quest/dialog-frame.png",
+  "size": 48,
+  "slice": 8
+ },
+ "icons": {
+  "sheet": "ui/quest/icons.png",
+  "size": 16,
+  "goals": [
+   "rose",
+   "skull",
+   "dust",
+   "seed",
+   "fish",
+   "ore",
+   "blood",
+   "token",
+   "golem",
+   "pickaxe",
+   "curse"
+  ],
+  "badges": [
+   "ghost",
+   "wandmaker",
+   "blacksmith",
+   "imp"
+  ]
+ },
+ "goals": {
+  "ghost": {
+   "rose": {
+    "item": "quest.rose",
+    "of": 1
+   },
+   "rat": {
+    "item": "quest.skull",
+    "of": 1,
+    "icon": "skull"
+   },
+   "curse": {
+    "icon": "curse",
+    "of": 1
+   }
+  },
+  "wandmaker": {
+   "dust": {
+    "item": "quest.dust",
+    "of": 1
+   },
+   "berry": {
+    "item": "seed.rotberry",
+    "of": 1,
+    "icon": "seed"
+   },
+   "fish": {
+    "item": "quest.fish",
+    "of": 1
+   }
+  },
+  "blacksmith": {
+   "gold": {
+    "item": "quest.ore",
+    "of": 15,
+    "icon": "ore",
+    "tool": "pickaxe"
+   },
+   "blood": {
+    "icon": "blood",
+    "of": 1,
+    "tool": "pickaxe",
+    "note": "the pickaxe stained with a vampire bat's blood (item.bloody)"
+   }
+  },
+  "imp": {
+   "monk": {
+    "item": "quest.token",
+    "of": 8,
+    "icon": "token"
+   },
+   "golem": {
+    "item": "quest.token",
+    "of": 6,
+    "icon": "golem"
+   }
+  }
+ },
+ "names": {
+  "rose": {
+   "en": "Dried rose",
+   "ru": "Засохшая роза"
+  },
+  "skull": {
+   "en": "Rat skull",
+   "ru": "Крысиный череп"
+  },
+  "dust": {
+   "en": "Corpse dust",
+   "ru": "Трупная пыль"
+  },
+  "seed": {
+   "en": "Rotberry seed",
+   "ru": "Семя гнилоягоды"
+  },
+  "fish": {
+   "en": "Phantom fish",
+   "ru": "Призрачная рыба"
+  },
+  "ore": {
+   "en": "Dark gold ore",
+   "ru": "Руда тёмного золота"
+  },
+  "blood": {
+   "en": "Vampire bat's blood",
+   "ru": "Кровь летучей мыши-вампира"
+  },
+  "token": {
+   "en": "Dwarf token (monk)",
+   "ru": "Жетон гнома (монах)"
+  },
+  "golem": {
+   "en": "Dwarf token (golem)",
+   "ru": "Жетон гнома (голем)"
+  },
+  "pickaxe": {
+   "en": "Pickaxe",
+   "ru": "Кирка"
+  },
+  "curse": {
+   "en": "The curse",
+   "ru": "Проклятие"
+  }
+ },
+ "progress": {
+  "sheet": "ui/quest/progress.png",
+  "track": [
+   0,
+   0,
+   48,
+   16
+  ],
+  "slice": 6,
+  "fill": {
+   "empty": [
+    48,
+    0,
+    16,
+    16
+   ],
+   "ember": [
+    64,
+    0,
+    16,
+    16
+   ],
+   "gold": [
+    80,
+    0,
+    16,
+    16
+   ],
+   "done": [
+    96,
+    0,
+    16,
+    16
+   ]
+  },
+  "tick": [
+   112,
+   0,
+   16,
+   16
+  ],
+  "note": "a step a unit while «of» ≤ 15 (ore 15, tokens 8 or 6), else a share; the last step gold, all green when done"
+ },
+ "rewards": {
+  "ghost.weapon": "quest.reward.ghost.weapon",
+  "ghost.armor": "quest.reward.ghost.armor",
+  "wandmaker.battle": "quest.reward.wandmaker.battle",
+  "wandmaker.utility": "quest.reward.wandmaker.utility",
+  "blacksmith.reforge": "quest.reward.blacksmith.reforge",
+  "imp.ring": "quest.reward.imp.ring"
+ },
+ "smith": {
+  "mine": "quest.ore.hit",
+  "nugget": "quest.ore.nugget",
+  "forge": "quest.forge",
+  "anvil": "quest.anvil",
+  "pickaxe": {
+   "held": "weapons/held/pickaxe.png",
+   "style": "blunt",
+   "note": "the part 9 pickaxe in the hand; a blow at an ore wall plays the blunt attack, quest.ore.hit at the wall's face"
+  }
+ }
+}

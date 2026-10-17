@@ -16,6 +16,8 @@ import { K_FLOOR, K_WATER, type LevelGeom } from './levelgeom';
 import { QuadBatch } from './quadbatch';
 import { Fx3D } from './fx3d';
 import { Growth3D } from './growth3d';
+import { Places3D } from './places3d';
+import { quality } from '../quality';
 import { chunkSize, SPECK_GROW, stainSize } from './bloodsize';
 import { ATLAS } from '../fxsheet';
 import type { SharedImages } from './assets3d';
@@ -34,6 +36,13 @@ export const DOT_AT = [16, 24, 32, 32] as const;
 const DISC_AT = [64, 24, 32, 32] as const;
 const RING_AT = [0, 64, 64, 64] as const;
 const MIST_AT = [128, 0, 128, 128] as const;
+/** The places' own shapes (places3d.ts): a column of light, a pixel «z», a four-point sparkle, a small plus. In the corner the designer's sheets leave alone. */
+const BEAM_AT = [64, 64, 32, 64] as const;
+const Z_AT = [96, 64, 8, 8] as const;
+const PLUS_AT = [96, 72, 8, 8] as const;
+const STAR_AT = [104, 64, 16, 16] as const;
+/** A tongue of flame, 16 x 32, white and soft at the tip: tinted by the quad's colour. */
+const FLAME_AT = [64, 144, 16, 32] as const;
 
 /** A rectangle of the atlas as (u, v, du, dv) (flipped texture: v runs up). */
 const rect = (at: readonly [number, number, number, number], i = 0, frames = 1): [number, number, number, number] => {
@@ -48,6 +57,11 @@ export const UV_DOT = rect(DOT_AT);
 export const UV_DISC = rect(DISC_AT);
 const UV_RING = rect(RING_AT);
 const UV_MIST = rect(MIST_AT);
+export const UV_BEAM = rect(BEAM_AT);
+export const UV_Z = rect(Z_AT);
+export const UV_PLUS = rect(PLUS_AT);
+export const UV_STAR = rect(STAR_AT);
+export const UV_FLAME = rect(FLAME_AT);
 
 /** The effects atlas: the kit's particles and ripples, and a few soft shapes drawn here. */
 export function fxTexture(images: SharedImages): CanvasTexture {
@@ -79,11 +93,87 @@ export function fxTexture(images: SharedImages): CanvasTexture {
   ring.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = ring;
   g.fillRect(RING_AT[0], RING_AT[1], RING_AT[2], RING_AT[3]);
+  placeShapes(g);
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
   texture.magFilter = texture.minFilter = NearestFilter;
   texture.generateMipmaps = false;
   return texture;
+}
+
+/**
+ * The places' shapes: a column of light (soft at both sides, bright at the foot and thinning to nothing at the top), a pixel «z», a small
+ * plus, and a four-point sparkle with a bright heart.
+ */
+function placeShapes(g: CanvasRenderingContext2D): void {
+  const [bx, by, bw, bh] = BEAM_AT;
+  g.save();
+  g.beginPath();
+  g.rect(bx, by, bw, bh);
+  g.clip();
+  const side = g.createLinearGradient(bx, 0, bx + bw, 0);
+  side.addColorStop(0, 'rgba(255,255,255,0)');
+  side.addColorStop(0.5, 'rgba(255,255,255,1)');
+  side.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = side;
+  g.fillRect(bx, by, bw, bh);
+  // The vertical fade: keep the colour where the mask is, so the top and bottom edges thin out.
+  g.globalCompositeOperation = 'destination-in';
+  const up = g.createLinearGradient(0, by, 0, by + bh);
+  up.addColorStop(0, 'rgba(255,255,255,0)');
+  up.addColorStop(0.3, 'rgba(255,255,255,0.75)');
+  up.addColorStop(0.85, 'rgba(255,255,255,1)');
+  up.addColorStop(1, 'rgba(255,255,255,0.35)');
+  g.fillStyle = up;
+  g.fillRect(bx, by, bw, bh);
+  g.restore();
+  g.fillStyle = '#fff';
+  // The «z»: a top bar, a slanted stroke and a bottom bar on a 5 x 5 grid.
+  const z = (x: number, y: number): void => g.fillRect(Z_AT[0] + 1 + x, Z_AT[1] + 1 + y, 1, 1);
+  for (let x = 0; x < 5; x++) { z(x, 0); z(x, 4); }
+  z(3, 1); z(2, 2); z(1, 3);
+  // The plus.
+  g.fillRect(PLUS_AT[0] + 3, PLUS_AT[1] + 1, 2, 6);
+  g.fillRect(PLUS_AT[0] + 1, PLUS_AT[1] + 3, 6, 2);
+  // The sparkle: two thin crossing strokes, soft to their tips, and a bright heart.
+  const [sx, sy, sw, sh] = STAR_AT;
+  const cx = sx + sw / 2;
+  const cy = sy + sh / 2;
+  const arm = (horizontal: boolean): void => {
+    const grad = horizontal ? g.createLinearGradient(sx, 0, sx + sw, 0) : g.createLinearGradient(0, sy, 0, sy + sh);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    if (horizontal) g.fillRect(sx, cy - 1, sw, 2);
+    else g.fillRect(cx - 1, sy, 2, sh);
+  };
+  arm(true);
+  arm(false);
+  // The flame: a teardrop pointing up, solid at the bottom and fading to nothing at the tip, with a brighter heart low in it.
+  const [fx0, fy0, fw, fh] = FLAME_AT;
+  const mid = fx0 + fw / 2;
+  const tongue = g.createLinearGradient(0, fy0 + fh, 0, fy0);
+  tongue.addColorStop(0, 'rgba(255,255,255,0.95)');
+  tongue.addColorStop(0.45, 'rgba(255,255,255,0.8)');
+  tongue.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = tongue;
+  g.beginPath();
+  g.moveTo(mid, fy0 + 1);
+  g.bezierCurveTo(mid + 3, fy0 + 9, mid + 8, fy0 + 17, mid + 5, fy0 + 26);
+  g.bezierCurveTo(mid + 4, fy0 + 30, mid - 4, fy0 + 30, mid - 5, fy0 + 26);
+  g.bezierCurveTo(mid - 8, fy0 + 17, mid - 3, fy0 + 9, mid, fy0 + 1);
+  g.fill();
+  const hot = g.createRadialGradient(mid, fy0 + 24, 0, mid, fy0 + 24, 7);
+  hot.addColorStop(0, 'rgba(255,255,255,1)');
+  hot.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = hot;
+  g.fillRect(fx0, fy0 + 14, fw, 18);
+  const heart = g.createRadialGradient(cx, cy, 0, cx, cy, sw * 0.28);
+  heart.addColorStop(0, 'rgba(255,255,255,1)');
+  heart.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = heart;
+  g.fillRect(sx, sy, sw, sh);
 }
 
 const lin = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -186,6 +276,8 @@ export class Effects3D {
   readonly sheets: Fx3D;
   /** The hero's growth on his figure (part 11: sparks, runes, wisps), the same two batches again. */
   readonly growth: Growth3D;
+  /** The special places' life and the short things over them (places3d.ts), the same two batches. */
+  readonly places: Places3D;
   private geom: LevelGeom | null = null;
   private region = 0;
   /** The region's and the arena's particles, with their colours and the rate each is made at. */
@@ -239,6 +331,7 @@ export class Effects3D {
     this.painter.glow = this.glow;
     this.sheets = new Fx3D(this.soft, this.glow, this.texture, { w: ATLAS_W, h: ATLAS_H, regions: ATLAS.free });
     this.growth = new Growth3D(this.glow, this.soft, this.texture, { x: ATLAS.growth.x, y: ATLAS.growth.y, atlasW: ATLAS_W, atlasH: ATLAS_H }, UV_DOT);
+    this.places = new Places3D(this.glow, this.soft, { dot: UV_DOT, solid: UV_SOLID, ring: UV_RING, mist: UV_MIST, beam: UV_BEAM, z: UV_Z, star: UV_STAR, plus: UV_PLUS, flame: UV_FLAME });
     scene.add(this.soft.mesh, this.glow.mesh);
   }
 
@@ -685,6 +778,7 @@ export class Effects3D {
     this.ripples(c);
     this.glows(c);
     this.cellFlashes(c);
+    this.places.frame(c, quality.light || !this.particlesOn, quality.reducedMotion);
     this.bolts(c, kit);
     this.legacy(c);
     // The designer's effects and clouds; until their sheets have come, the older puffs of gas.

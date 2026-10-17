@@ -19,6 +19,7 @@ import { idleFx } from './idlefx';
 import { haptic } from './telegram';
 import type { Aura } from './growth';
 import { AuraCache } from './growthcache';
+import { farewell, forgeFlare, swingPick } from './questfx';
 
 /*
  * What the player sees, as opposed to what the world is: characters slide
@@ -98,6 +99,11 @@ export interface Puppet extends Turnable {
   /** A boomerang thrown is not in the hand from `heldAwayFrom` until it is back (`heldAwayUntil`). */
   heldAwayFrom?: number;
   heldAwayUntil?: number;
+  /** A tool in the hand for a moment, whatever the hero wields (the pickaxe at a vein, questfx.ts), until `toolUntil`. */
+  tool?: ItemKind;
+  toolUntil?: number;
+  /** The wandmaker or the imp waiting for the farewell window to be put away before going (questfx.ts). */
+  leaving?: 'wandmaker' | 'imp';
   /** What the player's own hero wears, as pictures (a look's glow and aura, a hat); undefined for anyone else. */
   worn?: Worn;
   /** Hero class or monster kind. */
@@ -154,6 +160,15 @@ export interface Puppet extends Turnable {
   levitating?: boolean;
   /** Fallen into a chasm (a monster): when it began to drop out of sight, spinning and shrinking. */
   fallStart?: number;
+  /** Slowed by a wand: an amber cast and drops sinking off it. */
+  slowed?: boolean;
+  /** An animated statue's stir (it has been woken): shaking on its feet from `shakeAt`. */
+  stirred?: boolean;
+  shakeAt?: number;
+  /** Just come into being (a sheep of the flock, a mirror image, a creature teleported in): popping in, or shimmering in. */
+  pop?: { start: number; how: 'pop' | 'shimmer' };
+  /** Hit by a bolt of teleportation a moment ago: where it lands next is a jump, not a walk. */
+  warpAt?: number;
 }
 
 /** MobSprite.FALL_TIME: how long a monster takes to drop out of sight into a chasm. */
@@ -319,6 +334,11 @@ export class View {
   /** A new region's card on the way down: the depth, and when it appeared. */
   /** The descent's card; `intro` on a region's first visit on this device, with its few lines of text. */
   depthCard: { depth: number; start: number; intro: boolean } | null = null;
+  /** Where creatures are about to appear out of nothing (the flock's sheep, the mirror images) and how, until they have. */
+  readonly arrivals = new Map<number, { at: number; how: 'pop' | 'shimmer' }>();
+  /** Statues that have just woken (the cell), and creatures that have just been teleported in (the cell they landed on): placefx.ts shows both. */
+  woke: number[] = [];
+  warps: Array<{ cell: number }> = [];
   /** Thrown items and magic bolts in flight; `sprite` null for a bolt. */
   projectiles: Array<{ from: number; to: number; start: number; duration: number; sprite: number | null; color?: string; bolt?: string }> = [];
 
@@ -336,6 +356,9 @@ export class View {
     this.levelCard = null;
     this.floorTitle = null;
     this.projectiles = [];
+    this.arrivals.clear();
+    this.woke = [];
+    this.warps = [];
   }
 
   /**
@@ -421,6 +444,9 @@ export class View {
         // Wraith.spawnAt: it fades in over half a second where it rises (the cloud of curse is shown with it, fx-events.ts).
         if (!isHero && now < this.risingUntil && SPAWNED.has(kind)) puppet.fade = { start: now, ms: FADE_IN_MS, from: 0, to: 1 };
         else puppet.arrived = true;
+        // The flock's sheep and the mirror images arrive in the place the effect named, a moment ago: popping in, or shimmering in.
+        const arrival = isHero ? undefined : this.arrivals.get(pos);
+        if (arrival && now - arrival.at < 700) puppet.pop = { start: arrival.at, how: arrival.how };
         this.puppets.set(id, puppet);
       } else if (!isHero && puppet.kind !== kind && TURNED.has(kind) && TURNED.has(puppet.kind)) {
         // Ghost.replace: the ghost and the curse that binds it (and back) are one cell's two figures: the old fades out as the new fades in.
@@ -438,7 +464,19 @@ export class View {
         const shown = puppet.queue?.[puppet.queue.length - 1]?.cell ?? puppet.aim ?? puppet.to;
         const end = puppet.moveStart + (puppet.moveDur ?? this.stepMs);
         const walking = puppet.anim === 'run' && (now - end < WALK_GRACE_MS || (puppet.queue?.length ?? 0) > 0);
-        if (adjacent(pos, shown) && (now < end || (puppet.queue?.length ?? 0) > 0)) {
+        if (puppet.warpAt !== undefined && now - puppet.warpAt < 700 && !adjacent(pos, shown)) {
+          // Teleported by a wand: not a walk across the map, but gone from one place and there in the other.
+          puppet.warpAt = undefined;
+          puppet.from = pos;
+          puppet.fromX = cellX(pos) * TILE;
+          puppet.fromY = cellY(pos) * TILE;
+          puppet.aim = pos;
+          puppet.queue = [];
+          puppet.bend = undefined;
+          puppet.moveStart = -1e9;
+          puppet.pop = { start: now, how: 'shimmer' };
+          this.warps.push({ cell: pos });
+        } else if (adjacent(pos, shown) && (now < end || (puppet.queue?.length ?? 0) > 0)) {
           // A step while the last is still on screen: it waits its turn (see advance), however fast turns come.
           (puppet.queue ??= []).push({ cell: pos, bend: cornerBend(map, shown, pos) });
         } else if (adjacent(pos, shown) && walking && now - end < this.stepMs / 2) {
@@ -521,6 +559,17 @@ export class View {
       const puppet = this.puppets.get(mob.id)!;
       puppet.burning = (mob.burning ?? 0) > 0;
       puppet.poisoned = (mob.poison ?? 0) > 0;
+      puppet.slowed = (mob.slowed ?? 0) > 0;
+      if (mob.kind === 'statue') {
+        // An animated statue stands still until it is struck: when it first is, it shakes and cracks before it moves (placefx.ts).
+        const awake = mob.state !== 'sleeping';
+        if (puppet.stirred === undefined) puppet.stirred = awake;
+        else if (awake && !puppet.stirred) {
+          puppet.stirred = true;
+          puppet.shakeAt = now;
+          this.woke.push(mob.pos);
+        }
+      }
     }
     for (const [id, puppet] of this.puppets) {
       if (seen.has(id)) {
@@ -543,6 +592,7 @@ export class View {
         puppet.animStart = now;
       }
     }
+    for (const [cell, a] of this.arrivals) if (now - a.at > 1200) this.arrivals.delete(cell);
     this.floaters = this.floaters.filter((floater) => now - floater.start < 1200);
     this.flashes = this.flashes.filter((flash) => now - flash.start < (flash.duration ?? 600));
     this.projectiles = this.projectiles.filter((p) => now - p.start < p.duration);
@@ -765,7 +815,11 @@ export class View {
           if (!discovered) {
             this.say(t.found, COLORS.highlight, now);
             // The found chime when my own search found it; the old secret's chime for what turned up by itself.
-            audio.play(searchedByMe ? 'found' : 'secret');
+            // The wall answers the knock of the search hollow, together with the find and never without it; a find that came of itself is only the chime.
+            if (searchedByMe) {
+              audio.play('knockHollow', 1, 0.9, cellMiddle(effect.cell));
+              audio.later(150, 'found', 1, 1);
+            } else audio.play('secret');
           }
           idleFx.noteFound(now);
           discovered = true;
@@ -931,7 +985,9 @@ export class View {
           } else if (effect.kind === 'recharging') {
             if (effect.hero === myId) this.say(effect.count > 0 ? t.recharged : t.nothingToRecharge, COLORS.default, now);
           } else if (effect.kind === 'psionic') {
-            audio.play('psi');
+            // A whine that climbs, and the blast on its heels.
+            audio.play('psiWarn');
+            audio.later(170, 'psi');
             if (effect.hero === myId) this.say(t.psionic, COLORS.warning, now);
           } else {
             this.say(effect.kind === 'challenge' ? t.challenge : effect.kind === 'terror' ? t.terror : t.lullaby, COLORS.warning, now);
@@ -1016,6 +1072,9 @@ export class View {
           }
           break;
         case 'zapped':
+          if (effect.depth === this.depth && effect.bolt === 'teleport') {
+            for (const puppet of this.puppets.values()) if (!puppet.isHero && puppet.alive && puppet.to === effect.to) puppet.warpAt = now;
+          }
           if (effect.depth === this.depth) this.faceAway(effect.from, effect.to, now);
           if (effect.depth === this.depth && !fxp.launch(effect, this.depth, now, (cell) => seenCells(world, this.depth)[cell] === true)) {
             this.shoot(effect.from, effect.to, null, now, BOLT_COLORS[effect.bolt ?? 'magic'], effect.bolt ?? 'magic');
@@ -1050,20 +1109,35 @@ export class View {
           break;
         case 'mined':
           if (effect.depth !== this.depth) break;
+          // The swing with the pickaxe in hand (questfx.ts), the crunch of it on the rock and the gleam of the ore coming loose.
+          swingPick(this, effect.hero, effect.pos, now);
           this.flashes.push({ cell: effect.pos, start: now, color: '255, 210, 90', duration: 500 });
-          audio.play('rocks', 1.3, 0.5, cellMiddle(effect.pos));
+          audio.play('pick', 1, 0.9, cellMiddle(effect.pos));
+          audio.later(110, 'oreGleam', 1, 0.5, cellMiddle(effect.pos));
           break;
         case 'smith':
+          // The errand handed in: the forge flares (and his reforging is on offer).
+          if (effect.line === 'completed' && effect.hero === myId) forgeFlare(this, now);
+          break;
+        case 'wandmaker':
+        case 'imp':
+          // The wandmaker is off and the imp pops away once their word is kept (the ghost's leave-taking is below).
+          if (effect.line === 'farewell') farewell(this, effect.type, now, effect.hero === myId);
           break;
         case 'mirrored':
           if (effect.depth !== this.depth) break;
-          for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '200, 220, 255', duration: 500 });
-          audio.play('teleport', 1.2, 0.6);
+          for (const cell of effect.cells) {
+            this.flashes.push({ cell, start: now, color: '200, 220, 255', duration: 500 });
+            this.arrivals.set(cell, { at: now, how: 'shimmer' });
+          }
           if (effect.hero === myId) this.say(t.mirrored(effect.cells.length), COLORS.default, now);
           break;
         case 'flock':
           if (effect.depth !== this.depth) break;
-          for (const cell of effect.cells) this.flashes.push({ cell, start: now, color: '255, 255, 255', duration: 500 });
+          for (const cell of effect.cells) {
+            this.flashes.push({ cell, start: now, color: '255, 255, 255', duration: 500 });
+            this.arrivals.set(cell, { at: now, how: 'pop' });
+          }
           audio.play('puff');
           break;
         case 'faded':
