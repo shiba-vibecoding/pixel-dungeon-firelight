@@ -19,6 +19,7 @@ import './fl-input.css';
 import './photo.css';
 import './fl-grow.css';
 import './fl-quest.css';
+import './fl-p13.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickItem, quickRef, quickUse } from './quickslot';
 import { fx } from './fx';

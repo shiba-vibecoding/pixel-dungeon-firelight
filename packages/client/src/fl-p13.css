@@ -1,0 +1,109 @@
+/*
+ * Firelight · part 13: the quests' dialog and card, the boss bar, the places' card — the art of assets/ui/{quest,boss,places}
+ * (quest.json, fx.json bossBar, places.json) on the markup the game already has. Only tokens of ui.css. Pixel art, nearest, whole steps.
+ */
+:root {
+  --q-portraits: url("/assets/ui/quest/portraits.png");
+  --q-frame: url("/assets/ui/quest/portrait-frame.png");
+  --q-dialog: url("/assets/ui/quest/dialog-frame.png");
+  --q-icons: url("/assets/ui/quest/icons.png");
+  --q-progress: url("/assets/ui/quest/progress.png");
+  --q-reward: url("/assets/fx/quest/reward.png");
+  --b-bar: url("/assets/ui/boss/bar-frame.png");
+  --b-icons: url("/assets/ui/boss/icons.png");
+  --p-icons: url("/assets/ui/places/icons.png");
+}
+
+/* ---------- The dialog: the window's frame, the portrait in its niche, the mood ---------- */
+.pd-window.fl-dialog { border: calc(8 * var(--u)) solid transparent; border-image: var(--q-dialog) 8 fill / calc(8 * var(--u)) stretch; }
+.pd-window.fl-dialog::before { display: none; }
+.fl-dialog-head { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); align-items: end; padding-right: calc(var(--tap-min, 44px) - var(--space-2)); }
+/* --ps: the portrait's pixel (1 on a phone, 2 on a monitor); --row: ghost 0, wandmaker 1, blacksmith 2, imp 3; --mood: calm 0, pleased 1, annoyed 2 */
+.fl-portrait {
+  --ps: 1.5; position: relative; flex: none;
+  width: calc(64px * var(--ps)); height: calc(64px * var(--ps));
+  background: var(--q-frame) 0 0 / 100% 100% no-repeat; image-rendering: pixelated;
+}
+.fl-portrait::after {
+  content: ""; position: absolute; left: calc(8px * var(--ps)); top: calc(8px * var(--ps)); width: calc(48px * var(--ps)); height: calc(48px * var(--ps));
+  background: var(--q-portraits) no-repeat; background-size: calc(144px * var(--ps)) calc(192px * var(--ps));
+  background-position: calc(var(--mood, 0) * -48px * var(--ps)) calc(var(--row, 0) * -48px * var(--ps)); image-rendering: pixelated;
+}
+.fl-portrait.ghost { --row: 0; } .fl-portrait.wandmaker { --row: 1; } .fl-portrait.blacksmith { --row: 2; } .fl-portrait.imp { --row: 3; }
+.fl-portrait.calm { --mood: 0; } .fl-portrait.pleased { --mood: 1; } .fl-portrait.annoyed { --mood: 2; }
+.fl-portrait.speaks::after { animation: fl-q-speak 1.2s steps(2, jump-none) 1; }
+@media (min-width: 900px) { .fl-portrait { --ps: 2; } }
+.fl-dialog-head .pd-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fl-dialog-name { font: var(--text-title); color: var(--fire-light); text-shadow: 0 var(--u) 0 var(--fire-ash); }
+.fl-dialog-role { font: var(--text-caption); color: var(--ink-muted); }
+
+/* The rewards offered: each on its giver's podium of light (quest.json rewards → fx/quest/reward.png, frame 0 of its row). */
+.fl-reward-slot {
+  --rs: 1.5; position: relative; width: calc(32px * var(--rs)); height: calc(48px * var(--rs)); flex: none;
+  background: var(--q-reward) no-repeat; background-size: calc(256px * var(--rs)) calc(288px * var(--rs));
+  background-position: 0 calc(var(--rr, 0) * -48px * var(--rs)); image-rendering: pixelated;
+}
+.fl-reward-slot .pd-item { position: absolute; left: 50%; top: calc(14px * var(--rs)); transform: translateX(-50%); }
+.fl-reward-slot.ghost-weapon { --rr: 0; } .fl-reward-slot.ghost-armor { --rr: 1; } .fl-reward-slot.wand-battle { --rr: 2; }
+.fl-reward-slot.wand-utility { --rr: 3; } .fl-reward-slot.reforge { --rr: 4; } .fl-reward-slot.ring { --rr: 5; }
+.pd-reward:has(.fl-reward-slot) { grid-template-columns: calc(32px * 1.5) 1fr; }
+.pd-reward > .fl-reward-slot { grid-row: 1 / 4; align-self: center; }
+
+/* ---------- The quest card (journal) and its badge in the HUD ---------- */
+.fl-qicon { --qi: 0; --qr: 0; --qs: 2; display: inline-block; flex: none; width: calc(16px * var(--qs)); height: calc(16px * var(--qs));
+  background: var(--q-icons) no-repeat; background-size: calc(176px * var(--qs)) calc(32px * var(--qs));
+  background-position: calc(var(--qi) * -16px * var(--qs)) calc(var(--qr) * -16px * var(--qs)); image-rendering: pixelated; }
+.fl-quest {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px var(--space-3); align-items: center; padding: var(--space-2);
+  background: var(--stone-800); clip-path: var(--notch); box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--lit-dark);
+}
+.fl-quest .fl-qicon.badge { grid-row: 1 / 4; --qs: 3; }
+.fl-quest-title { font: var(--text-label); color: var(--fire-light); }
+.fl-quest-goal { display: flex; align-items: center; gap: var(--space-2); font: var(--text-caption); color: var(--ink); }
+.fl-quest-goal b { font-weight: 400; color: var(--fire-gold); margin-left: auto; }
+.fl-quest.done { opacity: .75; } .fl-quest.done .fl-quest-title { color: var(--good); }
+/* The bar's steps (the colours of progress.png's tiles, drawn by CSS so the bar stretches): --of steps, `on` done, `last` the last done. */
+.fl-qsteps { display: grid; grid-template-columns: repeat(var(--of, 10), 1fr); gap: 2px; height: 12px; padding: 2px; background: #2a241c; box-shadow: 0 0 0 2px var(--void), 0 -2px 0 2px #55524c; }
+.fl-qsteps i { background: #3a3228; }
+.fl-qsteps i.on { background: linear-gradient(to bottom, var(--fire-flame) 0 35%, var(--fire-ember) 35% 70%, var(--fire-coal) 70%); }
+.fl-qsteps i.last { background: linear-gradient(to bottom, var(--fire-light) 0 35%, var(--fire-gold) 35% 70%, var(--fire-ember) 70%); }
+.fl-qsteps.done i { background: linear-gradient(to bottom, #b6f07a 0 35%, #7ad05a 35% 70%, #3a7a2a 70%); }
+.pd-hud .fl-hud-quest { position: relative; display: inline-flex; align-items: center; gap: 2px; font: var(--text-hud); color: var(--ink); }
+.pd-hud .fl-hud-quest .fl-qicon { --qs: 1.5; }
+.pd-hud .fl-hud-quest small { font: var(--text-digits); color: var(--fire-gold); }
+
+/* ---------- The boss bar: under the HUD from the end of the boss card until the boss falls ---------- */
+.fl-bossbar {
+  --bs: 2; position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t, 0px) + var(--hud-h, 120px));
+  width: min(92vw, 520px); display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: var(--space-2); align-items: center; z-index: var(--z-hud, 10);
+  pointer-events: none; animation: fl-q-drop .32s steps(4, jump-none) both;
+}
+.fl-bossbar .icon { grid-row: 1 / 3; width: calc(16px * var(--bs)); height: calc(16px * var(--bs)); background: var(--b-icons) no-repeat;
+  background-size: calc(80px * var(--bs)) calc(16px * var(--bs)); background-position: calc(var(--bi, 0) * -16px * var(--bs)) 0; image-rendering: pixelated;
+  filter: drop-shadow(0 2px 0 var(--void)); }
+.fl-bossbar .name { font: var(--text-label); color: var(--fx-boss, #ff6a4a); text-shadow: var(--text-outline); display: flex; gap: var(--space-2); align-items: baseline; }
+.fl-bossbar .name small { font: var(--text-caption); color: var(--ink-muted); }
+.fl-bossbar .track { position: relative; height: calc(12px * var(--bs) / 2 + 12px); border: calc(6px * var(--bs) / 2) solid transparent;
+  border-image: var(--b-bar) 6 fill / calc(6px * var(--bs) / 2) stretch; image-rendering: pixelated; }
+.fl-bossbar .fill, .fl-bossbar .trace { position: absolute; left: 0; top: 0; bottom: 0; }
+.fl-bossbar .trace { width: calc(var(--was, 1) * 100%); background: linear-gradient(to bottom, #e8d8c0 0 45%, #b0a088 45%); transition: width .6s steps(4) .6s; }
+.fl-bossbar .fill { width: calc(var(--v, 1) * 100%); background: linear-gradient(to bottom, #ff5a3a 0 34%, #c8302a 34% 70%, #7a1a1e 70%); }
+.fl-bossbar .ticks { position: absolute; inset: 0; background: linear-gradient(to right, transparent calc(100% - 2px), rgba(11, 11, 9, .7) 0) 0 0 / 25% 100%; }
+.fl-bossbar.goo { --bi: 0; } .fl-bossbar.tengu { --bi: 1; } .fl-bossbar.dm300 { --bi: 2; } .fl-bossbar.king { --bi: 3; } .fl-bossbar.yog { --bi: 4; }
+@media (min-width: 900px) { .fl-bossbar { --bs: 3; width: 560px; } }
+
+/* ---------- The places: the «what is it» card ---------- */
+.fl-picon { --pi: 0; --ps2: 3; display: inline-block; flex: none; width: calc(16px * var(--ps2)); height: calc(16px * var(--ps2));
+  background: var(--p-icons) no-repeat; background-size: calc(176px * var(--ps2)) calc(16px * var(--ps2));
+  background-position: calc(var(--pi) * -16px * var(--ps2)) 0; image-rendering: pixelated; }
+.fl-place { display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3); align-items: center; }
+.fl-place .fl-picon { grid-row: 1 / 3; }
+.fl-place-name { font: var(--text-title); color: var(--fire-light); }
+.fl-place-text { font: var(--text-body); color: var(--ink); grid-column: 1 / -1; margin: 0; }
+.fl-codex { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); }
+.fl-codex > div { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); background: var(--stone-800); clip-path: var(--notch); font: var(--text-caption); color: var(--ink); }
+.fl-codex .fl-picon { --ps2: 2; }
+
+@keyframes fl-q-speak { 50% { translate: 0 -1px; } }
+@keyframes fl-q-drop { 0% { opacity: 0; translate: 0 -10px; } 100% { opacity: 1; translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .fl-portrait.speaks::after, .fl-bossbar { animation: none; } .fl-bossbar .trace { transition: none; } }

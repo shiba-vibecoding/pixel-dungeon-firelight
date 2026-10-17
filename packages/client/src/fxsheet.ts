@@ -510,18 +510,19 @@ export interface Rect {
 }
 
 /**
- * The 3D effects atlas: 1024 x 768, whose top-left 256 x 256 corner the older effects keep (particles, ripples, soft shapes). The rest is
- * free for the designer's sheets (about 350 000 of the 524 000 free pixels).
+ * The 3D effects atlas: 1024 x 1536, whose top-left 256 x 256 corner the older effects keep (particles, ripples, soft shapes). The rest is
+ * free for the designer's sheets: part 6's (about 350 000 pixels) in the upper 1024 x 768, part 13's (quests, places, minor magic, the
+ * bosses' stagings: about 420 000) mostly in the lower half added for them.
  */
 export const ATLAS = {
   w: 1024,
-  h: 768,
+  h: 1536,
   /**
    * The corner kept for part 11's effects sheet (ui/growth/growth-fx.png, 64 x 128: sparks, runes, wisps, the mastery sigil): the bottom of
    * the left strip, which the designer's sheets are not packed into. r3d/growth3d.ts puts the sheet there once it has loaded.
    */
   growth: { x: 0, y: 640, w: 64, h: 128 } as Rect,
-  free: [{ x: 256, y: 0, w: 768, h: 768 }, { x: 0, y: 256, w: 256, h: 384 }, { x: 64, y: 640, w: 192, h: 128 }] as readonly Rect[],
+  free: [{ x: 256, y: 0, w: 768, h: 768 }, { x: 0, y: 256, w: 256, h: 384 }, { x: 64, y: 640, w: 192, h: 128 }, { x: 0, y: 768, w: 1024, h: 768 }] as readonly Rect[],
 };
 
 /**
