@@ -485,6 +485,22 @@ export async function hydrate(s: StorageLike, key: string, timeoutMs = 2500): Pr
   }
 }
 
+/**
+ * Lets the mirror go of slots that are no longer wanted (the daily dungeons of days gone by: a run left unfinished keeps its copies
+ * there, as it does in localStorage until main.ts clears them). `keep` says which slots stay. Quiet, and never throws.
+ */
+export async function pruneMirror(keep: (slot: string) => boolean, timeoutMs = 2500): Promise<string[]> {
+  if (!mirror) return [];
+  try {
+    const keys = await Promise.race([mirror.keys(), new Promise<string[]>((resolve) => setTimeout(() => resolve([]), timeoutMs))]);
+    const doomed = keys.filter((key) => key.startsWith('pd-daily-') && !keep(slotOfKey(key)));
+    if (doomed.length > 0) mirror.remove(doomed);
+    return doomed;
+  } catch {
+    return [];
+  }
+}
+
 /* ----- writing ----- */
 
 /** The most actions the journal holds before the next snapshot. */

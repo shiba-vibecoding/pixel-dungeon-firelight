@@ -142,6 +142,7 @@ export async function openPage(
     put: (key, value) => { if (!storage.dead) shared.put(key, value); },
     remove: (keys) => { if (!storage.dead) shared.remove(keys); },
     read: (keys) => shared.read(keys),
+    keys: () => shared.keys(),
   } : null);
   // As main.ts does at start: a run the browser had not written out when the app was killed is found in the mirror.
   if (shared && !options.fresh) await hydrate(storage, KEY);

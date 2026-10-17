@@ -16,6 +16,8 @@ export interface Mirror {
   remove(keys: readonly string[]): void;
   /** The values of these keys that are kept. */
   read(keys: readonly string[]): Promise<Record<string, string>>;
+  /** Every key that is kept. */
+  keys(): Promise<string[]>;
 }
 
 const DB = 'pd-saves';
@@ -50,22 +52,72 @@ export function idbMirror(): Mirror | null {
         resolve(null);
       }
     }));
-  const write = (change: (store: IDBObjectStore) => void): void => {
+  /*
+   * Writes are coalesced: a transaction takes tens of milliseconds to complete, and a walk is ten turns a second, so what is waiting
+   * is kept as the latest value of each key (null: removed) and goes in one transaction when the one before it has finished. The
+   * queue cannot grow, and what a kill can lose is what is in the transaction on its way (a few tens of milliseconds) and what waits
+   * behind it, which is the turns taken in that time.
+   */
+  const waiting = new Map<string, string | null>();
+  let writing = false;
+  const flush = (): void => {
+    if (writing || waiting.size === 0) return;
+    writing = true;
+    const batch = [...waiting];
+    waiting.clear();
     void open().then((db) => {
-      if (!db) return;
+      if (!db) {
+        writing = false;
+        return;
+      }
       try {
-        change(db.transaction(STORE, 'readwrite').objectStore(STORE));
+        const transaction = db.transaction(STORE, 'readwrite');
+        const store = transaction.objectStore(STORE);
+        for (const [key, value] of batch) {
+          if (value === null) store.delete(key);
+          else store.put(value, key);
+        }
+        const done = (): void => {
+          writing = false;
+          flush();
+        };
+        transaction.oncomplete = done;
+        transaction.onerror = transaction.onabort = () => {
+          // This batch is lost (full, blocked, closed under us): what comes next is tried.
+          opened = null;
+          done();
+        };
       } catch {
         // The database was closed under us: the next write opens it again.
         opened = null;
+        writing = false;
+        flush();
       }
     });
   };
   return {
-    put: (key, value) => write((store) => store.put(value, key)),
-    remove: (keys) => write((store) => {
-      for (const key of keys) store.delete(key);
-    }),
+    put: (key, value) => {
+      waiting.set(key, value);
+      flush();
+    },
+    remove: (keys) => {
+      for (const key of keys) waiting.set(key, null);
+      flush();
+    },
+    keys: () =>
+      open().then(
+        (db) =>
+          new Promise<string[]>((resolve) => {
+            if (!db) return resolve([]);
+            try {
+              const request = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys();
+              request.onsuccess = () => resolve(request.result.filter((key): key is string => typeof key === 'string'));
+              request.onerror = () => resolve([]);
+            } catch {
+              resolve([]);
+            }
+          }),
+      ),
     read: (keys) =>
       open().then(
         (db) =>
@@ -100,5 +152,6 @@ export function memoryMirror(shared = new Map<string, string>()): Mirror & { dat
       for (const key of keys) shared.delete(key);
     },
     read: async (keys) => Object.fromEntries(keys.flatMap((key) => (shared.has(key) ? [[key, shared.get(key)!]] : []))),
+    keys: async () => [...shared.keys()],
   };
 }

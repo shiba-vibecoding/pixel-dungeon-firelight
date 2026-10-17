@@ -2,7 +2,7 @@ import { fingerprint, RULES_VERSION, type World } from '@pd/core';
 import { describe, expect, it } from 'vitest';
 import {
   BUDGET_CHARS, checksum, decodeSnapshot, encodeSnapshot, evictable, forgetSlot, JOURNAL_MAX, journalKey, journalKey2, putWithRoom, readSlot, SAVE_VERSION,
-  hydrate, type SavedCheck, setEvictContext, setMirror, SlotKeeper, slotOfKey, trimToBudget, twinKey, usage,
+  hydrate, pruneMirror, type SavedCheck, setEvictContext, setMirror, SlotKeeper, slotOfKey, trimToBudget, twinKey, usage,
 } from '../src/savestore';
 import { memoryMirror } from '../src/mirror';
 import { Killed, MemStorage, newWorld, play, sameWorld, viaJson } from './savekit';
@@ -609,8 +609,17 @@ describe('the mirror', () => {
     });
   });
 
+  it('lets go of the days gone by, and of nothing else', async () => {
+    await withMirror(async (mirror) => {
+      for (const key of ['pd-daily-2026-10-15', 'pd-daily-2026-10-15~2', 'pd-daily-2026-10-17', 'pd-daily-2026-10-17~j', 'pd-solo', 'pd-solo~2']) mirror.data.set(key, 'x');
+      const gone = await pruneMirror((slot) => slot === 'pd-daily-2026-10-17');
+      expect(gone.sort()).toEqual(['pd-daily-2026-10-15', 'pd-daily-2026-10-15~2']);
+      expect([...mirror.data.keys()].sort()).toEqual(['pd-daily-2026-10-17', 'pd-daily-2026-10-17~j', 'pd-solo', 'pd-solo~2']);
+    });
+  });
+
   it('answers a mirror that is slow only so long, and never throws', async () => {
-    const stuck = { put: () => undefined, remove: () => undefined, read: () => new Promise<Record<string, string>>(() => undefined) };
+    const stuck = { put: () => undefined, remove: () => undefined, read: () => new Promise<Record<string, string>>(() => undefined), keys: () => new Promise<string[]>(() => undefined) };
     setMirror(stuck);
     try {
       expect(await hydrate(new MemStorage(), KEY, 20)).toBe('local');

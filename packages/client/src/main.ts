@@ -104,7 +104,7 @@ import { rankings, recordRun, runScore } from './rankings';
 import { carriedOn, type CheckOptions, forgetSolo, inspectSolo, loadSolo, type Session, soloSession, staleSolo } from './session';
 import { planStart } from './startplan';
 import { onLeave } from './leave';
-import { BUDGET_CHARS, hydrate, setEvictContext, setMirror, slotOfKey, trimToBudget, usage } from './savestore';
+import { BUDGET_CHARS, hydrate, pruneMirror, setEvictContext, setMirror, slotOfKey, trimToBudget, usage } from './savestore';
 import { idbMirror } from './mirror';
 import { closeSuperseded, showSuperseded, supersededShown } from './supersededui';
 import { type BoardKind, type CircleBoardView, type Profile, type RunApi, type RunMeta, type RunSlot, runApi, type SyncAnswer, unreachable } from './checked';
@@ -4206,6 +4206,8 @@ addEventListener('pd-superseded', (event) => {
 // A run whose last turns the browser had not yet written to localStorage when the app was killed is found in the mirror (savestore.ts hydrate).
 try {
   await Promise.all([hydrate(localStorage, SOLO_SLOT), hydrate(localStorage, dailySlot())]);
+  // (The mirror's copies of the days gone by go too, as localStorage's do above.)
+  void pruneMirror((slot) => slot === dailySlot());
 } catch {
   // No storage: no run to find.
 }
