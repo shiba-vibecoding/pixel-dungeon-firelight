@@ -10,8 +10,10 @@
  *             door's leaf), statues, shelves and wells as lower blocks, and the edges of chasms that fall away three cells. Only
  *             what can be seen or cast a shadow, and only beside open ground. Rewritten, into the same arrays, when a box
  *             appears or goes (a door opens).
- *   doors   - closed and locked doors are gaps in the wall line (no box, no cap: the walls beside are the jambs, their faces and caps end
- *             at the gap); a door's leaf is not in these buffers but a small mesh of its own that swings (doorLeafBuffers, doorswing.ts).
+ *   doors   - design part 10 (doorkit.ts): a door of any state is a gap in the wall line (no box, no cap: the walls beside are the jambs, their
+ *             faces and caps end at the gap) with a threshold plate on its floor and a frame of posts and lintels round it (and a keyhole
+ *             plaque on a locked one), written into `boxes`; the wall cell south of a door in a north-south wall is lowered to a shoulder. A
+ *             door's leaf, its padlock and its light are not here: the leaf is a mesh of its own that swings (doorLeafBuffers, doorswing.ts).
  *   steps   - the stairs, in `boxes`: the entrance's three steps rise toward the north and the exit's three steps go down into the floor
  *             (the kit's stairs_up and stairs_down), the region's stair tile on the treads, the last of the way down the darkest.
  *   water   - a quad under every water cell, for the drifting water texture.
@@ -21,7 +23,8 @@
  * and from cell to cell.
  */
 import { F, HEIGHT, LENGTH, T, terrainFlags, WIDTH } from '@pd/core';
-import { DOOR_IRON, DOOR_LEAF, DOOR_LEAF_LOCK, DOOR_LOCK_H, DOOR_TOP_H } from './doorart';
+import { type DoorKit, type DoorLook, type DoorQuad, doorQuads, shoulderHeight, uvOf } from './doorkit';
+import { poseOf } from './doorswing';
 import { PITCH } from './project';
 import { CAP_FIRST, EDGE_LIP, EDGE_ROCK, FACE_DECO, FACE_UPPER, FACE_WALL, SHADOW_FIRST } from './tilemap';
 
@@ -89,9 +92,9 @@ export function shapesFor(kit: GeomKit): readonly Shape[] {
     else if (flags & F.PIT) shape = { kind: K_CHASM, h: kit.chasm, side: t, lowerH: 0, upper: -1, top: t };
     // A barricade, a bookshelf, a statue: a low stone base, and the prop itself a card of its tile at its true pixel scale standing on it
     // (world3d.ts addProps). The tile on the faces of a block 1.2 high was squeezed by the camera into a strip a few pixels deep.
-    else if (t === T.BARRICADE || t === T.BOOKSHELF) shape = { kind: K_LOW, h: kit.base, side: FACE_WALL, lowerH: kit.base, upper: -1, top: -2 };
+    else if (t === T.BOOKSHELF) shape = { kind: K_LOW, h: kit.base, side: FACE_WALL, lowerH: kit.base, upper: -1, top: -2 };
     else if (flags & F.SOLID && flags & F.LOS_BLOCKING) {
-      const door = t === T.DOOR || t === T.LOCKED_DOOR;
+      const door = t === T.DOOR || t === T.LOCKED_DOOR || t === T.BARRICADE;
       shape = {
         kind: K_WALL, h: kit.wall,
         side: door ? t : t === T.WALL_DECO ? FACE_DECO : FACE_WALL,
@@ -110,20 +113,32 @@ export const SHAPES: readonly Shape[] = shapesFor(DEFAULT_GEOM);
 
 /** A door, closed, locked or open: the cells the 3D dressing of doors is for. */
 export const isDoorTile = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR || terrain === T.OPEN_DOOR;
-/** A closed or locked door: a gap in the wall line, with a thin panel standing in it (no stone cap, no box). */
-export const isGapDoor = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR;
-/** The wood of a door's frame and slab is lit: its colours are lifted above the plain, warm for wood and cool for steel. */
-const WOOD_LIT = [1.45, 1.22, 0.98];
-const STEEL_LIT = [1.2, 1.25, 1.4];
-const LEAF_LIT = [1.5, 1.35, 1.2];
-/** A locked door is the same wood as the others, lit the same: its ironwork is dark. */
-const LEAF_LIT_LOCKED = LEAF_LIT;
-const IRON_LIT = [0.45, 0.47, 0.53];
+/** A closed or locked door, or a barricade: a gap in the wall line, with a thin panel standing in it (no stone cap, no box). */
+export const isGapDoor = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR || terrain === T.BARRICADE;
+/** What has a threshold and a frame in 3D: every door, and a barricade (the boards of one stand in a frame of their own). */
+export const isDoorLike = (terrain: number): boolean => isDoorTile(terrain) || terrain === T.BARRICADE;
+/** The most quads one door's fixed parts take (the frame's posts and lintels, the threshold, the plaques). */
+const DOOR_STATIC_QUADS = 28;
+/** Where the doors' rows begin in the atlas (art pixels): under the region's eight rows and the walls' two. */
+export const DOOR_ATLAS_Y = 160;
+
+const atlasKits = new WeakMap<DoorKit, DoorKit>();
+/** The door kit with its picture rects moved down to where the sheet lies in the terrain atlas (rows 10 to 15). */
+export function atlasKit(kit: DoorKit): DoorKit {
+  let shifted = atlasKits.get(kit);
+  if (!shifted) {
+    const atlas: Record<string, [number, number, number, number]> = {};
+    for (const [name, r] of Object.entries(kit.atlas)) atlas[name] = [r[0], r[1] + DOOR_ATLAS_Y, r[2], r[3]];
+    shifted = { ...kit, atlas };
+    atlasKits.set(kit, shifted);
+  }
+  return shifted;
+}
 
 /** The entrance: three steps rising to the north. */
 export const isStairsUp = (terrain: number): boolean => terrain === T.ENTRANCE;
 /** The exit, and the exit a boss's death unlocks: three steps going down into the floor. */
-export const isStairsDown = (terrain: number): boolean => terrain === T.EXIT || terrain === T.UNLOCKED_EXIT;
+export const isStairsDown = (terrain: number): boolean => terrain === T.EXIT || terrain === T.UNLOCKED_EXIT || terrain === T.LOCKED_EXIT;
 const isStairs = (terrain: number): boolean => isStairsUp(terrain) || isStairsDown(terrain);
 /** Steps in a flight, and the most quads one needs (treads, risers, sides). */
 const STEPS = 3;
@@ -168,7 +183,7 @@ export interface Buffers {
   indices: number;
 }
 
-function makeBuffers(vertexCapacity: number, indexCapacity: number): Buffers {
+export function makeBuffers(vertexCapacity: number, indexCapacity: number): Buffers {
   return {
     pos: new Float32Array(vertexCapacity * 3),
     normal: new Float32Array(vertexCapacity * 3),
@@ -218,6 +233,34 @@ function quad(
   b.index[i + 3] = v; b.index[i + 4] = v + 2; b.index[i + 5] = v + 3;
   b.verts += 4;
   b.indices += 6;
+}
+
+/** How much light a face has by the way it looks (the camera's side full, the far side dark, the flanks between). */
+function normalShade(n: readonly number[]): number {
+  return n[1]! > 0.5 ? 1 : n[2]! > 0.5 ? 1 : n[2]! < -0.5 ? 0.75 : 0.85;
+}
+
+/**
+ * Writes door quads (doorkit.ts) into `b`, placed at (`ox`, `oz`) cells (and `oy` up), their pictures looked up in the door sheet as it
+ * lies in the terrain atlas (`kit` through atlasKit); `half` insets the picture a hair, so nearest sampling takes no neighbour in.
+ */
+export function writeDoorQuads(b: Buffers, qs: readonly DoorQuad[], ox: number, oz: number, kit: DoorKit, size = 256, oy = 0): void {
+  const inset = 0.01 / size;
+  for (const q of qs) {
+    for (let k = 0; k < 12; k += 3) {
+      corners[k] = q.p[k]! + ox;
+      corners[k + 1] = q.p[k + 1]! + oy;
+      corners[k + 2] = q.p[k + 2]! + oz;
+    }
+    let [u0, v0, u1, v1] = uvOf(kit, q, size, size);
+    u0 += u0 < u1 ? inset : -inset;
+    u1 += u0 < u1 ? -inset : inset;
+    v0 += v0 < v1 ? inset : -inset;
+    v1 += v0 < v1 ? -inset : inset;
+    shades.fill(normalShade(q.n));
+    quad(b, corners, q.n[0], q.n[1], q.n[2], shades, WHITE, u0, v0, u1, v1);
+  }
+  shades.fill(1);
 }
 
 const set12 = (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number): void => {
@@ -353,38 +396,35 @@ function boxFaces(
   shades.fill(1);
 }
 
-/** How thick a door's leaf is, and how far from the hinge pin it reaches either way, in cells. */
-export const LEAF_THICK = 0.18;
-export const LEAF_REACH_BACK = LEAF_THICK / 2;
-export const LEAF_REACH = 1 - LEAF_THICK / 2;
-
 /**
- * A door's leaf as a mesh of its own, in its own frame: the hinge pin at the origin, the leaf reaching along +x (from just behind the pin
- * to a cell's width), 0.18 thick, as tall as the wall. Both faces carry a leaf picture of wood only (planks, hinge straps, a ring; or straps and a lock), its
- * top and ends are a strip of planks (dark iron on a locked door, which also has straps and a lock plate on both faces). The
- * renderer stands one of these at each door, turned about the pin as the door swings.
+ * A door's leaf as a mesh of its own, in its own frame, from the designer's door kit: the hinge pin at the origin, the leaf reaching along
+ * +x, as doorkit.ts builds it (planks with a hinge knuckle and a ring on top, a chain on a locked one; the boards of a barricade; the
+ * padlock of a locked leaf on both faces), at `look` and in a cut wall line or not. The renderer stands one of these at each door,
+ * turned about the pin as the door swings (a door hinged at the east post, or in a north-south wall, is this one turned by the leaf's
+ * angle: both of its faces carry the picture).
  */
-export function doorLeafBuffers(locked: boolean, cols: number, rows: number, wall = DEFAULT_GEOM.wall): Buffers {
-  const b = makeBuffers(12 * 4, 12 * 6);
-  // Wood only (doorart.ts): the original's door tile has a stone or plaster frame round the planks.
-  const tile = locked ? DOOR_LEAF_LOCK : DOOR_LEAF;
-  const tint = locked ? LEAF_LIT_LOCKED : LEAF_LIT;
-  // The top edge is planks either way; a locked leaf's is bound with two dark iron straps.
-  const top = { tile: locked ? DOOR_LOCK_H : DOOR_TOP_H, tint: WOOD_LIT, band: 'z' as const };
-  const h = LEAF_THICK / 2;
-  boxFaces(b, cols, rows, -LEAF_REACH_BACK, 0, -h, LEAF_REACH, wall, h, tile, tint, 15, top);
-  if (locked) {
-    for (const side of [1, -1]) {
-      const z0 = side > 0 ? h : -h - 0.04;
-      const z1 = side > 0 ? h + 0.04 : -h;
-      boxFaces(b, cols, rows, -LEAF_REACH_BACK, 0.3, z0, LEAF_REACH, 0.42, z1, DOOR_IRON, IRON_LIT, 1 | 8);
-      boxFaces(b, cols, rows, -LEAF_REACH_BACK, 1.05, z0, LEAF_REACH, 1.17, z1, DOOR_IRON, IRON_LIT, 1 | 8);
-      const p0 = side > 0 ? h : -h - 0.08;
-      const p1 = side > 0 ? h + 0.08 : -h;
-      boxFaces(b, cols, rows, 0.32, 0.55, p0, 0.6, 0.85, p1, DOOR_IRON, IRON_LIT, 1 | 8);
-    }
-  }
+export function doorLeafBuffers(door: DoorKit, look: DoorLook, cut: boolean, cols: number, rows: number): Buffers {
+  const kit = atlasKit(door);
+  const qs = doorQuads(kit, { across: true, cut, look, open: 0, hingeEast: false, swingSouth: true, light: null })
+    .filter((q) => q.part === 'leaf' || (q.part === 'lock' && q.pic.startsWith('padlock')));
+  const b = makeBuffers(qs.length * 4, qs.length * 6);
+  writeDoorQuads(b, qs, -door.post.w, -0.5, kit, cols * 16);
   return b;
+}
+
+/** What the renderer needs of a door-like cell (LevelGeom.doorInfo). */
+export interface DoorInfo {
+  cell: number;
+  /** The wall line runs east-west (the camera sees the door's face). */
+  across: boolean;
+  /** The door stands in a cut wall line (0.95). */
+  cut: boolean;
+  look: DoorLook;
+  /** The cell is an open door. */
+  open: boolean;
+  /** In doorkit's own frame: the hinge is at the east post, the leaf swings south (a north-south wall: the frame turned a quarter). */
+  hingeEast: boolean;
+  swingSouth: boolean;
 }
 
 export class LevelGeom {
@@ -413,6 +453,8 @@ export class LevelGeom {
     map: ArrayLike<number>, readonly cols: number, readonly rows: number, readonly kit: GeomKit = DEFAULT_GEOM,
     /** Terrain that stands over the floor as a card (high grass, a sign), and the plain floor tile under it. */
     private readonly under: ReadonlyMap<number, number> = new Map(),
+    /** The designer's door kit (assets/doors/doors.json): without it a level has no thresholds, frames or leaves (tests that do not draw doors). */
+    readonly doorKit: DoorKit | null = null,
   ) {
     this.shapes = kit === DEFAULT_GEOM ? SHAPES : shapesFor(kit);
     this.build(map);
@@ -473,7 +515,7 @@ export class LevelGeom {
     const y = shape.kind === K_CHASM ? this.kit.chasm : isStairsDown(this.terrain[cell]!) ? this.kit.stairsDown : 0;
     // A box on the cell hides its floor; the tile there is the plain floor, for the day it opens. An open door is a gap in the wall: the
     // floor shows, not the original's picture of a frame (a pale stone portal round the doorway). Stairs stand on plain floor (their tile is on their steps).
-    const tile = shape.kind === K_WALL || shape.kind === K_LOW || stairs || this.terrain[cell] === T.OPEN_DOOR ? (this.terrain[cell] === T.STATUE_SP ? T.EMPTY_SP : T.EMPTY) : shape.kind === K_CHASM ? T.CHASM : (this.under.get(this.terrain[cell]!) ?? this.terrain[cell]!);
+    const tile = shape.kind === K_WALL || shape.kind === K_LOW || stairs || this.terrain[cell] === T.OPEN_DOOR || this.terrain[cell] === T.BARRICADE ? (this.terrain[cell] === T.STATUE_SP ? T.EMPTY_SP : T.EMPTY) : shape.kind === K_CHASM ? T.CHASM : (this.under.get(this.terrain[cell]!) ?? this.terrain[cell]!);
     tileRect(tile, this.cols, this.rows, rect);
     set12(x, y, z + 1, x + 1, y, z + 1, x + 1, y, z, x, y, z);
     const v = slot * 4;
@@ -548,6 +590,7 @@ export class LevelGeom {
       else if (kind === K_CHASM) box += 4 * 2;
       if (kind === K_FLOOR || kind === K_LOW) decal += 4;
       if (isStairs(this.terrain[i]!)) box += STAIR_QUADS;
+      if (this.doorKit && isDoorLike(this.terrain[i]!)) box += DOOR_STATIC_QUADS;
     }
     return { box, water, decal };
   }
@@ -579,6 +622,7 @@ export class LevelGeom {
       // (Not on a stairs cell: the decal would lie across the mouth of the stairwell, a band of dark over the steps.)
       if ((kind === K_FLOOR || kind === K_LOW) && !isStairs(this.terrain[i]!)) this.writeShadows(i);
       if (isStairs(this.terrain[i]!)) this.writeSteps(i);
+      if (this.doorKit && isDoorLike(this.terrain[i]!)) this.writeDoorStatic(i);
     }
     this.quads.boxes = this.boxes.verts / 4;
     this.quads.water = this.water.verts / 4;
@@ -784,12 +828,17 @@ export class LevelGeom {
     }
   }
 
-  private writeBox(cell: number): void {
-    const b = this.boxes;
+  /** A block of plain wall on a cell, `height` high, written into `into`: a secret door's wall sinking into the floor as the door is found. */
+  wallBlock(cell: number, into: Buffers, height: number): void {
+    this.writeBox(cell, into, height, T.WALL);
+  }
+
+  private writeBox(cell: number, into?: Buffers, height?: number, asTerrain?: number): void {
+    const b = into ?? this.boxes;
     const x = cell % WIDTH;
     const z = Math.trunc(cell / WIDTH);
-    const shape = this.shapes[this.terrain[cell]!]!;
-    const h = this.isCut(cell) ? this.kit.cut : shape.h;
+    const shape = this.shapes[asTerrain ?? this.terrain[cell]!]!;
+    const h = height ?? this.heightOf(cell);
     // The top: a cap by the sides that have floor (darker if none does), or the block's own.
     let tile = shape.top;
     let shade = 1;
@@ -838,6 +887,106 @@ export class LevelGeom {
   }
 
   /**
+   * How tall the wall block of a cell stands: whole, cut down if the camera sees its back (isCut), and the wall cell just south of a door in a
+   * wall running north-south (the cell that would hide half of the doorway) lowered to a shoulder (doorkit.ts shoulderHeight), so that a notch
+   * in the long wall shows where the door is.
+   */
+  heightOf(cell: number): number {
+    const h = this.isCut(cell) ? this.kit.cut : this.shapes[this.terrain[cell]!]!.h;
+    return this.doorKit && this.isShoulder(cell) ? shoulderHeight(this.doorKit, h, true) : h;
+  }
+
+  /** Whether a wall cell is the shoulder: a wall directly south of a door that stands in a wall running north-south. */
+  isShoulder(cell: number): boolean {
+    const z = Math.trunc(cell / WIDTH);
+    if (z <= 0 || this.kinds[cell] !== K_WALL || isGapDoor(this.terrain[cell]!)) return false;
+    const door = cell - WIDTH;
+    return isDoorLike(this.terrain[door]!) && !this.doorAcross(cell % WIDTH, z - 1);
+  }
+
+  /** Whether a cell is open ground (not a wall block): what the leaf swings into, and what the doorway's light comes from. */
+  passableAt(x: number, z: number): boolean {
+    return x >= 0 && z >= 0 && x < WIDTH && z < HEIGHT && this.kinds[x + z * WIDTH] !== K_WALL;
+  }
+
+  /**
+   * Whether a locked door is a vault's: the room behind it is shut (one way in, this door), a rectangle whose edge is the special floor and whose
+   * middle is plain (the vault painter's ring of EMPTY_SP round an EMPTY or a pedestal), and not much bigger than a vault. The level carries
+   * no mark of it, so this is told from the map; if the room is anything else the door is plainly locked.
+   */
+  isVault(cell: number): boolean {
+    if (this.terrain[cell] !== T.LOCKED_DOOR) return false;
+    const reachable = (c: number): boolean => c >= 0 && c < LENGTH && this.kinds[c] !== K_WALL && !isDoorTile(this.terrain[c]!);
+    for (const step of [-WIDTH, WIDTH, -1, 1]) {
+      const start = cell + step;
+      if (!reachable(start)) continue;
+      const seen = new Set<number>([start]);
+      const queue = [start];
+      let closed = true;
+      for (let head = 0; head < queue.length && closed; head++) {
+        const c = queue[head]!;
+        for (const n of [-WIDTH, WIDTH, -1, 1]) {
+          const next = c + n;
+          if (next === cell || seen.has(next)) continue;
+          if (next < 0 || next >= LENGTH) continue;
+          if (isDoorTile(this.terrain[next]!) || this.terrain[next] === T.EXIT || this.terrain[next] === T.ENTRANCE) { closed = false; break; }
+          if (!reachable(next)) continue;
+          seen.add(next);
+          queue.push(next);
+          if (seen.size > 48) { closed = false; break; }
+        }
+      }
+      if (!closed) continue;
+      let x0 = WIDTH, x1 = 0, z0 = HEIGHT, z1 = 0;
+      for (const c of seen) {
+        x0 = Math.min(x0, c % WIDTH); x1 = Math.max(x1, c % WIDTH);
+        z0 = Math.min(z0, Math.trunc(c / WIDTH)); z1 = Math.max(z1, Math.trunc(c / WIDTH));
+      }
+      const w = x1 - x0 + 1;
+      const h = z1 - z0 + 1;
+      if (w < 3 || h < 3 || seen.size !== w * h) continue;
+      let ring = true;
+      let middle = false;
+      for (let z = z0; z <= z1 && ring; z++) {
+        for (let x = x0; x <= x1; x++) {
+          const t = this.terrain[x + z * WIDTH]!;
+          const edge = x === x0 || x === x1 || z === z0 || z === z1;
+          if (edge && t !== T.EMPTY_SP) { ring = false; break; }
+          // (The middle was plain floor or a pedestal when painted; the level's own grass and water may have grown over it since.)
+          if (!edge && t !== T.EMPTY_SP) middle = true;
+        }
+      }
+      if (ring && middle) return true;
+    }
+    return false;
+  }
+
+  /** Everything the renderer needs of a door-like cell to draw it: the way its wall runs, the look of its leaf, the side it hinges at and swings to. */
+  doorInfo(cell: number): DoorInfo {
+    const x = cell % WIDTH;
+    const z = Math.trunc(cell / WIDTH);
+    const t = this.terrain[cell]!;
+    const across = this.doorAcross(x, z);
+    const look: DoorLook = t === T.LOCKED_DOOR ? (this.isVault(cell) ? 'vault' : 'locked') : t === T.BARRICADE ? 'barricade' : 'closed';
+    const pose = { px: 0, pz: 0, closedA: 0, openA: 0 };
+    poseOf(cell, across, (px, pz) => this.passableAt(px, pz), pose);
+    return {
+      cell, across, cut: across && this.doorScale(x, z) < 1, look, open: t === T.OPEN_DOOR,
+      hingeEast: across ? Math.abs(pose.closedA - Math.PI) < 1e-6 : true,
+      swingSouth: across ? pose.openA < 0 || pose.openA > Math.PI : Math.abs(pose.openA) < 1e-6,
+    };
+  }
+
+  /** The fixed parts of a door: the frame, the threshold and the plaques of a locked one (the leaf and its light are the renderer's). */
+  private writeDoorStatic(cell: number): void {
+    const kit = this.doorKit!;
+    const info = this.doorInfo(cell);
+    const qs = doorQuads(atlasKit(kit), { across: info.across, cut: info.cut, look: info.look, open: 0, hingeEast: false, swingSouth: true, light: null })
+      .filter((q) => q.part === 'frame' || q.part === 'threshold' || (q.part === 'lock' && q.pic.startsWith('plaque')));
+    writeDoorQuads(this.boxes, qs, cell % WIDTH, Math.trunc(cell / WIDTH), atlasKit(kit), this.cols * 16);
+  }
+
+  /**
    * Whether a door's wall line runs east-west, so that its face looks south at the camera (the passage is north-south): true if
    * floor lies to its north or south, or if it has no floor beside it at all.
    */
@@ -879,6 +1028,8 @@ export class LevelGeom {
       // Boxes and water are rewritten when one comes or goes, or a box's art or height changes; a floor tile alone is patched in place.
       const box = now.kind === K_WALL || now.kind === K_LOW;
       if (was.kind !== now.kind || (box && (was.side !== now.side || was.top !== now.top || was.h !== now.h))) solids = true;
+      // A door's frame and threshold follow its state (locked, open, burnt), and the wall south of a door its shoulder.
+      if (isDoorLike(prev) || isDoorLike(next)) solids = true;
     }
     // A cell's tile and the shade at the corners of the floor round a wall that came or went.
     for (const i of changed) {

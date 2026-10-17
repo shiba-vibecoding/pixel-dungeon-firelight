@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { LENGTH, T, WIDTH } from '@pd/core';
 import { BUMP_MS, CLOSE_MS, DoorSwing, easeOutBack, OPEN_MS, poseOf, REDUCED_MS, swingAngle, writeLeafMatrix, type Leaf } from '../src/r3d/doorswing';
-import { doorLeafBuffers, K_WALL, LEAF_REACH, LevelGeom } from '../src/r3d/levelgeom';
+import type { DoorKit } from '../src/r3d/doorkit';
+import { doorLeafBuffers, K_WALL, LevelGeom } from '../src/r3d/levelgeom';
+
+const kit = JSON.parse(readFileSync(fileURLToPath(new URL('../public/assets/doors/doors.json', import.meta.url)), 'utf8')) as DoorKit;
 
 const mapOf = (carve: ReadonlyArray<readonly [number, number, number]>): number[] => {
   const map = new Array<number>(LENGTH).fill(T.WALL);
@@ -11,20 +16,22 @@ const mapOf = (carve: ReadonlyArray<readonly [number, number, number]>): number[
 const column = (b: { pos: Float32Array; verts: number }, axis: number): number[] => Array.from({ length: b.verts }, (_, i) => b.pos[i * 3 + axis]!);
 
 describe('a door leaf', () => {
-  it('is a thin full-height panel in its own frame: the hinge at the origin, 0.18 thick, as tall as the wall, a door tile on both faces', () => {
-    const b = doorLeafBuffers(false, 16, 16);
+  it('is the part 10 leaf in its own frame: the hinge pin at the origin, 0.125 thick, lower than the wall, as wide as the doorway', () => {
+    const b = doorLeafBuffers(kit, 'closed', false, 16, 16);
     const ys = column(b, 1);
     const zs = column(b, 2);
     const xs = column(b, 0);
-    expect(Math.max(...ys)).toBeCloseTo(1.5, 6);
-    expect(Math.min(...ys)).toBe(0);
-    expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(0.18, 6);
-    expect(Math.max(...xs)).toBeCloseTo(LEAF_REACH, 6);
-    // The panel is a cell wide.
-    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(1, 6);
-    // Five faces (the foot is not seen); a locked leaf has straps and plates besides.
-    expect(b.verts).toBe(5 * 4);
-    expect(doorLeafBuffers(true, 16, 16).verts).toBeGreaterThan(b.verts);
+    expect(Math.max(...ys)).toBeCloseTo(kit.leaf.lift + kit.leaf.h.full, 6);
+    expect(Math.max(...ys)).toBeLessThan(kit.heights.wall);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(kit.leaf.t, 6);
+    // From the pin (the inner edge of a post) along +x for the leaf's width.
+    expect(Math.min(...xs)).toBeCloseTo(0, 6);
+    expect(Math.max(...xs)).toBeCloseTo(kit.leaf.w, 6);
+    // A locked leaf has its padlock besides, a leaf in a cut wall line is lower still, and every look has a leaf.
+    expect(doorLeafBuffers(kit, 'locked', false, 16, 16).verts).toBeGreaterThan(b.verts);
+    expect(Math.max(...column(doorLeafBuffers(kit, 'closed', true, 16, 16), 1))).toBeLessThan(Math.max(...ys));
+    for (const look of ['vault', 'barricade', 'charred'] as const) expect(doorLeafBuffers(kit, look, false, 16, 16).verts, look).toBeGreaterThan(0);
   });
 
   it('leaves no stone round the gap: a closed door is neither a box nor a cap, and the walls beside it are its jambs', () => {
@@ -72,7 +79,7 @@ describe('where a door hinges and how it turns', () => {
   it('in a wall line running north-south hinges at the north jamb and lies along the passage when open', () => {
     const leaf = {} as Leaf;
     poseOf(20 + 21 * WIDTH, false, (x) => x === 21, leaf);
-    expect(leaf.pz).toBeCloseTo(21.09, 6);
+    expect(leaf.pz).toBeCloseTo(21 + kit.post.w, 6);
     expect(Math.abs(leaf.openA - leaf.closedA)).toBeCloseTo(Math.PI / 2, 6);
     // Open to the east, the only open side: the leaf lies along +x.
     expect(along(leaf.openA)[0]).toBeCloseTo(1, 6);

@@ -20,5 +20,5 @@ export const EDGE_ROCK = FACE_FIRST + 5;
 /** Contact shadows on the floor along a wall: north, east, south, west, the inner corner. */
 export const SHADOW_FIRST = FACE_FIRST + 8;
 
-/** The doors' dressing, drawn in code (doorart.ts): after the walls' two rows, seven tiles. */
+/** The doors' rows (the designer's door sheet, assets/doors): after the walls' two rows, six rows of tiles. */
 export const DOOR_FIRST = WALLS_FIRST + 32;

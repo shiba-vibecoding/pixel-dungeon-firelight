@@ -29,6 +29,8 @@ export interface DoorKit {
   spill: { l: number };
   grate: { y: number; t: number };
   atlas: Record<string, [number, number, number, number]>;
+  /** The effects sheet (doors-fx.png, 128 x 48): where each strip lies (y) and its frames (w x h each, side by side from x = 0). */
+  fx: Record<'sparks' | 'dust' | 'key' | 'flame', { row: number; w: number; h: number; frames: number }>;
 }
 
 export type DoorLook = 'closed' | 'locked' | 'vault' | 'barricade' | 'charred';

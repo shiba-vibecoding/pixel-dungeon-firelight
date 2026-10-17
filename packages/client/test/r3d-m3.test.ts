@@ -233,12 +233,11 @@ describe('the stairs as steps (levelgeom.ts)', () => {
     expect(geom.groundAt(-3, 5)).toBe(0);
   });
 
-  it('keeps the locked exit of a boss level a block, and gives the unlocked one its steps', () => {
+  it('gives the locked exit of a boss level its steps too (the grate of doorscene.ts stands over them), and keeps them when it is unlocked', () => {
     const geom = new LevelGeom(room(T.LOCKED_EXIT), 16, 16);
-    expect(tread(quads(geom), 13, -0.5 / 3, 6 - 4 / 16, 6)).toBeUndefined();
-    expect(geom.groundAt(13.5, 5.5)).toBe(0);
+    expect(tread(quads(geom), 13, -0.5 / 3, 6 - 4 / 16, 6)).toBeDefined();
     const open = room(T.UNLOCKED_EXIT);
-    expect(geom.patch(open)).toBe('solids');
+    geom.patch(open);
     expect(tread(quads(geom), 13, -0.5 / 3, 6 - 4 / 16, 6)).toBeDefined();
     expect(geom.floor.pos[geom.slot[13 + 5 * WIDTH]! * 12 + 1]).toBeCloseTo(-0.5, 6);
     expect(geom.groundAt(13.5, 5.1)).toBeCloseTo(-0.5, 6);
@@ -425,11 +424,11 @@ describe('the front walls are lower (levelgeom.ts isCut)', () => {
   });
 });
 
-describe('statues, shelves and barricades are cards over a low base (levelgeom.ts)', () => {
+describe('statues and shelves are cards over a low base (levelgeom.ts)', () => {
   it('makes a low stone base of each, not a block with the tile stretched over its faces', () => {
     const map = new Array<number>(LENGTH).fill(T.WALL);
     for (let z = 3; z <= 8; z++) for (let x = 3; x <= 15; x++) map[x + z * WIDTH] = T.EMPTY;
-    const props = [T.STATUE, T.STATUE_SP, T.BOOKSHELF, T.BARRICADE];
+    const props = [T.STATUE, T.STATUE_SP, T.BOOKSHELF];
     props.forEach((t, k) => { map[5 + k * 2 + 5 * WIDTH] = t; });
     const geom = new LevelGeom(map, 16, 16);
     props.forEach((t, k) => {

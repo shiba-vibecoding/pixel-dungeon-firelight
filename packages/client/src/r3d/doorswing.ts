@@ -52,7 +52,7 @@ export interface Leaf {
 }
 
 const HALF = Math.PI / 2;
-const HINGE = 0.09;
+const HINGE = 0.125;
 
 /**
  * Where a door's leaf hinges and which way it turns. `passable(x, z)` says whether a cell beside is open ground. In a wall line that
@@ -98,7 +98,7 @@ export function swingAngle(leaf: Pick<Leaf, 'from' | 'to' | 'opening' | 'ms'>, e
   return { angle: leaf.to - Math.sign(span) * BUMP_RAD * Math.sin(Math.PI * k) * (1 - k), done: false };
 }
 
-const isDoor = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR || terrain === T.OPEN_DOOR;
+const isDoor = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR || terrain === T.OPEN_DOOR || terrain === T.BARRICADE;
 
 /** Writes a leaf's instance matrix (column-major, 16 floats at `at`): the hinge pin placed, turned by `angle`; `scale` 0 hides it, `tall` (a share of the height) cuts the leaf down with the walls beside it. */
 export function writeLeafMatrix(m: Float32Array, at: number, px: number, pz: number, angle: number, scale: number, tall = 1): void {
