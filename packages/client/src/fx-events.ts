@@ -9,6 +9,7 @@ import { fxp } from './fxplayer';
 import { showBossCard } from './bosscard';
 import { addFxLights } from './fxdraw2d';
 import { regionIndex } from './worldsheets';
+import { minedFx } from './questfx';
 import {
   bloodRgb, chunkCount, chunksOf, FLOOR as FLOOR_LAYER, gore as record, levelSpatterMap, NO_BLOOD, NO_BODY, poolSplat, shade as shadeOf, spatterOf,
   type SpatterMap,
@@ -727,9 +728,10 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
     }
     case 'mined': {
       if (!here(effect.depth)) return;
+      // Sparks and rock chips thrown back at whoever struck, the ore's gleam, a little shake (questfx.ts).
       const at = cellCentre(effect.pos);
-      fx.burst(at.x, at.y, now, { count: 14, colors: [...GOLD, ...DUST], glow: true, speed: [30, 90], life: [250, 550], gravity: 300 });
-      fx.shake(1.5, 120, now);
+      const from = centreOf(view, effect.hero, now);
+      minedFx(at, from ? Math.atan2(from.y - at.y, from.x - at.x) : -Math.PI / 2, now);
       return;
     }
     case 'wraiths': {

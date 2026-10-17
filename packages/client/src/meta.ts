@@ -7,6 +7,7 @@ import { capitalize, lang, locale, t } from './i18n';
 import { itemInfo, itemName } from './itemtext';
 import { smooth } from './pace';
 import { QUIP_MODES, quipMode } from './quips';
+import { questSection } from './questcardui';
 import { type FxMode, quality } from './quality';
 import { el, info, show, sprites, windowOf } from './screens';
 import { canFullscreen, haptics, isFullscreen, openExternal, setFullscreen } from './telegram';
@@ -709,7 +710,9 @@ function showGuideEntry(id: string, back: () => void, onClose: () => void): void
 
 function notesView(world: World, hero: Hero): HTMLElement {
   const entries = journalEntries(world);
-  if (entries.length === 0) return el('p', { className: 'pd-empty pd-note center', textContent: t.meta.journalEmpty });
+  // The errands that stand or are done, as cards (questcardui.ts), over the places the party has met.
+  const quests = questSection(world, hero);
+  if (entries.length === 0 && !quests) return el('p', { className: 'pd-empty pd-note center', textContent: t.meta.journalEmpty });
   const list = el('div', { className: 'pd-journal' });
   for (const entry of entries) {
     const icon = el('i', { className: 'pd-jicon' });
@@ -724,7 +727,7 @@ function notesView(world: World, hero: Hero): HTMLElement {
       ),
     );
   }
-  return list;
+  return quests ? el('div', { className: 'fl-notes' }, quests, list) : list;
 }
 
 function itemIcon(sprite: number, silhouette: boolean): HTMLElement {

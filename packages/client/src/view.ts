@@ -19,6 +19,7 @@ import { idleFx } from './idlefx';
 import { haptic } from './telegram';
 import type { Aura } from './growth';
 import { AuraCache } from './growthcache';
+import { farewell, forgeFlare, swingPick } from './questfx';
 
 /*
  * What the player sees, as opposed to what the world is: characters slide
@@ -98,6 +99,11 @@ export interface Puppet extends Turnable {
   /** A boomerang thrown is not in the hand from `heldAwayFrom` until it is back (`heldAwayUntil`). */
   heldAwayFrom?: number;
   heldAwayUntil?: number;
+  /** A tool in the hand for a moment, whatever the hero wields (the pickaxe at a vein, questfx.ts), until `toolUntil`. */
+  tool?: ItemKind;
+  toolUntil?: number;
+  /** The wandmaker or the imp waiting for the farewell window to be put away before going (questfx.ts). */
+  leaving?: 'wandmaker' | 'imp';
   /** What the player's own hero wears, as pictures (a look's glow and aura, a hat); undefined for anyone else. */
   worn?: Worn;
   /** Hero class or monster kind. */
@@ -1050,10 +1056,20 @@ export class View {
           break;
         case 'mined':
           if (effect.depth !== this.depth) break;
+          // The swing with the pickaxe in hand (questfx.ts), the crunch of it on the rock and the gleam of the ore coming loose.
+          swingPick(this, effect.hero, effect.pos, now);
           this.flashes.push({ cell: effect.pos, start: now, color: '255, 210, 90', duration: 500 });
-          audio.play('rocks', 1.3, 0.5, cellMiddle(effect.pos));
+          audio.play('pick', 1, 0.9, cellMiddle(effect.pos));
+          audio.later(110, 'oreGleam', 1, 0.5, cellMiddle(effect.pos));
           break;
         case 'smith':
+          // The errand handed in: the forge flares (and his reforging is on offer).
+          if (effect.line === 'completed' && effect.hero === myId) forgeFlare(this, now);
+          break;
+        case 'wandmaker':
+        case 'imp':
+          // The wandmaker is off and the imp pops away once their word is kept (the ghost's leave-taking is below).
+          if (effect.line === 'farewell') farewell(this, effect.type, now, effect.hero === myId);
           break;
         case 'mirrored':
           if (effect.depth !== this.depth) break;

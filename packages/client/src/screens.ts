@@ -26,7 +26,7 @@ import { confirmRisky, drinkRisk, enchantLossChance, equipRisk, hasMagic, target
 import { quality } from './quality';
 import { countChallenges } from './challenge-info';
 import type { RunRecord } from './rankings';
-import { type Assets, heroSprite } from './sprites';
+import { type Assets, type CharSprite, heroSprite } from './sprites';
 import type { LogLine } from './view';
 
 /*
@@ -44,6 +44,11 @@ let assets: Assets | null = null;
 /** The sprite sheets portraits are cut from. */
 export function setAssets(loaded: Assets): void {
   assets = loaded;
+}
+
+/** A monster's sprite (the sheet and its animations), once the assets have loaded: the dialogue frames of questui.ts are cut from it. */
+export function mobSprite(kind: MobKind): CharSprite | undefined {
+  return assets?.mobs[kind];
 }
 
 export type Child = Node | string | null | undefined | false;
@@ -745,6 +750,8 @@ export interface ReforgeOptions {
   world: World;
   hero: Hero;
   text: string;
+  /** The blacksmith's word as the dialogue draws it (questui.ts: a portrait frame, a typewriter): in place of the plain portrait and text. */
+  talk?: { icon: HTMLElement; speech: HTMLElement; sub?: string };
   onReforge(first: ItemRef, second: ItemRef): void;
   onClose(): void;
 }
@@ -791,11 +798,11 @@ export function showReforge(options: ReforgeOptions): void {
     );
   show(
     windowOf(
-      { title: capitalize(t.mobs.blacksmith), icon: portrait('blacksmith'), onClose: options.onClose },
+      { title: capitalize(t.mobs.blacksmith), ...(options.talk?.sub ? { sub: options.talk.sub } : {}), icon: options.talk?.icon ?? portrait('blacksmith'), onClose: options.onClose, ...(options.talk ? { className: 'fl-smith-window' } : {}) },
       el(
         'div',
         { className: 'pd-scroll pd-stack' },
-        info(options.text, 'pd-speech'),
+        options.talk?.speech ?? info(options.text, 'pd-speech'),
         pairs.length === 0 ? info(t.nothingToReforge, 'pd-note') : el('div', { className: 'pd-rewards pd-reforges' }, ...pairs.map(card)),
       ),
     ),
