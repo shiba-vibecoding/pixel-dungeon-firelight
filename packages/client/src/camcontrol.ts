@@ -7,8 +7,8 @@
  * walks (looking ahead along the way). Nothing moves it but the player and five explicit things, all eased and never instant:
  *
  *   - the «centre» button, a double tap on the hero, a floor change, death, the key C/Space-hold: `recentre()`;
- *   - the hero acting (their cell changed) with the view panned so far that they would stand off the visible area, or within
- *     a tile of its edge: `nudge`, which moves just enough to bring them back, never to the middle;
+ *   - the hero acting (their cell changed) with the view panned so far that they would stand within a quarter of the visible
+ *     area of its edge (EDGE_SHARE, and at least EDGE_TILES): `nudge`, which moves just enough to keep them there, never to the middle;
  *   - the danger badge: `lookAt()`;
  *   - Shift + arrow keys: `keyPan()`;
  *   - the fling a released drag leaves (about 300 ms).
@@ -98,8 +98,14 @@ export const FOLLOW_LAG_MS = 60;
 export const FOLLOW_CATCH_UP_MS = 45;
 /** The view is «away» from the hero when panned further than this many tiles. */
 export const AWAY_TILES = 1.5;
-/** The hero keeps this many tiles from the edge of the visible area once they have acted. */
-export const EDGE_TILES = 1;
+/** The hero keeps this many tiles from the edge of the visible area once they have acted, and at least EDGE_SHARE of it. */
+export const EDGE_TILES = 3;
+/**
+ * The share of the visible area's width (and of the free band's height) the hero keeps from its edges: the view moves on with them
+ * step by step well before the edge, rather than letting them reach it and then sliding a long way at once (a player's video showed
+ * the hero at the very edge, then the whole view lurching).
+ */
+export const EDGE_SHARE = 0.25;
 
 const easeOut = (p: number): number => 1 - (1 - p) ** 3;
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -450,17 +456,18 @@ export class CamControl {
     this.ease('key', this.clampTo({ x: base.x + (dx * view.width * 0.25) / this.zoom, y: base.y + (dy * (view.bandBottom - view.bandTop) * 0.25) / this.zoom }), KEY_MS);
   }
 
-  /** The offset that keeps the hero at least a tile inside the visible area (the band the HUD leaves free), nearest to `pan`. */
+  /** The offset that keeps the hero a quarter of the visible area inside it (the band the HUD leaves free), nearest to `pan`. */
   private safePan(pan: Pt): Pt {
     const input = this.input;
     if (!input) return pan;
     const v = input.viewport;
     const z = this.zoom;
-    const m = EDGE_TILES * this.tile * z;
+    const mx = Math.max(EDGE_TILES * this.tile * z, v.width * EDGE_SHARE);
+    const my = Math.max(EDGE_TILES * this.tile * z, (v.bandBottom - v.bandTop) * EDGE_SHARE);
     // Where the hero stands on screen is the middle less the offset: it has to lie between the margins.
     const range = (lo: number, hi: number): [number, number] => (lo > hi ? [(lo + hi) / 2, (lo + hi) / 2] : [lo, hi]);
-    const [loX, hiX] = range((v.width / 2 - (v.width - m)) / z, (v.width / 2 - m) / z);
-    const [loY, hiY] = range((v.middle - (v.bandBottom - m)) / z, (v.middle - (v.bandTop + m)) / z);
+    const [loX, hiX] = range((v.width / 2 - (v.width - mx)) / z, (v.width / 2 - mx) / z);
+    const [loY, hiY] = range((v.middle - (v.bandBottom - my)) / z, (v.middle - (v.bandTop + my)) / z);
     return { x: clamp(pan.x, loX, hiX), y: clamp(pan.y, loY, hiY) };
   }
 

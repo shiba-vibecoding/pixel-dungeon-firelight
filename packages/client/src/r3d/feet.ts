@@ -17,6 +17,8 @@ interface Sheet {
   width: number;
   alpha: Uint8Array | null;
   frames: Map<number, number>;
+  /** The footprints (a packed number, see `footprint`), by the same key. */
+  prints: Map<number, number>;
 }
 
 const sheets = new WeakMap<object, Sheet>();
@@ -24,7 +26,7 @@ const sheets = new WeakMap<object, Sheet>();
 function sheetOf(image: HTMLImageElement | HTMLCanvasElement): Sheet {
   let sheet = sheets.get(image);
   if (sheet) return sheet;
-  sheet = { width: image.width, alpha: null, frames: new Map() };
+  sheet = { width: image.width, alpha: null, frames: new Map(), prints: new Map() };
   try {
     const canvas = document.createElement('canvas');
     canvas.width = image.width;
@@ -79,4 +81,61 @@ export function gapOfAlpha(alpha: ArrayLike<number>, width: number, w: number, h
     }
   }
   return gap === h || gap > MAX_GAP ? 0 : gap;
+}
+
+/**
+ * Where a frame's feet are across its width: the columns, first to last (inclusive), of the opaque pixels in its lowest opaque row and the
+ * row above it (a foot may be lifted by one row in a stride), and how many rows it has clear under them (not capped: a leap is a big
+ * number). The contact shadow is centred on this and as wide as it, so it is under the feet, not under the middle of the picture.
+ */
+export interface Footprint {
+  lo: number;
+  hi: number;
+  gap: number;
+}
+
+/** The footprint of the frame (0, 0, w, h) of a bare alpha channel `width` wide, written into `out`; false for an empty frame. */
+export function footprintOfAlpha(alpha: ArrayLike<number>, width: number, sx: number, sy: number, w: number, h: number, out: Footprint): boolean {
+  let last = -1;
+  for (let row = h - 1; row >= 0 && last < 0; row--) {
+    for (let col = 0; col < w; col++) {
+      if (alpha[(sy + row) * width + sx + col]! >= OPAQUE) {
+        last = row;
+        break;
+      }
+    }
+  }
+  if (last < 0) return false;
+  let lo = w;
+  let hi = -1;
+  for (let row = last; row >= Math.max(0, last - 1); row--) {
+    for (let col = 0; col < w; col++) {
+      if (alpha[(sy + row) * width + sx + col]! >= OPAQUE) {
+        if (col < lo) lo = col;
+        if (col > hi) hi = col;
+      }
+    }
+  }
+  out.lo = lo;
+  out.hi = hi;
+  out.gap = h - 1 - last;
+  return true;
+}
+
+/** The same for a frame of a loaded sheet (read once, then from a table); false if the sheet cannot be read or the frame is empty. */
+export function footprint(image: HTMLImageElement | HTMLCanvasElement, sx: number, sy: number, w: number, h: number, out: Footprint): boolean {
+  const sheet = sheetOf(image);
+  const alpha = sheet.alpha;
+  if (!alpha) return false;
+  const key = sy * 8192 + sx;
+  let packed = sheet.prints.get(key);
+  if (packed === undefined) {
+    packed = footprintOfAlpha(alpha, sheet.width, sx, sy, w, h, out) ? out.lo | (out.hi << 8) | (Math.min(out.gap, 255) << 16) : -1;
+    sheet.prints.set(key, packed);
+  }
+  if (packed < 0) return false;
+  out.lo = packed & 255;
+  out.hi = (packed >> 8) & 255;
+  out.gap = packed >> 16;
+  return true;
 }

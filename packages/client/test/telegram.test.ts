@@ -113,3 +113,27 @@ describe('Telegram: the photo mode’s saving and story', () => {
     expect(telegram.canShareStory()).toBe(false);
   });
 });
+
+describe('Telegram: the guide opened at an article', () => {
+  it('reads the article from startapp=guide_<id>, or ?guide=<id> in a browser', async () => {
+    const { telegram } = await inside('android');
+    expect(telegram.guideFromStart('guide_hunger', '')).toBe('hunger');
+    expect(telegram.guideFromStart('guide_traps', '')).toBe('traps');
+    expect(telegram.guideFromStart(undefined, '?guide=ankh')).toBe('ankh');
+  });
+
+  it('takes nothing else for an article', async () => {
+    const { telegram } = await inside('android');
+    expect(telegram.guideFromStart('guide_', '')).toBeNull();
+    expect(telegram.guideFromStart('guide_../../x', '')).toBeNull();
+    expect(telegram.guideFromStart('guide_Hunger', '')).toBeNull();
+    expect(telegram.guideFromStart('ref_12', '')).toBeNull();
+    expect(telegram.guideFromStart(undefined, '')).toBeNull();
+  });
+
+  it('launches for the guide from the app’s own start parameter', async () => {
+    const { telegram } = await inside('android', { initDataUnsafe: { start_param: 'guide_curses' } });
+    vi.stubGlobal('location', { search: '' });
+    expect(telegram.launchedForGuide()).toBe('curses');
+  });
+});

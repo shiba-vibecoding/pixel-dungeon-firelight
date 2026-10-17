@@ -7,6 +7,7 @@ import { type Assets, frameAt, ICONS, levelRegion } from './sprites';
 import { FALL_MS, type Puppet, TILE, type View } from './view';
 import { type Figure, figureOf } from './dirs';
 import { puppetAlpha } from './puppetfade';
+import { idleFx, MARK_HOURGLASS, MARK_START } from './idlefx';
 import { bossCard, depthCard, type FloatIcon, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
 import { drawSourceIcon, type Icon } from './srcicon';
 
@@ -75,6 +76,22 @@ export function patchLevel(baked: HTMLCanvasElement, seen: Uint8Array, level: Le
 function drawIcon(ctx: CanvasRenderingContext2D, assets: Assets, icon: readonly [number, number, number, number], x: number, y: number): void {
   const [sx, sy, w, h] = icon;
   ctx.drawImage(assets.icons, sx, sy, w, h, Math.round(x - w / 2), Math.round(y - h), w, h);
+}
+
+/**
+ * What the hero does while waiting, resting and being startled, over its head (idlefx.ts): the turn's hourglass flipping, a «z» drifting up,
+ * a «!» popping. They are the original's own little icons, flipped, drifted and faded.
+ */
+function drawIdleMarks(ctx: CanvasRenderingContext2D, assets: Assets, id: string, cx: number, top: number, now: number): void {
+  idleFx.marksOf(id, now, (kind, rise, side, alpha, sx, sy) => {
+    const [ix, iy, w, h] = kind === MARK_HOURGLASS ? ICONS.busy : kind === MARK_START ? ICONS.alert : ICONS.sleep;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.translate(Math.round(cx + side), Math.round(top - 3 - rise));
+    ctx.scale(sx, sy);
+    ctx.drawImage(assets.icons, ix, iy, w, h, -w / 2, -h, w, h);
+    ctx.restore();
+  });
 }
 
 /** One texel per cell: the fog's darkness, eased from frame to frame (see drawFog). */
@@ -233,6 +250,12 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
     ctx.scale(-1, 1);
   } else {
     ctx.translate(dx, dy);
+  }
+  // Crouching to search, settled to rest (idlefx.ts): lower, its feet where they were.
+  if (puppet.squash !== undefined && puppet.squash !== 1) {
+    ctx.translate(0, sheet.h);
+    ctx.scale(1, puppet.squash);
+    ctx.translate(0, -sheet.h);
   }
   const worn = puppet.worn;
   // A legendary look's aura stands behind the hero (24 x 28, its feet at (12, 26); the hero's at (6, 14)).
@@ -480,6 +503,8 @@ export function render(
   // Freshly discovered secrets glow for a moment.
   for (const flash of view.flashes) {
     const fade = 1 - (now - flash.start) / (flash.duration ?? 600);
+    // (A cell lit a moment ahead, the search's ring going round, waits its turn.)
+    if (fade > 1) continue;
     ctx.fillStyle = `rgba(${flash.color ?? '255, 255, 200'}, ${0.6 * fade})`;
     ctx.fillRect((flash.cell % WIDTH) * TILE, Math.trunc(flash.cell / WIDTH) * TILE, TILE, TILE);
   }
@@ -643,6 +668,7 @@ export function render(
     } else if (now < puppet.alertUntil) {
       drawIcon(ctx, assets, ICONS.alert, x + TILE / 2, top - 2);
     }
+    if (puppet.isHero) drawIdleMarks(ctx, assets, puppet.id, x + TILE / 2, top, now);
     if (puppet.hp < puppet.ht && !(puppet.isHero && puppet.id === myId)) drawHealth(ctx, puppet, snap(x + 2), snap(y + TILE - puppet.sprite.sheet.h - 3));
   }
 
@@ -710,6 +736,7 @@ export function renderOverlay3D(
     const top = (y + FEET_PX - camera.y) * ys - puppet.sprite.sheet.h - 1;
     if (puppet.sleeping) drawIcon(ctx, assets, ICONS.sleep, mid + TILE / 2 - 2, top + Math.sin(now / 400) * 1.5);
     else if (now < puppet.alertUntil) drawIcon(ctx, assets, ICONS.alert, mid, top - 2);
+    if (puppet.isHero) drawIdleMarks(ctx, assets, puppet.id, mid, top, now);
     if (puppet.hp < puppet.ht && !(puppet.isHero && puppet.id === myId)) {
       drawHealth(ctx, puppet, Math.round((mid - TILE / 2 + 2) * zoom) / zoom, Math.round((top - 2) * zoom) / zoom);
     }

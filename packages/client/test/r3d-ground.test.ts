@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Texture } from 'three';
 import { fx } from '../src/fx';
-import { MAX_GAP, gapOfAlpha, gapRows } from '../src/r3d/feet';
+import sharp from 'sharp';
+import { type Footprint, MAX_GAP, footprintOfAlpha, gapOfAlpha, gapRows } from '../src/r3d/feet';
+import { type Contact, WATER_BLOB, WATER_CONTACT, contactAt, pixelDepth } from '../src/r3d/contact';
 import { Tufts, TUFT_CAPACITY } from '../src/r3d/grass3d';
 import { makeAir } from '../src/r3d/fogofwar';
 import { TIERS } from '../src/r3d/governor';
@@ -105,5 +107,88 @@ describe('the contact shadow, dust and splash', () => {
 
   it('is off at low and min for the dust and the splash (they are particles)', () => {
     expect(TIERS.map((t) => [t.name, t.particles])).toEqual([['high', true], ['mid', true], ['low', false], ['min', false]]);
+  });
+});
+
+describe('the contact shadow touches the soles (contact.ts)', () => {
+  const read = async (path: string): Promise<{ alpha: Uint8Array; width: number; height: number }> => {
+    const { data, info } = await sharp(new URL(`../public/assets/${path}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const alpha = new Uint8Array(info.width * info.height);
+    for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3]!;
+    return { alpha, width: info.width, height: info.height };
+  };
+  const out: Contact = { x: 0, z: 0, width: 0, depth: 0 };
+  const foot: Footprint = { lo: 0, hi: 0, gap: 0 };
+  /** The floor depth of one art pixel on the screen. */
+  const px = pixelDepth();
+
+  it('finds the columns of the lowest opaque row and the row over it, and the clear rows under them', () => {
+    const a = new Uint8Array(12 * 15);
+    for (let col = 2; col < 6; col++) a[13 * 12 + col] = 255;
+    // A foot lifted by one row (the other foot is on the floor).
+    for (let col = 8; col < 10; col++) a[12 * 12 + col] = 255;
+    expect(footprintOfAlpha(a, 12, 0, 0, 12, 15, foot)).toBe(true);
+    expect(foot).toEqual({ lo: 2, hi: 9, gap: 1 });
+    expect(footprintOfAlpha(new Uint8Array(12 * 15), 12, 0, 0, 12, 15, foot)).toBe(false);
+  });
+
+  it('is centred on the feet, as wide as them, with its top edge over the soles and no slip', () => {
+    contactAt(5, 7, 3, 8, 12, false, 1, false, out);
+    expect(out.x).toBeCloseTo(5, 6);
+    expect(out.width).toBeGreaterThanOrEqual(6 / 16);
+    // Its top edge is above the line under the soles by more than half a pixel (so it lies behind the lowest row), and it shows below it.
+    expect(out.z - out.depth / 2).toBeLessThan(7 - 0.5 * px);
+    expect(out.z + out.depth / 2).toBeGreaterThan(7 + 1 * px);
+    // Feet to the right of the middle of the picture shift it, and a mirrored figure shifts it the other way.
+    contactAt(5, 7, 6, 11, 12, false, 1, false, out);
+    expect(out.x).toBeCloseTo(5 + 3 / 16, 6);
+    contactAt(5, 7, 6, 11, 12, true, 1, false, out);
+    expect(out.x).toBeCloseTo(5 - 3 / 16, 6);
+  });
+
+  it('starts at the waterline, a row up, when wading (the lowest row is under the surface)', () => {
+    const dry = { ...contactAt(5, 7, 3, 8, 12, false, 1, false, out) };
+    const wet = contactAt(5, 7, 3, 8, 12, false, 1, true, out);
+    expect(dry.z - dry.depth / 2 - (wet.z - wet.depth / 2)).toBeCloseTo(px, 6);
+    expect(WATER_CONTACT).toBeLessThan(0.5);
+    expect(WATER_BLOB).toBeLessThan(0.5);
+  });
+
+  it('holds for every frame of the hero and the rat, from the side, the front and the back', async () => {
+    const sheets: Array<[string, number, number]> = [];
+    for (const hero of ['warrior', 'mage', 'rogue', 'ranger']) sheets.push([`${hero}.png`, 12, 15]);
+    for (const hero of ['mage', 'ranger', 'rogue', 'warrior']) for (const view of ['front', 'back']) sheets.push([`dirs/${hero}-${view}.png`, 12, 15]);
+    sheets.push(['rat.png', 16, 15], ['dirs/rat-front.png', 16, 15], ['dirs/rat-back.png', 16, 15]);
+    let frames = 0;
+    for (const [path, w, h] of sheets) {
+      let img;
+      try {
+        img = await read(path);
+      } catch {
+        continue;
+      }
+      for (let row = 0; row + h <= img.height; row += h) {
+        for (let col = 0; col + w <= img.width; col += w) {
+          if (!footprintOfAlpha(img.alpha, img.width, col, row, w, h, foot)) continue;
+          frames++;
+          for (const flip of [false, true]) {
+            contactAt(0, 0, foot.lo, foot.hi, w, flip, 1, false, out);
+            const what = `${path} frame ${col / w},${row / h}${flip ? ' flipped' : ''}`;
+            // Where the feet are on the screen across, in the picture's own columns (mirrored if flipped).
+            const left = flip ? (w - 1 - foot.hi) : foot.lo;
+            const right = flip ? (w - foot.lo) : foot.hi + 1;
+            const centre = ((left + right) / 2 - w / 2) / 16;
+            expect(Math.abs(out.x - centre), `${what}: centred under the feet`).toBeLessThan(1e-9);
+            expect(out.x - out.width / 2, `${what}: wide enough, left`).toBeLessThanOrEqual(left / 16 - w / 32 + 1e-9);
+            expect(out.x + out.width / 2, `${what}: wide enough, right`).toBeGreaterThanOrEqual(right / 16 - w / 32 - 1e-9);
+            // Its top edge is over the lowest row of the feet (which is one pixel high, above the soles' line at z 0) and it shows under it.
+            expect(out.z - out.depth / 2, `${what}: overlaps the soles`).toBeLessThanOrEqual(-0.5 * px);
+            expect(out.z - out.depth / 2, `${what}: not floating above them`).toBeGreaterThanOrEqual(-2 * px);
+            expect(out.z + out.depth / 2, `${what}: shows below the soles`).toBeGreaterThanOrEqual(1.5 * px);
+          }
+        }
+      }
+    }
+    expect(frames).toBeGreaterThan(40);
   });
 });
