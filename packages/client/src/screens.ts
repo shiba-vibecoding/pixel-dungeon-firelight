@@ -10,7 +10,9 @@ import { chooseQuickslot, quickItem, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
+import { I } from './i18n-info';
 import { P } from './i18n-photo';
+import { knowLine, wasteLine } from './infolines';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import { mart } from './mart';
 import { labelWords } from './labels';
@@ -333,7 +335,11 @@ export function markWear(node: HTMLElement): void {
 
 /** An item's description, its curse and weight set apart as warnings, and how worn it is under its numbers. */
 function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
-  const nodes = described(itemInfo(world, hero, item));
+  // How near a thing carried is to being known (a count, nothing hidden), and what a meal would waste (infolines.ts).
+  const extra = [knowLine(world, hero, item), itemDef(item.kind).category === 'food' && inPack(hero, item) ? wasteLine(hero, item) : null].filter((n): n is HTMLElement => n !== null);
+  const base = described(itemInfo(world, hero, item));
+  // Right after the first paragraph, so that it is in view without scrolling the panel.
+  const nodes = [...base.slice(0, 1), ...extra, ...base.slice(1)];
   const wear = wearOf(world, item);
   if (!wear) return nodes;
   const line = el('div', { className: `pd-durability${wear.left > 0 && wear.left / wear.max <= 0.25 ? ' low' : ''}` },
@@ -341,6 +347,9 @@ function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
   const after = [line, ...(wear.left <= 0 ? [el('p', { className: 'pd-callout broken', textContent: t.brokenInfo })] : [])];
   return [nodes[0]!, ...after, ...nodes.slice(1)].filter(Boolean);
 }
+
+/** Whether the item is in the hero's pack (a thing for sale or lying on the floor is not). */
+const inPack = (hero: Hero, item: Item): boolean => hero.items.includes(item);
 
 /** A window title for an item: a broken item's level struck through rather than its name saying «broken». */
 function titleFor(world: World, item: Item, box: HTMLElement): void {
@@ -474,6 +483,8 @@ export interface HeroOptions {
   /** The look the hero wears, for their portrait. */
   skin?: string;
   buffs: ReadonlyArray<{ name: BuffName; turns?: number }>;
+  /** Opens the feed of the last wounds (feedui.ts); a row under the health. */
+  onFeed?: () => void;
   onClose(): void;
 }
 
@@ -508,6 +519,7 @@ export function showHero(options: HeroOptions): void {
         [t.goldLabel, String(hero.gold), 'gold'],
         [t.slain, String(hero.kills)],
       ]),
+      options.onFeed && button(t.input.feed.open, options.onFeed, 'quiet'),
       el('h3', { className: 'pd-heading', textContent: t.conditions }),
       ...(buffs.length > 0 ? buffs : [info(t.noConditions, 'pd-note')]),
       options.looks && el('h3', { className: 'pd-subhead', textContent: t.looksTitle }),
@@ -988,6 +1000,8 @@ export interface EndOptions {
   share?: readonly ShareChoice[];
   /** Opens the boards; absent without checked runs. */
   onBoards?: () => void;
+  /** «What happened»: opens the feed of the last wounds, and comes back here when it is closed. */
+  onWhat?: () => void;
 }
 
 /** The end of a run: the whole party fell, or it won. */
@@ -1027,7 +1041,11 @@ export function showRunEnd(options: EndOptions): void {
       ),
       actions(
         [button(options.restartLabel, options.onRestart, 'primary')],
-        [...(options.share?.length ? [shareButton(options.share)] : []), ...(options.onBoards ? [button(t.ranked.title, options.onBoards)] : [])],
+        [
+          ...(options.onWhat ? [button(t.input.feed.deathLink, options.onWhat)] : []),
+          ...(options.share?.length ? [shareButton(options.share)] : []),
+          ...(options.onBoards ? [button(t.ranked.title, options.onBoards)] : []),
+        ],
       ),
       button(t.toMenu, options.onExit, 'quiet'),
     ),
@@ -2122,6 +2140,12 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'seed') {
       use(t.throwItem, () => aimWith('throw', index));
       use(t.plantSeed, () => act({ type: 'use', item: index }));
+      // What the seeds brew in an alchemy pot, as odds (infoui.ts): a calculator, nothing is thrown.
+      more.push(button(I.pot.open, () => {
+        const back = (): void => showBackpack(options, { index });
+        pauseBag();
+        void import('./infoui').then(({ showPot }) => showPot({ world, hero, start: item.kind, onClose: back, cell: hero.pos }), back);
+      }, 'quiet'));
     }
     if (category === 'scroll') {
       // A known scroll that acts on one thing asks which, from the whole pack and what is worn (WndBag's selector).

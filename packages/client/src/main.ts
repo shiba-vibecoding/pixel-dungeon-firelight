@@ -15,12 +15,14 @@ import './fl-fx.css';
 import './fl-mart.css';
 import './fl-mart-ext.css';
 import './fl-compete.css';
+import './fl-input.css';
 import './photo.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickItem, quickRef, quickUse } from './quickslot';
 import { fx } from './fx';
 import { fxp } from './fxplayer';
 import { gore, GoreStore } from './gore';
+import { idleFx } from './idlefx';
 import { loadFx, whenFx } from './fxsheet';
 import { hideBossCard } from './bosscard';
 import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
@@ -62,7 +64,14 @@ import type { ChallengesOptions, JournalOptions, SettingsOptions } from './meta'
 import { eraseDevice } from './challenge-info';
 import { idle, lazy, load } from './lazy';
 import { QUIP_LOG_COLOR, quipSys } from './quipsys';
-import { loop, onResume } from './lifecycle';
+import { loop, onPause, onResume } from './lifecycle';
+import { type Screen, TouchGuard, touchGuardSetting } from './touchguard';
+import { conditionsOf, type HurtEntry, HurtLog } from './hurtlog';
+import { type Conditions, type Source, sourcesOf } from './hurtsrc';
+import { showFeed } from './feedui';
+import { actionable, describeTap, HOLD_MS, LoupeGesture, loupeSetting, type Tapped, type TapContext } from './loupe';
+import { HoverLabel, LoupeGlass, tapLabel } from './loupeui';
+import { needsConfirm, pathConfirm, PathPreview, planRoute, stopForTap, verdict, underway } from './pathpreview';
 import { reloadForUpdate } from './update';
 import { type Camp, type CampDress, campClasses } from './camp';
 import { type DailyRulesView, showCamp } from './campui';
@@ -97,7 +106,7 @@ import { type BoardKind, type CircleBoardView, type Profile, type RunMeta, type 
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
+  backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedForGuide, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
   shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen, invitedGift, inviteStart, launchedByInvite,
 } from './telegram';
@@ -134,6 +143,10 @@ const showChallenges = (options: ChallengesOptions): void => load(metaMod, (m) =
 const showJournal = (options: JournalOptions, tab?: 'notes' | 'catalog' | 'guide', category?: number, entry?: string): void =>
   load(metaMod, (m) => m.showJournal(options, tab, category, entry), windowFailed);
 const showGuide = (onClose: () => void, entry?: string): void => load(metaMod, (m) => m.showGuide(onClose, entry), windowFailed);
+/** The information windows (the hunger card, the alchemy pot's calculator: infoui.ts) are a chunk of their own too. */
+const infoMod = lazy(() => import('./infoui'));
+const showHunger = (...args: Parameters<typeof import('./infoui').showHunger>): void => load(infoMod, (m) => m.showHunger(...args), windowFailed);
+const showPot = (...args: Parameters<typeof import('./infoui').showPot>): void => load(infoMod, (m) => m.showPot(...args), windowFailed);
 
 initTelegram('#1f1d1d');
 // What goes wrong reaches whoever looks after the game (report.ts): never who, only where.
@@ -221,6 +234,7 @@ const feedback = new Feedback();
 const scenery = new Scenery();
 const hud = new Hud({
   hero: () => openHero(),
+  feed: () => openFeed(),
   menu: () => openMenu(),
   wait: () => {
     aim = null;
@@ -254,6 +268,11 @@ const hud = new Hud({
     openBackpack();
   },
   history: () => showHistory(view.log, hideOverlay),
+  hunger: () => {
+    const world = session?.world;
+    const me = world && heroById(world, session!.myId);
+    if (me) showHunger(world, me, hideOverlay);
+  },
   buff: (name, turns) => toast(turns ? `${t.buffs[name]} (${t.turnsLeft(turns)})` : t.buffs[name]),
   mate: (id) => {
     const hero = session?.world && heroById(session.world, id);
@@ -1331,8 +1350,14 @@ function takeShot(): Shot | null {
   const g = out.getContext('2d');
   if (!g) return null;
   try {
-    if (mode3d && canvas3d) g.drawImage(canvas3d, 0, 0, out.width, out.height);
-    else {
+    if (mode3d && canvas3d) {
+      g.drawImage(canvas3d, 0, 0, out.width, out.height);
+      // (The renderer's canvas has an alpha channel, and the shot must have none of its holes: whatever is not whole is put over the dark floor's colour.)
+      g.globalCompositeOperation = 'destination-over';
+      g.fillStyle = '#0b0b09';
+      g.fillRect(0, 0, out.width, out.height);
+      g.globalCompositeOperation = 'source-over';
+    } else {
       g.fillStyle = '#0b0b09';
       g.fillRect(0, 0, out.width, out.height);
       // The classic view's brightness is a CSS filter on its canvas: it goes into the picture too, where the webview can draw with one.
@@ -1594,6 +1619,8 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
     }
     return;
   }
+  // A finger on the map holds the walk where it is: if the touch is a tap, the walk ends there (tapAt); if it is a look around, it goes on.
+  if (cam.touching && underway(walk)) return;
   const me = heroById(world, session!.myId);
   // Resting turns are not paced like steps: there is nothing to animate.
   const pace = walk.resting ? 0 : STEP_MS;
@@ -1956,6 +1983,15 @@ function act(type: 'wait' | 'search'): void {
   const world = session?.world;
   if (!world || session!.busy) return;
   walk.reset();
+  // What the hero does while it waits and searches (idlefx.ts): visual only, and the next key is taken at once.
+  const hero = heroById(world, session!.myId);
+  if (hero && isAlive(hero)) {
+    if (type === 'wait') idleFx.wait(fx.now, view, session!.myId);
+    else {
+      const level = levelAt(world, hero.depth);
+      idleFx.search(fx.now, view, session!.myId, level.map, (cell) => hasFlag(level.map[cell]!, F.SOLID));
+    }
+  }
   send({ type }, performance.now());
 }
 
@@ -1967,6 +2003,9 @@ function tapCell(cell: number, quiet = false): void {
   const visible = seenCells(world, me.depth);
   const explored = exploredCells(world, me.depth);
   walk.reset();
+  // The route that was on show, if any, waits for a second tap on its cell (pathpreview.ts); any other tap puts it away.
+  const planned = preview.cell;
+  preview.clear();
   const vnow = fx.now;
   feedback.clear();
   // Aiming a shot, the tapped cell flashes for a blink: the tap was taken.
@@ -2022,6 +2061,8 @@ function tapCell(cell: number, quiet = false): void {
     }
     const way = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating);
     if (way && way.length > 1) {
+      // A far chest shows its way first, as any far cell does.
+      if (confirmFirst(world, me, cell, way.slice(0, -1), planned, quiet, vnow)) return;
       walk.queue = way.slice(0, -1);
       walk.open = cell;
       if (!quiet) feedback.aim(cell, false, vnow);
@@ -2074,9 +2115,9 @@ function tapCell(cell: number, quiet = false): void {
   // The alchemy pot: what it is for, then walk up to it as usual.
   if (level.map[cell] === T.ALCHEMY) view.say(t.alchemyPot, '#ffff44');
   // The way goes round monsters in sight, known traps (findPath) and clouds of gas in sight, where another way exists.
+  // In a fight (a hostile in sight) it also keeps off the items on the floor, where an equally short way exists (pathpreview.ts).
   const occupied = occupiedCells(world, me.depth);
-  const clouds = new Set([...occupied, ...gasCells(world, me.depth)]);
-  walk.queue = findPath(level, me.pos, cell, clouds, explored, floating) ?? findPath(level, me.pos, cell, occupied, explored, floating) ?? [];
+  walk.queue = routeFor(world, me, level, cell);
   if (walk.queue.length === 0) {
     // No way around a known trap: walk up to it and say so; a tap on the trap itself steps onto it.
     const risky = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating, true);
@@ -2090,6 +2131,11 @@ function tapCell(cell: number, quiet = false): void {
       // No way there: say so where the finger was.
       feedback.refuse(cell, vnow);
     }
+    return;
+  }
+  // A far route, or any in a fight, is shown first; the second tap on its cell walks it (pathpreview.ts).
+  if (confirmFirst(world, me, cell, walk.queue, planned, quiet, vnow)) {
+    walk.queue = [];
     return;
   }
   // Mis-tap protection (mistap.ts): a step into a cloud in sight is asked about first; with a walk ahead of it, the hero
@@ -2116,6 +2162,55 @@ function tapCell(cell: number, quiet = false): void {
   walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && (me.depth > 1 || hasAmulet(me))) walk.stairs = 'ascend';
+}
+
+/** The way a tap on `cell` walks (pathpreview.ts planRoute): round monsters, known traps and gas; in a fight, round items too where that costs nothing. */
+function routeFor(world: World, me: Hero, level: Level, cell: number): number[] {
+  const hostile = seenEnemies(world, me).length > 0;
+  return planRoute(level, me.pos, cell, {
+    occupied: occupiedCells(world, me.depth), gas: gasCells(world, me.depth), explored: exploredCells(world, me.depth), floating: (me.levitating ?? 0) > 0, combat: hostile,
+    heaps: hostile ? new Set((world.floors[me.depth]?.heaps ?? []).filter((h) => h.kind === 'heap').map((h) => h.pos)) : new Set(),
+  });
+}
+
+/** The route on show, waiting for the second tap on its cell (pathpreview.ts). */
+const preview = new PathPreview();
+/**
+ * What it says, as a small tag over the target (a page element: the status line would change the free band of the screen, and the map
+ * would slide under the finger between the two taps).
+ */
+const routeTag = Object.assign(document.createElement('div'), { className: 'fl-route-tag' });
+routeTag.hidden = true;
+document.body.append(routeTag);
+let routeTagFor = '';
+function placeRouteTag(): void {
+  if (!preview.active || loupe.active) {
+    routeTag.hidden = true;
+    routeTagFor = '';
+    return;
+  }
+  const text = t.input.path.tag(preview.path.length);
+  if (routeTagFor !== text) {
+    routeTagFor = text;
+    routeTag.textContent = text;
+  }
+  routeTag.hidden = false;
+  const at = cellClient(preview.cell);
+  routeTag.style.left = `${Math.round(at.x)}px`;
+  routeTag.style.top = `${Math.round(at.y - 22)}px`;
+}
+
+/**
+ * Whether the tap on `cell` (a pointer's, not a key's or the «go on» button's) only shows its route for now: it asks to be confirmed
+ * (the setting; never for a neighbour; not during the first walk's lesson) and is not the second tap on the cell already on show.
+ */
+function confirmFirst(world: World, me: Hero, cell: number, route: readonly number[], planned: number, quiet: boolean, now: number): boolean {
+  // A confirmed hold (the loupe, loupe.ts) is the confirmation: no second tap.
+  if (!byPointer || quiet || !coached || confirmedHold) return false;
+  const needs = needsConfirm(pathConfirm.mode, seenEnemies(world, me).length > 0, route.length);
+  if (verdict(planned, cell, needs) === 'walk') return false;
+  preview.show(cell, route, me.pos, me.depth, now);
+  return true;
 }
 
 /** What the game refused to do and said so lately (refusal.ts). */
@@ -2146,8 +2241,19 @@ function openHero(): void {
   aim = null;
   showHero({
     hero: me, buffs: heroBuffs(me), onClose: hideOverlay, skin: session?.looks[me.id]?.skin,
+    onFeed: () => openFeed(openHero),
     looks: looksRows(me.heroClass, (shelf) => showMart({ heroClass: me.heroClass, shelf, onClose: openHero })),
   });
+}
+
+/** What the hero's last wounds were and what dealt them (feedui.ts); `back` is where closing it goes (the window it was opened from). */
+function openFeed(back: () => void = hideOverlay): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  walk.reset();
+  aim = null;
+  showFeed({ world, hero: me, assets, entries: hurtLog.recent(), onClose: back });
 }
 
 function openBackpack(): void {
@@ -2277,8 +2383,138 @@ const toDevice = (clientX: number, clientY: number): { x: number; y: number } =>
   return { x: (clientX - rect.left) * sx, y: ((clientY - rect.top) * sy) / ground() };
 };
 
+/* The touch loupe (loupe.ts, loupeui.ts): a hold raises a magnified bubble over the finger, naming what lifting would do. */
+const loupe = new LoupeGesture();
+const glass = new LoupeGlass();
+const hoverLabel = new HoverLabel();
+let loupeTimer = 0;
+/** Where the finger is (client pixels) and the cell the loupe last aimed at. */
+const loupePoint = { x: 0, y: 0 };
+
+/** What a tap on `cell` would come to, as the loupe words it; null when no game is on. */
+function describeAt(cell: number): Tapped | null {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me || !isAlive(me)) return null;
+  const level = levelAt(world, me.depth);
+  const context: TapContext = {
+    world, me, level, visible: seenCells(world, me.depth), explored: exploredCells(world, me.depth), floating: (me.levitating ?? 0) > 0,
+    aim: aim && (aim.kind === 'throw' || aim.kind === 'zap' || aim.kind === 'special') ? aim.kind : null,
+    front: (wall) => wallFront(world, me, level, wall, exploredCells(world, me.depth), (me.levitating ?? 0) > 0),
+    route: (to) => routeFor(world, me, level, to),
+  };
+  return describeTap(context, cell);
+}
+
+/** A finger came down: if it stays still for HOLD_MS (and is still a tap, not a drag or a pinch) the loupe comes up. */
+function armLoupe(event: PointerEvent): void {
+  clearTimeout(loupeTimer);
+  if (!loupeSetting.on) return;
+  loupePoint.x = event.clientX;
+  loupePoint.y = event.clientY;
+  const started = cam.tapping;
+  const id = event.pointerId;
+  loupe.down(id);
+  if (!started || loupe.id !== id) {
+    // A second finger: the loupe is gone, and so is the glass.
+    endLoupe();
+    return;
+  }
+  loupeTimer = window.setTimeout(() => {
+    if (!session?.world || overlayOpen() || !loupe.fire(id, cam.tapping === started)) return;
+    // The touch is the loupe's now: its moves retarget it, and lifting is not a tap for the camera.
+    cam.spend();
+    retarget(loupePoint.x, loupePoint.y);
+  }, HOLD_MS);
+}
+
+/** The loupe follows the finger: the cell under it, the words for it, the route (shown on the floor), the glass above. */
+function retarget(clientX: number, clientY: number): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  const device = toDevice(clientX, clientY);
+  // Off the map: over a HUD element or out of the canvas.
+  const over = document.elementFromPoint(clientX, clientY);
+  const cell = tapCellAt(device.x, device.y);
+  const outside = over !== canvas || cell < 0;
+  loupe.move(loupe.id, cell, outside);
+  const tapped = !outside ? describeAt(cell) : null;
+  preview.clear();
+  if (tapped && (tapped.kind === 'walk' || tapped.kind === 'pickup' || tapped.kind === 'descend' || tapped.kind === 'ascend' || tapped.kind === 'open') && tapped.steps > 0) {
+    const route = routeFor(world, me, levelAt(world, me.depth), tapped.cell);
+    preview.show(tapped.cell, tapped.kind === 'open' ? route.slice(0, -1) : route, me.pos, me.depth, fx.now);
+  }
+  glass.show(tapped ? tapLabel(world, tapped) : t.input.loupe.cancel, !tapped || (!actionable(tapped.kind) && tapped.kind !== 'examine'), clientX, clientY, ground());
+  drawPace.force();
+}
+
+/** The loupe is over (the finger lifted, a window opened, a second finger came, the ping took the hold): the glass and the route go. */
+function endLoupe(): void {
+  clearTimeout(loupeTimer);
+  loupe.cancel();
+  glass.hide();
+  preview.clear();
+}
+
+/** The finger lifted on `cell` in a hold: the action the bubble named. A far route needs no second tap: this was the confirmation. */
+function holdAction(cell: number): void {
+  const tapped = describeAt(cell);
+  if (!tapped) return;
+  if (tapped.kind === 'examine') {
+    examineCell(cell);
+    return;
+  }
+  stopWalking();
+  byPointer = true;
+  confirmedHold = true;
+  try {
+    tapCell(cell);
+  } finally {
+    byPointer = false;
+    confirmedHold = false;
+  }
+}
+
+/** Copies the cells round the loupe's target into the glass, in the task that drew the frame (the 3D scene keeps no picture of it). */
+function paintGlass(): void {
+  if (!glass.visible || loupe.lastCell < 0) return;
+  const cell = loupe.lastCell;
+  const cx = ((cell % WIDTH) * TILE + TILE / 2 - camera.x) * camera.zoom;
+  const cy = (Math.floor(cell / WIDTH) * TILE + TILE / 2 - camera.y) * camera.zoom * ground();
+  const sw = 3 * TILE * camera.zoom;
+  const sh = sw * ground();
+  const sources: Array<{ image: CanvasImageSource; scale: number }> = [];
+  if (mode3d && canvas3d) sources.push({ image: canvas3d, scale: canvas3d.width / canvas.width });
+  sources.push({ image: canvas, scale: 1 });
+  glass.paint(sources, cx - sw / 2, cy - sh / 2, sw, sh);
+}
+
+/* The guard against accidental touches (touchguard.ts): a palm, a grip on the edge, the touch that wakes the app, a tap with a second finger. */
+const touchGuard = new TouchGuard();
+const guardProbe = document.createElement('div');
+guardProbe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:0 var(--safe-r,0px) var(--safe-b,0px) var(--safe-l,0px)';
+document.body.append(guardProbe);
+/** The window and the room the phone and Telegram claim at its sides and bottom (the safe areas), CSS pixels. */
+function guardScreen(): Screen {
+  const style = getComputedStyle(guardProbe);
+  return {
+    width: innerWidth, height: innerHeight,
+    left: parseFloat(style.paddingLeft) || 0, right: parseFloat(style.paddingRight) || 0, bottom: parseFloat(style.paddingBottom) || 0,
+  };
+}
+onResume(() => touchGuard.resumed(performance.now()));
+onPause(() => touchGuard.reset());
+
 canvas.addEventListener('pointerdown', (event) => {
   if (!session?.world || overlayOpen()) return;
+  touchGuard.enabled = touchGuardSetting.on;
+  const kept = touchGuard.press(
+    { id: event.pointerId, x: event.clientX, y: event.clientY, width: event.width, height: event.height, kind: event.pointerType, time: event.timeStamp },
+    guardScreen(),
+  );
+  // A palm, a grip or the touch that woke the app never reaches the camera.
+  if (kept) return;
   // The middle button pans; the browser's own use of it (a scrolling cursor) is not wanted.
   if (event.button === 1) event.preventDefault();
   // The HUD, log and toolbar are HTML over the canvas: what reaches here is a touch on the map.
@@ -2289,7 +2525,9 @@ canvas.addEventListener('pointerdown', (event) => {
   }
   const at = toDevice(event.clientX, event.clientY);
   cam.pointerDown(event.pointerId, at.x, at.y, event.timeStamp, event.button);
-  if (event.button === 0) armPing(at);
+  const finger = event.pointerType !== 'mouse';
+  if (event.button === 0) armPing(at, finger && loupeSetting.on);
+  if (event.button === 0 && finger) armLoupe(event);
 });
 canvas.addEventListener('mousedown', (event) => {
   if (event.button === 1) event.preventDefault();
@@ -2298,17 +2536,28 @@ canvas.addEventListener('mousedown', (event) => {
 canvas.addEventListener('pointermove', (event) => {
   const at = toDevice(event.clientX, event.clientY);
   cam.pointerMove(event.pointerId, at.x, at.y, event.timeStamp);
+  loupePoint.x = event.clientX;
+  loupePoint.y = event.clientY;
+  if (loupe.active && event.pointerId === loupe.id) retarget(event.clientX, event.clientY);
 });
 
 const lift = (event: PointerEvent): void => {
   const at = toDevice(event.clientX, event.clientY);
+  const tapped = touchGuard.release(event.pointerId);
+  // A hold with the loupe up: lifting on the cell does what the bubble said; anywhere else, or a cancelled pointer, does nothing.
+  const lifted = event.type === 'pointerup' ? loupe.up(event.pointerId) : (loupe.id === event.pointerId && loupe.cancel(), 'none');
+  if (lifted !== 'none') {
+    const cell = loupe.lastCell;
+    endLoupe();
+    if (lifted === 'act' && cell >= 0) holdAction(cell);
+  }
   if (event.type !== 'pointerup') {
     cam.pointerCancel(event.pointerId);
     return;
   }
-  // A drag, a pinch or a fling stopped is not a tap: the camera says what was one.
+  // A drag, a pinch or a fling stopped is not a tap: the camera says what was one; the guard, whether it was meant.
   const tap = cam.pointerUp(event.pointerId, at.x, at.y, event.timeStamp);
-  if (tap) tapAt(tap.x, tap.y);
+  if (tap && tapped) tapAt(tap.x, tap.y);
 };
 canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);
@@ -2316,23 +2565,29 @@ canvas.addEventListener('pointercancel', lift);
 /* Co-op signals (coop-marks.ts): a long press on the map pings that cell for the party. */
 const coop = new CoopMarks(hud.root);
 const LONG_PRESS_MS = 450;
+/** The ping's hold when the loupe is on: it comes up at HOLD_MS, so the ping waits for a hold that is clearly meant. */
+const LOUPE_PING_MS = 800;
 let pressTimer = 0;
 
 /** Called as a finger comes down: held still long enough, the touch becomes a ping instead of a tap. */
-function armPing(at: { x: number; y: number }): void {
+function armPing(at: { x: number; y: number }, loupeOn = false): void {
   clearTimeout(pressTimer);
   const started = cam.tapping;
   if (session?.mode !== 'online' || !started) return;
+  // With the loupe on, a hold first shows the loupe (a quarter of a second); the ping is the longer hold, after it.
   pressTimer = window.setTimeout(() => {
-    // A drag or a pinch, a lifted finger or a new touch each replace the gesture: then it was not a hold.
-    if (cam.tapping !== started || !session?.world || overlayOpen()) return;
+    // A drag or a pinch, a lifted finger or a new touch each replace the gesture: then it was not a hold. (The loupe having come up
+    // spent the touch for the camera, but the finger is still the same one: a long hold turns the loupe into the ping.)
+    const holding = loupe.active ? true : cam.tapping === started;
+    if (!holding || !session?.world || overlayOpen()) return;
+    if (loupe.active) endLoupe();
     const x = Math.floor((camera.x + at.x / camera.zoom) / TILE);
     const y = Math.floor((camera.y + at.y / camera.zoom) / TILE);
     if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
     // The touch is spent: lifting the finger walks nowhere.
     cam.spend();
     if (coop.ping(session, view.depth, x + y * WIDTH)) haptic('hit');
-  }, LONG_PRESS_MS);
+  }, loupeOn ? LOUPE_PING_MS : LONG_PRESS_MS);
 }
 
 /** The mouse wheel (and a touchpad's pinch) zooms by steps, round the cursor. */
@@ -2450,7 +2705,17 @@ function cellUnder(clientX: number, clientY: number): number {
   return x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT ? -1 : x + y * WIDTH;
 }
 
+/** Where a cell is on the page (client pixels), the way a tap on it is read back (the dev hooks and the screenshots use it). */
+const cellClient = (cell: number): { x: number; y: number } => {
+  const rect = canvas.getBoundingClientRect();
+  const k = rect.width / canvas.width;
+  return {
+    x: rect.left + ((cell % WIDTH) * TILE + TILE / 2 - camera.x) * camera.zoom * k,
+    y: rect.top + (Math.trunc(cell / WIDTH) * TILE + TILE / 2 - camera.y) * camera.zoom * ground() * k,
+  };
+};
 function hideHover(): void {
+  hoverLabel.hide();
   hover.cell = -1;
   hover.frame.style.display = 'none';
 }
@@ -2467,10 +2732,18 @@ function hoverKind(cell: number): 'foe' | 'cell' | null {
 canvas.addEventListener('pointermove', (event) => {
   if (event.pointerType !== 'mouse' || event.buttons !== 0 || !session?.world || overlayOpen()) return;
   const cell = cellUnder(event.clientX, event.clientY);
-  if (cell === hover.cell) return;
+  if (cell === hover.cell) {
+    if (hoverLabel.root.hidden === false) hoverLabel.show(hoverLabel.root.textContent ?? '', event.clientX, event.clientY);
+    return;
+  }
   hideHover();
   hover.cell = cell;
   if (cell < 0) return;
+  // The mouse's loupe: what a click here would do, in words by the cursor.
+  if (loupeSetting.on) {
+    const tapped = describeAt(cell);
+    if (tapped && session.world) hoverLabel.show(tapLabel(session.world, tapped), event.clientX, event.clientY);
+  }
   const kind = hoverKind(cell);
   hover.frame.className = `pd-hover${kind === 'foe' ? ' foe' : ''}`;
   // No frame follows the mouse (the owner's wish): the cell is still tracked for the right button, not drawn.
@@ -2483,6 +2756,8 @@ canvas.addEventListener('pointerdown', hideHover);
 canvas.addEventListener('contextmenu', (event) => {
   event.preventDefault();
   hideHover();
+  // A long press on a phone raises this event too: with the loupe on, the hold is the loupe's («Examine» is one of its words), not a second examine.
+  if (loupeSetting.on && ((event as PointerEvent).pointerType === 'touch' || (event as PointerEvent).pointerType === 'pen' || loupe.active)) return;
   const cell = cellUnder(event.clientX, event.clientY);
   if (cell >= 0 && session?.world && !overlayOpen()) examineCell(cell);
 });
@@ -2503,12 +2778,12 @@ function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;
   // A region's intro is read first: the tap that skips it does nothing else.
   if (view.skipIntro(fx.now)) return;
-  const wx = camera.x + px / camera.zoom;
-  const wy = camera.y + py / camera.zoom;
-  // In 3D a figure stands up off its cell, drawn over the cells north of it: a tap on its body is a tap on its cell.
-  const figure = figureCellAt(wx, wy);
-  const x = figure >= 0 ? figure % WIDTH : Math.floor(wx / TILE);
-  const y = figure >= 0 ? Math.floor(figure / WIDTH) : Math.floor(wy / TILE);
+  // Any tap on the map stops the walk at once, whatever it then asks for (and even when something else takes it: a double tap on the
+  // hero, the examine tool, the whole-level view).
+  stopWalking();
+  const under = tapCellAt(px, py);
+  const x = under >= 0 ? under % WIDTH : -1;
+  const y = under >= 0 ? Math.floor(under / WIDTH) : -1;
   // The whole level is on: a tap on the map walks there (below) and takes the view back to the normal zoom, eased.
   if (cam.overview) cam.exitOverview(true);
   if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
@@ -2530,8 +2805,27 @@ function tapAt(px: number, py: number): void {
   }
 }
 
+/** The cell a point of the map (device pixels) stands for, or -1: in 3D a figure stands up off its cell, drawn over the cells north of it, and a tap on its body is a tap on its cell. */
+function tapCellAt(px: number, py: number): number {
+  const wx = camera.x + px / camera.zoom;
+  const wy = camera.y + py / camera.zoom;
+  const figure = figureCellAt(wx, wy);
+  const x = figure >= 0 ? figure % WIDTH : Math.floor(wx / TILE);
+  const y = figure >= 0 ? Math.floor(figure / WIDTH) : Math.floor(wy / TILE);
+  return x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT ? -1 : x + y * WIDTH;
+}
+
+/** Stops what the hero is doing over several turns: a walk, a chase, a rest, a key held; under live turns the plan already sent too. */
+function stopWalking(): void {
+  stopForTap(walk, held);
+  const me = session?.world && heroById(session.world, session.myId);
+  if (me && session!.beatMs !== null && me.plan?.length) send({ type: 'plan', steps: [] }, performance.now());
+}
+
 /** Whether the tapCell under way came from the pointer (tapAt), not a key or a walk: only a finger or a click on a wall means the floor by it. */
 let byPointer = false;
+/** The tapCell under way is a hold that was confirmed by lifting the finger (the loupe): a far route needs no second tap. */
+let confirmedHold = false;
 
 /** How far into the dark a tap may land and still mean the known floor at its edge, in cells. */
 const DARK_REACH = 4;
@@ -2664,6 +2958,11 @@ function examineCell(pos: number): void {
       icon: portrait(char.heroClass, armorTier(char)),
       health: [Math.max(0, char.hp), char.ht],
     });
+    return;
+  }
+  // The alchemy pot, with whatever lies in it: what it is, and a calculator of what the seeds would brew (infoui.ts).
+  if (levelAt(world, me.depth).map[pos] === T.ALCHEMY) {
+    showPot({ world, hero: me, cell: pos, onClose: hideOverlay });
     return;
   }
   const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === pos && h.kind !== 'hidden');
@@ -3105,8 +3404,49 @@ function flushAnswers(world: World, me: Hero, now: number, vnow: number, force =
   takeEffects(held.effects, world, me, now, vnow);
 }
 
+/** The wounds the hero took lately (hurtlog.ts), the conditions they were under at the last look, and the run these belong to. */
+const hurtLog = new HurtLog();
+let hurtConditions: Conditions | null = null;
+let hurtGeneration = -1;
+
+/**
+ * What dealt each damage in a batch (hurtsrc.ts), for the little pictures by the numbers; the hero's own wounds also go to the
+ * feed. Read from the effects and the hero's state: the core's `hurt` carries no cause (and the rules are not to change).
+ */
+const conditionsNow = (world: World, me: Hero): Conditions => conditionsOf(me, isStarving(me), gasKindAt(world.floors[me.depth], me.pos) === 'toxic');
+
+function readSources(effects: readonly Effect[], world: World, me: Hero): ReadonlyMap<number, Source> {
+  if (session!.generation !== hurtGeneration) {
+    hurtGeneration = session!.generation;
+    hurtLog.reset();
+    hurtConditions = null;
+  }
+  const after = conditionsNow(world, me);
+  const found = sourcesOf(effects, {
+    myId: session!.myId,
+    mobKind: (id) => mobById(world, me.depth, id)?.kind ?? (id.startsWith('#') ? (view.puppets.get(id)?.kind as MobKind | undefined) : undefined),
+    heroClass: (id) => heroById(world, id)?.heroClass,
+    before: hurtConditions,
+    after,
+    depth: me.depth,
+  });
+  for (const [index, source] of found) {
+    const effect = effects[index]!;
+    const mine = (effect.type === 'hurt' && effect.who === session!.myId) || (effect.type === 'attack' && effect.target === session!.myId);
+    if (!mine) continue;
+    const entry: HurtEntry = { turn: world.turn, depth: effect.type === 'hurt' || effect.type === 'attack' ? effect.depth : me.depth, amount: effect.type === 'hurt' || effect.type === 'attack' ? effect.damage : 0, source };
+    hurtLog.push(entry);
+  }
+  hurtConditions = after;
+  return found;
+}
+
 function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: number, vnow: number): void {
-  if (effects.length === 0) return;
+  if (effects.length === 0) {
+    // A quiet frame: a condition that has worn off must not be counted among those that tick (hurtsrc.ts).
+    if (hurtConditions && Object.values(hurtConditions).some(Boolean)) hurtConditions = conditionsNow(world, me);
+    return;
+  }
   // What was held back to follow an earlier blow comes first, so the order of events never turns round.
   flushAnswers(world, me, now, vnow, true);
   // A monster's blow in the same turn as mine answers it a beat later, as the original's actors wait for each other's
@@ -3120,7 +3460,7 @@ function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: nu
   }
   drawPace.effect(now);
   const lastLine = view.log[view.log.length - 1];
-  view.apply(effects, world, session!.myId, vnow);
+  view.apply(effects, world, session!.myId, vnow, readSources(effects, world, me));
   // What an action done in the open backpack came to is told in the backpack too (the log is behind it).
   if (backpackOpen()) bagSay(view.log.slice(view.log.lastIndexOf(lastLine!) + 1).map((line) => line.text).slice(-2).join(' '));
   // The backpack, if open, shows the pack as it is now (an item put on, dropped, picked up).
@@ -3189,6 +3529,10 @@ function tick(now: number): void {
     return;
   }
 
+  // The route on show belongs to where the hero stood: a step, a new floor, a window, an aim or the examine tool put it away.
+  if (preview.active && !loupe.active && (preview.stale(me.pos, me.depth) || aim || examining || overlayOpen() || !isAlive(me))) preview.clear();
+  if (loupe.active && (overlayOpen() || !isAlive(me))) endLoupe();
+
   // Low on health, the edges of the view pulse red like a heartbeat, quicker the nearer death.
   if (session.world) {
     const self = heroById(session.world, session.myId);
@@ -3223,6 +3567,7 @@ function tick(now: number): void {
     view.reset(me.depth);
     fx.reset();
     fxp.clear();
+    idleFx.clear();
     hideBossCard();
     // The bodies and blood of this depth come back as they were left (gore.ts): kept per run and depth on this device.
     gore.bind(runKey(world), me.depth, world.turn === 0);
@@ -3351,6 +3696,7 @@ function tick(now: number): void {
   }
   fx.update(vnow, dt);
   fxp.update(vnow);
+  idleFx.frame(vnow, view, me.id, walk.resting, threats.size > 0, me.hp, level.map[me.pos]! >= T.WATER_TILES && level.map[me.pos]! <= T.WATER);
   ambientFx(view, vnow, dt);
   regionFx(level, visible, vnow, dt);
 
@@ -3417,7 +3763,7 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || idleFx.busy(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
@@ -3453,6 +3799,9 @@ function tick(now: number): void {
             walk.queue.length === 0 && !walk.chase && !session!.busy, vnow,
           );
         }
+      },
+      plan: (c: CanvasRenderingContext2D) => {
+        if (!forShot && preview.active) feedback.drawPlan(c, preview.path, preview.cell, preview.since, vnow);
       },
       mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
       overview: cam.overviewShown,
@@ -3501,6 +3850,7 @@ function tick(now: number): void {
       render(ctx, scene, view, session.myId, assets, camera, vnow);
       coop.frame(ctx, { session, world, view, camera, free, now: vnow });
     }
+    paintGlass();
     if (forShot && shotWanted) {
       const done = shotWanted;
       shotWanted = null;
@@ -3517,6 +3867,7 @@ function tick(now: number): void {
   if (walk.goal === me.pos) walk.goal = null;
   const foe = isAlive(me) ? attackTarget(world, me) : null;
   placeHover();
+  placeRouteTag();
   hints.pump();
   if (overlayOpen() && hover.cell >= 0) hideHover();
   mapControls.indicators(
@@ -3687,14 +4038,15 @@ function tick(now: number): void {
       });
       // The table and the badges follow the account (cloud.ts).
       pushCloud();
-      showRunEnd({
+      // The death window comes back after the feed of the last wounds («What happened»): shown again from the same figures.
+      const endScreen = (): void => showRunEnd({
         place,
         victory,
         title: victory ? (world.ending === 'surface' ? t.happyEnd : t.victory) : solo ? t.youDied : t.partyFell,
         cause: victory ? (world.ending === 'surface' ? t.happyEndText : t.victoryText) : [t.soloFell(me.depth), cause ? t.killedBy(cause) : ''].filter(Boolean).join(' '),
         // What the cause means when it was no monster's blow, and what the pack held (deathcopy.ts).
         ...(victory ? {} : { notes: [causeNote(me.killedBy), packLine(me)] }),
-        ...(solo ? { label: labelWords(runLabel({ checked: !!session.checked, ranked: session.checked?.meta.ranked ?? true })) } : {}),
+        ...(solo ? { label: labelWords(runLabel({ checked: !!session?.checked, ranked: session?.checked?.meta.ranked ?? true })) } : {}),
         hero: { name: me.name || playerName || telegramName() || t.heroLabel, heroClass: me.heroClass, lvl: me.lvl, depth: me.depth, gold: me.gold, kills: me.kills },
         // The hero as he fell or won, in the armour worn at the end and the look, hat, pet and fire he wears (herocard.ts).
         card: endCard(me),
@@ -3708,7 +4060,9 @@ function tick(now: number): void {
         ranking: rankingBlock(answer),
         onBoards: api ? () => openBoards(dailyRun ? 'daily' : 'week') : undefined,
         share,
+        ...(victory ? {} : { onWhat: () => openFeed(endScreen) }),
       });
+      endScreen();
     }, 1200 + quipSys.deathDelay());
   }
 }
@@ -3795,6 +4149,9 @@ if (launchedForDaily()) {
   toTitle();
   // Without the server there is no profile to ask: the news are judged by this device alone.
   if (!api) maybeNews(null);
+  // Opened from a guide article the bot sent to a chat (`startapp=guide_<id>`): the guide at that article, a step back to the title.
+  const guideEntry = launchedForGuide();
+  if (guideEntry) showGuide(toTitle, guideEntry);
   // Opened from the bot's «you were passed on the board» message: the day's board.
   if (api && launchedForBoards()) openBoards('daily');
   if (api && launchedForLeague()) openLeague();
@@ -3806,6 +4163,7 @@ if (launchedForDaily()) {
 // Badges and the rankings from the player's other devices: on the title at once, once they come.
 // The windows the camp opens are fetched in the spare time after the first screen.
 idle(() => load(metaMod, () => undefined));
+idle(() => load(infoMod, () => undefined));
 void pullCloud().then(() => {
   reloadBadges();
   if (!session && document.querySelector('.pd-camp')) toTitle(false);
@@ -3829,5 +4187,5 @@ if (import.meta.env.DEV) {
     }
   };
   Object.assign(window, { __release: { news: () => showNews({ release: CURRENT, onClose: () => toTitle(false) }), report: () => api && showReport({ api, run: runFacts, onClose: () => toTitle(false) }), crash: showCrash } });
-  Object.assign(window, { __pd: { cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
+  Object.assign(window, { __pd: { cellClient, preview, touchGuard, hurtLog, cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
 }

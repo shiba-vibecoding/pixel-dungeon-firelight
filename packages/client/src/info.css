@@ -1,0 +1,70 @@
+/*
+ * The information windows (infoui.ts, infolines.ts): the hunger icon's card with the hunger bar's marks, the progress toward
+ * knowing an item, the alchemy pot's calculator. Only tokens of the design system (ui.css).
+ */
+
+/* The HUD's satiety bar: a mark where hunger begins (260 of 360) and one where starving does (360, the bar's empty end). */
+.pd-bar.food::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; right: 0; pointer-events: none; z-index: 2;
+  --hungry-at: calc((1 - 260 / 360) * 100%);
+  background:
+    linear-gradient(var(--ink), var(--ink)) var(--hungry-at) 0 / 1px 100% no-repeat,
+    linear-gradient(var(--bad), var(--bad)) 0 0 / 2px 100% no-repeat;
+  opacity: .8;
+}
+/* The pair (icon and bar) is a button to the card: its touch area is taller than the thin bar, without moving anything. */
+.pd-bar-pair.tappable { position: relative; cursor: pointer; padding: 7px 0; margin: -7px 0; -webkit-tap-highlight-color: transparent; }
+
+
+/* Progress toward knowing an item. */
+.pd-know { display: flex; flex-direction: column; gap: var(--space-1); }
+.pd-know .pd-know-text { margin: 0; }
+.pd-know .pd-bar { margin: var(--u) 0; }
+.pd-know .pd-know-idle { margin: 0; }
+.pd-waste { margin: 0; }
+
+/* The cards. */
+.pd-info-window { gap: var(--space-2); }
+.pd-info-block { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-2); border-top: var(--u) solid var(--stone-600); }
+.pd-info-block p { margin: 0; }
+.pd-info-head { font: var(--text-label, 400 15px/20px var(--font-small)); color: var(--gold); margin: 0; }
+.pd-hunger-icon { width: calc(7 * var(--u)); height: calc(7 * var(--u)); flex: none; }
+.pd-hunger-state { font: var(--text-heading, 400 22px/28px var(--font-ui)); color: var(--ink); }
+.pd-hunger-state.hungry { color: var(--warn); }
+.pd-hunger-state.starving { color: var(--bad); }
+.pd-hunger-turns { font-weight: 700; margin: 0; }
+
+/* The hunger bar of the card, filled as the HUD's is (what is left of satiety), with its two marks and their numbers beneath. */
+.pd-meter-box { display: flex; flex-direction: column; gap: 2px; margin: var(--u) var(--u) 0; }
+.pd-meter {
+  --v: 1; --at: .2778;
+  position: relative; height: 14px; background: var(--stone-900); border: var(--u) solid var(--void); box-shadow: 0 0 0 var(--u) var(--stone-400);
+}
+.pd-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--v) * 100%); background: var(--food); }
+.pd-meter.hungry .pd-meter-fill { background: var(--warn); }
+.pd-meter.starving .pd-meter-fill { background: var(--bad); }
+.pd-meter-tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+.pd-meter-tick.hungry { left: calc(var(--at) * 100% - 1px); }
+.pd-meter-tick.starving { left: -1px; background: var(--bad); }
+.pd-meter-scale { position: relative; height: 16px; font: var(--text-caption, 400 15px/20px var(--font-small)); color: var(--ink-muted); }
+.pd-meter-label { position: absolute; top: 0; transform: translateX(-50%); }
+.pd-meter-label.hungry { left: calc(var(--at) * 100%); }
+.pd-meter-label.starving { left: 0; transform: none; color: var(--bad); }
+
+/* The alchemy pot. */
+.pd-pot .pd-scroll { display: flex; flex-direction: column; gap: var(--space-2); }
+.pd-pot-row { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: var(--space-2); row-gap: 2px; align-items: center; }
+.pd-pot-row .pd-slot { grid-row: 1 / span 2; }
+.pd-pot-stepper { display: flex; align-items: center; gap: var(--space-2); }
+.pd-pot-seed { min-width: 0; align-self: end; font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--ink); overflow-wrap: break-word; }
+.pd-pot-step { flex: none; min-width: 40px; width: 40px; padding: 0; text-align: center; }
+.pd-pot-step:disabled { opacity: .35; }
+.pd-pot-count { flex: none; min-width: 24px; text-align: center; font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--gold); }
+.pd-pot-result { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); background: var(--stone-800); box-shadow: inset var(--u) var(--u) 0 var(--void); }
+.pd-pot-result p { margin: 0; }
+.pd-pot-mix { color: var(--gold); }
+.pd-pot-line { display: grid; grid-template-columns: 1fr auto; column-gap: var(--space-2); row-gap: 2px; align-items: baseline; }
+.pd-pot-name { font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--ink); overflow-wrap: anywhere; }
+.pd-pot-pct { font: var(--text-body, 400 18px/24px var(--font-ui)); color: var(--gold); }
+.pd-pot-bar { grid-column: 1 / -1; margin: 0; }
+.pd-meter-note { margin: 0; }

@@ -9,7 +9,9 @@ import { type Figure, figureOf } from './dirs';
 import { heldFigure } from './heldart';
 import type { Held } from './held';
 import { puppetAlpha } from './puppetfade';
-import { bossCard, depthCard, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
+import { idleFx, MARK_HOURGLASS, MARK_START } from './idlefx';
+import { bossCard, depthCard, type FloatIcon, floatGlyphs, floatNumber, floorTitle, levelCard, nameplate, slainCard } from './cards';
+import { drawSourceIcon, type Icon } from './srcicon';
 
 import { fx } from './fx';
 import { drawFx2D } from './fxdraw2d';
@@ -76,6 +78,22 @@ export function patchLevel(baked: HTMLCanvasElement, seen: Uint8Array, level: Le
 function drawIcon(ctx: CanvasRenderingContext2D, assets: Assets, icon: readonly [number, number, number, number], x: number, y: number): void {
   const [sx, sy, w, h] = icon;
   ctx.drawImage(assets.icons, sx, sy, w, h, Math.round(x - w / 2), Math.round(y - h), w, h);
+}
+
+/**
+ * What the hero does while waiting, resting and being startled, over its head (idlefx.ts): the turn's hourglass flipping, a «z» drifting up,
+ * a «!» popping. They are the original's own little icons, flipped, drifted and faded.
+ */
+function drawIdleMarks(ctx: CanvasRenderingContext2D, assets: Assets, id: string, cx: number, top: number, now: number): void {
+  idleFx.marksOf(id, now, (kind, rise, side, alpha, sx, sy) => {
+    const [ix, iy, w, h] = kind === MARK_HOURGLASS ? ICONS.busy : kind === MARK_START ? ICONS.alert : ICONS.sleep;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.translate(Math.round(cx + side), Math.round(top - 3 - rise));
+    ctx.scale(sx, sy);
+    ctx.drawImage(assets.icons, ix, iy, w, h, -w / 2, -h, w, h);
+    ctx.restore();
+  });
 }
 
 /** One texel per cell: the fog's darkness, eased from frame to frame (see drawFog). */
@@ -235,6 +253,12 @@ function drawPuppet(ctx: CanvasRenderingContext2D, puppet: Puppet, x: number, y:
   } else {
     ctx.translate(dx, dy);
   }
+  // Crouching to search, settled to rest (idlefx.ts): lower, its feet where they were.
+  if (puppet.squash !== undefined && puppet.squash !== 1) {
+    ctx.translate(0, sheet.h);
+    ctx.scale(1, puppet.squash);
+    ctx.translate(0, -sheet.h);
+  }
   const worn = puppet.worn;
   // A legendary look's aura stands behind the hero (24 x 28, its feet at (12, 26); the hero's at (6, 14)).
   const aura = worn?.look?.aura;
@@ -389,6 +413,8 @@ export interface Scene {
   under?: (ctx: CanvasRenderingContext2D) => void;
   /** Drawn over what lies on the floor, under the characters: glints, coins in the air (motion.ts). */
   over?: (ctx: CanvasRenderingContext2D) => void;
+  /** Drawn flat on the floor over everything of the ground, in 2D and in 3D alike: the route waiting for its second tap (pathpreview.ts). */
+  plan?: (ctx: CanvasRenderingContext2D) => void;
   /** The whole-level view is showing, 0..1 (camcontrol.ts): the map is read from afar, so the hero and the foes are marked. */
   overview?: number;
 }
@@ -404,6 +430,7 @@ export function render(
 ): void {
   const { level, baked, visible, explored } = scene;
   const { canvas } = ctx;
+  assetsNow = assets;
   ctx.imageSmoothingEnabled = false;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
@@ -468,6 +495,7 @@ export function render(
     ctx.restore();
   }
   scene.over?.(ctx);
+  scene.plan?.(ctx);
 
   // The sacrificial fire: a flickering blue flame on its pedestal (SacrificialParticle).
   const ambient = sheet(`ambient${levelRegion(level)}`);
@@ -488,6 +516,8 @@ export function render(
   // Freshly discovered secrets glow for a moment.
   for (const flash of view.flashes) {
     const fade = 1 - (now - flash.start) / (flash.duration ?? 600);
+    // (A cell lit a moment ahead, the search's ring going round, waits its turn.)
+    if (fade > 1) continue;
     ctx.fillStyle = `rgba(${flash.color ?? '255, 255, 200'}, ${0.6 * fade})`;
     ctx.fillRect((flash.cell % WIDTH) * TILE, Math.trunc(flash.cell / WIDTH) * TILE, TILE, TILE);
   }
@@ -651,6 +681,7 @@ export function render(
     } else if (now < puppet.alertUntil) {
       drawIcon(ctx, assets, ICONS.alert, x + TILE / 2, top - 2);
     }
+    if (puppet.isHero) drawIdleMarks(ctx, assets, puppet.id, x + TILE / 2, top, now);
     if (puppet.hp < puppet.ht && !(puppet.isHero && puppet.id === myId)) drawHealth(ctx, puppet, snap(x + 2), snap(y + TILE - puppet.sprite.sheet.h - 3));
   }
 
@@ -697,6 +728,7 @@ export function renderOverlay3D(
   marks: ReadonlyArray<{ puppet: Puppet; x: number; y: number }>, count: number,
 ): void {
   const { canvas } = ctx;
+  assetsNow = assets;
   const ys = camera.ys ?? 1;
   const { zoom } = camera;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -707,6 +739,7 @@ export function renderOverlay3D(
   const visible = scene.visible;
   ctx.setTransform(zoom, 0, 0, zoom * ys, -Math.round(camera.x * zoom), -Math.round(camera.y * zoom * ys));
   fx.draw(ctx, now, (x, y) => visible[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true);
+  scene.plan?.(ctx);
   // Marks in screen art pixels: the transform only scales.
   ctx.setTransform(zoom, 0, 0, zoom, 0, 0);
   for (let i = 0; i < count; i++) {
@@ -716,12 +749,20 @@ export function renderOverlay3D(
     const top = (y + FEET_PX - camera.y) * ys - puppet.sprite.sheet.h - 1;
     if (puppet.sleeping) drawIcon(ctx, assets, ICONS.sleep, mid + TILE / 2 - 2, top + Math.sin(now / 400) * 1.5);
     else if (now < puppet.alertUntil) drawIcon(ctx, assets, ICONS.alert, mid, top - 2);
+    if (puppet.isHero) drawIdleMarks(ctx, assets, puppet.id, mid, top, now);
     if (puppet.hp < puppet.ht && !(puppet.isHero && puppet.id === myId)) {
       drawHealth(ctx, puppet, Math.round((mid - TILE / 2 + 2) * zoom) / zoom, Math.round((top - 2) * zoom) / zoom);
     }
   }
   screenLayer(ctx, scene, view, camera, now, marks, count);
 }
+
+/** The damage number's source icon being drawn (see screenLayer): set before each, read by `drawFloaterIcon`, so nothing is allocated per frame. */
+const pen: { icon: Icon | null; assets: Assets | null; depth: number } = { icon: null, assets: null, depth: 1 };
+let assetsNow: Assets | null = null;
+const drawFloaterIcon: FloatIcon = (ctx, x, y, size) => {
+  if (pen.icon && pen.assets) drawSourceIcon(ctx, pen.assets, pen.icon, x, y, size, pen.depth);
+};
 
 /** Where a character's head is on the screen (device pixels), for names and marks; `y` is the top of its cell. */
 function headY(camera: Camera, y: number, spriteH: number): number {
@@ -781,8 +822,16 @@ function screenLayer(
     const kind = floater.word ? 'word' : numeric ? (scale >= 2 ? 'kill' : scale > 1 ? 'big' : 'damage') : /^\+\d+$/.test(floater.text) ? 'heal' : 'word';
     // The damage-digits style my hero wears draws numbers in its glyphs; words stay words.
     const glyphs = digits && kind !== 'word' && /^\+?\d+$/.test(floater.text) ? digits : undefined;
-    if (glyphs && kind !== 'word') floatGlyphs(ctx, glyphs, floater.text, kind, sx, sy, now - floater.start, px);
-    else floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px);
+    // A tiny picture of what dealt the damage goes beside the number (no allocation here: the icon was made with the floater).
+    let icon: FloatIcon | undefined;
+    if (floater.icon && assetsNow) {
+      pen.icon = floater.icon;
+      pen.assets = assetsNow;
+      pen.depth = view.depth;
+      icon = drawFloaterIcon;
+    }
+    if (glyphs && kind !== 'word') floatGlyphs(ctx, glyphs, floater.text, kind, sx, sy, now - floater.start, px, icon);
+    else floatNumber(ctx, floater.text, kind, floater.color, sx, sy, now - floater.start, px, icon);
   }
   ctx.globalAlpha = 1;
 

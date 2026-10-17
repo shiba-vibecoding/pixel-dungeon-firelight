@@ -44,6 +44,41 @@ export class Feedback {
     this.target = null;
   }
 
+  /**
+   * The route shown before it is walked (pathpreview.ts): small gold markers on the floor, a light running along them to the target, and
+   * the target's frame closing in and pulsing. Nothing is allocated here: the path is the preview's own array.
+   */
+  drawPlan(ctx: CanvasRenderingContext2D, path: readonly number[], cell: number, since: number, now: number): void {
+    if (cell < 0) return;
+    const still = quality.reducedMotion;
+    const t = now - since;
+    for (let i = 0; i < path.length - 1; i++) {
+      const at = path[i]!;
+      const x = (at % WIDTH) * TILE + 5;
+      const y = Math.trunc(at / WIDTH) * TILE + 5;
+      // A wave of light travels from the hero to the target, and the markers appear one after another at first.
+      const wave = still ? 1 : 0.8 + 0.2 * Math.sin(t / 150 - i * 0.8);
+      const shown = still ? 1 : Math.min(1, Math.max(0, (t - i * 18) / 90));
+      if (shown <= 0) continue;
+      ctx.globalAlpha = shown * 0.95;
+      ctx.fillStyle = '#1a0a06';
+      ctx.fillRect(x, y, 6, 6);
+      ctx.globalAlpha = shown * wave;
+      ctx.fillStyle = '#fff0b0';
+      ctx.fillRect(x + 1, y + 1, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+    const s = sheet('feedback');
+    const frames = s?.anims['target-move'];
+    if (s && frames) {
+      const each = frames[0]!.ms;
+      const frame = still
+        ? frames[2]!
+        : t < each * INTRO.length ? frameAt(frames, t, false, INTRO) : frameAt(frames, t - each * INTRO.length, true, PULSE);
+      drawFrame(ctx, s, frame, (cell % WIDTH) * TILE, Math.trunc(cell / WIDTH) * TILE);
+    }
+  }
+
   /** The monster the aim is marked on (or none), set on every frame. */
   mark(mob: string | null): void {
     this.marked = mob;

@@ -61,6 +61,8 @@ export function heroBuffs(me: Hero): Array<{ name: BuffName; turns?: number }> {
 
 export interface HudHandlers {
   hero(): void;
+  /** A tap on the health bar: the last wounds and what dealt them. */
+  feed(): void;
   menu(): void;
   /** A tap on the hourglass: wait a turn. */
   wait(): void;
@@ -81,6 +83,8 @@ export interface HudHandlers {
   buff(name: BuffName, turns?: number): void;
   /** A tap on a companion. */
   mate(id: string): void;
+  /** A tap on the hunger icon or its bar: the turns left. */
+  hunger(): void;
 }
 
 /** The status line under the HUD: one passing state at a time (the design's .pd-status). */
@@ -237,6 +241,17 @@ export class Hud {
     // The wound's trace: a pale stretch where health was, melting away a moment after a blow.
     this.hpLag = el('span', 'pd-bar-lag');
     this.hp = el('div', 'pd-bar', this.hpLag, this.hpText);
+    // The bar opens «what was»: the last wounds (feedui.ts).
+    this.hp.setAttribute('role', 'button');
+    this.hp.tabIndex = 0;
+    this.hp.ariaLabel = t.input.feed.open;
+    this.hp.onclick = tap(() => handlers.feed());
+    this.hp.onkeydown = (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        tap(() => handlers.feed())();
+      }
+    };
     this.xp = el('div', 'pd-bar thin xp');
     this.food = el('div', 'pd-bar thin food');
     this.depth = document.createTextNode('');
@@ -263,7 +278,7 @@ export class Hud {
             'div',
             'pd-bars-small',
             el('div', 'pd-bar-pair', icon('star'), this.xp),
-            el('div', 'pd-bar-pair', icon('food'), this.food),
+            this.hungerButton(),
           ),
         ),
         el(
@@ -374,6 +389,19 @@ export class Hud {
       this.islandRight.remove();
       this.root.prepend(this.band, this.log, this.toolbar);
     }
+  }
+
+  /** The satiety icon and bar: a tap opens the card of turns left before hungry and starving. */
+  private hungerButton(): HTMLElement {
+    const pair = el('div', 'pd-bar-pair tappable', icon('food'), this.food);
+    pair.setAttribute('role', 'button');
+    pair.ariaLabel = t.buffs.hunger;
+    const open = (): void => {
+      audio.play('click');
+      this.handlers.hunger();
+    };
+    pair.onclick = open;
+    return pair;
   }
 
   /** The hourglass: a tap waits a turn; holding it fills a bar in steps, then rests until healed. */

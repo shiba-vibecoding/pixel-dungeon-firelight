@@ -13,6 +13,9 @@ import { wornFor, type Worn } from './wear';
 import { type WearQuad, WearFx } from './wearfx';
 import { seenCells } from './sight';
 import { fxp } from './fxplayer';
+import { iconFor, type Icon } from './srcicon';
+import type { Source } from './hurtsrc';
+import { idleFx } from './idlefx';
 import { haptic } from './telegram';
 
 /*
@@ -137,6 +140,8 @@ export interface Puppet extends Turnable {
   fadeMs?: number;
   /** Its arrival (the cloud of curse) has been shown. */
   arrived?: boolean;
+  /** How tall it stands now, 1 when whole: lower when it crouches to search or settles to rest (idlefx.ts). */
+  squash?: number;
   /** Burning or poisoned: embers or bubbles rise off it. */
   burning?: boolean;
   poisoned?: boolean;
@@ -160,6 +165,8 @@ export interface Floater {
   scale?: number;
   /** Drawn in its own colour even if it looks like a number (gold found). */
   word?: boolean;
+  /** What dealt the damage, as a tiny picture beside the number (hurtsrc.ts; srcicon.ts). */
+  icon?: Icon;
 }
 
 export interface LogLine {
@@ -625,13 +632,13 @@ export class View {
     return { x: x + TILE / 2, y: y + TILE / 2 };
   }
 
-  private float(id: string, text: string, color: string, now: number, word = false): void {
+  private float(id: string, text: string, color: string, now: number, word = false, icon?: Icon): void {
     const puppet = this.puppets.get(id);
     if (!puppet) return;
     const { x, y } = this.position(puppet, now);
     // Stack texts that appear together over the same one so they stay readable (not over a neighbour).
     const stacked = this.floaters.filter((f) => now - f.start < 250 && Math.abs(f.x - x - TILE / 2) < 4 && y - f.y >= 0 && y - f.y < 15).length;
-    this.floaters.push({ text, color, x: x + TILE / 2, y: y - stacked * 7, start: now, ...(word ? { word } : {}) });
+    this.floaters.push({ text, color, x: x + TILE / 2, y: y - stacked * 7, start: now, ...(word ? { word } : {}), ...(icon ? { icon } : {}) });
   }
 
   private name(world: World, id: string): string {
@@ -642,7 +649,10 @@ export class View {
     return heroById(world, id)?.name ?? '';
   }
 
-  apply(effects: readonly Effect[], world: World, myId: string, now: number): void {
+  /**
+   * `sources`: what dealt each damage in `effects`, by index (hurtsrc.ts sourcesOf); a damage number carries a tiny picture of it.
+   */
+  apply(effects: readonly Effect[], world: World, myId: string, now: number, sources?: ReadonlyMap<number, Source>): void {
     const searchedByMe = effects.some((e) => e.type === 'searched' && e.hero === myId);
     let discovered = false;
     // Traps announce their own gas and flames.
@@ -652,7 +662,11 @@ export class View {
     // What the party sees on the depth shown, worked out only if something needs it.
     let sight: readonly boolean[] | undefined;
     const seen = (cell: number): boolean => (sight ??= seenCells(world, this.depth))[cell] === true;
-    for (const effect of effects) {
+    const iconAt = (at: number): Icon | undefined => {
+      const source = sources?.get(at);
+      return source ? iconFor(source, world.run.labels) : undefined;
+    };
+    for (const [at, effect] of effects.entries()) {
       switch (effect.type) {
         case 'attack': {
           if (effect.depth !== this.depth) break;
@@ -666,7 +680,7 @@ export class View {
           if (effect.hit) {
             if (target) target.flashUntil = now + 160;
             const toHero = !effect.target.startsWith('#');
-            this.float(effect.target, String(effect.damage), toHero ? COLORS.negative : COLORS.warning, now);
+            this.float(effect.target, String(effect.damage), toHero ? COLORS.negative : COLORS.warning, now, false, iconAt(at));
             audio.play(blowSound(world, effect.attacker, this.puppets.get(effect.attacker)?.kind), 0.8 + Math.random() * 0.45, 1, this.placeOf(effect.target, now));
             if (effect.target === myId) {
               // A light tap for a hit taken, a heavy one for a crushing blow (a quarter of my health or more).
@@ -744,8 +758,10 @@ export class View {
           if (effect.depth === this.depth) this.flashes.push({ cell: effect.cell, start: now });
           if (!discovered) {
             this.say(t.found, COLORS.highlight, now);
-            audio.play('secret');
+            // The found chime when my own search found it; the old secret's chime for what turned up by itself.
+            audio.play(searchedByMe ? 'found' : 'secret');
           }
+          idleFx.noteFound(now);
           discovered = true;
           break;
         case 'searched': {
@@ -767,7 +783,7 @@ export class View {
           if (effect.hero === myId) haptic('success');
           break;
         case 'hurt':
-          if (effect.depth === this.depth) this.float(effect.who, String(effect.damage), COLORS.negative, now);
+          if (effect.depth === this.depth) this.float(effect.who, String(effect.damage), COLORS.negative, now, false, iconAt(at));
           break;
         case 'oozed':
           if (effect.hero === myId) this.say(t.oozed, COLORS.negative, now);
