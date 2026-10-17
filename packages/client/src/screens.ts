@@ -2131,6 +2131,12 @@ function itemActions(options: ItemOptions): { main: HTMLElement[]; more: HTMLEle
     if (category === 'seed') {
       use(t.throwItem, () => aimWith('throw', index));
       use(t.plantSeed, () => act({ type: 'use', item: index }));
+      // What the seeds brew in an alchemy pot, as odds (infoui.ts): a calculator, nothing is thrown.
+      more.push(button(I.pot.open, () => {
+        const back = (): void => showBackpack(options, { index });
+        pauseBag();
+        void import('./infoui').then(({ showPot }) => showPot({ world, hero, start: item.kind, onClose: back, cell: hero.pos }), back);
+      }, 'quiet'));
     }
     if (category === 'scroll') {
       // A known scroll that acts on one thing asks which, from the whole pack and what is worn (WndBag's selector).

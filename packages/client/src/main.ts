@@ -134,9 +134,10 @@ const showChallenges = (options: ChallengesOptions): void => load(metaMod, (m) =
 const showJournal = (options: JournalOptions, tab?: 'notes' | 'catalog' | 'guide', category?: number, entry?: string): void =>
   load(metaMod, (m) => m.showJournal(options, tab, category, entry), windowFailed);
 const showGuide = (onClose: () => void, entry?: string): void => load(metaMod, (m) => m.showGuide(onClose, entry), windowFailed);
-/** The information windows (the hunger card: infoui.ts) are a chunk of their own too. */
+/** The information windows (the hunger card, the alchemy pot's calculator: infoui.ts) are a chunk of their own too. */
 const infoMod = lazy(() => import('./infoui'));
 const showHunger = (...args: Parameters<typeof import('./infoui').showHunger>): void => load(infoMod, (m) => m.showHunger(...args), windowFailed);
+const showPot = (...args: Parameters<typeof import('./infoui').showPot>): void => load(infoMod, (m) => m.showPot(...args), windowFailed);
 
 initTelegram('#1f1d1d');
 // What goes wrong reaches whoever looks after the game (report.ts): never who, only where.
@@ -2670,6 +2671,11 @@ function examineCell(pos: number): void {
       icon: portrait(char.heroClass, armorTier(char)),
       health: [Math.max(0, char.hp), char.ht],
     });
+    return;
+  }
+  // The alchemy pot, with whatever lies in it: what it is, and a calculator of what the seeds would brew (infoui.ts).
+  if (levelAt(world, me.depth).map[pos] === T.ALCHEMY) {
+    showPot({ world, hero: me, cell: pos, onClose: hideOverlay });
     return;
   }
   const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === pos && h.kind !== 'hidden');

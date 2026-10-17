@@ -39,6 +39,29 @@ export interface Words {
     turns: (done: number, of: number) => string;
     idle: Record<'hits' | 'taken' | 'turns', string>;
   };
+  pot: {
+    title: string;
+    sub: string;
+    /** The button on a seed's card. */
+    open: string;
+    inPot: string;
+    spoiled: string;
+    pack: string;
+    noSeeds: string;
+    pick: string;
+    chosen: string;
+    none: string;
+    need: (more: number) => string;
+    odds: string;
+    random: string;
+    /** A potion the party does not know yet: told by the seed it comes of, not by its colour. */
+    unknownPotion: (seed: string) => string;
+    note: string;
+    stack: string;
+    close: string;
+    plus: string;
+    minus: string;
+  };
 }
 
 const ruTurns = (n: number): string => `${n} ${plural(n, 'ход', 'хода', 'ходов')}`;
@@ -86,6 +109,27 @@ const RU: Words = {
       turns: 'Счёт идёт, пока кольцо надето.',
     },
   },
+  pot: {
+    title: 'Алхимический котёл',
+    sub: 'Что сварится из семян',
+    open: 'Что сварится?',
+    inPot: 'Уже в котле',
+    spoiled: 'В котле лежит не только семя: такая смесь ничего не сварит.',
+    pack: 'Семена в рюкзаке',
+    noSeeds: 'В рюкзаке нет семян.',
+    pick: 'Выбирайте семена кнопками + и −. Ничего не бросается: это только расчёт.',
+    chosen: 'В котёл',
+    none: 'Пока ничего не выбрано.',
+    need: (more) => `Котёл варит от трёх семян: нужно ещё ${more}.`,
+    odds: 'Выйдет',
+    random: 'случайное зелье',
+    unknownPotion: (seed) => `неизвестное зелье (${seed})`,
+    note: 'С N семенами случайное зелье выходит один раз из N, иначе зелье одного из семян: чем семян больше, тем оно вероятнее. Случайное может совпасть с названным.',
+    stack: 'Бросайте семена по одному: котёл варит, как только их три. Стопка, выброшенная из рюкзака, ложится вся сразу и считается вся.',
+    close: 'Закрыть',
+    plus: 'Ещё одно семя',
+    minus: 'Убрать одно семя',
+  },
 };
 
 const EN: Words = {
@@ -126,6 +170,27 @@ const EN: Words = {
       taken: 'It counts while the armour is worn.',
       turns: 'It counts while the ring is worn.',
     },
+  },
+  pot: {
+    title: 'Alchemy pot',
+    sub: 'What the seeds will brew',
+    open: 'What will it brew?',
+    inPot: 'Already in the pot',
+    spoiled: 'There is more than seeds in the pot: such a mix brews nothing.',
+    pack: 'Seeds in the pack',
+    noSeeds: 'There are no seeds in the pack.',
+    pick: 'Pick seeds with + and −. Nothing is thrown: this is only a calculation.',
+    chosen: 'Into the pot',
+    none: 'Nothing picked yet.',
+    need: (more) => `The pot brews from three seeds: ${more} more needed.`,
+    odds: 'You will get',
+    random: 'a random potion',
+    unknownPotion: (seed) => `an unknown potion (${seed})`,
+    note: 'With N seeds, one time in N the potion is a random one; otherwise it is the potion of one of the seeds, the likelier the more of them there are. The random one may be the same as a named one.',
+    stack: 'Throw seeds one at a time: the pot brews as soon as it holds three. A stack dropped from the pack lands whole and all of it counts.',
+    close: 'Close',
+    plus: 'One more seed',
+    minus: 'One seed less',
   },
 };
 
