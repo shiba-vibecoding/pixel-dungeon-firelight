@@ -561,8 +561,9 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
           return;
         case 'psionic':
           if (!own) {
-            fx.wave(at.x, at.y, now, { colors: '#ffffff', rings: 1, tiles: 8, duration: 350, width: 3 });
-            if (mine && !quality.reducedMotion) fx.flash('255, 255, 255', 0.45, 220, now);
+            // The warning comes first (placefx.ts: a rising whine, an amber flash at the edge); the blast itself is a beat later.
+            fx.wave(at.x, at.y, now + 170, { colors: '#ffffff', rings: 2, tiles: 8, duration: 380, stagger: 90, width: 3 });
+            if (mine && !quality.reducedMotion) window.setTimeout(() => fx.flash('255, 255, 255', 0.5, 260, fx.now), 170);
           }
           return;
         default:

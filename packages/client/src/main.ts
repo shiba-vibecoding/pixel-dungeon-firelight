@@ -29,6 +29,10 @@ import { idleFx } from './idlefx';
 import { loadFx, whenFx } from './fxsheet';
 import { hideBossCard } from './bosscard';
 import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
+import { placeSink, placesBatch, placesFrame, updatePlaces } from './placefx';
+import { placeStore } from './places';
+import { stamps } from './stamps';
+import { placeCard } from './placetext';
 /** The visual clock's last reading, for frame-to-frame particle steps. */
 let lastVisual = 0;
 /** When my hero fell, on the visual clock, or 0 while alive. */
@@ -156,6 +160,8 @@ const SERVER: string = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ?
  */
 const metaMod = lazy(() => import('./meta'));
 const windowFailed = (): void => toast(t.offline.windowFailed, { tone: 'warn' });
+// What the special places say when they are used (placefx.ts): a toast in the HUD's own voice.
+placeSink.toast = (text, tone) => toast(text, tone ? { tone } : {});
 const showSettings = (options: SettingsOptions): void => load(metaMod, (m) => m.showSettings(options), windowFailed);
 const showChallenges = (options: ChallengesOptions): void => load(metaMod, (m) => m.showChallenges(options), windowFailed);
 const showJournal = (options: JournalOptions, tab?: import('./meta').JournalTab, category?: number, entry?: string): void =>
@@ -1826,9 +1832,13 @@ function takeHere(world: World, me: Hero, now: number): void {
 
 function openTrade(world: World, me: Hero, item: Item): void {
   walk.reset();
+  // The ring of haggler shows its discount only once the ring is known (the price asked is the lower one either way).
+  const haggling = me.rings.some((ring) => ring.kind === 'ring.haggler');
+  const known = world.known.includes(item.kind);
   showTrade({
     world, hero: me, item,
-    price: buyPrice(item, me.depth, world.known.includes(item.kind), me.rings.some((ring) => ring.kind === 'ring.haggler')),
+    price: buyPrice(item, me.depth, known, haggling),
+    ...(haggling && world.known.includes('ring.haggler') ? { was: buyPrice(item, me.depth, known, false) } : {}),
     onBuy: () => send({ type: 'buy' }, performance.now()),
     onClose: hideOverlay,
   });
@@ -3012,10 +3022,19 @@ function examineCell(pos: number): void {
     return;
   }
   const heap = world.floors[me.depth]?.heaps.find((h) => h.pos === pos && h.kind !== 'hidden');
-  if (heap && (seen || heap.kind !== 'heap')) {
+  const heapShown = heap !== undefined && (seen || heap.kind !== 'heap');
+  // A special place (a well, the altar's fire, a pedestal, a shelf, a sign): what it is and what it does, from the rules themselves.
+  const here = levelAt(world, me.depth);
+  const card = placeCard(here, (world.floors[me.depth]?.altar?.volume ?? 0) > 0, pos, heapShown);
+  if (card && !(heapShown && here.map[pos] === T.PEDESTAL)) {
+    const well = here.map[pos] === T.WELL ? here.wells.find((w) => w.pos === pos) : undefined;
+    showInfo(card.name, well ? [wellText(well.water), ...card.lines] : card.lines, hideOverlay);
+    return;
+  }
+  if (heap && heapShown) {
     if (heap.kind === 'heap' || heap.kind === 'forSale') {
       const item = heap.items[0]!;
-      showInfo(itemName(world, item), itemInfo(world, me, item), hideOverlay, { icon: slot(world, item, { hero: me }) });
+      showInfo(itemName(world, item), [...itemInfo(world, me, item), ...(card ? card.lines : [])], hideOverlay, { icon: slot(world, item, { hero: me }) });
     } else {
       showInfo(t.heapNames[heap.kind] ?? '', [], hideOverlay);
     }
@@ -3526,6 +3545,7 @@ function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: nu
     launch: (sprite, x, y, at) => launches.push({ sprite, x, y, at, gold: false }),
     oreName: () => capitalize(itemName(world, core.createItem('quest.ore'))),
   });
+  placesBatch(effects, view, world, session!.myId, vnow);
   motion.effects(effects, world, me.depth, (e) => itemSprite(e.item, world.run.labels));
   scenery.effects(effects, me.depth, vnow);
   handleMyEffects(effects, session!.myId);
@@ -3549,6 +3569,11 @@ function footfall(level: Level, me: Hero, from: number, vnow: number): void {
   // Stepping onto a sign reads it.
   // Below the last shop the signs burst into flames as one reads them (Sign.read).
   const tip = t.signs[me.depth - 1] ?? t.signBurns;
+  if (terrain === T.SIGN) {
+    // The parchment, a glint of dust off it.
+    audio.play('pages', 1.1, 0.6);
+    fx.burst(cellX(me.pos) * 16 + 8, cellY(me.pos) * 16 + 6, vnow, { count: 6, colors: ['#ffe9b0', '#ffffff', '#d6ccae'], glow: true, speed: [4, 16], life: [500, 900], rise: 14, size: [1, 1], spread: 4 });
+  }
   if (terrain === T.SIGN && tip) {
     if (walk.queue.length > 0 || held.code) {
       // Passed over on the way somewhere: read in passing, into the log, and the walk goes on.
@@ -3626,6 +3651,7 @@ function tick(now: number): void {
     view.reset(me.depth);
     fx.reset();
     fxp.clear();
+    stamps.clear();
     idleFx.clear();
     hideBossCard();
     // The bodies and blood of this depth come back as they were left (gore.ts): kept per run and depth on this device.
@@ -3688,6 +3714,8 @@ function tick(now: number): void {
       patchLevel(baked, bakedMap, level, assets);
     }
     visible = seenCells(world, me.depth);
+    // The special places of the floor (wells, the altar's fire, the pot, prizes on pedestals): listed again each turn, for the scene's light and life.
+    updatePlaces(world, me.depth, key);
     bakedKey = key;
     drawPace.force();
 
@@ -3716,7 +3744,10 @@ function tick(now: number): void {
       governor.hold(1500);
     }
     if (fresh || r3Turn !== key) {
-      if (!fresh) r3.patch(level);
+      if (!fresh) {
+        r3.patch(level);
+        r3.refreshPlaces();
+      }
       r3.setSight(visible, exploredCells(world, me.depth), fresh);
       r3Turn = key;
     }
@@ -3761,6 +3792,7 @@ function tick(now: number): void {
   idleFx.frame(vnow, view, me.id, walk.resting, threats.size > 0, me.hp, level.map[me.pos]! >= T.WATER_TILES && level.map[me.pos]! <= T.WATER);
   ambientFx(view, vnow, dt);
   regionFx(level, visible, vnow, dt);
+  placesFrame(view, world, me, vnow);
 
   const mine = view.puppets.get(me.id);
   const at = mine ? view.position(mine, vnow) : { x: cellX(me.pos) * TILE, y: cellY(me.pos) * TILE };
@@ -3825,7 +3857,7 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || idleFx.busy(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || idleFx.busy(vnow) || stamps.busy(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
@@ -4282,5 +4314,5 @@ if (import.meta.env.DEV) {
     }
   };
   Object.assign(window, { __release: { news: () => showNews({ release: CURRENT, onClose: () => toTitle(false) }), report: () => api && showReport({ api, run: runFacts, onClose: () => toTitle(false) }), crash: showCrash } });
-  Object.assign(window, { __pd: { cellClient, preview, touchGuard, hurtLog, cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
+  Object.assign(window, { __pd: { openTrade, examineCell, stamps, placeStore, cellClient, preview, touchGuard, hurtLog, cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
 }

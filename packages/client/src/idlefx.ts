@@ -70,6 +70,8 @@ export class IdleFx {
   private foundAt = -1e9;
   /** A figure's own facing before a glance, to put back. */
   private facing = false;
+  /** A wall stood among the cells of the last search (so a search that found nothing is answered by a solid knock). */
+  private wallNear = false;
 
   // ---- what the game tells us ---------------------------------------------------------------------------------------------------
 
@@ -116,6 +118,7 @@ export class IdleFx {
     const cx = x + TILE / 2;
     const cy = y + TILE - 4;
     const cell = Math.round(x / TILE) + Math.round(y / TILE) * WIDTH;
+    this.wallNear = false;
     // The ring: out over the cells round, a soft lantern's sweep, lighting each in its turn as it passes.
     fx.wave(cx, cy, now, { colors: ['#ffe9a0'], rings: 1, tiles: 1.9, duration: ms, width: 1.5 });
     fx.pulse(cx, cy - 2, now, '255, 220, 140', 3, ms + 40);
@@ -125,6 +128,7 @@ export class IdleFx {
       if (at < 0 || at >= (map?.length ?? 0)) continue;
       const delay = (i / AROUND.length) * ms * 0.8;
       if (solid(at)) {
+        this.wallNear = true;
         // A wall that is tapped: dust rises off it.
         const wx = (at % WIDTH) * TILE + TILE / 2;
         const wy = Math.trunc(at / WIDTH) * TILE + TILE / 2;
@@ -221,6 +225,8 @@ export class IdleFx {
       case Do.Fizzle:
         // The search found nothing (view.ts would have told us by now): a faint grey wisp over the hero.
         if (this.foundAt < t.a) {
+          // Only now, with the result in: a wall that was tapped and gave nothing up sounds solid (a find has already knocked hollow, view.ts).
+          if (this.wallNear) audio.play('knockSolid', 1, 0.8);
           const { x, y } = view.position(p, now);
           fx.burst(x + TILE / 2, y + 6, now, { count: quality.light ? 2 : 4, colors: ['#9a9a9a', '#b8b8b8'], speed: [3, 9], life: [350, 600], rise: 12, drag: 0.5, size: [1, 1], spread: 5 });
         }
