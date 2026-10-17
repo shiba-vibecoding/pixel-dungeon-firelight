@@ -115,6 +115,8 @@ export interface FxLib {
   /** Event key -> effect id (or `boss.<kind>`, which is a card in `bossCards`). */
   events: Record<string, string>;
   bossCards: BossCards;
+  /** The staging of the bosses (part 13: `bosses` of fx.json), as the file has it; bossdata.ts reads it with its own defaults. */
+  bosses?: unknown;
 }
 
 const fail = (path: string, what: string): never => {
@@ -266,7 +268,7 @@ export function parseFx(raw: unknown): FxLib {
   for (const [id, v] of Object.entries(raw.fx)) fx[id] = def(id, v);
   const events: Record<string, string> = {};
   for (const [key, id] of Object.entries(raw.events)) events[key] = str(id, `events.${key}`);
-  return { version: num(raw.version, 'version', 1), fx, events, bossCards: bossCards(raw.bossCards) };
+  return { version: num(raw.version, 'version', 1), fx, events, bossCards: bossCards(raw.bossCards), ...(isObject(raw.bosses) ? { bosses: raw.bosses } : {}) };
 }
 
 /** The effect ids a def points to (its hit, the ends of a beam, the specks a wave throws, what follows a trap). */

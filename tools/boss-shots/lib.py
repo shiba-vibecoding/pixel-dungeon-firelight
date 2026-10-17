@@ -11,7 +11,7 @@ BASE = 'http://127.0.0.1:%s/pixel-dungeon-firelight/' % PORT
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'docs', 'bosses')
 
 
-def launch(p, width=412, height=760, dpr=2, query='lang=en&reveal=1', gpu=False, reduced=False):
+def launch(p, width=412, height=760, dpr=2, query='lang=en&reveal=1', gpu=False, reduced=False, freeze=True):
     args = ['--use-angle=d3d11', '--ignore-gpu-blocklist'] if gpu else ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
     browser = p.chromium.launch(args=args)
     context = browser.new_context(viewport={'width': width, 'height': height}, device_scale_factor=dpr, reduced_motion='reduce' if reduced else 'no-preference')
@@ -38,6 +38,10 @@ def launch(p, width=412, height=760, dpr=2, query='lang=en&reveal=1', gpu=False,
     except Exception:
         pass
     time.sleep(0.5)
+    if freeze:
+        # Only the frames this script asks for are drawn, on a clock it alone moves: a film of a moment, whatever the machine's speed.
+        page.evaluate("() => { const t = performance.now(); performance.now = () => t; window.requestAnimationFrame = () => 0; }")
+        adv(page, 600)
     return browser, page
 
 
@@ -140,6 +144,7 @@ def strip(page, id, times, name, folder=None, w=230, h=250, scale=1.0, act=None,
     """Frames at the given times (ms after the call; `act` runs first at t=0): a contact sheet."""
     folder = folder or OUT
     os.makedirs(folder, exist_ok=True)
+    crop_of(page, id, w, h)
     if act:
         act()
     if hide_ui:

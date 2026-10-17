@@ -63,9 +63,10 @@ export function slimeSplatter(x: number, z: number, y: number, power: number, de
   for (let i = 0; i < count(2 + power * 4); i++) puff(x, y, z, { colors: SLIME, size: 0.35, grow: 1.8, rise: 0.5, spread: 0.3, life: 700, alpha: 0.35, delay, drift: 0.8 });
 }
 
-/** The slime's burst: everything at once, and a green ring along the floor. */
-export function slimePop(x: number, z: number, y: number, delay = 0): void {
-  slimeSplatter(x, z, y, 1, delay);
+/** The slime's burst: drops thrown everywhere, and (when the designer's pop is not there to be the splash) a green ring along the floor. */
+export function slimePop(x: number, z: number, y: number, delay = 0, rings = true): void {
+  slimeSplatter(x, z, y, rings ? 1 : 0.7, delay);
+  if (!rings) return;
   ring(x, z, { color: '#7fdc4a', from: 0.5, to: 3.4, life: 560, alpha: 0.8, delay, glow: false });
   ring(x, z, { color: '#c8ff9a', from: 0.3, to: 2.2, life: 420, alpha: 0.7, delay });
 }
@@ -109,19 +110,6 @@ export function explosion(x: number, y: number, z: number, size: number, delay =
   ring(x, z, { color: '#ffb040', from: 0.4, to: 1.6 + size * 1.1, life: 420, alpha: 0.85, delay });
 }
 
-/** A jet of steam from a pipe: puffs that shoot sideways and up, thin out and go. */
-export function steamJet(x: number, y: number, z: number, dirX: number, dirZ: number, ms = 800): void {
-  const n = count(9);
-  for (let i = 0; i < n; i++) {
-    const delay = (i / n) * ms;
-    const v = rnd(0.9, 1.6);
-    bossVfx.emit({
-      x, y, z, vx: dirX * v + rnd(-0.12, 0.12), vz: dirZ * v + rnd(-0.12, 0.12), vy: rnd(0.15, 0.5), drag: 1.6,
-      life: rnd(700, 1100), size: rnd(0.16, 0.24), grow: 3.2, color: pick(STEAM), alpha: 0.5, shape: SHAPE.mist, soft: true, delay,
-    });
-  }
-}
-
 /** Dust shaken from the ceiling over a place: a few specks that drift down, and a pebble now and then that lands in a puff. */
 export function fallingDust(x: number, z: number, radius: number, n: number, pebbles: number): void {
   for (let i = 0; i < count(n); i++) {
@@ -162,10 +150,15 @@ export function mendColumn(x: number, z: number, height: number): void {
   ring(x, z, { color: '#c8ffc8', from: 0.4, to: 1.7, life: 560, delay: 220, alpha: 0.7 });
 }
 
-/** A blink's smoke: a thick cloud where it left, a thin one where it lands, and a trail of puffs between them. */
-export function blinkSmoke(fromX: number, fromZ: number, toX: number, toZ: number): void {
-  for (let i = 0; i < count(12); i++) puff(fromX, rnd(0.1, 0.8), fromZ, { colors: GREY, size: 0.4, grow: 2.4, rise: 0.35, spread: 0.3, life: 1200, alpha: 0.7, drift: 0.9 });
-  for (let i = 0; i < count(7); i++) puff(toX, rnd(0.1, 0.7), toZ, { colors: GREY, size: 0.3, grow: 2.2, rise: 0.3, spread: 0.25, life: 1000, alpha: 0.55, drift: 0.7, delay: 60 });
+/**
+ * A blink's smoke: a trail of puffs between the two cells and sparks at the one it left; and, when the designer's smoke is not there to be
+ * the clouds at both ends (`clouds`), a thick one where it left and a thin one where it lands.
+ */
+export function blinkSmoke(fromX: number, fromZ: number, toX: number, toZ: number, clouds = true): void {
+  if (clouds) {
+    for (let i = 0; i < count(12); i++) puff(fromX, rnd(0.1, 0.8), fromZ, { colors: GREY, size: 0.4, grow: 2.4, rise: 0.35, spread: 0.3, life: 1200, alpha: 0.7, drift: 0.9 });
+    for (let i = 0; i < count(7); i++) puff(toX, rnd(0.1, 0.7), toZ, { colors: GREY, size: 0.3, grow: 2.2, rise: 0.3, spread: 0.25, life: 1000, alpha: 0.55, drift: 0.7, delay: 60 });
+  }
   const steps = count(7);
   for (let k = 1; k < steps; k++) {
     const f = k / steps;
@@ -232,11 +225,6 @@ export function motes(x: number, z: number, radius: number, n: number, color = '
       size: rnd(0.03, 0.06), color, alpha: 0.9, glow: true, delay: rnd(0, 900),
     });
   }
-}
-
-/** A shaft of light standing over a place: tall soft puffs, still. */
-export function shaft(x: number, z: number, o: { color: string; height: number; width: number; life: number; alpha: number; delay?: number }): void {
-  bossVfx.emit({ x, y: o.height * 0.5, z, life: o.life, size: o.width, tall: o.height / o.width, color: o.color, alpha: o.alpha, glow: true, shape: SHAPE.mist, soft: true, ...(o.delay ? { delay: o.delay } : {}) });
 }
 
 /** The eye's glare: a red flare growing over it. */

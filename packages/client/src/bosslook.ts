@@ -7,6 +7,8 @@
  * (bossfx.ts) keeps the states.
  */
 
+import { DEFAULT_STAGING, type Staging, squashAt } from './bossdata';
+
 /** The look of one body this frame; written in place by `lookOf`. */
 export interface BodyLook {
   /** Width and height multiples (1 is as drawn), kept at the feet. */
@@ -22,9 +24,11 @@ export interface BodyLook {
   stage: number;
   /** Not drawn at all. */
   hide: boolean;
+  /** Turned over about its feet, radians (positive: falls back to its left; the scene flips it for one that looks left). */
+  roll: number;
 }
 
-export const newLook = (): BodyLook => ({ sx: 1, sy: 1, r: 1, g: 1, b: 1, glow: 0, stage: 0, hide: false });
+export const newLook = (): BodyLook => ({ sx: 1, sy: 1, r: 1, g: 1, b: 1, glow: 0, stage: 0, hide: false, roll: 0 });
 
 /** What has happened to a body and when (ms on the frame clock; undefined for what has not). */
 export interface BodyState {
@@ -53,7 +57,7 @@ export const JIGGLE_MS = 520;
 export const POP_MS = 170;
 export const REPAIR_MS = 1500;
 export const GLARE_MS = 900;
-export const COLLAPSE_MS = 900;
+export const COLLAPSE_MS = 600;
 export const DM_BLAST_MS = 1100;
 
 const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -78,11 +82,12 @@ export function jiggle(ms: number, calm = false): number {
  * The shape of one body now. `calm` is reduced motion: the springs and the shudders are quieter, the pops and the slams are kept (they
  * are what says «it died» and «it came»), and nothing flickers.
  */
-export function lookOf(s: BodyState, now: number, calm: boolean, out: BodyLook): BodyLook {
+export function lookOf(s: BodyState, now: number, calm: boolean, out: BodyLook, staging: Staging = DEFAULT_STAGING): BodyLook {
   out.sx = out.sy = out.r = out.g = out.b = 1;
   out.glow = 0;
   out.stage = 0;
   out.hide = false;
+  out.roll = 0;
 
   // A body coming up: through the floor (a summoned dwarf grows out of it, a fist slams up through it), or flickering into being.
   if (s.riseAt !== undefined && s.riseMs) {
@@ -119,11 +124,15 @@ export function lookOf(s: BodyState, now: number, calm: boolean, out: BodyLook):
   }
 
   if (s.kind === 'goo') {
-    // A blow squashes it wide and flat, and it wobbles back.
+    // A blow squashes it wide and flat, and it wobbles back: the designer's steps (fx.json → bosses.goo.squash), feet fixed. Reduced motion
+    // takes a third of the change.
     if (s.hitAt !== undefined) {
-      const k = jiggle(now - s.hitAt, calm);
-      out.sx *= 1 + 0.42 * k;
-      out.sy *= 1 - 0.34 * k;
+      const at = squashAt(staging.gooSquash, now - s.hitAt);
+      if (at) {
+        const k = calm ? 0.35 : 1;
+        out.sx *= 1 + (at[0] - 1) * k;
+        out.sy *= 1 + (at[1] - 1) * k;
+      }
     }
     // Its death: it swells, white with strain, and bursts (the burst is the director's: slime flies at POP_MS).
     if (s.deathAt !== undefined) {
@@ -189,12 +198,14 @@ export function lookOf(s: BodyState, now: number, calm: boolean, out: BodyLook):
   }
 
   if (s.kind === 'king') {
-    // The collapse: he sags in the middle and slumps, greying as the colour leaves him.
+    // The fall: he turns over on his back about his feet, in the steps the data gives (a quarter turn in four steps and 600 ms), greying as
+    // the colour leaves him. Reduced motion keeps the steps and takes the fall in one.
     if (s.deathAt !== undefined) {
-      const t = easeOut((now - s.deathAt) / COLLAPSE_MS);
-      out.sy *= 1 - 0.38 * t;
-      out.sx *= 1 + 0.16 * t;
-      const grey = 1 - 0.28 * t;
+      const fall = staging.kingFall;
+      const t = clamp01((now - s.deathAt) / fall.ms);
+      const done = calm ? (t > 0 ? fall.steps : 0) : Math.ceil(t * fall.steps - 1e-9);
+      out.roll = ((fall.rotate * Math.PI) / 180) * (done / fall.steps);
+      const grey = 1 - 0.28 * easeOut(t);
       out.r *= grey;
       out.g *= grey;
       out.b *= grey;

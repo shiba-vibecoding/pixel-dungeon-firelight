@@ -1308,7 +1308,7 @@ export class World3D {
   private sprite(
     image: HTMLImageElement | HTMLCanvasElement, sx: number, sy: number, w: number, h: number, flip: boolean,
     x: number, y: number, z: number, width: number, height: number, tint: number, mode = LEANED, shear = 0, glow?: CanvasImageSource,
-    blend = false,
+    blend = false, roll = 0,
   ): void {
     const dead = this.toDead && !blend;
     if (blend || dead) this.gnd.on = 0;
@@ -1333,7 +1333,15 @@ export class World3D {
       const sh = height * LEAN_STRETCH;
       const sinL = Math.sin(LEAN);
       const cosL = Math.cos(LEAN);
-      m[o + 4] = shear * sh; m[o + 5] = sh * cosL; m[o + 6] = -sh * sinL; m[o + 7] = 0;
+      if (roll !== 0) {
+        // Turned over about its feet in its own plane (a king falling, bossfx.ts).
+        const sr = Math.sin(roll);
+        const cr = Math.cos(roll);
+        m[o] = width * cr; m[o + 1] = width * sr * cosL; m[o + 2] = -width * sr * sinL;
+        m[o + 4] = -sh * sr; m[o + 5] = sh * cr * cosL; m[o + 6] = -sh * cr * sinL; m[o + 7] = 0;
+      } else {
+        m[o + 4] = shear * sh; m[o + 5] = sh * cosL; m[o + 6] = -sh * sinL; m[o + 7] = 0;
+      }
       m[o + 8] = 0; m[o + 9] = sinL; m[o + 10] = cosL; m[o + 11] = 0;
     } else {
       m[o + 4] = shear * height; m[o + 5] = height; m[o + 6] = 0; m[o + 7] = 0;
@@ -1564,7 +1572,7 @@ export class World3D {
       this.tg = boss.g;
       this.tb = boss.b;
     }
-    this.sprite(bodyImage, sx, sy, sheet.w, sheet.h, fig.flip, tx, by, bz, (sheet.w / TILE) * scale * fw, (sheet.h / TILE) * scale * fh, tint, LEANED, 0, bodyGlow, blend);
+    this.sprite(bodyImage, sx, sy, sheet.w, sheet.h, fig.flip, tx, by, bz, (sheet.w / TILE) * scale * fw, (sheet.h / TILE) * scale * fh, tint, LEANED, 0, bodyGlow, blend, boss && boss.roll !== 0 ? (fig.flip ? -boss.roll : boss.roll) : 0);
     this.tr = this.tg = this.tb = 1;
     if (boss && boss.glow > 0 && bodyGlow && bodyGlow !== fig.glow) this.glowLast(boss.glow);
     this.toDead = false;

@@ -1,9 +1,8 @@
 /*
- * The boss's health bar at the top of the screen (fl-boss.css): its portrait, its name, and a long bar with a pale «ghost» behind the
- * fill, the health just lost, which waits a moment and then catches up slowly, so the size of a blow is seen. Notches on the bar mark
- * the phases (a quarter, a half, three quarters). A heal (the machine mending) lifts the fill at once and flashes it green with a word.
- * The ghost is `HpGhost`, plain numbers for the tests (test/bossbar.test.ts); the bar is the page element that shows it, changed only
- * when a number has moved by a pixel.
+ * The boss's health bar under the HUD (the designer's, fl-p13.css; the rest in fl-boss.css): its icon, its name, and a long bar with a
+ * pale «ghost» behind the fill, the health just lost, which waits a moment and then catches up slowly, so the size of a blow is seen. A
+ * heal (the machine mending) lifts the fill at once and flashes it green with a word. The ghost is `HpGhost`, plain numbers for the
+ * tests (test/bossbar.test.ts); the bar is the page element that shows it, changed only when a number has moved by a pixel.
  */
 
 /** How long the ghost waits after a blow before it starts to follow, ms; and how fast it follows (the share of the bar a second). */
@@ -79,62 +78,62 @@ function node<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, 
 
 /** What the bar is told when a boss takes the stage. */
 export interface BarBoss {
-  /** `goo`, `tengu`...: the bar's colours come with it (fl-boss.css). */
+  /** `goo`, `tengu`...: the bar's icon comes with it (the designer's fl-p13.css: `.fl-bossbar.goo`). */
   kind: string;
   name: string;
-  portrait: string;
-  accent: string;
-  /** The word on the bar for a phase, when there is one (the machine's mending). */
+  /** The line after the name (the epithet). */
   epithet?: string;
 }
 
+/**
+ * The bar is the designer's (fl-p13.css: the frame, the icon and the colours of the bar; `--v` the health, `--was` the pale trace of what
+ * was just lost); this class fills it, and drives the trace itself, easing it down from `HpGhost` (fl-boss.css puts the stylesheet's own
+ * transition away), so it waits and then catches up slowly.
+ */
 export class BossBar {
   private readonly root = node('div', 'fl-bossbar');
-  private readonly face = node('img', 'fl-bossbar-face');
-  private readonly name = node('span', 'fl-bossbar-name');
-  private readonly note = node('span', 'fl-bossbar-note');
-  private readonly track = node('div', 'fl-bossbar-track');
-  private readonly ghostEl = node('i', 'fl-bossbar-ghost');
-  private readonly fillEl = node('i', 'fl-bossbar-fill');
-  private readonly numbers = node('span', 'fl-bossbar-num');
-  private shown = { fill: -1, ghost: -1, text: '' };
+  private readonly icon = node('span', 'icon');
+  private readonly name = node('span', 'who');
+  private readonly small = node('small', '');
+  private readonly note = node('em', 'note');
+  private readonly track = node('div', 'track');
+  private shown = { v: -1, was: -1 };
   private noteUntil = 0;
   private on = false;
   private hideTimer = 0;
+  private stripAt = 0;
 
   constructor(host: HTMLElement) {
     this.root.setAttribute('aria-hidden', 'true');
-    this.face.alt = '';
-    const head = node('div', 'fl-bossbar-head');
-    head.append(this.name, this.note);
-    this.track.append(this.ghostEl, this.fillEl);
-    for (const at of [25, 50, 75]) {
-      const notch = node('b', `fl-bossbar-notch${at === 50 ? ' half' : ''}`);
-      notch.style.left = `${at}%`;
-      this.track.append(notch);
-    }
-    this.track.append(this.numbers);
-    const main = node('div', 'fl-bossbar-main');
-    main.append(head, this.track);
-    this.root.append(this.face, main);
+    this.root.hidden = true;
+    const title = node('div', 'name');
+    title.append(this.name, this.small, this.note);
+    this.track.append(node('i', 'trace'), node('i', 'fill'), node('i', 'ticks'));
+    this.root.append(this.icon, title, this.track);
     host.append(this.root);
   }
 
-  /** Takes the stage: slides in under the HUD. */
+  /** Takes the stage: drops in under the HUD. */
   show(boss: BarBoss): void {
     window.clearTimeout(this.hideTimer);
-    this.root.dataset.boss = boss.kind;
-    this.root.style.setProperty('--boss', boss.accent);
-    this.face.src = boss.portrait;
+    this.root.className = `fl-bossbar ${boss.kind}`;
     this.name.textContent = boss.name;
-    this.note.textContent = boss.epithet ?? '';
-    this.shown = { fill: -1, ghost: -1, text: '' };
-    this.root.classList.remove('dead', 'heal', 'hit', 'rage', 'out');
-    // The page measures it before the class lands, so the slide is seen.
+    this.small.textContent = boss.epithet ?? '';
+    this.note.textContent = '';
+    this.shown = { v: -1, was: -1 };
+    this.root.hidden = false;
+    // The drop-in of the designer's CSS plays from the start each time.
+    this.root.style.animation = 'none';
     void this.root.offsetWidth;
-    this.root.classList.add('on');
+    this.root.style.animation = '';
     this.on = true;
-    document.documentElement.style.setProperty('--boss-strip', '46px');
+    this.strip();
+  }
+
+  /** What hangs under the bar (the toasts, the net strip) is pushed down by the bar's own height. */
+  private strip(): void {
+    const h = this.root.hidden ? 0 : Math.ceil(this.root.getBoundingClientRect().height) + 6;
+    document.documentElement.style.setProperty('--boss-strip', `${h}px`);
   }
 
   get visible(): boolean {
@@ -146,45 +145,42 @@ export class BossBar {
     return this.root.getBoundingClientRect().bottom;
   }
 
-  /** Puts the bar's numbers on screen (only what changed). */
-  draw(g: HpGhost, hp: number, ht: number, now: number, rage: boolean): void {
+  /** Puts the bar's numbers on screen (only what changed, a pixel's worth). */
+  draw(g: HpGhost, now: number, rage: boolean): void {
     if (!this.on) return;
-    const fill = Math.round(g.hp * 500) / 5;
-    const ghost = Math.round(g.ghost * 500) / 5;
-    if (fill !== this.shown.fill) {
-      this.shown.fill = fill;
-      this.fillEl.style.width = `${fill}%`;
+    const v = Math.round(g.hp * 400) / 400;
+    const was = Math.round(g.ghost * 400) / 400;
+    if (v !== this.shown.v) {
+      this.shown.v = v;
+      this.root.style.setProperty('--v', String(v));
     }
-    if (ghost !== this.shown.ghost) {
-      this.shown.ghost = ghost;
-      this.ghostEl.style.width = `${ghost}%`;
+    if (was !== this.shown.was) {
+      this.shown.was = was;
+      this.root.style.setProperty('--was', String(was));
     }
-    const text = `${Math.max(0, Math.ceil(hp))}/${ht}`;
-    if (text !== this.shown.text) {
-      this.shown.text = text;
-      this.numbers.textContent = text;
-    }
-    this.root.classList.toggle('rage', rage);
-    // A blow lights the fill for a moment; a mending turns it green for longer.
     const hit = now - g.hitAt < 140;
     const heal = now - g.healedAt < 900;
-    this.root.classList.toggle('hit', hit && !heal);
-    this.root.classList.toggle('heal', heal);
+    const cl = this.root.classList;
+    cl.toggle('rage', rage);
+    cl.toggle('hit', hit && !heal);
+    cl.toggle('heal', heal);
+    if (this.on && now - this.stripAt > 500) {
+      this.stripAt = now;
+      this.strip();
+    }
     if (this.noteUntil && now >= this.noteUntil) {
       this.noteUntil = 0;
       this.note.textContent = '';
-      this.note.classList.remove('lit');
     }
   }
 
-  /** A word beside the name for a while (a phase, the machine mending): `text` empty puts it away. */
+  /** A word at the end of the name's line for a while (a phase, the machine mending): empty puts it away. */
   say(text: string, now: number, ms: number): void {
     this.note.textContent = text;
-    this.note.classList.toggle('lit', text !== '');
     this.noteUntil = text ? now + ms : 0;
   }
 
-  /** The boss is down: the bar empties, greys and goes after a moment. */
+  /** The boss is down: the bar greys and goes after a moment. */
   fall(ms = 1600): void {
     if (!this.on) return;
     this.root.classList.add('dead');
@@ -196,8 +192,7 @@ export class BossBar {
     window.clearTimeout(this.hideTimer);
     if (!this.on) return;
     this.on = false;
-    this.root.classList.remove('on');
-    this.root.classList.add('out');
+    this.root.hidden = true;
     document.documentElement.style.setProperty('--boss-strip', '0px');
   }
 
@@ -205,8 +200,8 @@ export class BossBar {
   clear(): void {
     window.clearTimeout(this.hideTimer);
     this.on = false;
-    this.root.classList.remove('on', 'dead', 'heal', 'hit', 'rage');
-    this.root.classList.remove('out');
+    this.root.hidden = true;
+    this.root.classList.remove('dead', 'heal', 'hit', 'rage');
     document.documentElement.style.setProperty('--boss-strip', '0px');
   }
 }

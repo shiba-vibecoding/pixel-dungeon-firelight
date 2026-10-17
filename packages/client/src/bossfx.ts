@@ -1,4 +1,4 @@
-import { createItem, type Effect, F, heroById, itemSprite, type Level, type Mob, terrainFlags, WIDTH, type World } from '@pd/core';
+import { type Effect, F, heroById, type Level, type Mob, T, terrainFlags, WIDTH, type World } from '@pd/core';
 import { audio } from './audio';
 import { type BarBoss, BossBar, HpGhost } from './bossbar';
 import { REPAIR_MS } from './bosslook';
@@ -8,8 +8,10 @@ import {
 } from './bosslook';
 import * as emit from './bossemit';
 import { fx } from './fx';
+import { fxp, type PlayOpts } from './fxplayer';
 import { fxState } from './fxsheet';
-import { gore } from './gore';
+import { squashMs, stageAt, type Staging, stagingOf } from './bossdata';
+import { gore, poolSplat } from './gore';
 import { lang, t } from './i18n';
 import { quality } from './quality';
 import { quipMode } from './quips';
@@ -57,6 +59,9 @@ interface Fight {
   nextSteam: number;
   nextGlare: number;
   rageSeen: boolean;
+  /** The machine's loop now (an index of the staging's stages, -1 for none) and how often the old god's eye has glinted. */
+  loop: number;
+  glints: number;
 }
 
 /** What is waiting to be said, and what is on screen. */
@@ -91,6 +96,9 @@ const TEXT = {
     amuletSub: 'Он ждёт внизу, куда путь теперь открыт.',
   },
 }[lang === 'ru' ? 'ru' : 'en'];
+
+/** How long a loop of the designer's art plays before it is put again, ms. */
+const LOOP_MS = 1800;
 
 const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 const rnd = (a: number, b: number): number => a + Math.random() * (b - a);
@@ -132,6 +140,29 @@ class BossFx {
   private pendingRepair = new Map<string, number>();
   /** What was said last, for the dev console and the tests of the page. */
   lastLine = '';
+
+  // ---- the designer's art ---------------------------------------------------------------------------------------------------
+
+  private stagingFor: unknown = undefined;
+  private stagingNow: Staging = stagingOf(null);
+
+  /** The staging of fx.json (bossdata.ts), with the file's own numbers once it has come. */
+  private get staging(): Staging {
+    const lib = fxState()?.lib ?? null;
+    if (lib !== this.stagingFor) {
+      this.stagingFor = lib;
+      this.stagingNow = stagingOf(lib);
+    }
+    return this.stagingNow;
+  }
+
+  /**
+   * Plays one of the designer's effects (part 13) at a place in cells; false if the data (or that sheet) is not there, and the caller
+   * then makes the older look itself. So nothing is drawn twice: what the designer's art does, the particles leave out.
+   */
+  private art(id: string, x: number, z: number, now: number, o: PlayOpts = {}): boolean {
+    return fxp.ready && fxp.has(id) && fxp.playAt(id, x, z, now, o);
+  }
 
   // ---- the page -------------------------------------------------------------------------------------------------------------
 
@@ -184,7 +215,11 @@ class BossFx {
         return;
       }
       case 'attack': {
-        if (e.depth !== view.depth || !e.hit) return;
+        if (e.depth !== view.depth) return;
+        if (!e.hit) {
+          this.missed(view, e.attacker, e.target, now);
+          return;
+        }
         const target = view.puppets.get(e.target);
         if (!target || !(BOSS_SET.has(target.kind) || RISERS.has(target.kind))) return;
         this.struck(target, e.damage, e.attacker, now);
@@ -201,7 +236,10 @@ class BossFx {
         if (e.depth !== view.depth) return;
         const from = cellOf(e.from);
         const to = cellOf(e.to);
-        emit.blinkSmoke(from.x, from.z, to.x, to.z);
+        // The designer's smoke at both ends; the trail between them, and the sparks, are ours.
+        const st = this.staging;
+        const drawn = this.art(st.tenguJump, from.x, from.z, now) && this.art(st.tenguJump, to.x, to.z, now + 60);
+        emit.blinkSmoke(from.x, from.z, to.x, to.z, !drawn);
         const state = this.stateOf(e.mob, 'tengu');
         state.riseAt = now;
         state.riseMs = 340;
@@ -236,6 +274,16 @@ class BossFx {
         }
         return;
       }
+      case 'hurt': {
+        // Hurt by no one's blow (fire, poison, the ooze): the slime splashes all the same (fx.json's moment `hurt.goo`).
+        if (e.depth !== view.depth) return;
+        const puppet = view.puppets.get(e.who);
+        if (puppet?.kind !== 'goo') return;
+        const center = this.cellCenter(puppet, now);
+        if (center) this.art(this.staging.gooHit, center.x, center.z, now);
+        this.stateOf(puppet.id, 'goo').hitAt = now;
+        return;
+      }
       case 'pumped':
         return;
       default:
@@ -251,18 +299,14 @@ class BossFx {
     const mob = mobOf(world, view.depth, id);
     const fight: Fight = {
       id, kind, depth: view.depth, hp: mob?.hp ?? 1, ht: mob?.ht ?? 1, ghost: new HpGhost(), half: (mob?.hp ?? 1) <= (mob?.ht ?? 1) / 2, quarter: false, fell: false,
-      nextSpark: now + 800, nextSmoke: now + 600, nextDust: now + 1500, nextSteam: now + 2500, nextGlare: now + 5000, rageSeen: false,
+      nextSpark: now + 800, nextSmoke: now + 600, nextDust: now + 1500, nextSteam: now + 2500, nextGlare: now + 3000, rageSeen: false, loop: -1, glints: 0,
     };
     fight.ghost.reset(fight.ht > 0 ? fight.hp / fight.ht : 1);
     this.fights.set(id, fight);
     this.stateOf(id, kind).frac = fight.ht > 0 ? fight.hp / fight.ht : 1;
     this.primary = id;
     if (this.ensureDom()) {
-      const card = fxState()?.lib.bossCards.bosses[kind];
-      const base = `${import.meta.env.BASE_URL}assets/`;
-      const boss: BarBoss = {
-        kind, name: t.mobs[kind] ?? kind, portrait: card ? `${base}${card.portrait}` : '', accent: card?.accent ?? '#ff6a4a', epithet: t.bossEpithets[kind] ?? '',
-      };
+      const boss: BarBoss = { kind, name: t.mobs[kind] ?? kind, epithet: t.bossEpithets[kind] ?? '' };
       this.bar!.show(boss);
     }
     if (quiet) return fight;
@@ -311,6 +355,23 @@ class BossFx {
     if (this.queue.length > 6) this.queue.shift();
   }
 
+  /** A blow that missed: Tengu's blade, thrown from afar, lies where it fell (the designer's mark, one of its rows, for twenty seconds). */
+  private missed(view: View, attackerId: string, targetId: string, now: number): void {
+    const attacker = view.puppets.get(attackerId);
+    const target = view.puppets.get(targetId);
+    if (!attacker || attacker.kind !== 'tengu' || !target) return;
+    const a = view.positionInto(attacker, now, SCRATCH);
+    const ax = a.x;
+    const ay = a.y;
+    const b = view.positionInto(target, now, SCRATCH2);
+    // Close at hand it is a swing, not a throw.
+    if (Math.hypot(b.x - ax, b.y - ay) < TILE * 1.6) return;
+    const st = this.staging;
+    const dist = Math.hypot(b.x - ax, b.y - ay) / TILE;
+    const flight = Math.max(90, dist * 45);
+    this.art(st.tenguMark, (b.x + TILE / 2) / TILE + rnd(-0.18, 0.18), (b.y + FEET_PX) / TILE + rnd(-0.1, 0.15), now + flight, { rowAdd: Math.floor(Math.random() * st.tenguMarkRows) });
+  }
+
   /** A boss's body or its summoned one is struck. */
   private struck(target: Puppet, damage: number, attackerId: string, now: number): void {
     const state = this.stateOf(target.id, target.kind);
@@ -327,10 +388,12 @@ class BossFx {
       side = Math.atan2(at.y - from.y, at.x - from.x);
     }
     const height = Math.max(0.5, target.sprite.sheet.h / TILE);
-    if (target.kind === 'goo') emit.slimeSplatter(x, z, height * 0.45, 0.25 + share * 2);
-    else if (target.kind === 'dm300') {
+    if (target.kind === 'goo') {
+      // The designer's splash on the slime (its middle), and drops flying in 3D over it; a blow that does not hurt much throws fewer.
+      this.art(this.staging.gooHit, (at.x + TILE / 2) / TILE, (at.y + TILE / 2) / TILE, now);
+      emit.slimeSplatter(x, z, height * 0.45, 0.1 + share * 1.5);
+    } else if (target.kind === 'dm300') {
       emit.sparks(x, height * 0.5, z, 6 + Math.round(share * 20), side === undefined ? undefined : side + Math.PI);
-      if (share > 0.08) emit.smoke(x, height * 0.7, z, { dark: true, n: 1 + Math.round(share * 6), size: 0.3, life: 1400 });
     } else if (target.kind === 'yog') {
       const fight = this.fights.get(target.id);
       if (fight && Math.random() < 0.45) this.glare(fight, now);
@@ -350,10 +413,10 @@ class BossFx {
     if (this.primary === id) this.primary = '';
     switch (kind) {
       case 'goo': {
-        // It swells (the look) and bursts: slime flies, and a green wave runs along the floor.
+        // It swells (the look) and bursts: the designer's pop, a puddle that stays eight seconds, and drops flying over it.
         this.later(now + POP_MS, () => {
-          emit.slimePop(at.x, at.z, height * 0.5);
-          fx.shake(5, 420, now + POP_MS);
+          const drawn = this.art(this.staging.gooDeath, at.x, at.z, now + POP_MS);
+          emit.slimePop(at.x, at.z, height * 0.5, 0, !drawn);
           audio.play('pop', 0.7, 0.9);
           audio.play('puff', 0.6, 0.5);
         });
@@ -375,11 +438,25 @@ class BossFx {
         }
         const big = now + DM_BLAST_MS;
         this.later(big, () => {
-          emit.explosion(at.x, height * 0.5, at.z, 3.2);
-          emit.shockwave(at.x, at.z, 4, ['#ffb040', '#ffe9a0', '#ff7a20'], 3);
-          emit.smoke(at.x, 0.4, at.z, { dark: true, n: 10, size: 0.6, rise: 1.1, life: 3200 });
-          fx.shake(9, 800, big);
-          fx.flash('255, 214, 150', 0.5, 420, big);
+          // The designer's burst, with the light, shake and tint it carries, and six pieces thrown out of it (a plate, a gear or a bolt
+          // each); ours is only the smoke that stays and a flash.
+          const st = this.staging;
+          const drawn = this.art(st.dmDeath, at.x, at.z, big);
+          if (drawn) {
+            for (let i = 0; i < st.dmDebrisCount; i++) {
+              const a = (i / st.dmDebrisCount) * Math.PI * 2 + Math.random();
+              const reach = rnd(0.8, 2.2);
+              this.art(st.dmDebris, at.x + Math.cos(a) * reach, at.z + Math.sin(a) * reach * 0.7, big + 120, { rowAdd: Math.floor(Math.random() * 3), delay: rnd(0, 120) });
+            }
+          } else {
+            emit.explosion(at.x, height * 0.5, at.z, 3.2);
+            emit.shockwave(at.x, at.z, 4, ['#ffb040', '#ffe9a0', '#ff7a20'], 3);
+            fx.shake(9, 800, big);
+          }
+          emit.smoke(at.x, 0.4, at.z, { dark: false, n: 10, size: 0.6, rise: 1.1, life: 3200 });
+          // The floor under it is blackened for good (the baked blood layer takes it, as a pool): a scorch.
+          for (let i = 0; i < 3; i++) gore.addSplat(poolSplat(at.x * TILE, at.z * TILE - 2, 9 + i * 5, 0x161412));
+          fx.flash('255, 214, 150', 0.4, 420, big);
           fx.hitStop(160);
           audio.play('blast', 0.6, 1);
           audio.play('rocks', 0.8, 0.7);
@@ -388,11 +465,16 @@ class BossFx {
       }
       case 'king': {
         this.throne.fall = now;
+        const fall = this.staging.kingFall;
+        // He turns over in four steps; the dust of it, and then the crown, lying where he fell (the designer's, for six seconds).
         this.later(now + 250, () => {
           emit.collapse(at.x, at.z);
           fx.shake(6, 700, now + 250);
           audio.play('rocks', 0.7, 0.8);
           audio.play('rumble', 0.8, 0.8);
+        });
+        this.later(now + fall.ms, () => {
+          this.art(fall.then, at.x + (puppet?.flip ? 0.55 : -0.55), at.z, now + fall.ms);
         });
         break;
       }
@@ -401,7 +483,7 @@ class BossFx {
         break;
       }
       case 'tengu': {
-        emit.blinkSmoke(at.x, at.z, at.x, at.z);
+        this.art(this.staging.tenguJump, at.x, at.z, now) || emit.blinkSmoke(at.x, at.z, at.x, at.z, true);
         break;
       }
       default:
@@ -414,8 +496,16 @@ class BossFx {
     this.pushFor(id, { at: now, inMs: 1500, holdMs: 1500, outMs: 1600, amount: 0.32, slide: 0.7 });
     this.pulse();
     this.later(now + 350, () => {
-      emit.shockwave(at.x, at.z, 9, ['#ff3a2a', '#ffb0a0', '#ffffff'], 4);
-      fx.wave(at.x * TILE, at.z * TILE, now + 350, { colors: ['#ff4030', '#ffd0c0', '#ffffff'], rings: 3, tiles: 9, duration: 1100, width: 3, stagger: 160 });
+      // The designer's fall (its red rings, light, shake and tint), three times as big as drawn; ours are the rings of light that run out
+      // along the floor far beyond it, if it is not there.
+      const st = this.staging;
+      const drawn = this.art(st.yogDeath, at.x, at.z, now + 350, { scale: 3 });
+      if (!drawn) {
+        emit.shockwave(at.x, at.z, 9, ['#ff3a2a', '#ffb0a0', '#ffffff'], 4);
+        fx.wave(at.x * TILE, at.z * TILE, now + 350, { colors: ['#ff4030', '#ffd0c0', '#ffffff'], rings: 3, tiles: 9, duration: 1100, width: 3, stagger: 160 });
+      } else {
+        emit.shockwave(at.x, at.z, 9, ['#ff3a2a', '#ffb0a0'], 2, 150);
+      }
       fx.shake(10, 1200, now + 350);
       fx.hitStop(220);
       audio.play('blast', 0.5, 1);
@@ -430,10 +520,14 @@ class BossFx {
       veil.style.transition = `opacity ${calm ? 1800 : 1100}ms ease-in`;
       veil.style.opacity = calm ? '0.8' : '1';
     });
-    this.later(upAt + 1700, () => this.revealAmulet());
-    this.later(upAt + 2400, () => {
+    // The Amulet stands in the light the white-out leaves (the designer's, as tall as it is drawn, twice over), with a word on where it waits.
+    this.later(upAt + 1500, () => this.revealAmulet());
+    // The white lifts, and the Amulet is standing in the light where the old god was.
+    this.later(upAt + 2700, () => {
+      this.art(this.staging.yogAmulet, at.x, at.z, upAt + 2700, { scale: 2 });
+      audio.play('amulet', 1, 0.8);
       if (!veil) return;
-      veil.style.transition = `opacity ${calm ? 2400 : 2000}ms ease-out`;
+      veil.style.transition = `opacity ${calm ? 2600 : 2200}ms ease-out`;
       veil.style.opacity = '0';
     });
   }
@@ -446,25 +540,17 @@ class BossFx {
     const root = document.createElement('div');
     root.className = 'fl-amulet';
     root.setAttribute('aria-hidden', 'true');
-    const rays = document.createElement('div');
-    rays.className = 'fl-amulet-rays';
-    const icon = document.createElement('i');
-    icon.className = 'pd-item';
-    const sprite = itemSprite(createItem('quest.amulet'), this.world?.run.labels ?? {});
-    icon.style.setProperty('--ix', String(sprite % 8));
-    icon.style.setProperty('--iy', String(Math.trunc(sprite / 8)));
     const title = document.createElement('div');
     title.className = 'fl-amulet-text';
     title.textContent = TEXT.amulet;
     const sub = document.createElement('div');
     sub.className = 'fl-amulet-sub';
     sub.textContent = TEXT.amuletSub;
-    root.append(rays, icon, title, sub);
+    root.append(title, sub);
     this.host.append(root);
     this.amuletEl = root;
     void root.offsetWidth;
     root.classList.add('on');
-    audio.play('amulet', 1, 0.8);
     window.setTimeout(() => {
       root.remove();
       if (this.amuletEl === root) this.amuletEl = null;
@@ -483,10 +569,9 @@ class BossFx {
     if (at) {
       const height = Math.max(0.5, (puppet?.sprite.sheet.h ?? 16) / TILE);
       emit.mendColumn(at.x, at.z, height);
-      // The steam of the trap's vents: jets to either side and up through it.
-      for (const dir of [-1, 1]) emit.steamJet(at.x + dir * 0.35, 0.15, at.z, dir, rnd(-0.3, 0.3), 900);
-      emit.steamJet(at.x, 0.1, at.z, 0, -0.4, 1000);
-      emit.smoke(at.x, 0.3, at.z, { n: 4, size: 0.35, rise: 1.1, life: 1500 });
+      // The steam of the trap's vents: the designer's jets either side of it and through it.
+      const steam = this.staging.steam;
+      for (const dx of [-0.42, 0, 0.42]) this.art(steam, at.x + dx, at.z + 0.1, now, { ms: 1500, lift: 0 }) || emit.smoke(at.x + dx, 0.3, at.z, { n: 2, size: 0.35, rise: 1.1, life: 1500 });
     }
     this.bar?.say(TEXT.mending(0), now, REPAIR_MS + 400);
     fx.flash('120, 255, 150', 0.22, 600, now);
@@ -499,7 +584,10 @@ class BossFx {
 
   /** Whether anything wants the picture drawn at full pace (pace.ts). */
   busy(now: number): boolean {
-    return this.pushes.length > 0 || this.timers.length > 0 || bossVfx.busy || this.shown !== null || this.queue.length > 0 || this.fights.size > 0 || now < this.throne.start + 3000;
+    if (this.pushes.length > 0 || this.timers.length > 0 || bossVfx.busy || this.shown !== null || this.queue.length > 0 || now < this.throne.start + 3000) return true;
+    // A bar whose trace is still catching up; a boss whose arena makes its own show (the machine's sparks and dust, the eye's glint).
+    for (const f of this.fights.values()) if (!f.fell && (f.ghost.ghost > f.ghost.hp + 1e-4 || f.kind === 'dm300' || f.kind === 'yog')) return true;
+    return false;
   }
 
   /** The music's intensity for the boss fight now: 0 when there is none. */
@@ -553,14 +641,14 @@ class BossFx {
         fight.ghost.update(frac, now, dt, calm);
         if (fight.id === this.primary) {
           focus = fight;
-          this.bar?.draw(fight.ghost, fight.hp, fight.ht, now, frac <= 0.5);
+          this.bar?.draw(fight.ghost, now, frac <= 0.5);
         }
         if (fight.kind === 'king' && this.throne.armed) this.kingSeen(fight, now);
         this.phases(fight, frac, now);
         this.ambient(fight, frac, now, dt);
       } else if (fight.id === this.primary || this.bar?.visible) {
         fight.ghost.update(0, now, dt, calm);
-        this.bar?.draw(fight.ghost, 0, fight.ht, now, false);
+        this.bar?.draw(fight.ghost, now, false);
       }
       if (frac <= 0.5 && !fight.rageSeen) fight.rageSeen = true;
     }
@@ -588,7 +676,7 @@ class BossFx {
     if (this.fights.size > 0 && [...this.fights.values()].every((f) => f.fell) && !this.bar?.visible) this.fights.clear();
   }
 
-  /** The king is first in sight: the throne room's light rises round him, in shafts and motes, and a ring of gold on the floor. */
+  /** The king is first in sight: the throne room's light rises round him (the accent light, the throne's beams on its pedestals, motes). */
   private kingSeen(f: Fight, now: number): void {
     const view = this.view!;
     const puppet = view.puppets.get(f.id);
@@ -597,10 +685,6 @@ class BossFx {
     if (!at) return;
     this.throne.armed = false;
     this.throne.start = now;
-    for (const [dx, dz, delay] of [[-1.1, -0.5, 0], [1.1, -0.5, 300], [0, -1.1, 600], [-0.4, 0.6, 900], [0.5, 0.7, 1200]] as const) {
-      emit.shaft(at.x + dx, at.z + dz, { color: '#ffe0a0', height: 3.4, width: 0.8, life: 5200, alpha: 0.2, delay });
-    }
-    emit.ring(at.x, at.z, { color: '#ffd070', from: 0.6, to: 4.4, life: 1800, alpha: 0.6 });
     emit.motes(at.x, at.z, 2.6, 14);
     audio.play('rumble', 1.2, 0.35);
     fx.shake(2, 500, now);
@@ -632,74 +716,126 @@ class BossFx {
     }
   }
 
-  /** What the arena does round the fight: the machine's sparks, smoke, falling dust and hissing pipes; the old god's glare; the king's light. */
+  /** Loops of the designer's art kept alive while their cause is in sight: each is put again a little before it runs out. */
+  private readonly loops = new Map<string, number>();
+
+  private loop(key: string, id: string, x: number, z: number, now: number, o: PlayOpts): boolean {
+    const next = this.loops.get(key) ?? 0;
+    if (now < next) return true;
+    const drawn = this.art(id, x, z, now, { ms: LOOP_MS, ...o });
+    if (drawn) this.loops.set(key, now + LOOP_MS - 300);
+    return drawn;
+  }
+
+  /** The wall cells of the level a vent stands at (every third wall cell facing the floor), found once for each floor. */
+  private vents: number[] | null = null;
+
+  private ventsOf(level: Level | undefined): number[] {
+    if (this.vents) return this.vents;
+    const out: number[] = [];
+    if (level) {
+      let n = 0;
+      for (let cell = WIDTH; cell < level.map.length - WIDTH; cell++) {
+        // A floor cell with a wall to its north: the pipe runs along the foot of that wall.
+        if (isFloor(level, cell) && !isFloor(level, cell - WIDTH) && n++ % 3 === 0) out.push(cell);
+      }
+    }
+    this.vents = out;
+    return out;
+  }
+
+  /** What the arena does round the fight: the machine's loops, falling dust and hissing pipes; the old god's glint; the king's throne. */
   private ambient(f: Fight, frac: number, now: number, dt: number): void {
     const view = this.view!;
     const puppet = view.puppets.get(f.id);
-    if (!puppet || quality.light && f.kind !== 'dm300') return;
+    if (!puppet || (quality.light && f.kind !== 'dm300')) return;
     const world = this.world!;
     const visible = seenCells(world, view.depth);
     if (!visible[puppet.to]) return;
     const at = this.cellFeet(puppet, now);
     if (!at) return;
     const height = Math.max(0.5, puppet.sprite.sheet.h / TILE);
+    const st = this.staging;
     if (f.kind === 'dm300') {
       const stage = damageStage(frac);
-      // Sparks and smoke off the body, more the more it is worn down.
-      const sparkEvery = [0, 2600, 1100, 450][stage]!;
-      const smokeEvery = [0, 1500, 650, 280][stage]!;
+      // The designer's loop over the body for the stage it is at (sparks and smoke, the worse ones lit), a third as big again as the sprite.
+      const loop = stageAt(st.dmStages, frac);
+      if (loop !== f.loop) {
+        if (f.loop >= 0) fxp.stop(st.dmStages[f.loop]!.fx, f.id);
+        f.loop = loop;
+        this.loops.delete(`dm:${f.id}`);
+        if (loop >= 0) audio.play('crackle', 0.9, 0.4);
+      }
+      const drawn = loop < 0 || this.loop(`dm:${f.id}`, st.dmStages[loop]!.fx, at.x, at.z - 0.5 + 0.0, now, { follow: f.id, lift: 0.55, scale: 1.3 });
+      // Sparks off the body now and then, as a blow throws them; and where the designer's art is not there, smoke as well.
+      const sparkEvery = [0, 3200, 1500, 650][stage]!;
       if (sparkEvery > 0 && now >= f.nextSpark) {
         f.nextSpark = now + sparkEvery * rnd(0.6, 1.4);
         emit.sparks(at.x + rnd(-0.4, 0.4), rnd(0.3, height * 0.9), at.z + rnd(-0.2, 0.2), 3 + stage * 2);
         if (stage >= 2) audio.play('crackle', rnd(1, 1.5), 0.18);
       }
-      if (smokeEvery > 0 && now >= f.nextSmoke) {
+      const smokeEvery = [0, 1500, 650, 280][stage]!;
+      if (!drawn && smokeEvery > 0 && now >= f.nextSmoke) {
         f.nextSmoke = now + smokeEvery * rnd(0.6, 1.4);
         emit.smoke(at.x + rnd(-0.35, 0.35), rnd(0.5, height), at.z + rnd(-0.15, 0.15), { dark: stage >= 2, n: 1, size: 0.28 + stage * 0.06, rise: 0.8, life: 1500 + stage * 300 });
       }
-      // The arena reacts: dust falls from the ceiling, and the pipes hiss steam. The fight's first fifth is quiet; it grows with the damage.
+      // The arena reacts: dust falls from the ceiling, and the pipes along the walls hiss steam (the designer's vents).
       if (now >= f.nextDust) {
         f.nextDust = now + [4200, 3200, 2200, 1200][stage]! * rnd(0.7, 1.3);
         emit.fallingDust(at.x, at.z, 3.6, 5 + stage * 3, stage >= 1 ? 1 + stage : 0);
         if (stage >= 2) audio.play('rumble', rnd(1.1, 1.6), 0.18);
       }
-      if (now >= f.nextSteam) {
-        f.nextSteam = now + [6500, 5000, 3600, 2200][stage]! * rnd(0.7, 1.3);
-        this.pipeHiss(at.x, at.z, world.levels[view.depth], visible);
-      }
+      this.steam(f, at.x, at.z, world.levels[view.depth], visible, now);
     } else if (f.kind === 'yog') {
-      // The eye looks about the room from time to time.
+      // The eye glints about every three seconds; now and then it glares, with a beam to the hero and a pulse of the screen's edge.
       if (now >= f.nextGlare) {
-        f.nextGlare = now + rnd(4200, 7600);
-        this.glare(f, now);
+        f.nextGlare = now + rnd(st.yogGlintEvery[0], st.yogGlintEvery[1]);
+        const drawn = this.art(st.yogGlint, at.x, at.z, now, { lift: height * 0.6 });
+        if (!drawn || ++f.glints % 4 === 0) this.glare(f, now);
       }
     } else if (f.kind === 'king') {
-      // Motes in the throne room's light.
-      if (now >= f.nextDust && now >= this.throne.start && this.throne.fall < 0) {
-        f.nextDust = now + 700;
-        emit.motes(at.x, at.z, 2.5, 4);
+      // The throne room's light stands on his two pedestals while he stands, and motes drift in it.
+      if (this.throne.start > 0 && this.throne.fall < 0) {
+        for (const cell of this.pedestals(world.levels[view.depth])) {
+          if (visible[cell]) this.loop(`throne:${cell}`, st.kingThrone, (cell % WIDTH) + 0.5, Math.trunc(cell / WIDTH) + 0.6, now, { lift: 0 });
+        }
+        if (now >= f.nextDust) {
+          f.nextDust = now + 700;
+          emit.motes(at.x, at.z, 2.5, 4);
+        }
       }
     }
     void dt;
   }
 
-  /** A jet of steam from a pipe: a wall cell near the fight whose floor lies in front of it. */
-  private pipeHiss(x: number, z: number, level: Level | undefined, visible: readonly boolean[]): void {
-    if (!level) return;
-    for (let tries = 0; tries < 14; tries++) {
-      const cx = Math.floor(x + rnd(-6, 6));
-      const cz = Math.floor(z + rnd(-5, 4));
-      if (cx < 1 || cz < 1 || cx >= WIDTH - 1) continue;
-      const cell = cx + cz * WIDTH;
-      // A floor cell with a wall to its north (the pipe runs along the wall's foot), in sight.
-      if (!visible[cell] || !isFloor(level, cell) || isFloor(level, cell - WIDTH)) continue;
-      emit.steamJet(cx + 0.5, 0.75, cz + 0.12, rnd(-0.5, 0.5), 1, 900);
-      audio.play('gust', rnd(1.5, 2.1), 0.22);
-      return;
+  /** The two pedestals of the hall (where the king summons from, and the throne's light stands). */
+  private pedestals(level: Level | undefined): number[] {
+    if (this.pedestalCells) return this.pedestalCells;
+    const out: number[] = [];
+    if (level) for (let cell = 0; cell < level.map.length; cell++) if (level.map[cell] === T.PEDESTAL) out.push(cell);
+    this.pedestalCells = out;
+    return out;
+  }
+  private pedestalCells: number[] | null = null;
+
+  /** Steam from the pipes near the fight, the nearest few in sight; and the hiss of one now and then. */
+  private steam(f: Fight, x: number, z: number, level: Level | undefined, visible: readonly boolean[], now: number): void {
+    const near: Array<{ cell: number; d: number }> = [];
+    for (const cell of this.ventsOf(level)) {
+      if (!visible[cell]) continue;
+      const d = Math.hypot((cell % WIDTH) + 0.5 - x, Math.trunc(cell / WIDTH) + 0.5 - z);
+      if (d < 9) near.push({ cell, d });
+    }
+    near.sort((a, b) => a.d - b.d);
+    const steam = this.staging.steam;
+    for (const { cell } of near.slice(0, 6)) this.loop(`steam:${cell}`, steam, (cell % WIDTH) + 0.5, Math.trunc(cell / WIDTH) + 0.55, now, { lift: 0 });
+    if (near.length > 0 && now >= f.nextSteam) {
+      f.nextSteam = now + rnd(2600, 5200);
+      audio.play('gust', rnd(1.5, 2.1), 0.2);
     }
   }
 
-  /** The eye's glare: it flares, a beam runs to the hero, the screen's edges pulse. */
+  /** The eye's glare: a beam runs to the hero, the screen's edges pulse (the glint itself is the designer's, above). */
   private glare(f: Fight, now: number): void {
     const view = this.view!;
     const world = this.world!;
@@ -711,7 +847,7 @@ class BossFx {
     const at = this.cellFeet(puppet, now);
     if (!at) return;
     const height = Math.max(0.5, puppet.sprite.sheet.h / TILE);
-    emit.glareFlare(at.x, height * 0.55, at.z);
+    if (!fxp.has(this.staging.yogGlint)) emit.glareFlare(at.x, height * 0.55, at.z);
     const me = world.heroes.find((h) => h.depth === view.depth && h.hp > 0);
     if (me) {
       const to = cellOf(me.pos);
@@ -725,6 +861,7 @@ class BossFx {
   /** Bodies that came up out of the floor in this fight: dwarves from the king's summons, the fists of the old god. */
   private risers(view: View, now: number): void {
     if (this.fights.size === 0) return;
+    const st = this.staging;
     for (const puppet of view.puppets.values()) {
       if (!RISERS.has(puppet.kind) || !puppet.alive || this.riserSeen.has(puppet.id)) continue;
       this.riserSeen.add(puppet.id);
@@ -732,27 +869,34 @@ class BossFx {
       // Only what comes in a summoning or in the fists' entrance rises; one already there (a game loaded in the fight) just stands.
       if (!(undead ? now - this.summonAt < 1800 : now - this.fistsAt < 3600)) continue;
       const order = undead ? 0 : this.fistsDone++;
-      const delay = undead ? rnd(0, 260) : 420 + order * 520;
+      const delay = undead ? 0 : 420 + order * 520;
       const state = this.stateOf(puppet.id, puppet.kind);
-      state.riseAt = now + delay;
-      state.riseMs = undead ? 780 : 640;
       const at = this.cellFeet(puppet, now);
       if (!at) continue;
+      if (undead) {
+        // The designer's rising (its light, its green) plays on the cell for six frames, and the dwarf stands up out of it.
+        const drawn = this.art(st.kingSummon, at.x, at.z, now + delay);
+        state.riseAt = now + (drawn ? 480 : 0);
+        state.riseMs = drawn ? 320 : 780;
+        if (!drawn) this.later(now, () => emit.riseBurst(at.x, at.z, { bone: true, color: '#b8ffb0', n: 10 }));
+        this.later(now + 200, () => audio.play('bones', rnd(0.8, 1.1), 0.5));
+        continue;
+      }
+      state.riseAt = now + delay;
+      state.riseMs = 640;
       this.later(now + delay, () => {
-        if (undead) {
-          emit.riseBurst(at.x, at.z, { bone: true, color: '#b8ffb0', n: 10 });
-          audio.play('bones', rnd(0.8, 1.1), 0.5);
-          return;
+        const drawn = this.art(st.yogFists[puppet.kind] ?? '', at.x, at.z, now + delay);
+        if (!drawn) {
+          const burning = puppet.kind === 'burningFist';
+          emit.riseBurst(at.x, at.z, { bone: false, color: burning ? '#ff9040' : '#8be04a', n: 16 });
+          if (burning) emit.explosion(at.x, 0.3, at.z, 0.8);
+          else emit.slimeSplatter(at.x, at.z, 0.2, 0.6);
+          emit.shockwave(at.x, at.z, 2.4, burning ? ['#ff9040', '#ffe9a0'] : ['#8be04a', '#c8ff9a'], 2);
+          fx.shake(5, 380, now + delay);
         }
-        const burning = puppet.kind === 'burningFist';
-        emit.riseBurst(at.x, at.z, { bone: false, color: burning ? '#ff9040' : '#8be04a', n: 16 });
-        if (burning) emit.explosion(at.x, 0.3, at.z, 0.8);
-        else emit.slimeSplatter(at.x, at.z, 0.2, 0.6);
-        emit.shockwave(at.x, at.z, 2.4, burning ? ['#ff9040', '#ffe9a0'] : ['#8be04a', '#c8ff9a'], 2);
-        fx.shake(5, 380, now + delay);
         audio.play('rocks', 0.7, 0.8);
       });
-      if (!undead) this.pushFor(puppet.id, { at: now + delay, inMs: 300, holdMs: 100, outMs: 500, amount: 0.04, slide: 0 });
+      this.pushFor(puppet.id, { at: now + delay, inMs: 300, holdMs: 100, outMs: 500, amount: 0.04, slide: 0 });
     }
   }
   private readonly riserSeen = new Set<string>();
@@ -770,7 +914,10 @@ class BossFx {
       const c = cellOf(body.cell);
       // Only once the death has played out (the body is laid when its picture has played its last frame).
       if (body.at !== undefined && now < body.at) continue;
-      emit.smoke(c.x + rnd(-0.3, 0.3), 0.3, c.z + rnd(-0.15, 0.1), { dark: Math.random() < 0.6, n: 1, size: 0.3, rise: 0.7, life: 2800 });
+      // The designer's worst loop (sparks, black smoke, the glow of a fire) stays over it, and our smoke rises from it.
+      const stages = this.staging.dmStages;
+      this.loop(`wreck:${body.cell}`, stages[stages.length - 1]!.fx, c.x, c.z, now, { lift: 0.4 });
+      emit.smoke(c.x + rnd(-0.3, 0.3), 0.3, c.z + rnd(-0.15, 0.1), { dark: false, n: 1, size: 0.3, rise: 0.7, life: 2800 });
       if (Math.random() < 0.18) emit.sparks(c.x + rnd(-0.3, 0.3), 0.3, c.z, 3);
       if (Math.random() < 0.25) bossVfx.emit({ x: c.x + rnd(-0.3, 0.3), y: 0.12, z: c.z + rnd(-0.1, 0.1), life: 900, size: 0.1, color: '#ff6a20', alpha: 0.8, glow: true, soft: true });
     }
@@ -794,7 +941,7 @@ class BossFx {
     if (this.states.size === 0) return null;
     const state = this.states.get(puppet.id);
     if (!state || state.kind !== puppet.kind) return null;
-    return lookOf(state, now, quality.reducedMotion, this.look);
+    return lookOf(state, now, quality.reducedMotion, this.look, this.staging);
   }
 
   /**
@@ -899,7 +1046,9 @@ class BossFx {
     if (age >= shown.hold) node.classList.add('out');
     node.style.visibility = '';
     const layerBox = this.host?.getBoundingClientRect();
-    const barBottom = this.bar?.visible && layerBox ? (this.bar.bottom() - layerBox.top) / scale : 0;
+    // Under the bar if it is up, else under the HUD (main.ts keeps its bottom in --hud-bottom).
+    const hudBottom = parseFloat(document.documentElement.style.getPropertyValue('--hud-bottom')) || 0;
+    const barBottom = this.bar?.visible && layerBox ? (this.bar.bottom() - layerBox.top) / scale : hudBottom / scale;
     const anchor = anchorOf(shown.line.id);
     const w = node.offsetWidth;
     const h = node.offsetHeight;
@@ -968,6 +1117,13 @@ class BossFx {
     return puppet ? this.cellFeet(puppet, fx.now) : null;
   }
 
+  /** The middle of a puppet's cell, in cells. */
+  private cellCenter(puppet: Puppet, now: number): { x: number; z: number } | null {
+    if (!this.view) return null;
+    const p = this.view.positionInto(puppet, now, SCRATCH);
+    return { x: (p.x + TILE / 2) / TILE, z: (p.y + TILE / 2) / TILE };
+  }
+
   /** Where a puppet's feet are, in cells. */
   private cellFeet(puppet: Puppet, now: number): { x: number; z: number } | null {
     if (!this.view) return null;
@@ -991,6 +1147,9 @@ class BossFx {
     this.pendingRepair.clear();
     this.lastRepairHp.clear();
     this.wreckAt.clear();
+    this.loops.clear();
+    this.vents = null;
+    this.pedestalCells = null;
     this.riserSeen.clear();
     this.wreckNext.clear();
     this.focus.ok = false;
