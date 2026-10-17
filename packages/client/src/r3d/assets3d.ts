@@ -172,9 +172,10 @@ export function buildTerrain(images: RegionImages, kit: Kit, region: number): Te
 
 /**
  * A prop that stands over the floor in PD's tiles (high grass, fungi, a signpost) cut out of its tile: what differs from the plain
- * floor beside it stays, the rest goes clear. Returns the cut-out and, where the region makes it glow, its glow, 16 x 16 each.
+ * floor beside it stays, the rest goes clear (`tolerance`: how far, summed over the three colour channels, a pixel may be from the floor's and still
+ * be floor; a statue's tile is drawn on the exact floor tile, so a card prop is cut with a small one and keeps its grey pedestal). Returns the cut-out and, where the region makes it glow, its glow, 16 x 16 each.
  */
-export function propCutout(images: RegionImages, tile: number, floorTile: number): { color: HTMLCanvasElement; glow: HTMLCanvasElement } {
+export function propCutout(images: RegionImages, tile: number, floorTile: number, tolerance = 40): { color: HTMLCanvasElement; glow: HTMLCanvasElement } {
   const cols = images.tiles.width / 16;
   const read = (image: HTMLImageElement, t: number): ImageData => {
     const { g } = canvasOf(image.width, image.height);
@@ -188,7 +189,7 @@ export function propCutout(images: RegionImages, tile: number, floorTile: number
   const glowOut = canvasOf(16, 16);
   for (let i = 0; i < prop.data.length; i += 4) {
     const d = Math.abs(prop.data[i]! - floor.data[i]!) + Math.abs(prop.data[i + 1]! - floor.data[i + 1]!) + Math.abs(prop.data[i + 2]! - floor.data[i + 2]!);
-    const on = d > 40;
+    const on = d > tolerance;
     prop.data[i + 3] = on ? 255 : 0;
     const k = on ? glow.data[i + 3]! / 255 : 0;
     glow.data[i] = glow.data[i]! * k;

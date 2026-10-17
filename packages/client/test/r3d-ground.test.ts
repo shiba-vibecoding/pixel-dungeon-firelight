@@ -3,6 +3,7 @@ import { Texture } from 'three';
 import { fx } from '../src/fx';
 import sharp from 'sharp';
 import { type Footprint, MAX_GAP, footprintOfAlpha, gapOfAlpha, gapRows } from '../src/r3d/feet';
+import { subImageSupported } from '../src/r3d/texsub';
 import { type Contact, WATER_BLOB, WATER_CONTACT, contactAt, pixelDepth } from '../src/r3d/contact';
 import { Tufts, TUFT_CAPACITY } from '../src/r3d/grass3d';
 import { makeAir } from '../src/r3d/fogofwar';
@@ -190,5 +191,49 @@ describe('the contact shadow touches the soles (contact.ts)', () => {
       }
     }
     expect(frames).toBeGreaterThan(40);
+  });
+});
+
+describe('the rectangle uploads fall back to whole textures when unsure (texsub.ts)', () => {
+  const fakeRenderer = (gl: unknown): Parameters<typeof subImageSupported>[0] =>
+    ({ getContext: () => gl, state: { bindTexture: () => undefined, unbindTexture: () => undefined } }) as unknown as Parameters<typeof subImageSupported>[0];
+
+  it('says no for a context that is not WebGL 2, one that throws, and one that gives back the wrong pixels', () => {
+    expect(subImageSupported(fakeRenderer({}))).toBe(false);
+    expect(subImageSupported(fakeRenderer({ texStorage2D: () => undefined, readPixels: () => undefined, getError: () => { throw new Error('lost'); } }))).toBe(false);
+    // A card that takes the calls but returns zeros (the rectangle never landed).
+    const gl: Record<string, unknown> = {
+      texStorage2D: () => undefined, readPixels: () => undefined, getError: () => 0, NO_ERROR: 0, createTexture: () => ({}), createFramebuffer: () => ({}),
+      pixelStorei: () => undefined, texImage2D: () => undefined, texParameteri: () => undefined, texSubImage2D: () => undefined, getParameter: () => null,
+      bindFramebuffer: () => undefined, framebufferTexture2D: () => undefined, checkFramebufferStatus: () => 36053, FRAMEBUFFER_COMPLETE: 36053,
+      deleteFramebuffer: () => undefined, deleteTexture: () => undefined,
+    };
+    expect(subImageSupported(fakeRenderer(gl))).toBe(false);
+  });
+
+  it('says yes for a context that puts the rectangle where it should (flipped) and remembers the answer', () => {
+    // A 4 x 4 texture kept in memory, written by texSubImage2D with the flip, read by readPixels.
+    const tex = new Uint8Array(4 * 4 * 4);
+    let flip = false;
+    let calls = 0;
+    const gl: Record<string, unknown> = {
+      texStorage2D: () => undefined, getError: () => 0, NO_ERROR: 0, createTexture: () => ({}), createFramebuffer: () => ({}),
+      UNPACK_FLIP_Y_WEBGL: 1, pixelStorei: (k: number, v: boolean) => { if (k === 1) flip = v; },
+      texImage2D: () => { calls++; tex.fill(0); },
+      texParameteri: () => undefined,
+      texSubImage2D: (_t: number, _l: number, x: number, y: number, w: number, h: number, _f: number, _ty: number, data: Uint8Array) => {
+        for (let row = 0; row < h; row++) for (let col = 0; col < w; col++) {
+          const from = ((flip ? h - 1 - row : row) * w + col) * 4;
+          for (let c = 0; c < 4; c++) tex[((y + row) * 4 + x + col) * 4 + c] = data[from + c]!;
+        }
+      },
+      getParameter: () => null, bindFramebuffer: () => undefined, framebufferTexture2D: () => undefined, checkFramebufferStatus: () => 1, FRAMEBUFFER_COMPLETE: 1,
+      readPixels: (x: number, y: number, _w: number, _h: number, _f: number, _t: number, out: Uint8Array) => { for (let c = 0; c < 4; c++) out[c] = tex[(y * 4 + x) * 4 + c]!; },
+      deleteFramebuffer: () => undefined, deleteTexture: () => undefined,
+    };
+    const renderer = fakeRenderer(gl);
+    expect(subImageSupported(renderer)).toBe(true);
+    expect(subImageSupported(renderer)).toBe(true);
+    expect(calls).toBe(1);
   });
 });

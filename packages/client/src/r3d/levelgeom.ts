@@ -46,6 +46,8 @@ export interface GeomKit {
   /** How far the exit's steps go down (negative) and the entrance's rise, in cells. */
   stairsDown: number;
   stairsUp: number;
+  /** How high the stone base of a prop stands (a statue, a bookshelf, a barricade: the figure itself is a card over it, world3d.ts), cells. */
+  base: number;
   /** How high a cut-away wall stands (see `LevelGeom.isCut`), cells. */
   cut: number;
 }
@@ -57,7 +59,10 @@ export interface GeomKit {
  */
 export const FRONT_WALL_H = 0.95;
 
-export const DEFAULT_GEOM: GeomKit = { cut: FRONT_WALL_H, wall: 1.5, door: 1.25, statue: 1.2, bookshelf: 1.4, barricade: 1.0, well: 0.4, chasm: -3, water: -0.06, stairsDown: -0.5, stairsUp: 0.5 };
+/** The stone base a statue, a bookshelf or a barricade stands on, cells: low, so that the figure (a card of its tile) is what is seen. */
+export const PROP_BASE = 0.1;
+
+export const DEFAULT_GEOM: GeomKit = { base: PROP_BASE, cut: FRONT_WALL_H, wall: 1.5, door: 1.25, statue: 1.2, bookshelf: 1.4, barricade: 1.0, well: 0.4, chasm: -3, water: -0.06, stairsDown: -0.5, stairsUp: 0.5 };
 
 /** How high a wall's lower face goes: the kit's face is a cell, and the rest of the wall's height is the upper half cell. */
 const FACE_CELL = 1;
@@ -82,8 +87,9 @@ export function shapesFor(kit: GeomKit): readonly Shape[] {
     let shape: Shape = { kind: K_FLOOR, h: 0, side: t, lowerH: 0, upper: -1, top: t };
     if (t >= T.WATER_TILES && t <= T.WATER) shape = { kind: K_WATER, h: kit.water, side: t, lowerH: 0, upper: -1, top: t };
     else if (flags & F.PIT) shape = { kind: K_CHASM, h: kit.chasm, side: t, lowerH: 0, upper: -1, top: t };
-    else if (t === T.BARRICADE) shape = { kind: K_LOW, h: kit.barricade, side: t, lowerH: kit.barricade, upper: -1, top: -2 };
-    else if (t === T.BOOKSHELF) shape = { kind: K_LOW, h: kit.bookshelf, side: t, lowerH: kit.bookshelf, upper: -1, top: -2 };
+    // A barricade, a bookshelf, a statue: a low stone base, and the prop itself a card of its tile at its true pixel scale standing on it
+    // (world3d.ts addProps). The tile on the faces of a block 1.2 high was squeezed by the camera into a strip a few pixels deep.
+    else if (t === T.BARRICADE || t === T.BOOKSHELF) shape = { kind: K_LOW, h: kit.base, side: FACE_WALL, lowerH: kit.base, upper: -1, top: -2 };
     else if (flags & F.SOLID && flags & F.LOS_BLOCKING) {
       const door = t === T.DOOR || t === T.LOCKED_DOOR;
       shape = {
@@ -91,8 +97,9 @@ export function shapesFor(kit: GeomKit): readonly Shape[] {
         side: door ? t : t === T.WALL_DECO ? FACE_DECO : FACE_WALL,
         lowerH: door ? kit.door : FACE_CELL, upper: FACE_UPPER, top: -1,
       };
-    } else if (flags & F.SOLID) shape = { kind: K_LOW, h: kit.statue, side: t, lowerH: kit.statue, upper: -1, top: -2 };
-    else if (t === T.WELL) shape = { kind: K_LOW, h: kit.well, side: t, lowerH: kit.well, upper: -1, top: t };
+    } else if (flags & F.SOLID) shape = { kind: K_LOW, h: kit.base, side: FACE_WALL, lowerH: kit.base, upper: -1, top: -2 };
+    // The well: a stone rim, and its own tile on top.
+    else if (t === T.WELL) shape = { kind: K_LOW, h: kit.well, side: FACE_WALL, lowerH: kit.well, upper: -1, top: t };
     shapes.push(shape);
   }
   return shapes;
@@ -129,7 +136,7 @@ const TREAD_ROWS = [5, 5, 6] as const;
 /** The first row of each tread's slice of the tile, counted from the tile's top (north): the northern tread has the top rows. */
 const TREAD_TOP = [11, 6, 0] as const;
 /** The brightness down the stairwell, from its rim (1) to its far end, and up the entrance (a little light from above). */
-const wellShade = (t: number): number => 1 - 0.7 * t ** 1.1;
+const wellShade = (t: number): number => 1 - 0.5 * t ** 1.1;
 const riseShade = (t: number): number => 0.9 + 0.26 * t;
 
 /** Plain wall: no floor under it, and nothing ever changes it but a rebuild. */
@@ -466,7 +473,7 @@ export class LevelGeom {
     const y = shape.kind === K_CHASM ? this.kit.chasm : isStairsDown(this.terrain[cell]!) ? this.kit.stairsDown : 0;
     // A box on the cell hides its floor; the tile there is the plain floor, for the day it opens. An open door is a gap in the wall: the
     // floor shows, not the original's picture of a frame (a pale stone portal round the doorway). Stairs stand on plain floor (their tile is on their steps).
-    const tile = shape.kind === K_WALL || shape.kind === K_LOW || stairs || this.terrain[cell] === T.OPEN_DOOR ? T.EMPTY : shape.kind === K_CHASM ? T.CHASM : (this.under.get(this.terrain[cell]!) ?? this.terrain[cell]!);
+    const tile = shape.kind === K_WALL || shape.kind === K_LOW || stairs || this.terrain[cell] === T.OPEN_DOOR ? (this.terrain[cell] === T.STATUE_SP ? T.EMPTY_SP : T.EMPTY) : shape.kind === K_CHASM ? T.CHASM : (this.under.get(this.terrain[cell]!) ?? this.terrain[cell]!);
     tileRect(tile, this.cols, this.rows, rect);
     set12(x, y, z + 1, x + 1, y, z + 1, x + 1, y, z, x, y, z);
     const v = slot * 4;

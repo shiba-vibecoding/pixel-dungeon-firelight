@@ -5,7 +5,7 @@
  */
 import { CanvasTexture, DataTexture, NearestFilter, RGBAFormat, SRGBColorSpace, UnsignedByteType, Vector2, type WebGLRenderer } from 'three';
 import { RectPacker } from './packer';
-import { subImage } from './texsub';
+import { subImage, subImageSupported } from './texsub';
 
 export const ATLAS_W = 2048;
 export const ATLAS_H = 1024;
@@ -75,7 +75,8 @@ export class Atlas {
   flush(renderer?: WebGLRenderer): void {
     if (!this.dirty) return;
     this.dirty = false;
-    if (!renderer || !this.onCard) {
+    // (A card that cannot take a rectangle (texsub.ts) is sent the whole atlas, as it was before the rectangles.)
+    if (!renderer || !this.onCard || !subImageSupported(renderer)) {
       this.pending.length = 0;
       this.onCard = renderer !== undefined;
       this.color.needsUpdate = true;

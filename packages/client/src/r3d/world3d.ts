@@ -35,7 +35,7 @@ import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrai
 import { Effects3D, type FxContext, parseCss } from './effects3d';
 import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, type MistKit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
-import { type Buffers, doorLeafBuffers, FRONT_WALL_H, type GeomKit, K_WALL, K_WATER, LevelGeom } from './levelgeom';
+import { type Buffers, doorLeafBuffers, FRONT_WALL_H, type GeomKit, K_WALL, K_WATER, LevelGeom, PROP_BASE } from './levelgeom';
 import { DoorSwing, writeLeafMatrix } from './doorswing';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
 import { TIERS, type Tier } from './governor';
@@ -125,6 +125,8 @@ const FLYERS: ReadonlySet<string> = new Set(['bat', 'eye', 'bee', 'swarm']);
 /** The tile props of the region that stand over the floor (high grass, fungi; a signpost) are cut out of. */
 const HIGH_GRASS = 15;
 const SIGN = 29;
+/** The props that stand on a low stone base as a card of their tile (a statue, the special room's statue, a bookshelf, a barricade, a boss's locked exit) and the floor under each. */
+const CARD_PROPS: ReadonlyArray<readonly [number, number]> = [[35, 1], [36, 14], [41, 1], [13, 1], [25, 1]];
 /** A prop is drawn only this near the hero, cells. */
 const PROP_REACH = 11;
 /** A torch out of sight keeps its halo this near the hero, cells. */
@@ -328,6 +330,9 @@ export class World3D {
   private grassCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
   private shortCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
   private signCut: { color: HTMLCanvasElement; glow: HTMLCanvasElement } | null = null;
+  /** The cut-out of each card prop's tile, by terrain, and where they stand in this level. */
+  private readonly cardCuts = new Map<number, { color: HTMLCanvasElement; glow: HTMLCanvasElement }>();
+  private cards: number[] = [];
 
   // Characters.
   private readonly sprites: InstancedMesh;
@@ -404,6 +409,12 @@ export class World3D {
     this.options = options;
     this.tier = options.tier;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance', stencil: false });
+    // The sprite atlas is 2048 wide: a card that cannot hold a texture of that size would draw it as garbage (squares); it stays in 2D (main.ts
+    // falls back when this throws), as does a device without WebGL 2 (three r169 needs it: the renderer above has already thrown there).
+    if (this.renderer.capabilities.maxTextureSize < ATLAS_W) {
+      this.renderer.dispose();
+      throw new Error(`3D needs textures ${ATLAS_W} wide, this card takes ${this.renderer.capabilities.maxTextureSize}`);
+    }
     this.renderer.setPixelRatio(1);
     // Nothing blows out to white: light is compressed above 0.8, as the kit's frames are, and the pixel art keeps its colours below.
     this.renderer.toneMapping = NeutralToneMapping;
@@ -654,7 +665,7 @@ export class World3D {
     const stairs = (key: string, fallback: number): number => (this.kit.materials[key] ? m(key) : fallback);
     return {
       wall: m('wall_face'), door: m('door'), statue: m('statue'), bookshelf: m('bookshelf'), barricade: m('barricade'), well: m('well'), chasm: m('chasm'), water: m('water'),
-      stairsDown: stairs('stairs_down', -0.5), stairsUp: stairs('stairs_up', 0.5), cut: FRONT_WALL_H,
+      stairsDown: stairs('stairs_down', -0.5), stairsUp: stairs('stairs_up', 0.5), cut: FRONT_WALL_H, base: PROP_BASE,
     };
   }
 
@@ -779,6 +790,8 @@ export class World3D {
     this.shortCut = propCutout(images, T.GRASS, T.EMPTY);
     this.measureFloor(images);
     this.signCut = propCutout(images, SIGN, 1);
+    this.cardCuts.clear();
+    for (const [tile, floor] of CARD_PROPS) this.cardCuts.set(tile, propCutout(images, tile, floor, 6));
   }
 
   /** The average colour of the region's plain floor tile, in linear light. */
@@ -822,10 +835,12 @@ export class World3D {
   /** Which cells of the level carry a signpost and which high grass; the grass batch follows the map (trampled grass folds flat). */
   private scanProps(snap = false): void {
     this.props = [];
+    this.cards = [];
     this.grassCells.length = 0;
     const g = this.geom!;
     for (let i = 0; i < LENGTH; i++) {
       if (g.terrain[i] === SIGN) this.props.push(i);
+      else if (this.cardCuts.has(g.terrain[i]!)) this.cards.push(i);
       else if (g.terrain[i] === HIGH_GRASS) this.grassCells.push(i);
     }
     this.grass?.set(this.grassCells, this.lastNow, snap);
@@ -1852,6 +1867,20 @@ export class World3D {
       const z = Math.trunc(cell / WIDTH);
       if (Math.abs(x + 0.5 - hx) > PROP_REACH || Math.abs(z + 0.5 - hz) > PROP_REACH) continue;
       this.sprite(this.signCut!.color, 0, 0, 16, 16, false, x + 0.5, 0, z + 0.62, 1, 1, 1, LEANED, 0, this.signCut!.glow);
+    }
+    // A statue, a bookshelf, a barricade: the tile of the region cut out of its floor, upright on its cell at its true pixel scale as a figure
+    // is (leaned, a shadow under it), over a low stone base. A card is opaque where the art is, so a shelf still hides what is behind it.
+    const cards = this.cards;
+    for (let i = 0; i < cards.length; i++) {
+      const cell = cards[i]!;
+      if (!f.explored[cell]) continue;
+      const x = cell % WIDTH;
+      const z = Math.trunc(cell / WIDTH);
+      if (Math.abs(x + 0.5 - hx) > PROP_REACH || Math.abs(z + 0.5 - hz) > PROP_REACH) continue;
+      const cut = this.cardCuts.get(this.geom!.terrain[cell]!);
+      if (!cut) continue;
+      this.effects.shadowBlob(x + 0.5, z + 0.86, 0.9, 0.4, this.kit.sprites.shadow.squash, PROP_BASE);
+      this.sprite(cut.color, 0, 0, 16, 16, false, x + 0.5, PROP_BASE, z + 0.86, 1, 1, 1, LEANED, 0, cut.glow);
     }
   }
 

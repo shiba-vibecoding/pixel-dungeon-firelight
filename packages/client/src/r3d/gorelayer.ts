@@ -13,7 +13,7 @@ import { HEIGHT, WIDTH } from '@pd/core';
 import { CHUNK, chunkPixels, faceShows, type GoreData, groundCell, POOL, shade, type Splat, WALL } from '../gore';
 import { seeded } from './bodyart';
 import { type AirUniforms, withFog } from './fogofwar';
-import { subImage } from './texsub';
+import { subImage, subImageSupported } from './texsub';
 import { still } from './quadbatch';
 
 const CELL = 16;
@@ -90,7 +90,7 @@ class Sheet {
 
   /** Sends what was painted (once a frame). */
   flush(renderer: WebGLRenderer): void {
-    if (this.whole || !this.onCard || (this.forceFull && this.x1 >= this.x0)) {
+    if (this.whole || !this.onCard || !subImageSupported(renderer) || (this.forceFull && this.x1 >= this.x0)) {
       this.whole = false;
       this.onCard = true;
       this.x0 = 1e9;

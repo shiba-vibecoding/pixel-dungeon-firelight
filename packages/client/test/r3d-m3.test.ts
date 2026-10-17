@@ -4,7 +4,7 @@ import { LENGTH, T, WIDTH, createWorld, levelAt } from '@pd/core';
 import { bloomWeights } from '../src/r3d/post';
 import { TIERS } from '../src/r3d/governor';
 import { blankMirror, makeMirrorUniforms, Mirror } from '../src/r3d/mirror';
-import { FRONT_WALL_H, K_FLOOR, K_WALL, K_WATER, LevelGeom, tileRect } from '../src/r3d/levelgeom';
+import { FRONT_WALL_H, K_FLOOR, K_LOW, K_WALL, K_WATER, LevelGeom, PROP_BASE, tileRect } from '../src/r3d/levelgeom';
 import { FOLD_MS, Grass, crossedQuads, grassHeight } from '../src/r3d/grass3d';
 import { makeAir } from '../src/r3d/fogofwar';
 import { GOLD_ORE, GOLD_REGION, orePixels } from '../src/r3d/ore';
@@ -422,5 +422,29 @@ describe('the front walls are lower (levelgeom.ts isCut)', () => {
     side[6 * WIDTH + 2] = T.DOOR;
     const g2 = new LevelGeom(side, 16, 16);
     expect(g2.doorScale(2, 6)).toBe(1);
+  });
+});
+
+describe('statues, shelves and barricades are cards over a low base (levelgeom.ts)', () => {
+  it('makes a low stone base of each, not a block with the tile stretched over its faces', () => {
+    const map = new Array<number>(LENGTH).fill(T.WALL);
+    for (let z = 3; z <= 8; z++) for (let x = 3; x <= 15; x++) map[x + z * WIDTH] = T.EMPTY;
+    const props = [T.STATUE, T.STATUE_SP, T.BOOKSHELF, T.BARRICADE];
+    props.forEach((t, k) => { map[5 + k * 2 + 5 * WIDTH] = t; });
+    const geom = new LevelGeom(map, 16, 16);
+    props.forEach((t, k) => {
+      const x = 5 + k * 2;
+      expect(geom.kinds[x + 5 * WIDTH], `kind of ${t}`).toBe(K_LOW);
+      expect(geom.shapeOf(t).h, `height of ${t}`).toBe(PROP_BASE);
+      // The highest point over its cell is the base.
+      const { pos, verts } = geom.boxes;
+      let top = 0;
+      for (let v = 0; v < verts; v++) {
+        const px = pos[v * 3]!;
+        const pz = pos[v * 3 + 2]!;
+        if (px >= x && px <= x + 1 && pz >= 5 && pz <= 6) top = Math.max(top, pos[v * 3 + 1]!);
+      }
+      expect(top, `top of ${t}`).toBeCloseTo(PROP_BASE, 6);
+    });
   });
 });
