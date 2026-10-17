@@ -17,6 +17,8 @@ import { iconFor, type Icon } from './srcicon';
 import type { Source } from './hurtsrc';
 import { idleFx } from './idlefx';
 import { haptic } from './telegram';
+import type { Aura } from './growth';
+import { AuraCache } from './growthcache';
 
 /*
  * What the player sees, as opposed to what the world is: characters slide
@@ -90,6 +92,9 @@ export interface Puppet extends Turnable {
   look?: Look;
   /** The weapon in a hero's hand (an item kind; a held thrown stack or the boomerang too), drawn in the hand (held.ts); undefined for bare fists and for monsters. */
   weapon?: ItemKind;
+  /** What the hero's weapon, armour and curses show on his figure in 3D (part 11), worked out only when his gear changes (growthcache.ts). */
+  aura?: Aura;
+  growth?: AuraCache;
   /** A boomerang thrown is not in the hand from `heldAwayFrom` until it is back (`heldAwayUntil`). */
   heldAwayFrom?: number;
   heldAwayUntil?: number;
@@ -497,6 +502,7 @@ export class View {
         puppet.levitating = (hero.levitating ?? 0) > 0;
         puppet.row = hero.armor ? itemDef(hero.armor.kind).tier ?? 0 : 0;
         puppet.weapon = hero.weapon?.kind;
+        puppet.aura = (puppet.growth ??= new AuraCache()).get(hero);
         puppet.label = hero.id === myId ? '' : hero.name;
       }
     }
