@@ -100,12 +100,12 @@ export function swingAngle(leaf: Pick<Leaf, 'from' | 'to' | 'opening' | 'ms'>, e
 
 const isDoor = (terrain: number): boolean => terrain === T.DOOR || terrain === T.LOCKED_DOOR || terrain === T.OPEN_DOOR;
 
-/** Writes a leaf's instance matrix (column-major, 16 floats at `at`): the hinge pin placed, turned by `angle`; `scale` 0 hides it. */
-export function writeLeafMatrix(m: Float32Array, at: number, px: number, pz: number, angle: number, scale: number): void {
+/** Writes a leaf's instance matrix (column-major, 16 floats at `at`): the hinge pin placed, turned by `angle`; `scale` 0 hides it, `tall` (a share of the height) cuts the leaf down with the walls beside it. */
+export function writeLeafMatrix(m: Float32Array, at: number, px: number, pz: number, angle: number, scale: number, tall = 1): void {
   const c = Math.cos(angle) * scale;
   const s = Math.sin(angle) * scale;
   m[at] = c; m[at + 1] = 0; m[at + 2] = -s; m[at + 3] = 0;
-  m[at + 4] = 0; m[at + 5] = scale; m[at + 6] = 0; m[at + 7] = 0;
+  m[at + 4] = 0; m[at + 5] = scale * tall; m[at + 6] = 0; m[at + 7] = 0;
   m[at + 8] = s; m[at + 9] = 0; m[at + 10] = c; m[at + 11] = 0;
   m[at + 12] = px; m[at + 13] = 0; m[at + 14] = pz; m[at + 15] = 1;
 }

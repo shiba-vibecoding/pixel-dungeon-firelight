@@ -101,7 +101,8 @@ describe('a level as geometry', () => {
     const geom = new LevelGeom(mapOf([[20, 20, T.EMPTY]]), COLS, ROWS);
     expect(geom.quads.floor).toBe(1);
     // Eight walls around the cell, each with a top; the four that touch the cell show a side to it, in two parts (the face and the upper half cell).
-    expect(geom.quads.boxes).toBe(8 + 4 * 2);
+    // (The wall to its south is a front wall, cut below the face's upper half: one quad of face, not two.)
+    expect(geom.quads.boxes).toBe(8 + 4 * 2 - 1);
     // And the kit's contact shadow on the floor under each of the four.
     expect(geom.quads.decals).toBe(4);
     expect(geom.quads.water).toBe(0);
@@ -129,7 +130,8 @@ describe('a level as geometry', () => {
     const geom = new LevelGeom(mapOf(carve), COLS, ROWS);
     expect(geom.quads.floor).toBe(25);
     // The rim: a ring of walls around a 5 x 5 room is 7 x 7 - 25 = 24 cells, each with a top; its 20 orthogonal neighbours show a side (two quads).
-    expect(geom.quads.boxes).toBe(24 + 20 * 2);
+    // (The five of the south wall are front walls: one quad of face each.)
+    expect(geom.quads.boxes).toBe(24 + 20 * 2 - 5);
     expect(geom.quads.decals).toBe(20);
     expect(geom.boxes.indices).toBe(geom.quads.boxes * 6);
     // Every index points at a vertex that is there.

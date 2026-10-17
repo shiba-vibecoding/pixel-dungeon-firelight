@@ -45,6 +45,8 @@ export interface AirUniforms {
   uFloor: { value: Color };
   /** What lies below this height (world y) is not drawn by the terrain and water shaders: the mirror's pass sets it to the water's level, and it is far below the world otherwise. */
   uBelow: { value: number };
+  /** 1 while the frame goes through the bloom (a figure's alpha is the glow the bloom takes of it), 0 when it is drawn straight to the canvas (alpha 1: a canvas with an alpha channel must not be left with holes). */
+  uGlowOut: { value: number };
 }
 
 export function makeAir(fog: Texture): AirUniforms {
@@ -61,6 +63,7 @@ export function makeAir(fog: Texture): AirUniforms {
     uMistColor: { value: new Color(0x5a1a10) },
     uFloor: { value: new Color(0.2, 0.18, 0.15) },
     uBelow: { value: -1000 },
+    uGlowOut: { value: 1 },
   };
 }
 
@@ -213,6 +216,7 @@ export function withFog(
     shader.uniforms.uMistColor = air.uMistColor;
     shader.uniforms.uFloor = air.uFloor;
     shader.uniforms.uBelow = air.uBelow;
+    shader.uniforms.uGlowOut = air.uGlowOut;
     const declarations = [
       '#include <common>', 'uniform sampler2D tFog;', 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;',
       mode === 'attribute' ? 'attribute vec2 aFog;' : 'attribute vec4 aUv;',
@@ -258,7 +262,7 @@ export function withFog(
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec3 vFeet;', 'varying vec4 vRect;', 'uniform vec3 uFloor;'] : []), 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;', 'uniform vec3 uMistColor;', 'uniform vec2 uMist;', 'uniform float uBelow;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;', 'uniform float uTime;', 'uniform float uMem;', 'uniform float uPool;'].join(NEWLINE),
+        ['#include <common>', ...(sprite ? ['varying vec3 vRim;', 'varying vec3 vRimColor;', 'varying vec3 vFeet;', 'varying vec4 vRect;', 'uniform vec3 uFloor;'] : []), 'varying float vFog;', 'varying vec3 vPool;', 'varying vec2 vWPos;', 'varying float vWY;', 'uniform vec3 uMistColor;', 'uniform vec2 uMist;', 'uniform float uBelow;', 'uniform vec2 uHero;', 'uniform vec2 uHaze;', 'uniform vec3 uFogColor;', 'uniform vec3 uBg;', 'uniform float uTime;', 'uniform float uMem;', 'uniform float uPool;', 'uniform float uGlowOut;'].join(NEWLINE),
       )
       .replace('#include <emissivemap_fragment>', sprite ? spriteFragment(sprite) : '#include <emissivemap_fragment>')
       // The terrain, the water and the decals do not draw what lies under the mirror's plane in the mirror's pass (a chasm's rock).
@@ -282,8 +286,8 @@ export function withFog(
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, uBg, smoothstep(0.52, 1.0, vFog));',
           // A sprite's alpha, once its pixel has been cut out, is what the bloom takes of it (post.ts): none for a plain figure, the
           // strength of its own glow where it has one (a legendary look, a wand); the batch is drawn without blending, so this is the
-          // pixel's alpha in the frame. (On the canvas, with no alpha, it is nothing.)
-          ...(sprite ? ['  #ifdef USE_EMISSIVEMAP', '  gl_FragColor.a = min(1.0, max(emissiveColor.r, max(emissiveColor.g, emissiveColor.b)));', '  #endif'] : []),
+          // pixel's alpha in the frame. (Drawn straight to the canvas it is 1: three's context always has an alpha channel, and a figure left with alpha 0 there is a hole, a black silhouette in a photo.)
+          ...(sprite ? ['  #ifdef USE_EMISSIVEMAP', '  gl_FragColor.a = mix(1.0, min(1.0, max(emissiveColor.r, max(emissiveColor.g, emissiveColor.b))), uGlowOut);', '  #endif'] : []),
           '}',
         ].join(NEWLINE),
       );

@@ -1329,8 +1329,14 @@ function takeShot(): Shot | null {
   const g = out.getContext('2d');
   if (!g) return null;
   try {
-    if (mode3d && canvas3d) g.drawImage(canvas3d, 0, 0, out.width, out.height);
-    else {
+    if (mode3d && canvas3d) {
+      g.drawImage(canvas3d, 0, 0, out.width, out.height);
+      // (The renderer's canvas has an alpha channel, and the shot must have none of its holes: whatever is not whole is put over the dark floor's colour.)
+      g.globalCompositeOperation = 'destination-over';
+      g.fillStyle = '#0b0b09';
+      g.fillRect(0, 0, out.width, out.height);
+      g.globalCompositeOperation = 'source-over';
+    } else {
       g.fillStyle = '#0b0b09';
       g.fillRect(0, 0, out.width, out.height);
       // The classic view's brightness is a CSS filter on its canvas: it goes into the picture too, where the webview can draw with one.
