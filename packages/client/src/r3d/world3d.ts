@@ -16,7 +16,7 @@
  * (ore.ts), and the demon halls have the kit's haze: a low red mist in the fog shaders, a heat shimmer in the bloom's last pass.
  */
 import {
-  AdditiveBlending, AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
+  AmbientLight, BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, FrontSide, HemisphereLight, InstancedBufferAttribute, InstancedMesh, MathUtils,
   Color, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, NearestFilter, NeutralToneMapping, NoBlending, NoToneMapping, OrthographicCamera, PCFShadowMap, PerspectiveCamera,
   PlaneGeometry, RepeatWrapping, Scene, SRGBColorSpace, Texture, WebGLRenderer,
 } from 'three';
@@ -33,11 +33,10 @@ import { puppetAlpha } from '../puppetfade';
 import { ATLAS_H, ATLAS_W, Atlas } from './atlas';
 import { type RegionImages, type SharedImages, type TerrainTextures, buildTerrain, loadKit, loadRegion, propCutout } from './assets3d';
 import { Effects3D, type FxContext, parseCss } from './effects3d';
-import { Fog, makeAir, withFog, withSightFade } from './fogofwar';
+import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, type MistKit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
-import { type Buffers, FRONT_WALL_H, type GeomKit, K_WALL, K_WATER, LevelGeom, PROP_BASE } from './levelgeom';
-import type { DoorKit } from './doorkit';
-import { DoorScene } from './doorscene';
+import { type Buffers, doorLeafBuffers, FRONT_WALL_H, type GeomKit, K_WALL, K_WATER, LevelGeom, PROP_BASE } from './levelgeom';
+import { DoorSwing, writeLeafMatrix } from './doorswing';
 import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
 import { TIERS, type Tier } from './governor';
 import { heapDrawn } from '../heapsight';
@@ -95,9 +94,6 @@ export interface Shown {
 
 /** How long the first floor may keep the picture back for the warm-up (compiling every program, sending every texture), ms; then it is drawn whatever is not ready. */
 const WARM_LIMIT_MS = 4500;
-/** A cell is lit by a fire that stays if its baked pool adds up to more than this (bytes), or by the hero torch within this many cells. */
-const LIT_POOL = 60;
-const LIT_REACH = 4;
 const MAX_SPRITES = 360;
 const MAX_DEAD = 160;
 /** How long a body lies in the 3D view before it fades away (MobSprite.FADE_TIME: the original's dead sprite fades out over three seconds). */
@@ -136,7 +132,7 @@ const FLYERS: ReadonlySet<string> = new Set(['bat', 'eye', 'bee', 'swarm']);
 const HIGH_GRASS = 15;
 const SIGN = 29;
 /** The props that stand on a low stone base as a card of their tile (a statue, the special room's statue, a bookshelf, a barricade, a boss's locked exit) and the floor under each. */
-const CARD_PROPS: ReadonlyArray<readonly [number, number]> = [[35, 1], [36, 14], [41, 1]];
+const CARD_PROPS: ReadonlyArray<readonly [number, number]> = [[35, 1], [36, 14], [41, 1], [13, 1], [25, 1]];
 /** A prop is drawn only this near the hero, cells. */
 const PROP_REACH = 11;
 /** A torch out of sight keeps its halo this near the hero, cells. */
@@ -189,7 +185,7 @@ const UPRIGHT = 1;
 const FLAT = 2;
 
 /** The kit's loaded files, once they have come (prepare). */
-let kitState: { kit: Kit; images: SharedImages; doors: DoorKit } | null = null;
+let kitState: { kit: Kit; images: SharedImages } | null = null;
 let kitFailed = false;
 let kitLoading = false;
 const regionState = new Map<number, RegionImages>();
@@ -302,21 +298,13 @@ export class World3D {
   private decalMaterial: MeshBasicMaterial | null = null;
   private waterMaterial: MeshStandardMaterial | null = null;
   /**
-   * The doors: thresholds and frames are part of the level's boxes (levelgeom.ts); the leaves, their light, the grate of the exit and
-   * the plays of a door found, unlocked or burnt are DoorScene's (doorscene.ts).
+   * The doors' leaves: each door has a leaf standing in its gap, turned about its hinge as the door swings (doorswing.ts): one small
+   * instanced mesh for the plain kind and one for the locked, each drawn only if the level has a door of that kind.
    */
-  private doors: DoorScene | null = null;
+  private readonly swing = new DoorSwing();
+  private leafMesh: InstancedMesh | null = null;
+  private lockMesh: InstancedMesh | null = null;
   private leafMaterial: MeshStandardMaterial | null = null;
-  private lightMaterial: MeshBasicMaterial | null = null;
-  private fxAddMaterial: MeshBasicMaterial | null = null;
-  private fxAlphaMaterial: MeshBasicMaterial | null = null;
-  private fxTexture: Texture | null = null;
-  /** The map as the game has it, and the level it came from (the doors show it a little late, while they play). */
-  private lastLevel: Level | null = null;
-  /** The light of the fires that stay and of nothing else: where a room beyond a door is lit. */
-  private litPool = new Uint8Array(LENGTH * 3);
-  private doorStainedVersion = -1;
-  private doorReal: ArrayLike<number> = new Uint8Array(LENGTH);
   /** The last turn's sight and the last frame's time, for the swings begun by a change of the map. */
   private lastVisible: readonly boolean[] = [];
   private clock = 0;
@@ -700,10 +688,6 @@ export class World3D {
       this.waterTex?.dispose();
       this.terrainMaterial?.dispose();
       this.leafMaterial?.dispose();
-      this.lightMaterial?.dispose();
-      this.fxAddMaterial?.dispose();
-      this.fxAlphaMaterial?.dispose();
-      this.fxTexture?.dispose();
       this.decalMaterial?.dispose();
       this.waterMaterial?.dispose();
       this.images = images;
@@ -724,16 +708,8 @@ export class World3D {
     const a = atmosphere(this.kit, region, level.depth);
     // Under high grass and a sign, the plain floor of the region: the prop itself is a card standing over it.
     const under = new Map<number, number>([[HIGH_GRASS, region >= 2 ? 1 : 2], [SIGN, 1]]);
-    this.geom = new LevelGeom(level.map, 16, 16, this.geomKit(region), under, kitState!.doors);
+    this.geom = new LevelGeom(level.map, 16, 16, this.geomKit(region), under);
     this.goreLayer.bindLevel(level.map, this.geomKit(region).wall);
-    this.lastLevel = level;
-    this.doors?.dispose();
-    this.doors = new DoorScene(
-      this.scene, kitState!.doors,
-      { leaf: this.leafMaterial!, solid: this.terrainMaterial!, add: this.lightMaterial!, fxAdd: this.fxAddMaterial!, fxAlpha: this.fxAlphaMaterial! },
-      this.options.reduced === true,
-    );
-    this.doorReal = level.map;
     this.makeMeshes();
     this.scanProps(true);
     this.configureMirror();
@@ -751,7 +727,6 @@ export class World3D {
     this.renderer.setClearColor(this.air.uBg.value, 1);
     this.fires = sourcesOf(this.kit, a.region, this.geom, true);
     this.rig.configure(L, this.fires, this.tier.shadowLights);
-    this.bakeLit();
     this.fog.setPools(bakePools([...this.fires, ...doorGlow(this.geom.terrain), ...stairGlow(this.geom.terrain)], this.geom.kinds));
     this.lightBase = { ambient: L.ambient.intensity, hemi: L.hemi.intensity };
     // The floor in the light of the level, for the bounce on the feet.
@@ -791,21 +766,6 @@ export class World3D {
       map: t.color, emissiveMap: t.emissive, emissive: 0xffffff, emissiveIntensity: 1, roughness: 1, metalness: 0, vertexColors: true, depthWrite: false,
     });
     withFog(this.leafMaterial, this.air, 'instance');
-    // The light of the doors: the door sheet's glow map, added, only where the hero sees. The effects of a door: sparks and flames added, a key and dust laid over.
-    this.lightMaterial = new MeshBasicMaterial({
-      map: t.emissive, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1,
-    });
-    withSightFade(this.lightMaterial, this.air, 'add');
-    const fxTexture = new Texture(this.shared.doorFx);
-    fxTexture.colorSpace = SRGBColorSpace;
-    fxTexture.magFilter = fxTexture.minFilter = NearestFilter;
-    fxTexture.generateMipmaps = false;
-    fxTexture.needsUpdate = true;
-    this.fxTexture = fxTexture;
-    this.fxAddMaterial = new MeshBasicMaterial({ map: fxTexture, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, vertexColors: true });
-    withSightFade(this.fxAddMaterial, this.air, 'add');
-    this.fxAlphaMaterial = new MeshBasicMaterial({ map: fxTexture, transparent: true, depthWrite: false, side: DoubleSide, vertexColors: true });
-    withSightFade(this.fxAlphaMaterial, this.air, 'alpha');
     this.decalMaterial = new MeshBasicMaterial({ map: t.color, vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 });
     withFog(this.decalMaterial, this.air, 'attribute');
     const w = materialOf(this.kit, region, 'water');
@@ -896,21 +856,20 @@ export class World3D {
   patch(level: Level): void {
     const geom = this.geom;
     if (!geom) return;
-    this.lastLevel = level;
-    this.doorReal = level.map;
-    const doors = this.doors;
-    // A secret door found, a door unlocked, a barricade burnt play out before the geometry shows the new state (doorscene.ts).
-    const change = geom.patch(doors ? doors.display(level.map, this.clock) : level.map);
-    if (doors?.takeBegun()) doors.refresh();
+    const change = geom.patch(level.map);
     if (change === 'same') return;
     if (change === 'rebuilt') {
       this.dropMeshes();
-      this.makeMeshes(true);
-    } else if (doors) {
+      this.makeMeshes();
+    } else {
       // Whatever changed (a secret door found, a door burnt, a wall mined), the doors of the level are collected again, and the leaves
       // made again if there are more or fewer: the gap and its leaf are there on the next frame.
-      doors.refresh();
-      if (doors.sync(this.clock) > 0) {
+      const { across, passable } = this.doorSurroundings();
+      if (this.swing.refresh(geom.terrain, across, passable)) {
+        this.dropLeaves();
+        this.makeLeaves(true);
+      }
+      if (this.swing.sync(geom.terrain, (cell) => this.options.reveal === true || this.lastVisible[cell] === true, this.clock) > 0) {
         // A door in sight begins to swing: its shadow is drawn again when it has swung, as well as now.
         this.rig.shadowsStale = true;
       }
@@ -920,8 +879,6 @@ export class World3D {
     if (change !== 'patched') {
       this.rig.shadowsStale = true;
       // A wall or a door went: the pools of the fixed fires reach differently.
-      this.bakeLit();
-      this.doors?.relight();
       this.fog.setPools(bakePools([...this.fires, ...doorGlow(geom.terrain), ...stairGlow(geom.terrain)], geom.kinds));
     }
   }
@@ -943,28 +900,92 @@ export class World3D {
     }
     this.floorMesh = this.boxMesh = this.waterMesh = this.decalMesh = null;
     this.seenFloor = this.seenBox = -1;
-    this.doors?.dropLeaves();
+    this.dropLeaves();
   }
 
-  /** The light of the fires that stay (not of the doors' own rims): where a room beyond a door is lit. */
-  private bakeLit(): void {
-    this.litPool.fill(0);
-    bakePools(this.fires, this.geom!.kinds, this.litPool);
+  /** The leaves' meshes are given back (the doors themselves are kept: DoorSwing). */
+  private dropLeaves(): void {
+    for (const mesh of [this.leafMesh, this.lockMesh]) {
+      if (!mesh) continue;
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.dispose();
+    }
+    this.leafMesh = this.lockMesh = null;
   }
 
-  /** Whether a room's cell is lit now: a fire that stays reaches it, or the hero's torch does and it is in sight. */
-  private litCell(cell: number): boolean {
-    const p = this.litPool;
-    if (cell < 0 || cell >= LENGTH) return false;
-    if (p[cell * 3]! + p[cell * 3 + 1]! + p[cell * 3 + 2]! > LIT_POOL) return true;
-    const hero = this.heroCell;
-    if (hero < 0 || this.lastVisible[cell] !== true) return false;
-    return Math.abs((hero % WIDTH) - (cell % WIDTH)) + Math.abs(Math.trunc(hero / WIDTH) - Math.trunc(cell / WIDTH)) <= LIT_REACH;
+  /** The level's terrain says which cells hold doors: beside a wall, open ground? */
+  private doorSurroundings(): { across: (x: number, z: number) => boolean; passable: (x: number, z: number) => boolean } {
+    const g = this.geom!;
+    return {
+      across: (x, z) => g.doorAcross(x, z),
+      passable: (x, z) => x >= 0 && z >= 0 && x < WIDTH && z < LENGTH / WIDTH && g.kinds[x + z * WIDTH] !== K_WALL,
+    };
   }
 
-  /** Doors are swinging, or playing, now: the frame must be drawn. */
+  /** One leaf mesh per kind, an instance for each door of the level (the kind a door is not has its instance scaled to nothing). */
+  private makeLeaves(keep: boolean): void {
+    const g = this.geom!;
+    const { across, passable } = this.doorSurroundings();
+    this.swing.reduced = this.options.reduced === true;
+    if (!keep || this.swing.leaves.length === 0) this.swing.reset(g.terrain, across, passable);
+    const n = this.swing.leaves.length;
+    if (n === 0 || !this.leafMaterial) return;
+    for (const locked of [false, true]) {
+      const b = doorLeafBuffers(locked, 16, 16);
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(b.pos.slice(0, b.verts * 3), 3));
+      geometry.setAttribute('normal', new BufferAttribute(b.normal.slice(0, b.verts * 3), 3));
+      geometry.setAttribute('uv', new BufferAttribute(b.uv.slice(0, b.verts * 2), 2));
+      geometry.setAttribute('color', new BufferAttribute(b.color.slice(0, b.verts * 3), 3));
+      geometry.setIndex(new BufferAttribute(b.index.slice(0, b.indices), 1));
+      // The picture's own coordinates are in the geometry: every instance maps them whole.
+      const whole = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) { whole[i * 4 + 2] = 1; whole[i * 4 + 3] = 1; }
+      geometry.setAttribute('aUv', new InstancedBufferAttribute(whole, 4));
+      const mesh = new InstancedMesh(geometry, this.leafMaterial, n);
+      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+      // (With its colour from the start: blood on a door tints it (tintDoors), and a mesh that takes a colour later is another program.)
+      mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3).setUsage(DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 1;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      reflects(mesh);
+      still(mesh);
+      this.scene.add(mesh);
+      if (locked) this.lockMesh = mesh;
+      else this.leafMesh = mesh;
+    }
+    this.writeLeaves();
+    this.doorStained = -1;
+  }
+
+  /** The leaves' matrices, from their angles. */
+  private writeLeaves(): void {
+    const leaf = this.leafMesh;
+    const lock = this.lockMesh;
+    if (!leaf || !lock) return;
+    const a = leaf.instanceMatrix.array as Float32Array;
+    const b = lock.instanceMatrix.array as Float32Array;
+    let locked = 0;
+    const leaves = this.swing.leaves;
+    for (let i = 0; i < leaves.length; i++) {
+      const l = leaves[i]!;
+      const low = this.geom!.doorScale(l.cell % WIDTH, Math.trunc(l.cell / WIDTH));
+      writeLeafMatrix(a, i * 16, l.px, l.pz, l.angle, l.locked ? 0 : 1, low);
+      writeLeafMatrix(b, i * 16, l.px, l.pz, l.angle, l.locked ? 1 : 0, low);
+      if (l.locked) locked++;
+    }
+    leaf.visible = locked < leaves.length;
+    lock.visible = locked > 0;
+    leaf.instanceMatrix.needsUpdate = true;
+    lock.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Doors are swinging now: the frame must be drawn. */
   get doorsMoving(): boolean {
-    return this.doors?.moving === true;
+    return this.swing.moving > 0;
   }
 
   /** `keepSwing`: the buffers only grew, the doors are the same (a door swinging goes on swinging). */
@@ -999,24 +1020,8 @@ export class World3D {
     this.seenBox = geom.boxVersion;
     // The walls' shadows are cast on the side facing the light; the floor and the walls take them.
     this.terrainMaterial!.shadowSide = FrontSide;
-    this.doors?.reset(this.doorWorld(), this.doorReal, keepSwing);
-    this.doorStainedVersion = -1;
+    this.makeLeaves(keepSwing);
     this.rig.shadowsStale = true;
-  }
-
-  /** A hold of a play has run out: the geometry is made from the real map again. */
-  private patchHeld(): void {
-    if (this.lastLevel) this.patch(this.lastLevel);
-  }
-
-  /** What the doors ask of the world: where it is lit, where the hero is, what is in sight. */
-  private doorWorld(): { geom: LevelGeom; lit(cell: number): boolean; hero(): number; seen(cell: number): boolean } {
-    return {
-      geom: this.geom!,
-      lit: (cell) => this.litCell(cell),
-      hero: () => this.heroCell,
-      seen: (cell) => this.options.reveal === true || this.lastVisible[cell] === true,
-    };
   }
 
   /** Uploads what the geometry has changed since the last frame. */
@@ -1232,7 +1237,7 @@ export class World3D {
       if (instanced.isInstancedMesh) instanced.count = Math.max(1, instanced.count);
     };
     for (const mesh of [
-      this.sprites, this.deadMesh, this.ghosts, this.effects.soft.mesh, this.effects.glow.mesh, this.grass?.mesh, this.tufts?.mesh, ...(this.doors?.meshes ?? []),
+      this.sprites, this.deadMesh, this.ghosts, this.effects.soft.mesh, this.effects.glow.mesh, this.grass?.mesh, this.tufts?.mesh, this.leafMesh, this.lockMesh,
       ...this.goreLayer.meshes,
     ]) force(mesh);
     try {
@@ -1623,13 +1628,10 @@ export class World3D {
     if (brightness.value !== this.bright) this.applyBrightness(brightness.value);
     this.air.uTime.value = f.now / 1000;
     this.clock = f.now;
-    const doors = this.doors;
-    if (doors) {
-      const was = doors.swing.moving;
-      doors.setBurning(f.gas);
-      if (doors.frame(f.now)) this.patchHeld();
+    if (this.swing.step(f.now)) {
+      this.writeLeaves();
       // A swing that has just ended: the shadows are drawn once more with the leaf where it stays.
-      if (was > 0 && doors.swing.moving === 0) this.rig.shadowsStale = true;
+      if (this.swing.moving === 0) this.rig.shadowsStale = true;
     }
     this.fogMoving = this.fog.step(dt);
     const hx = f.focusX / TILE;
@@ -1654,7 +1656,7 @@ export class World3D {
     if (this.goreLayer.version !== gore.version) this.goreLayer.replay(gore.data, gore.version);
     this.goreLayer.update(this.renderer);
     gore.sweep(f.now, CORPSE_FADE_MS);
-    if (this.doorStained !== gore.version * 100000 + gore.stains || this.doorStainedVersion !== (this.doors?.leavesVersion ?? 0)) this.tintDoors();
+    if (this.doorStained !== gore.version * 100000 + gore.stains) this.tintDoors();
     this.effects.begin();
     this.tufts?.begin();
     f.view.puppets.forEach(this.puppetPass);
@@ -1853,12 +1855,13 @@ export class World3D {
   /** The leaves of the doors that blood has reached are stained, redder the more (the tint of each instance). */
   private tintDoors(): void {
     this.doorStained = gore.version * 100000 + gore.stains;
-    this.doorStainedVersion = this.doors?.leavesVersion ?? 0;
-    for (const { mesh, cells } of this.doors?.leafMeshes ?? []) {
-      if (!mesh.instanceColor) mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(cells.length * 3).fill(1), 3).setUsage(DynamicDrawUsage);
+    const leaves = this.swing.leaves;
+    for (const mesh of [this.leafMesh, this.lockMesh]) {
+      if (!mesh) continue;
+      if (!mesh.instanceColor) mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(leaves.length * 3).fill(1), 3).setUsage(DynamicDrawUsage);
       const c = mesh.instanceColor.array as Float32Array;
-      for (let i = 0; i < cells.length; i++) {
-        const k = Math.min(1, (gore.data.doors.get(cells[i]!) ?? 0) / 5);
+      for (let i = 0; i < leaves.length; i++) {
+        const k = Math.min(1, (gore.data.doors.get(leaves[i]!.cell) ?? 0) / 5);
         c[i * 3] = 1 - 0.2 * k;
         c[i * 3 + 1] = 1 - 0.6 * k;
         c[i * 3 + 2] = 1 - 0.65 * k;
@@ -2014,12 +2017,7 @@ export class World3D {
     this.overlay?.remove();
     this.dropMeshes();
     this.terrainMaterial?.dispose();
-    this.doors?.dispose();
     this.leafMaterial?.dispose();
-    this.lightMaterial?.dispose();
-    this.fxAddMaterial?.dispose();
-    this.fxAlphaMaterial?.dispose();
-    this.fxTexture?.dispose();
     this.decalMaterial?.dispose();
     this.waterMaterial?.dispose();
     this.terrain?.dispose();

@@ -1,11 +1,11 @@
 /*
  * What the 3D view loads besides the game's own sheets: the world kit (hd2d-kit.json and the maps beside it), once, and each region's
  * glow, roughness and wall maps. The region's tiles, its walls, its glow and its roughness are laid on three canvases of the same
- * layout (256 x 256: the tiles' eight rows, then the walls' two, then the doors' six: assets/doors/doors-<region>.png, design part 10), so
- * one terrain material reads them all and the whole level is a few draws. Pixel art: nearest, no mipmaps; colour and glow are sRGB, roughness is linear.
+ * layout (256 x 256: the tiles' eight rows, then the walls' two), so one terrain material reads them all and the whole level is a
+ * few draws. Pixel art: nearest, no mipmaps; colour and glow are sRGB, roughness is linear.
  */
 import { CanvasTexture, NearestFilter, NoColorSpace, SRGBColorSpace, type Texture } from 'three';
-import type { DoorKit } from './doorkit';
+import { paintDoorTiles } from './doorart';
 import { type Kit, materialOf, parseKit } from './kit';
 import { GOLD_ORE, GOLD_REGION, orePixels } from './ore';
 
@@ -18,21 +18,13 @@ export interface SharedImages {
   particles: HTMLImageElement;
   ripple: HTMLImageElement;
   itemsEmissive: HTMLImageElement;
-  /** The doors' effects: sparks, dust, a key, a flame (doors-fx.png, doors.json fx). */
-  doorFx: HTMLImageElement;
 }
-
-/** The names of the regions in the door sheets' file names (assets/doors/doors-<name>.png), by region number. */
-export const REGION_NAMES = ['sewers', 'prison', 'caves', 'city', 'halls'] as const;
 
 export interface RegionImages {
   tiles: HTMLImageElement;
   emissive: HTMLImageElement;
   rough: HTMLImageElement;
   walls: HTMLImageElement;
-  /** The region's door sheet and its glow map, 256 x 96, for rows 10 to 15 of the terrain atlas. */
-  doors: HTMLImageElement;
-  doorsGlow: HTMLImageElement;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -47,24 +39,19 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 /** Where the kit's files are, from the game's assets address (ending in a slash). */
 export const kitUrl = (base: string, file: string): string => `${base}hd2d/${file}?v=${VERSION}`;
 
-/** Where the doors' files are (assets/doors/). */
-export const doorUrl = (base: string, file: string): string => `${base}doors/${file}?v=${VERSION}`;
-
-let shared: Promise<{ kit: Kit; images: SharedImages; doors: DoorKit }> | null = null;
+let shared: Promise<{ kit: Kit; images: SharedImages }> | null = null;
 const regions = new Map<number, Promise<RegionImages>>();
 
 /** The kit and the pictures every region shares, fetched once. A failure is not kept: the next ask tries again. */
-export function loadKit(base: string): Promise<{ kit: Kit; images: SharedImages; doors: DoorKit }> {
+export function loadKit(base: string): Promise<{ kit: Kit; images: SharedImages }> {
   shared ??= (async () => {
-    const [json, particles, ripple, itemsEmissive, doors, doorFx] = await Promise.all([
+    const [json, particles, ripple, itemsEmissive] = await Promise.all([
       fetch(kitUrl(base, 'hd2d-kit.json')).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`kit ${r.status}`)))) as Promise<unknown>,
       loadImage(kitUrl(base, 'particles.png')),
       loadImage(kitUrl(base, 'ripple.png')),
       loadImage(kitUrl(base, 'items-emissive.png')),
-      fetch(doorUrl(base, 'doors.json')).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`doors ${r.status}`)))) as Promise<DoorKit>,
-      loadImage(doorUrl(base, 'doors-fx.png')),
     ]);
-    return { kit: parseKit(json), images: { particles, ripple, itemsEmissive, doorFx }, doors };
+    return { kit: parseKit(json), images: { particles, ripple, itemsEmissive } };
   })().catch((error: unknown) => {
     shared = null;
     throw error;
@@ -76,12 +63,8 @@ export function loadKit(base: string): Promise<{ kit: Kit; images: SharedImages;
 export function loadRegion(base: string, region: number, tiles: HTMLImageElement): Promise<RegionImages> {
   let promise = regions.get(region);
   if (!promise) {
-    const name = REGION_NAMES[region] ?? 'sewers';
-    promise = Promise.all([
-      loadImage(kitUrl(base, `tiles${region}-emissive.png`)), loadImage(kitUrl(base, `tiles${region}-rough.png`)), loadImage(kitUrl(base, `walls${region}.png`)),
-      loadImage(doorUrl(base, `doors-${name}.png`)), loadImage(doorUrl(base, `doors-${name}-glow.png`)),
-    ])
-      .then(([emissive, rough, walls, doors, doorsGlow]) => ({ tiles, emissive, rough, walls, doors, doorsGlow }))
+    promise = Promise.all([loadImage(kitUrl(base, `tiles${region}-emissive.png`)), loadImage(kitUrl(base, `tiles${region}-rough.png`)), loadImage(kitUrl(base, `walls${region}.png`))])
+      .then(([emissive, rough, walls]) => ({ tiles, emissive, rough, walls }))
       .catch((error: unknown) => {
         regions.delete(region);
         throw error;
@@ -143,10 +126,8 @@ export function buildTerrain(images: RegionImages, kit: Kit, region: number): Te
   glow.g.drawImage(premultiplied(images.emissive, images.emissive.width, images.emissive.height), 0, 0);
   // The wall tiles that glow (the prison's barred windows, the caves' gold ore) glow on their faces too: the deco face is the tile's own glow.
   glow.g.drawImage(premultiplied(images.emissive, images.emissive.width, images.emissive.height), 12 * 16, 0, 16, 16, 16, images.tiles.height + 16, 16, 16);
-  // The doors' sheet and its glow map (design part 10), under the walls': rows 10 to 15 of the atlas, 256 x 96. The glow map is an
-  // emissive map as it is (the colour of what glows, black elsewhere), not alpha-weighted.
-  color.g.drawImage(images.doors, 0, images.tiles.height + 32);
-  glow.g.drawImage(images.doorsGlow, 0, images.tiles.height + 32);
+  // The doors' own pieces (frame wood, steel, the slab seen from above), after the walls' rows, with a faint warm glow of their own.
+  paintDoorTiles(color.g, glow.g, images.tiles, width / 16);
   const rough = canvasOf(width, width);
   // The roughness of the tiles is in their map; the walls' sheet is as rough as the kit's wall material says.
   const gray = (value: number): string => `rgb(${Math.round(value * 255)},${Math.round(value * 255)},${Math.round(value * 255)})`;
@@ -157,9 +138,6 @@ export function buildTerrain(images: RegionImages, kit: Kit, region: number): Te
   rough.g.fillRect(0, images.tiles.height, width, 16);
   rough.g.fillStyle = gray(materialOf(kit, region, 'wall_face').roughness);
   rough.g.fillRect(0, images.tiles.height + 16, width, 16);
-  // The doors' rows: wood, iron and slate as rough as the designer says (0.85).
-  rough.g.fillStyle = gray(0.85);
-  rough.g.fillRect(0, images.tiles.height + 32, width, 96);
   // The caves' gold ore is metal, by the kit (ore.ts): the pixels the glow map lights on the deco face (and on tile 12 of the sheet) are
   // given the kit's roughness in the roughness map and its metalness in a map of their own; everything else stays as it was.
   let metal: CanvasTexture | null = null;

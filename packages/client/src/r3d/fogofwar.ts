@@ -294,21 +294,3 @@ export function withFog(
   };
   material.customProgramCacheKey = () => `pdair-${mode}-${lit ? 'lit' : 'flat'}${sprite ? `-${sprite.selfLight}-${sprite.texel[0]}` : ''}`;
 }
-
-/**
- * A material that adds light or lays a thin picture over the level (a door's light, a spark): it shows only where the hero sees now, and
- * is nothing in the dark of the unseen and the grey of the remembered. `how`: 'add' dims the colour (for added light), 'alpha' the opacity.
- * Geometry carries its fog coordinates (`aFog`), as the terrain's does.
- */
-export function withSightFade(material: MeshBasicMaterial, air: AirUniforms, how: 'add' | 'alpha'): void {
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.tFog = air.tFog;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', ['#include <common>', 'uniform sampler2D tFog;', 'attribute vec2 aFog;', 'varying float vSight;'].join(NEWLINE))
-      .replace('#include <begin_vertex>', ['#include <begin_vertex>', `  vSight = 1.0 - clamp(texture2D(tFog, aFog).r / ${FOG_REMEMBERED.toFixed(2)}, 0.0, 1.0);`].join(NEWLINE));
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', ['#include <common>', 'varying float vSight;'].join(NEWLINE))
-      .replace('#include <opaque_fragment>', ['#include <opaque_fragment>', how === 'add' ? '  gl_FragColor.rgb *= vSight;' : '  gl_FragColor.a *= vSight;'].join(NEWLINE));
-  };
-  material.customProgramCacheKey = () => `pdsight-${how}`;
-}
