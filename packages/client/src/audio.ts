@@ -397,13 +397,21 @@ class Audio {
    * What is happening, once a frame: how many enemies are awake in sight, and whether a boss is being fought. The music plays
    * its calm layer, its danger layer or its boss layer and crossfades between them; danger and boss linger a few seconds after.
    */
-  situation(danger: number, boss: boolean): void {
+  situation(danger: number, boss: boolean, intensity = 0): void {
     const plan = planLayers(this.layer, { danger, boss }, performance.now() / 1000);
     const changed = plan.mode !== this.layer.mode;
     this.layer = plan;
+    // A boss fight's phase (bossfx.ts): the layers that play in it mix harder as it goes on.
+    const level = boss ? intensity : 0;
+    if (level !== this.intensity) {
+      this.intensity = level;
+      this.music?.player.setIntensity(level);
+    }
     if (!changed) return;
     this.music?.player.setMode(plan.mode);
   }
+  /** How hard the boss fight plays now (kept for the tune that starts next). */
+  private intensity = 0;
 
   /** The music at rest: a new run or the title, nothing to be wary of yet. */
   calmDown(): void {
@@ -448,6 +456,7 @@ class Audio {
       if (!ctx || !this.musicFilter) return;
       const gain = this.fadeIn(ctx, this.musicFilter);
       this.music = { track: this.track, player: new MusicPlayer(ctx, this.track, gain, { mode: this.layer.mode }), gain };
+      this.music.player.setIntensity(this.intensity);
       this.levels();
     }
     this.music.player.play();

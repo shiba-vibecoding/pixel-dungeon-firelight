@@ -50,6 +50,8 @@ import { bakeBody } from './bodyart';
 import { bakeItem } from './itemblood';
 import { GoreLayer } from './gorelayer';
 import { gore } from '../gore';
+import { bossFx } from '../bossfx';
+import { woundedSheet } from '../bossdmg';
 import { Grass, Tufts } from './grass3d';
 import { contactAt, type Contact, WATER_BLOB, WATER_CONTACT } from './contact';
 import { type Footprint, footprint, gapRows } from './feet';
@@ -353,6 +355,10 @@ export class World3D {
   private deadCount = 0;
   /** How far the next body written has dissolved (0 whole, 1 gone): a dither over its pixels, not a darkening. */
   private deadFade = 0;
+  /** The colour the next sprite written is multiplied by (a boss's tint, bossfx.ts); white for all the rest. */
+  private tr = 1;
+  private tg = 1;
+  private tb = 1;
   private readonly deadFades: InstancedBufferAttribute;
   private toDead = false;
   /** Per instance: the rim light's direction (texture axes, -1/0/1) and colour times strength. */
@@ -734,6 +740,8 @@ export class World3D {
     this.bright = 0;
     if (a.accent) this.rig.setAccent(hex(a.accent.color), a.accent.intensity * 2.2);
     else this.rig.setAccent(0xffffff, 0);
+    this.accentColor = a.accent ? hex(a.accent.color) : 0xffffff;
+    this.accentShown = this.accentColor;
     this.accentBase = a.accent ? a.accent.intensity * 2.2 : 0;
     this.bossName = a.boss;
     this.effects.configure(this.kit, a, this.geom, region, this.tier);
@@ -748,6 +756,9 @@ export class World3D {
   }
 
   private accentBase = 0;
+  /** The accent's own colour, and the one it has now (the fight may turn it). */
+  private accentColor = 0xffffff;
+  private accentShown = 0xffffff;
   private bossName: string | null = null;
 
   /** The terrain, water and decal materials of a region, from the kit's materials and maps. */
@@ -1308,7 +1319,9 @@ export class World3D {
     uv[q + 2] = flip ? -du : du;
     uv[q + 3] = h / ATLAS_H;
     const c = batch.instanceColor!.array as Float32Array;
-    c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = tint;
+    c[i * 3] = tint * this.tr;
+    c[i * 3 + 1] = tint * this.tg;
+    c[i * 3 + 2] = tint * this.tb;
     if (blend) return;
     if (dead) {
       (this.deadFades.array as Float32Array)[i * 3] = this.deadFade;
@@ -1382,6 +1395,9 @@ export class World3D {
     // Only where its cell is in sight now (figuresight.ts), the hero and what the hero senses excepted.
     if (!figureShown(puppet, visible, f.seeAll)) return;
     const now = f.now;
+    // A boss's body in a fight (bossfx.ts): how it is squashed, tinted and worn; or not there yet (a dwarf before it rises).
+    const boss = bossFx.lookFor(puppet, now);
+    if (boss?.hide) return;
     const pos = f.view.positionInto(puppet, now, this.at);
     const { sheet, anims } = puppet.sprite;
     // Which view of it to draw (dirs.ts: side, front or back by its last step or blow; the same layout, so the frame is the same).
@@ -1446,9 +1462,9 @@ export class World3D {
     // Its lowest opaque row on the floor, in this frame of its picture (a clear row or two under the feet, or a foot lifted in a stride, is
     // put right), and the squash of a landing: the figure is a pixel lower and a half pixel wider.
     const gap = standing ? gapRows(fig.image, sx, sy, sheet.w, sheet.h) : 0;
-    const fw = 1 + (0.5 * squash) / sheet.w;
+    const fw = (1 + (0.5 * squash) / sheet.w) * (boss ? boss.sx : 1);
     // (And the crouch of a search, the settling of a rest: how tall it stands, idlefx.ts.)
-    const fh = (1 - squash / sheet.h) * (puppet.squash ?? 1);
+    const fh = (1 - squash / sheet.h) * (puppet.squash ?? 1) * (boss ? boss.sy : 1);
     const down = (gap / sheet.h) * (sheet.h / TILE) * scale * fh * LEAN_STRETCH;
     const by = lift - down * Math.cos(LEAN);
     const bz = tz + down * Math.sin(LEAN);
@@ -1476,7 +1492,24 @@ export class World3D {
     const held = puppet.isHero ? heldFigure(puppet, fig, frame, now) : null;
     const heldBack = held !== null && held.held.layer === 'back';
     if (held && heldBack) this.heldQuad(held, sheet.w, sheet.h, fig.flip, tx, by, bz, scale * fw, scale * fh, tint, scale);
-    this.sprite(fig.image, sx, sy, sheet.w, sheet.h, fig.flip, tx, by, bz, (sheet.w / TILE) * scale * fw, (sheet.h / TILE) * scale * fh, tint, LEANED, 0, fig.glow, blend);
+    // A worn-down machine is drawn from its wounded copy of the sheet (bossdmg.ts), the cracks of the last stage glowing.
+    let bodyImage: HTMLImageElement | HTMLCanvasElement = fig.image;
+    let bodyGlow: CanvasImageSource | undefined = fig.glow;
+    if (boss && boss.stage > 0) {
+      const worn = woundedSheet(fig.image, sheet.w, sheet.h, boss.stage);
+      if (worn) {
+        bodyImage = worn.image;
+        bodyGlow = worn.glow ?? bodyGlow;
+      }
+    }
+    if (boss) {
+      this.tr = boss.r;
+      this.tg = boss.g;
+      this.tb = boss.b;
+    }
+    this.sprite(bodyImage, sx, sy, sheet.w, sheet.h, fig.flip, tx, by, bz, (sheet.w / TILE) * scale * fw, (sheet.h / TILE) * scale * fh, tint, LEANED, 0, bodyGlow, blend);
+    this.tr = this.tg = this.tb = 1;
+    if (boss && boss.glow > 0 && bodyGlow && bodyGlow !== fig.glow) this.glowLast(boss.glow);
     this.toDead = false;
     if (spectral) this.effects.halo(tx, 0.55 + lift, tz, COLD, 1.7, 0.2 + 0.05 * Math.sin(now / 520 + puppet.to));
     if (look && fig.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
@@ -1778,8 +1811,15 @@ export class World3D {
     if (this.accentBase > 0 && this.bossFound) {
       this.bossSeen = true;
       const pulse = this.bossName === 'yog' ? 1 + 0.4 * Math.sin((this.current!.now / 1000) * Math.PI) : 1;
+      // The fight's own light (bossfx.ts): the throne room's rising, the machine's flicker, the old god's flare.
+      const show = bossFx.accentFor(this.bossName, this.current!.now);
+      const colour = show.color >= 0 ? show.color : this.accentColor;
+      if (colour !== this.accentShown) {
+        this.accentShown = colour;
+        accent.color.setHex(colour);
+      }
       accent.position.set(this.bossX, 2.2, this.bossZ + 1.2);
-      accent.intensity = this.accentBase * pulse;
+      accent.intensity = this.accentBase * pulse * show.k;
     } else if (!this.bossSeen) accent.intensity = 0;
   }
 

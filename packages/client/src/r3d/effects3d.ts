@@ -19,6 +19,7 @@ import { Growth3D } from './growth3d';
 import { chunkSize, SPECK_GROW, stainSize } from './bloodsize';
 import { ATLAS } from '../fxsheet';
 import type { SharedImages } from './assets3d';
+import { bossVfx } from './bossvfx3d';
 
 const TILE = 16;
 /** The effects atlas (fxsheet.ts → ATLAS): the old 256 x 256 corner (below) and, round it, the room for the designer's sheets (fx3d.ts). */
@@ -234,6 +235,8 @@ export class Effects3D {
     this.texture = fxTexture(images);
     this.soft = new QuadBatch({ capacity: 900, texture: this.texture, additive: false, fog: air.tFog, renderOrder: 2 });
     this.glow = new QuadBatch({ capacity: 560, texture: this.texture, additive: true, fog: air.tFog, renderOrder: 4 });
+    this.painter.soft = this.soft;
+    this.painter.glow = this.glow;
     this.sheets = new Fx3D(this.soft, this.glow, this.texture, { w: ATLAS_W, h: ATLAS_H, regions: ATLAS.free });
     this.growth = new Growth3D(this.glow, this.soft, this.texture, { x: ATLAS.growth.x, y: ATLAS.growth.y, atlasW: ATLAS_W, atlasH: ATLAS_H }, UV_DOT);
     scene.add(this.soft.mesh, this.glow.mesh);
@@ -641,7 +644,14 @@ export class Effects3D {
         this.glow.flat(w.x / TILE, 0.03, w.y / TILE, r * 2, r * 2, 0, UV_RING[0], UV_RING[1], UV_RING[2], UV_RING[3], rgb[0]! * 1.6, rgb[1]! * 1.6, rgb[2]! * 1.6, 0.85 * (1 - k));
       }
     }
+    // The bosses' own: smoke and falling dust, steam, sparks that bounce, the rings and streaks of their blows (bossfx.ts).
+    if (bossVfx.busy) {
+      bossVfx.update(c.dt, now);
+      bossVfx.draw(this.painter, now, (x, z) => visible[Math.trunc(z) * WIDTH + Math.trunc(x)] === true);
+    }
   }
+
+  private readonly painter = { soft: null as unknown as QuadBatch, glow: null as unknown as QuadBatch, dot: UV_DOT, mist: UV_MIST, solid: UV_SOLID, ring: UV_RING };
 
   /** Clouds of gas as soft puffs, tinted by the gas, a little thicker where there is more. */
   private gas(c: FxContext): void {

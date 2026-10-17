@@ -1,0 +1,74 @@
+/* The boss fights (bossfx.ts, bossbar.ts): the health bar with its ghost, the boss's lines, the red pulse, the white-out and the Amulet. */
+
+/* ---------- The health bar ---------- */
+.fl-bossbar { --boss: #ff6a4a; position: fixed; z-index: var(--z-hud, 10); left: 50%; width: min(calc(100vw - 24px), 540px); box-sizing: border-box;
+  top: max(calc(var(--safe-t, 0px) + var(--space-2, 8px)), calc(var(--hud-bottom, 0px) + var(--space-2, 8px)));
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px 5px 4px; pointer-events: none;
+  background: rgba(16, 9, 9, .9); border: 2px solid #3c1d17; box-shadow: 0 2px 0 rgba(0, 0, 0, .65), inset 0 0 0 1px rgba(255, 255, 255, .06);
+  opacity: 0; transform: translate(-50%, -150%); }
+.fl-bossbar.on { opacity: 1; transform: translate(-50%, 0); transition: transform .34s steps(6, jump-end), opacity .15s linear; }
+.fl-bossbar.out { transition: opacity .3s linear; }
+.fl-bossbar-face { flex: none; width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; border: 2px solid var(--boss); background: #1c0e0c; box-sizing: border-box; padding: 1px; }
+.fl-bossbar-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.fl-bossbar-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-height: 16px; }
+.fl-bossbar-name { font: 400 16px/16px var(--font-ui, Galmuri11); color: var(--boss); text-shadow: 0 2px 0 #1a0a06; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-bossbar-note { font: var(--text-caption, 400 13px/16px var(--font-small)); color: var(--ink-muted, #b0b5a3); white-space: nowrap; }
+.fl-bossbar-note.lit { color: #ffe9a0; animation: fl-bossbar-note .5s steps(2, jump-none) infinite alternate; }
+.fl-bossbar-track { position: relative; height: 14px; background: #2b0f0e; border: 1px solid #000; box-shadow: inset 0 1px 0 rgba(0, 0, 0, .55); overflow: hidden; }
+.fl-bossbar-ghost, .fl-bossbar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; }
+.fl-bossbar-ghost { background: #f4e6c2; opacity: .88; }
+.fl-bossbar-fill { background: linear-gradient(var(--boss) 0 55%, color-mix(in srgb, var(--boss) 62%, #000) 55% 100%); }
+.fl-bossbar-notch { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(0, 0, 0, .5); }
+.fl-bossbar-notch.half { width: 2px; background: rgba(0, 0, 0, .7); margin-left: -1px; }
+.fl-bossbar-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 400 11px/12px var(--font-small, Galmuri9); color: #fff; text-shadow: 0 1px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 -1px 0 #000; }
+.fl-bossbar.hit .fl-bossbar-fill { filter: brightness(1.9) saturate(.6); }
+.fl-bossbar.heal .fl-bossbar-fill { background: linear-gradient(#8cff8c 0 55%, #3fbf4a 55% 100%); }
+.fl-bossbar.rage { border-color: color-mix(in srgb, var(--boss) 55%, #3c1d17); }
+.fl-bossbar.rage .fl-bossbar-track { border-color: var(--boss); animation: fl-bossbar-rage 1s steps(2, jump-none) infinite alternate; }
+.fl-bossbar.dead .fl-bossbar-fill, .fl-bossbar.dead .fl-bossbar-ghost { filter: grayscale(1) brightness(.6); }
+.fl-bossbar.dead .fl-bossbar-name { color: #8d8d80; text-decoration: line-through; }
+@keyframes fl-bossbar-note { from { opacity: 1; } to { opacity: .55; } }
+@keyframes fl-bossbar-rage { from { box-shadow: 0 0 0 0 transparent; } to { box-shadow: 0 0 6px 0 var(--boss); } }
+@media (max-width: 420px) { .fl-bossbar { gap: 6px; } .fl-bossbar-name { font-size: 14px; } }
+@media (min-width: 900px) { .fl-bossbar { width: 620px; padding: 6px 12px 7px 6px; gap: 12px; } .fl-bossbar-face { width: 44px; height: 44px; } .fl-bossbar-name { font-size: 20px; line-height: 20px; }
+  .fl-bossbar-track { height: 18px; } .fl-bossbar-num { font-size: 13px; line-height: 16px; } }
+@media (prefers-reduced-motion: reduce) { .fl-bossbar.on, .fl-bossbar.out { transition: opacity .2s linear; } .fl-bossbar.on { transform: translate(-50%, 0); }
+  .fl-bossbar-note.lit, .fl-bossbar.rage .fl-bossbar-track { animation: none; } }
+
+/* ---------- The boss's lines ---------- */
+.fl-bossline { --boss: #ff6a4a; position: absolute; left: 0; top: 0; z-index: var(--z-hud, 10); max-width: min(78vw, 300px); pointer-events: none; will-change: transform; }
+.fl-bossline[hidden] { display: none; }
+.fl-bossline-body { position: relative; padding: 6px 10px 7px; background: rgba(18, 9, 9, .94); border: 2px solid var(--boss); color: #fff3df;
+  font: var(--text-body, 400 17px/22px var(--font-ui)); text-wrap: balance; clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px)); }
+.fl-bossline-who { display: block; font: var(--text-caption, 400 13px/15px var(--font-small)); color: var(--boss); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 2px; }
+.fl-bossline::after { content: ""; position: absolute; left: var(--tail, 24px); top: 100%; width: 0; height: 0; margin-left: -7px; border: 7px solid transparent; border-top-color: var(--boss); border-bottom: 0; }
+.fl-bossline.under::after { top: auto; bottom: 100%; border: 7px solid transparent; border-bottom-color: var(--boss); border-top: 0; }
+.fl-bossline.pop .fl-bossline-body { animation: fl-bossline-pop .16s steps(3) both; }
+.fl-bossline.out { opacity: 0; transition: opacity .22s linear; }
+.fl-bossline.last .fl-bossline-body { background: rgba(40, 10, 8, .96); }
+@keyframes fl-bossline-pop { from { transform: scale(.7); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fl-bossline.pop .fl-bossline-body { animation: none; } }
+
+/* ---------- The red pulse of the finale and the white-out ---------- */
+.fl-boss-pulse { position: fixed; inset: 0; z-index: calc(var(--z-toast, 30) - 1); pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(150, 0, 0, 0) 38%, rgba(190, 8, 8, .82) 100%); }
+.fl-boss-pulse.beat { animation: fl-boss-beat 1.15s cubic-bezier(.2, .6, .3, 1) both; }
+.fl-boss-pulse.soft { animation-duration: 1.8s; }
+@keyframes fl-boss-beat { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .fl-boss-pulse.beat { animation: fl-boss-beat-calm 2.2s linear both; } }
+@keyframes fl-boss-beat-calm { 0% { opacity: 0; } 30% { opacity: .5; } 100% { opacity: 0; } }
+.fl-boss-veil { position: fixed; inset: 0; z-index: calc(var(--z-toast, 30) + 5); pointer-events: none; opacity: 0; background: #fffdf2; }
+
+/* ---------- The Amulet shown in the white ---------- */
+.fl-amulet { position: fixed; left: 0; right: 0; top: 42%; z-index: calc(var(--z-toast, 30) + 6); transform: translateY(-50%); pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 14px; opacity: 0; }
+.fl-amulet.on { animation: fl-amulet-in 4.6s linear both; }
+.fl-amulet-rays { position: absolute; top: 50%; left: 50%; width: min(120vw, 760px); aspect-ratio: 1; margin: calc(min(120vw, 760px) / -2) 0 0 calc(min(120vw, 760px) / -2); border-radius: 50%; z-index: -1;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 214, 110, .5) 0 6deg, rgba(255, 214, 110, 0) 6deg 18deg); -webkit-mask: radial-gradient(circle, #000 0 8%, transparent 62%); mask: radial-gradient(circle, #000 0 8%, transparent 62%); animation: fl-amulet-spin 14s linear infinite; }
+.fl-amulet .pd-item { --u: 5px; --ix: 0; --iy: 0; filter: drop-shadow(0 0 14px #ffcf55) drop-shadow(0 0 4px #fff); animation: fl-amulet-float 1.6s ease-in-out infinite alternate; }
+.fl-amulet-text { font: 400 22px/28px var(--font-ui, Galmuri11); color: #5a3a08; text-align: center; max-width: 86vw; text-wrap: balance; text-shadow: 0 1px 0 rgba(255, 255, 255, .6); }
+.fl-amulet-sub { font: var(--text-body, 400 17px/22px var(--font-ui)); color: #6b4a1a; text-align: center; max-width: 80vw; text-wrap: balance; }
+@keyframes fl-amulet-in { 0% { opacity: 0; transform: translateY(-40%) scale(.85); } 14% { opacity: 1; transform: translateY(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes fl-amulet-spin { to { transform: rotate(360deg); } }
+@keyframes fl-amulet-float { from { transform: translateY(-4px); } to { transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .fl-amulet.on { animation: fl-amulet-calm 4.6s linear both; } .fl-amulet-rays, .fl-amulet .pd-item { animation: none; } }
+@keyframes fl-amulet-calm { 0% { opacity: 0; } 14% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
