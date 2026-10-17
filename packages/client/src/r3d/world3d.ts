@@ -55,6 +55,10 @@ import { Grass, Tufts } from './grass3d';
 import { contactAt, type Contact, WATER_BLOB, WATER_CONTACT } from './contact';
 import { type Footprint, footprint, gapRows } from './feet';
 import { withGlint } from './ore';
+import { hasAura } from '../growthcache';
+import { sigilPending } from './growth3d';
+import { onScreen } from './growthfx';
+import { quality } from '../quality';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
 import type { WearQuad } from '../wearfx';
@@ -100,6 +104,8 @@ const MAX_DEAD = 160;
 const CORPSE_FADE_MS = 3000;
 /** The most soft-bodied figures (a ghost, a wraith, bees) drawn at once, in their own blended batch. */
 const MAX_BLENDED = 48;
+/** How many cells past the screen's edge a hero's growth is still drawn (its sparks reach a cell or so from him). */
+const GROWTH_MARGIN = 2;
 /** The cold glow round a ghost. */
 const COLD = new Float32Array([0.45, 0.66, 0.95]);
 
@@ -1483,6 +1489,13 @@ export class World3D {
     if (held && !heldBack) {
       this.heldQuad(held, sheet.w, sheet.h, fig.flip, tx, by, bz, scale * fw, scale * fh, tint, scale);
       this.rimLast(tx, tz, fig.flip);
+    }
+    // Part 11: the growth of his weapon and armour, a curse known, the mastery sigil, as more instances of the effects' two batches.
+    if (puppet.isHero && puppet.alive && puppet.aura && (hasAura(puppet.aura) || sigilPending()) && onScreen(px, py, f.camX, f.camY, f.zoom, f.width, f.height, Math.sin(PITCH), GROWTH_MARGIN)) {
+      this.effects.growth.figure(
+        puppet.id, puppet.aura, now, tx, tz, by, bz, ground, scale, fh, sheet.w, sheet.h, fig.flip, held ? held.held : null, tint,
+        quality.light || !this.tier.particles,
+      );
     }
     if (puppet.alive || !puppet.laid) {
       const air = flyer || spectral || hover > 0;

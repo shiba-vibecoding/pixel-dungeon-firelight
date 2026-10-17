@@ -516,7 +516,12 @@ export interface Rect {
 export const ATLAS = {
   w: 1024,
   h: 768,
-  free: [{ x: 256, y: 0, w: 768, h: 768 }, { x: 0, y: 256, w: 256, h: 512 }] as readonly Rect[],
+  /**
+   * The corner kept for part 11's effects sheet (ui/growth/growth-fx.png, 64 x 128: sparks, runes, wisps, the mastery sigil): the bottom of
+   * the left strip, which the designer's sheets are not packed into. r3d/growth3d.ts puts the sheet there once it has loaded.
+   */
+  growth: { x: 0, y: 640, w: 64, h: 128 } as Rect,
+  free: [{ x: 256, y: 0, w: 768, h: 768 }, { x: 0, y: 256, w: 256, h: 384 }, { x: 64, y: 640, w: 192, h: 128 }] as readonly Rect[],
 };
 
 /**
