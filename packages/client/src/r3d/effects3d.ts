@@ -338,13 +338,13 @@ export class Effects3D {
   /**
    * The contact shadow: a small, sharp, dark ellipse right under a foot (`width` cells across, a little over a third as deep), on top of the
    * soft blob; it is drawn on the floor, before any figure. `lift` is how high the figure is off the floor (a flyer, a leap): it shrinks
-   * and fades with it.
+   * and fades with it. `depth` is its extent front to back (a flat ellipse by default; contact.ts places it under the soles).
    */
-  contactShadow(x: number, z: number, width: number, opacity: number, ground = 0, lift = 0): void {
+  contactShadow(x: number, z: number, width: number, opacity: number, ground = 0, lift = 0, depth = width * 0.4): void {
     const k = Math.max(0, 1 - lift / 0.7);
     if (k <= 0.02) return;
     const w = width * (0.55 + 0.45 * k);
-    this.soft.flat(x, 0.024 + ground, z, w, w * 0.4, 0, UV_DISC[0], UV_DISC[1], UV_DISC[2], UV_DISC[3], 0.005, 0.006, 0.014, Math.min(1, opacity * k));
+    this.soft.flat(x, 0.024 + ground, z, w, depth * (0.55 + 0.45 * k), 0, UV_DISC[0], UV_DISC[1], UV_DISC[2], UV_DISC[3], 0.005, 0.006, 0.014, Math.min(1, opacity * k));
   }
 
   /** A ring on the water where a foot comes down (see the drops': a quarter of a second later it is wide and gone). */

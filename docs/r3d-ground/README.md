@@ -21,3 +21,12 @@ tell from the baseline): CPU high 0.66 to 0.84 ms (+0.2 at most), mid 0.58 to 0.
 someone stands in short grass; heaps moved into the batch of the dead, which is drawn only when it has something in it); no per-frame allocation (the
 tufts, the feet attribute and the contact shadows write into arrays made once; the only objects made are the particles of a footstep, on the step).
 Dust, splash, sparks and rings are off at low and min (they are particles); the shader parts are a few lines in the sprite fragment shader.
+
+## Second pass (`fix2/`)
+
+- The white dot a cell in front of the hero in water was the specular highlight of the hero's own point light on the water (kit roughness 0.06 is a
+  mirror to the lights); the water's roughness is now at least 0.8 (`WATER_ROUGHNESS`), so a light is a soft sheen. The reflection and the glow are untouched.
+- The contact shadow is placed from the feet's own pixels (`feet.ts footprint`, `contact.ts contactAt`): centred on the columns of the lowest row, as wide as
+  them plus a pixel each side, its top edge 1.5 screen pixels over the soles' line (2.5 in water, where the lowest row is under the surface), no slip.
+  Water takes 35 percent of its strength. The soft blob is 0.78 of its size, 0.6 of its opacity (0.3 of that on water) and slips at most 0.03.
+- `before-*` / `after-*` crops at camera zoom 2 and 4 (dry, rat, water, grass) and `*-walk-*` strips (side, side mirrored, front, back, eight frames of a walk).

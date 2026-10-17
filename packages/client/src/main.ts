@@ -98,7 +98,7 @@ import { type BoardKind, type CircleBoardView, type Profile, type RunMeta, type 
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
+  backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedForGuide, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
   shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen, invitedGift, inviteStart, launchedByInvite,
 } from './telegram';
@@ -2012,8 +2012,14 @@ function tapCell(cell: number, quiet = false): void {
     if (!quiet) feedback.aim(cell, true, vnow, mob.id);
     return;
   }
-  if (!explored[cell]) return;
   const floating = (me.levitating ?? 0) > 0;
+  if (!explored[cell]) {
+    // A finger in the dark just past what is known (a corridor running on into the unknown): the hero goes as far that way as is known,
+    // to the explored floor nearest the tap at the edge of the dark. Keys and walks never come here (byPointer).
+    const edge = byPointer ? darkEdge(world, me, level, cell, explored, floating) : null;
+    if (edge === null || edge === me.pos) return;
+    cell = edge;
+  }
   // Hero.actOpenChest: a chest, a tomb or remains are opened from beside them, as in the original
   // (by a wall or in a corner, fewer wraiths can rise round a tomb); from afar, the hero walks up to one.
   const box = world.floors[me.depth]?.heaps.find((h) => h.pos === cell && h.kind !== 'heap' && h.kind !== 'forSale' && h.kind !== 'hidden');
@@ -2534,6 +2540,49 @@ function tapAt(px: number, py: number): void {
 
 /** Whether the tapCell under way came from the pointer (tapAt), not a key or a walk: only a finger or a click on a wall means the floor by it. */
 let byPointer = false;
+
+/** How far into the dark a tap may land and still mean the known floor at its edge, in cells. */
+const DARK_REACH = 4;
+
+/**
+ * The explored floor a tap in the unknown stands for: of the explored, walkable cells next to the unknown (the edge of the dark) within
+ * DARK_REACH of the tap, the one nearest the tap (then the shortest walk from the hero); null when the tap is too deep in the dark or
+ * no such cell can be reached.
+ */
+function darkEdge(world: World, me: Hero, level: Level, tap: number, explored: readonly boolean[], floating: boolean): number | null {
+  const tx = tap % WIDTH;
+  const ty = Math.floor(tap / WIDTH);
+  const occupied = occupiedCells(world, me.depth);
+  let best: number | null = null;
+  let bestDistance = Infinity;
+  let bestLength = Infinity;
+  for (let y = Math.max(0, ty - DARK_REACH); y <= Math.min(HEIGHT - 1, ty + DARK_REACH); y++) {
+    for (let x = Math.max(0, tx - DARK_REACH); x <= Math.min(WIDTH - 1, tx + DARK_REACH); x++) {
+      const cell = x + y * WIDTH;
+      if (!explored[cell] || !hasFlag(level.map[cell]!, F.PASSABLE)) continue;
+      // At the edge: some neighbour is still unknown.
+      let edge = false;
+      for (const n of core.NEIGHBOURS8) {
+        const next = cell + n;
+        if (next >= 0 && next < WIDTH * HEIGHT && !explored[next]) {
+          edge = true;
+          break;
+        }
+      }
+      if (!edge) continue;
+      const distance = Math.max(Math.abs(x - tx), Math.abs(y - ty));
+      if (distance > bestDistance) continue;
+      const way = cell === me.pos ? [cell] : findPath(level, me.pos, cell, occupied, explored, floating);
+      if (!way) continue;
+      if (distance < bestDistance || way.length < bestLength) {
+        best = cell;
+        bestDistance = distance;
+        bestLength = way.length;
+      }
+    }
+  }
+  return best;
+}
 
 /**
  * The floor beside a wall cell a tap on it stands for: of its four sides' explored, walkable cells, the one the shortest way from the
@@ -3755,6 +3804,9 @@ if (launchedForDaily()) {
   toTitle();
   // Without the server there is no profile to ask: the news are judged by this device alone.
   if (!api) maybeNews(null);
+  // Opened from a guide article the bot sent to a chat (`startapp=guide_<id>`): the guide at that article, a step back to the title.
+  const guideEntry = launchedForGuide();
+  if (guideEntry) showGuide(toTitle, guideEntry);
   // Opened from the bot's «you were passed on the board» message: the day's board.
   if (api && launchedForBoards()) openBoards('daily');
   if (api && launchedForLeague()) openLeague();

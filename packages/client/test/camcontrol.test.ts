@@ -252,15 +252,15 @@ describe('the hero acts after a pan', () => {
     expect(rig.cam.state.moving).toBe(true);
     rig.run(600);
     const at = rig.heroOnScreen();
-    // A tile (32 device pixels at zoom 2) in from the edge, and not a pixel more: nowhere near the middle.
-    expect(at.x).toBeCloseTo(TILE * 2, 0);
-    expect(at.x).toBeLessThan(100);
+    // A quarter of the width in from the edge (EDGE_SHARE), and not a pixel more: nowhere near the middle.
+    expect(at.x).toBeCloseTo(750 * 0.25, 0);
+    expect(at.x).toBeLessThan(375);
     expect(rig.cam.pan.x).toBeLessThan(before);
     // The vertical offset was fine and stays.
     expect(rig.cam.pan.y).toBeCloseTo(0, 3);
   });
 
-  it('a hero within a tile of the edge is nudged in, and one further in is left alone', () => {
+  it('a hero within a quarter of the edge is nudged in, and one further in is left alone', () => {
     const rig = new Rig();
     rig.panBy(-176, 0);
     const out = rig.heroOnScreen();
@@ -268,7 +268,7 @@ describe('the hero acts after a pan', () => {
     const before = rig.cam.pan.x;
     rig.step(1, 0);
     rig.run(600);
-    expect(rig.heroOnScreen().x).toBeCloseTo(750 - TILE * 2, 0);
+    expect(rig.heroOnScreen().x).toBeCloseTo(750 * 0.75, 0);
     expect(rig.cam.pan.x).toBeGreaterThan(before);
 
     const calm = new Rig();
@@ -294,7 +294,7 @@ describe('the hero acts after a pan', () => {
     expect(rig.heroOnScreen().y).toBeGreaterThan(1300);
     rig.step(0, 1);
     rig.run(600);
-    expect(rig.heroOnScreen().y).toBeCloseTo(1300 - TILE * 2, 0);
+    expect(rig.heroOnScreen().y).toBeCloseTo(1300 - (1300 - 120) * 0.25, 0);
   });
 });
 

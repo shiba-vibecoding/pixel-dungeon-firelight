@@ -50,7 +50,8 @@ import { bakeItem } from './itemblood';
 import { GoreLayer } from './gorelayer';
 import { gore } from '../gore';
 import { Grass, Tufts } from './grass3d';
-import { gapRows } from './feet';
+import { contactAt, type Contact, WATER_BLOB, WATER_CONTACT } from './contact';
+import { type Footprint, footprint, gapRows } from './feet';
 import { withGlint } from './ore';
 import { isSoft } from './softalpha';
 import { FEET_PX, LEAN, LEAN_STRETCH, PITCH } from './project';
@@ -143,6 +144,17 @@ const LEAP_HOP = 0.4;
 const KNOCK_MS = 120;
 const LAND_MS = 150;
 const WADE_ROWS = 3;
+/**
+ * How rough the water is at the least. The kit's 0.06 is a mirror to the lights: the hero's own light (0.9 up, a step in front of him) showed
+ * in it as a small sharp white dot hanging a cell in front of him, and followed him (the owner's «точка перед персонажем»); a torch showed
+ * the same on its own patch. At this roughness a light is a wide, soft sheen on the water, not a point. The water still shines by its own
+ * glow and the mirror's reflection, neither of which is a highlight.
+ */
+const WATER_ROUGHNESS = 0.8;
+/** The soft blob under a figure, against the kit's: smaller, fainter, and slipping at most this far (cells) from the light. */
+const BLOB_SIZE = 0.78;
+const BLOB_OPACITY = 0.6;
+const BLOB_SLIP = 0.03;
 const DUST: BurstOptions = { count: 3, colors: ['#b9ad96', '#9c917e', '#d2c8b0'], speed: [5, 15], life: [260, 440], size: [1, 2], spread: 2, rise: 10, drag: 0.02, low: true };
 const SPLASH: BurstOptions = { count: 4, colors: ['#c4e6f2', '#8ec6dc', '#eaf7fb'], speed: [14, 34], life: [280, 460], size: [1, 2], spread: 2, rise: 26, gravity: 90, drag: 0.03 };
 const CRUNCH: BurstOptions = { count: 3, colors: ['#ffb050', '#ff7a2a', '#ffd890'], speed: [10, 30], life: [200, 380], size: [1, 2], spread: 2, rise: 22, drag: 0.03, glow: true, low: true };
@@ -335,6 +347,9 @@ export class World3D {
   private readonly spriteRim: InstancedBufferAttribute;
   private readonly spriteRimColor: InstancedBufferAttribute;
   private readonly strong: Strongest = { ux: 0, uz: 0, r: 0, g: 0, b: 0, strength: 0 };
+  /** Scratch for a figure's footprint and its contact shadow (addPuppet): nothing is made in the frame. */
+  private readonly foot: Footprint = { lo: 0, hi: 0, gap: 0 };
+  private readonly contact: Contact = { x: 0, z: 0, width: 0, depth: 0 };
   private spriteCount = 0;
   /** The blended batch for figures with soft bodies: alpha-blended, no depth written, sorted back to front; drawn only when one is on screen. */
   private readonly ghosts: InstancedMesh;
@@ -740,7 +755,7 @@ export class World3D {
     const lava = a.emissive !== undefined;
     // The water shines by itself: its texture tinted with the region's water colour, bright, and glossy to the lights. Lava glows.
     this.waterMaterial = new MeshStandardMaterial({
-      map: this.waterTex, color: lava ? 0xffffff : hex(a.surface), roughness: w.roughness, metalness: w.metalness,
+      map: this.waterTex, color: lava ? 0xffffff : hex(a.surface), roughness: Math.max(w.roughness, WATER_ROUGHNESS), metalness: w.metalness,
       emissive: lava ? hex(a.emissive!) : hex(a.surface), emissiveMap: this.waterTex, emissiveIntensity: lava ? a.emissiveIntensity ?? 0.8 : 1.1, vertexColors: true,
     });
     if (!lava) this.waterMaterial.color.multiplyScalar(1.6);
@@ -1451,13 +1466,26 @@ export class World3D {
     }
     if (puppet.alive || !puppet.laid) {
       const air = flyer || spectral || hover > 0;
-      const size = Math.max(0.35, sk.shadow.width * (sheet.w / TILE)) * (air ? sk.fly.shadowScale : 1) * scale;
-      const away = lit ? sk.shadow.offset : 0;
       const up = lift - ground;
-      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * (air ? sk.fly.shadowFade : 1) * Math.max(0.35, 1 - hop * 2.5), sk.shadow.squash, ground);
-      // Under the feet, tight and dark: a small hard ellipse in front of the soft one, weaker for what flies, smaller and fainter the higher it is.
-      const width = Math.min(0.62, CONTACT_WIDTH + 0.12 * (sheet.w / 12)) * scale;
-      this.effects.contactShadow(tx - this.strong.ux * away * 0.4, tz - this.strong.uz * away * 0.4, width * (air ? 0.8 : 1), CONTACT_OPACITY * (air ? 0.5 : 1), ground, up);
+      // The soft blob: a faint, smaller smudge under the whole body that slips at most a hair from the strongest light (a wide slip is what
+      // read as a shadow cast off a figure floating over the floor); on water it is fainter still.
+      const size = Math.max(0.35, sk.shadow.width * (sheet.w / TILE)) * BLOB_SIZE * (air ? sk.fly.shadowScale : 1) * scale;
+      const away = lit ? Math.min(sk.shadow.offset, BLOB_SLIP) : 0;
+      const onWater = wading ? WATER_BLOB : 1;
+      this.effects.shadowBlob(tx - this.strong.ux * away, tz - this.strong.uz * away, size, sk.shadow.opacity * BLOB_OPACITY * onWater * (air ? sk.fly.shadowFade : 1) * Math.max(0.35, 1 - hop * 2.5), sk.shadow.squash, ground);
+      // Under the feet, tight and dark: a small hard ellipse that touches the soles (contact.ts): as wide as the feet and centred on them,
+      // no slip, its top edge under the lowest row of their pixels; fainter for what flies, smaller and fainter the higher it is, and on
+      // water, which does not take a crisp shadow, very faint and from the waterline.
+      const k = this.contact;
+      if (standing && footprint(fig.image, sx, sy, sheet.w, sheet.h, this.foot)) {
+        contactAt(tx, tz, this.foot.lo, this.foot.hi, sheet.w, fig.flip, scale, wading, k);
+      } else {
+        k.width = Math.min(0.62, CONTACT_WIDTH + 0.12 * (sheet.w / 12)) * scale * (air ? 0.8 : 1);
+        k.depth = k.width * 0.4;
+        k.x = tx;
+        k.z = tz;
+      }
+      this.effects.contactShadow(k.x, k.z, k.width, CONTACT_OPACITY * (air ? 0.5 : 1) * (wading ? WATER_CONTACT : 1), ground, up, k.depth);
       // (No blades of short grass over the feet: the owner found the swaying tufts under the hero odd; short grass stays the floor's decal.)
     }
     if (BOSS_KINDS.has(puppet.kind) && puppet.alive) {
