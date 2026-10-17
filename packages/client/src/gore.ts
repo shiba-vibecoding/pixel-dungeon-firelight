@@ -93,6 +93,17 @@ export interface StorageLike {
 }
 
 const PREFIX = 'pd-gore:';
+/** The start of every record's key. */
+export const GORE_PREFIX = PREFIX;
+
+/** The run and depth a record's key is of (a run's name has colons in it: the depth is after the last one); null for a key that is not a record. */
+export function goreKeyInfo(key: string): { run: string; depth: number } | null {
+  if (!key.startsWith(PREFIX)) return null;
+  const rest = key.slice(PREFIX.length);
+  const at = rest.lastIndexOf(':');
+  const depth = Number(rest.slice(at + 1));
+  return at < 0 || !Number.isInteger(depth) ? null : { run: rest.slice(0, at), depth };
+}
 
 /** What is kept of a depth: bodies as [kind, cell, flip, seed, hits], splats as [layer, x, y, w, h, rgb], water as [cell, value]. */
 interface Saved {
@@ -174,6 +185,11 @@ export class Gore {
   onSplat: ((s: Splat) => void) | null = null;
   /** Called when the water has stained a little more. */
   onWater: (() => void) | null = null;
+
+  /** The run and depth being shown, or null when none is bound yet (the quota spares these records longest). */
+  where(): { run: string; depth: number } | null {
+    return this.depth >= 0 ? { run: this.run, depth: this.depth } : null;
+  }
 
   setStore(store: GoreStore): void {
     this.store = store;

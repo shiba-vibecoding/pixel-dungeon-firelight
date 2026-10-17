@@ -80,6 +80,16 @@ export const withoutArena = (profile: Profile): Profile => ({
 
 export type Trouble = 'offline' | 'unauthorized' | 'rules';
 
+/**
+ * Which copy of the game is talking (runs.ts, `owner`): the page's own token, and whether this call takes the run over (a run
+ * just begun or carried on, or taken back after another device took it). A sync from a token the server does not hold as the
+ * run's owner is answered `taken` and changes nothing.
+ */
+export interface DeviceTag {
+  sid: string;
+  claim: boolean;
+}
+
 /** A player's report of a problem: their words, and when attached, the run's last actions and the console's last errors (diag.ts). */
 export interface ProblemReport {
   text: string;
@@ -289,8 +299,8 @@ export interface RunApi {
   challenge(text: string, card: string | null, circle?: string): Promise<string | null>;
   /** The bot's reminders on or off; false if the server could not be told. */
   notify(on: boolean): Promise<boolean>;
-  start(slot: RunSlot, hero: HeroClass, challenges: number): Promise<{ run: RunMeta; world: World } | Trouble>;
-  sync(meta: RunMeta, actions: readonly Action[], hash: string | null, keepalive?: boolean): Promise<SyncAnswer | Trouble>;
+  start(slot: RunSlot, hero: HeroClass, challenges: number, sid?: string): Promise<{ run: RunMeta; world: World } | Trouble>;
+  sync(meta: RunMeta, actions: readonly Action[], hash: string | null, keepalive?: boolean, tag?: DeviceTag): Promise<SyncAnswer | Trouble>;
   get(slot: RunSlot): Promise<{ run: RunMeta | null; world?: World } | Trouble>;
   me(): Promise<Profile | null>;
   /** The mailbox: read all, claim one (by its id) or claim all; the letters and trophies after it, or null. */
@@ -325,13 +335,19 @@ export function runApi(server: string, identity: () => Identity, development: bo
   if (!server || (!identity().initData && !development)) return null;
   const base = httpBase(server);
   const post = async <T>(path: string, body: Record<string, unknown>, keepalive = false): Promise<T | Trouble> => {
+    const text = JSON.stringify({ ...identity(), rules: RULES_VERSION, ...body });
     try {
-      const response = await fetch(`${base}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...identity(), rules: RULES_VERSION, ...body }),
-        keepalive,
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text, keepalive });
+      } catch (error) {
+        // A page that is going: a keepalive request refused outright (no fetch for it, a body too big) goes as a beacon, which the browser
+        // sends after the page is gone (plain text, so that it needs no preflight; the server reads the body as JSON all the same).
+        if (keepalive && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function' && typeof Blob !== 'undefined') {
+          navigator.sendBeacon(`${base}${path}`, new Blob([text], { type: 'text/plain' }));
+        }
+        throw error;
+      }
       if (response.status === 401) return 'unauthorized';
       if (response.status === 409) return 'rules';
       if (!response.ok) return 'offline';
@@ -345,10 +361,10 @@ export function runApi(server: string, identity: () => Identity, development: bo
     return typeof answer === 'string' ? null : answer;
   };
   return {
-    start: (slot, hero, challenges) => post('/run', { op: 'start', slot, hero, challenges }),
+    start: (slot, hero, challenges, sid) => post('/run', { op: 'start', slot, hero, challenges, ...(sid ? { sid } : {}) }),
     // A keepalive request (the app being put away) must stay under 64 KB: the batch is cut to fit.
-    sync: (meta, actions, hash, keepalive = false) =>
-      post('/run', { op: 'sync', slot: meta.slot, run: meta.id, from: meta.seq, actions, hash }, keepalive),
+    sync: (meta, actions, hash, keepalive = false, tag) =>
+      post('/run', { op: 'sync', slot: meta.slot, run: meta.id, from: meta.seq, actions, hash, ...(tag ? { sid: tag.sid, claim: tag.claim } : {}) }, keepalive),
     get: (slot) => post('/run', { op: 'get', slot }),
     me: async () => {
       const profile = await quiet<Profile>('/me', {});

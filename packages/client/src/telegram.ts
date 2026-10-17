@@ -157,6 +157,12 @@ export function onLayoutChange(callback: () => void): void {
   }
 }
 
+/** Calls back when Telegram changes the viewport (the app is folded, unfolded, resized): a swipe down on a phone starts with it. */
+export function onViewportChange(callback: () => void): void {
+  if (!webApp?.onEvent || !inTelegram) return;
+  webApp.onEvent('viewportChanged', callback);
+}
+
 /** Calls back when Telegram minimises or restores the app (Bot API 8.0 «deactivated» / «activated»); nothing elsewhere. */
 export function onActiveChange(callback: (active: boolean) => void): void {
   if (!webApp?.onEvent || !inTelegram) return;
