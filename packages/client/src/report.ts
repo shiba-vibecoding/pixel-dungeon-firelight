@@ -31,7 +31,8 @@ export function scrub(text: string): string {
 }
 
 /** Browser notes that are not errors of the game: a ResizeObserver that could not deliver everything in one frame, and the like. */
-const BENIGN = /^ResizeObserver loop/;
+/** Browser notes that are not errors of the game: a ResizeObserver that could not deliver everything in one frame, sound refused before a touch. */
+const BENIGN = /^(ResizeObserver loop|Failed to start the audio device|NotAllowedError)/;
 
 export function report(kind: string, message: string, stack?: string, context: Context = {}): void {
   if (!endpoint || sent >= LIMIT) return;

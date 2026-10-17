@@ -210,7 +210,7 @@ class Audio {
       void this.context?.suspend();
     });
     onResume(() => {
-      void this.context?.resume();
+      this.context?.resume().catch(() => undefined);
       this.startMusic();
     });
   }
@@ -230,7 +230,7 @@ class Audio {
   private unlock(): void {
     if (this.unlocked) {
       if (this.context && this.context.state !== 'running' && !paused()) {
-        void this.context.resume();
+        this.context.resume().catch(() => undefined);
         this.silence(this.context);
       }
       return;
@@ -239,7 +239,7 @@ class Audio {
     try {
       const ctx = new AudioContext();
       this.context = ctx;
-      void ctx.resume();
+      ctx.resume().catch(() => undefined);
       this.silence(ctx);
       const compressor = ctx.createDynamicsCompressor();
       compressor.threshold.value = -14;
