@@ -8,6 +8,8 @@
  * `renderSfx` returns plain samples (it is tested in node), and `makeBuffer` wraps them for the browser.
  */
 
+import { QUEST_SFX } from './sfx-quest';
+
 export type Wave = 'sine' | 'triangle' | 'saw' | 'square' | 'noise';
 
 /** One voice. Times are seconds, pitches Hz, pitch changes semitones. */
@@ -611,6 +613,9 @@ export const SFX = {
   ember: fx(0.4,
     { wave: 'noise', filter: bp(2500, 900, 1.5), decay: 0.05, shape: 3 },
     { wave: 'sine', freq: 600, slide: -10, decay: 0.04, gain: 0.3 }),
+
+  // The quests': a pick on rock, ore gleaming, a reward's fanfare, a giver's voice (sfx-quest.ts).
+  ...QUEST_SFX,
 } as const satisfies Record<string, Sfx>;
 
 export type SfxName = keyof typeof SFX;

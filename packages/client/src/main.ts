@@ -4,7 +4,7 @@ import {
   HEAP_SPRITES,
   type Hero, type Item, type Level,
   type Bones, hasAmulet, heroById, type HeroClass, leaveBones, HEIGHT, isAlive, isHungry, isStarving, itemDef, itemSprite, levelAt, mobById, type MobKind,
-  ORE_WANTED, type PlanStep, PLANT_KINDS, type SmithLine, T,
+  type PlanStep, PLANT_KINDS, type SmithLine, T,
   chargesKnown, WIDTH, itemAt,
   type World, charAt, swapsWithHero,
 } from '@pd/core';
@@ -18,6 +18,7 @@ import './fl-compete.css';
 import './fl-input.css';
 import './photo.css';
 import './fl-grow.css';
+import './fl-quest.css';
 import { mobDescription, plantText, tileText, wellText } from './examine';
 import { quickItem, quickRef, quickUse } from './quickslot';
 import { fx } from './fx';
@@ -50,6 +51,11 @@ import {
   backpackOpen, bagMoment, bagSay, refreshBackpack, showHistory, showMenu, showRankings, showAmulet, showQuest, showRunEnd, showBadges, showInfo, showSell, showSign, showTrade, showWaiting, slot, toast, type ShareChoice,
 } from './screens';
 import { rankingBlock, trophyText } from './rankui';
+import { showTalk, smithTalk, type TalkOptions } from './questui';
+import { ghostPlan, impPlan, smithPlan, type TalkPlan, wandmakerPlan } from './questtalk';
+import { Q, registerNow } from './quest-text';
+import { QuestChip } from './questcardui';
+import { questTake, releaseFarewells } from './questfx';
 import { showBoards } from './boardsui';
 import { showProfile } from './profileui';
 import { lastArmor, lastWeapon } from './compete-ui';
@@ -503,6 +509,8 @@ hints.suppress = (id) => tutorial.active && (id === 'monster' || id === 'stairs'
 hints.hold = () => tutorial.visible;
 
 const finds = new Finds(document.getElementById('ui')!);
+// The errand that stands, as a chip on the HUD (questcardui.ts): a tap opens the journal at its notes.
+const questChip = new QuestChip(document.getElementById('ui')!, () => openJournal());
 /** Something was picked up since the backpack was last opened. */
 let newLoot = false;
 
@@ -1937,30 +1945,29 @@ function handleMyEffects(effects: readonly Effect[], myId: string): void {
   }
 }
 
+/** A word with a quest giver (questui.ts): the plan of the moment (questtalk.ts) in the language and register of now. */
+function talkWith(plan: TalkPlan, world: World, me: Hero, extra: Partial<TalkOptions> = {}): void {
+  showTalk({
+    world, hero: me, id: plan.id, kind: plan.kind, text: plan.text, replies: plan.replies, offers: plan.offers, complete: plan.complete,
+    ...(plan.bye ? { bye: plan.bye } : {}),
+    // The wandmaker and the imp go once the farewell is read: the leave-taking is seen on the map (questfx.ts).
+    onClose: plan.bye ? () => { hideOverlay(); releaseFarewells(view, fx.time(performance.now())); } : hideOverlay, ...extra,
+  });
+}
+
 function talkWithGhost(line: 'intro' | 'remind' | 'reward' | 'farewell', errand: 'rose' | 'rat' | 'curse'): void {
   const world = session?.world;
   const me = world && heroById(world, session!.myId);
   if (!world || !me) return;
   audio.play('ghost');
   walk.reset();
-  const quest = world.quest;
   // Each errand has its own words; the curse is only taken on if the hero says yes.
-  const text =
-    line === 'farewell' ? t.ghost.farewell
-    : errand === 'rat' ? t.ghostRat[line]
-    : errand === 'curse' ? (line === 'reward' ? t.ghostCurse.reward(t.classes[me.heroClass]) : t.ghostCurse.intro)
-    : t.ghost[line];
-  showQuest({
-    world,
-    hero: me,
-    who: 'ghost',
-    text,
-    offers: line === 'reward' && quest ? [quest.weapon, quest.armor] : [],
+  const plan = ghostPlan(Q, world, me, line, errand, registerNow(), t.classes[me.heroClass]);
+  talkWith(plan, world, me, {
     onChoose: (index) => send({ type: 'reward', choice: index === 0 ? 'weapon' : 'armor' }, performance.now()),
     ...(errand === 'curse' && line === 'intro'
       ? { answers: [{ label: t.ghostCurse.yes, onAnswer: () => send({ type: 'faceCurse' }, performance.now()) }, { label: t.ghostCurse.no, onAnswer: () => undefined }] }
       : {}),
-    onClose: hideOverlay,
   });
 }
 
@@ -1978,20 +1985,9 @@ function talkWithWandmaker(line: 'intro' | 'remind' | 'reward' | 'farewell'): vo
   const me = world && heroById(world, session!.myId);
   if (!world || !me) return;
   walk.reset();
-  const quest = world.wandQuest;
-  showQuest({
-    world,
-    hero: me,
-    who: 'wandmaker',
-    // He may be after a rotberry seed rather than corpse dust.
-    text: quest?.wants === 'berry' && line === 'intro' ? t.wandmaker.introBerry
-      : quest?.wants === 'berry' && line === 'remind' ? t.wandmaker.remindBerry
-      : quest?.wants === 'fish' && line === 'intro' ? t.wandmaker.introFish
-      : quest?.wants === 'fish' && line === 'remind' ? t.wandmaker.remindFish
-      : t.wandmaker[line],
-    offers: line === 'reward' && quest ? [quest.battle, quest.utility] : [],
+  // He may be after a rotberry seed or a phantom fish rather than corpse dust: the plan knows.
+  talkWith(wandmakerPlan(Q, world, me, line, registerNow()), world, me, {
     onChoose: (index) => send({ type: 'wandReward', choice: index === 0 ? 'battle' : 'utility' }, performance.now()),
-    onClose: hideOverlay,
   });
 }
 
@@ -2001,20 +1997,17 @@ function talkWithSmith(line: SmithLine): void {
   const quest = world?.smithQuest;
   if (!world || !me || !quest) return;
   walk.reset();
-  const text =
-    line === 'intro' ? t.smith.intro[quest.wants]
-    : line === 'noGold' ? t.smith.noGold(ORE_WANTED)
-    : t.smith[line];
+  const plan = smithPlan(Q, world, me, line, registerNow());
   // Done with the errand: his services are on offer at once.
   if (line === 'completed' || line === 'reforge') {
     showReforge({
-      world, hero: me, text,
+      world, hero: me, text: plan.text, talk: smithTalk(plan.id, plan.kind, plan.text, plan.complete),
       onReforge: (first, second) => send({ type: 'reforge', first, second }, performance.now()),
       onClose: hideOverlay,
     });
     return;
   }
-  showQuest({ world, hero: me, who: 'blacksmith', text, onClose: hideOverlay });
+  talkWith(plan, world, me);
 }
 
 function talkWithImp(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
@@ -2023,20 +2016,7 @@ function talkWithImp(line: 'intro' | 'remind' | 'reward' | 'farewell'): void {
   const quest = world?.impQuest;
   if (!world || !me || !quest) return;
   walk.reset();
-  const text =
-    line === 'intro' ? t.imp.intro[quest.prey]
-    : line === 'remind' ? t.imp.remind[quest.prey]
-    : line === 'reward' ? t.imp.reward
-    : t.imp.farewell(t.classes[me.heroClass]);
-  showQuest({
-    world,
-    hero: me,
-    who: 'imp',
-    text,
-    offers: line === 'reward' ? [quest.reward] : [],
-    onChoose: () => send({ type: 'impReward' }, performance.now()),
-    onClose: hideOverlay,
-  });
+  talkWith(impPlan(Q, world, me, line, registerNow(), t.classes[me.heroClass]), world, me, { onChoose: () => send({ type: 'impReward' }, performance.now()) });
 }
 
 /* Input */
@@ -3538,6 +3518,13 @@ function takeEffects(effects: readonly Effect[], world: World, me: Hero, now: nu
   const mine = session!.myId;
   if (effects.some((e) => ('hero' in e && e.hero === mine) || ('who' in e && e.who === mine))) refreshBackpack(world, me);
   for (const effect of effects) effectFx(effect, view, world, session!.myId, vnow);
+  // The ore that pops out of a vein, the toast with the count of ore and tokens (questfx.ts).
+  questTake(effects, world, me, vnow, {
+    toast: (text, options) => toast(text, options),
+    find: (key, sprite, name) => finds.show(key, sprite, name, true),
+    launch: (sprite, x, y, at) => launches.push({ sprite, x, y, at, gold: false }),
+    oreName: () => capitalize(itemName(world, core.createItem('quest.ore'))),
+  });
   motion.effects(effects, world, me.depth, (e) => itemSprite(e.item, world.run.labels));
   scenery.effects(effects, me.depth, vnow);
   handleMyEffects(effects, session!.myId);
@@ -4047,6 +4034,8 @@ function tick(now: number): void {
       },
       walk.resting,
     );
+    // The errand that stands, on the HUD's own beat.
+    questChip.update(world, me, me.depth, !isAlive(me));
   }
   placeToasts();
   // Bones laid on their depth are this run's now: the device forgets them.
