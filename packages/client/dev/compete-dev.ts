@@ -42,9 +42,9 @@ declare global {
 
 const screen = q.get('s') ?? 'boards';
 const runs = [
-  { key: 'a', score: 10500, name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'mage', lvl: 19, depth: 17, gold: 1200, won: false, cause: '', mode: 'daily', checked: true, date: Date.parse('2026-10-15') },
-  { key: 'b', score: 7210, name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'warrior', lvl: 14, depth: 12, gold: 800, won: false, cause: '', mode: 'solo', checked: true, date: Date.parse('2026-10-14') },
-  { key: 'c', score: 2300, name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'rogue', lvl: 8, depth: 6, gold: 200, won: false, cause: '', mode: 'solo', checked: false, date: Date.parse('2026-10-10') },
+  { key: 'a', score: 10500, name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'mage', armor: 3, weapon: 'weapon.quarterstaff', lvl: 19, depth: 17, gold: 1200, won: false, cause: '', mode: 'daily', checked: true, date: Date.parse('2026-10-15') },
+  { key: 'b', score: 7210, name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'warrior', armor: 4, weapon: 'weapon.battleAxe', lvl: 14, depth: 12, gold: 800, won: false, cause: '', mode: 'solo', checked: true, date: Date.parse('2026-10-14') },
+  { key: 'c', score: 2300, name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'rogue', armor: 2, weapon: 'missile.dart', lvl: 8, depth: 6, gold: 200, won: false, cause: '', mode: 'solo', checked: false, date: Date.parse('2026-10-10') },
 ] as never[];
 if (screen === 'boards' || screen === 'runs') {
   const metric = q.get('metric') as 'score' | 'speed' | 'depth' | null;
@@ -73,7 +73,7 @@ if (screen === 'circlecard') {
 if (screen === 'hall') showHall({ api, onBack: () => undefined, onClose: () => undefined });
 const me = (): Parameters<typeof storyPicture>[0] => ({
   name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'mage', place: q.get('place') === 'none' ? null : 4, depth: 17, streak: 12,
-  look: { ...myLook('mage'), l: 'skin.mage.frost', h: 'hat.wizard', p: 'pet.firefly', f: 'fire.blue', fr: 'frame.runes' },
+  look: { ...myLook('mage', 3, 'weapon.quarterstaff'), l: 'skin.mage.frost', h: 'hat.wizard', p: 'pet.firefly', f: 'fire.blue', fr: 'frame.runes' },
 });
 if (screen === 'profile') {
   showProfile({

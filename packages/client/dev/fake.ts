@@ -22,6 +22,14 @@ const NAMES = {
 const of = (category: Item['category']): Item[] => CATALOG.filter((item) => item.category === category && item.stars > 0 && !item.earn);
 const pick = <T,>(list: readonly T[], random: () => number): T => list[Math.floor(random() * list.length)]!;
 
+/** The weapons a class might end a run holding (design part 9). */
+const WEAPONS: Record<string, readonly string[]> = {
+  warrior: ['weapon.shortSword', 'weapon.sword', 'weapon.longsword', 'weapon.mace', 'weapon.battleAxe', 'weapon.warHammer', 'weapon.spear'],
+  mage: ['weapon.knuckles', 'weapon.quarterstaff', 'weapon.dagger', 'weapon.glaive'],
+  rogue: ['weapon.dagger', 'weapon.shortSword', 'missile.dart', 'weapon.spear'],
+  huntress: ['weapon.dagger', 'missile.boomerang', 'weapon.glaive', 'missile.dart'],
+};
+
 export const MY_NAME = { en: 'Kirill', ru: 'Кирилл' };
 
 /** One player of the crowd, by number: a hero of some class dressed from the shop's things (every fifth wears nothing). */
@@ -35,6 +43,10 @@ export function person(i: number, ru: boolean): BoardEntry {
   const won = depth === 26 && random() > 0.5;
   const gold = Math.floor(random() * 4000);
   const w: NonNullable<BoardEntry['w']> = {};
+  // The armour and the weapon he held at the end of the run (the server's word from the final world): most carry one.
+  w.a = 1 + Math.floor(random() * 5);
+  const arms = WEAPONS[heroClass]!;
+  if (random() > 0.15) w.wp = pick(arms, random);
   if (!bare) {
     const looks = of('look').filter((item) => item.heroClass === heroClass);
     if (random() > 0.35) w.l = pick(looks, random).id;
@@ -67,7 +79,7 @@ export function board(kind: string, slice: BoardSlice | undefined, ru: boolean, 
   // The first three are the best, as a board's first three read.
   const me: BoardEntry = {
     id: 'me', name: MY_NAME[ru ? 'ru' : 'en'], heroClass: 'mage', score: 10500, depth: 17, level: 19, gold: 1200, won: false, turns: 4120, at: 1,
-    w: { l: 'skin.mage.frost', h: 'hat.wizard', p: 'pet.firefly', f: 'fire.blue', fr: 'frame.runes', nc: 'name.gold' },
+    w: { a: 3, wp: 'weapon.quarterstaff', l: 'skin.mage.frost', h: 'hat.wizard', p: 'pet.firefly', f: 'fire.blue', fr: 'frame.runes', nc: 'name.gold' },
   };
   const top = list.slice(0, metric === 'score' && !slice?.cls ? 100 : 50);
   return { name: `${kind}:fake`, rank: metric === 'score' && !slice?.cls ? mine : null, top, total: top.length, played, you: me };
@@ -132,7 +144,7 @@ export function hall(ru: boolean, season = 's1'): HallView {
 export function profile(ru: boolean): Profile {
   return {
     name: MY_NAME[ru ? 'ru' : 'en'], games: 87, wins: 3, deepest: 21, best: 10500, bestByClass: { mage: 10500 }, arenaWaves: 0, arenaBest: 0,
-    streak: { last: null, count: 12, best: 14, freezes: 1 }, dailyDone: true, badges: {} as Profile['badges'], history: [], trophies: [
+    streak: { last: null, count: 12, best: 14, freezes: 1 }, dailyDone: true, badges: {} as Profile['badges'], history: [{ heroClass: 'mage', armor: 3, weapon: 'weapon.quarterstaff', depth: 17, level: 19, gold: 1200, won: false, score: 10500, slot: 'dungeon', ranked: true, at: 1 }] as unknown as Profile['history'], trophies: [
       { board: 'daily:2026-10-12', place: 2, at: 1 }, { board: 'week:2026-W41', place: 7, at: 1 }, { board: 'daily:2026-10-09', place: 3, at: 1 },
     ],
     places: { daily: 37 }, totals: { daily: 1284 }, runs: {}, today: '2026-10-16',
