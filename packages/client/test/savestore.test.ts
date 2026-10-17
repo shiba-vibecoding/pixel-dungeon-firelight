@@ -2,8 +2,9 @@ import { fingerprint, RULES_VERSION, type World } from '@pd/core';
 import { describe, expect, it } from 'vitest';
 import {
   BUDGET_CHARS, checksum, decodeSnapshot, encodeSnapshot, evictable, forgetSlot, JOURNAL_MAX, journalKey, journalKey2, putWithRoom, readSlot, SAVE_VERSION,
-  type SavedCheck, setEvictContext, SlotKeeper, slotOfKey, trimToBudget, twinKey, usage,
+  hydrate, type SavedCheck, setEvictContext, setMirror, SlotKeeper, slotOfKey, trimToBudget, twinKey, usage,
 } from '../src/savestore';
+import { memoryMirror } from '../src/mirror';
 import { Killed, MemStorage, newWorld, play, sameWorld, viaJson } from './savekit';
 
 const KEY = 'pd-solo';
@@ -305,12 +306,17 @@ describe('damage', () => {
     expect(read.run && sameWorld(read.run.world, world)).toBe(true);
   });
 
-  it('does not play a journal on other rules', () => {
+  it('plays a journal written under other rules (the game was updated while the moves waited), as long as it comes to its fingerprint', () => {
     const { storage, world } = slot();
-    for (const key of journalKeys) forge(storage, key, (body) => { body.r = RULES_VERSION + 1; });
+    for (const key of journalKeys) forge(storage, key, (body) => { body.r = RULES_VERSION - 1; });
     const read = readSlot(storage, KEY);
-    expect(read.recovered).toBe('journal');
-    expect(read.run!.world.turn).toBe(world.turn - 6);
+    expect(read.recovered).toBeNull();
+    expect(read.run && sameWorld(read.run.world, world)).toBe(true);
+    // If the new rules changed what the moves do, the fingerprint says so, and the snapshot stands (told of).
+    for (const key of journalKeys) forge(storage, key, (body) => { body.r = RULES_VERSION - 1; body.f = 'ffffffffffffff'; });
+    const changed = readSlot(storage, KEY);
+    expect(changed.recovered).toBe('journal');
+    expect(changed.run!.world.turn).toBe(world.turn - 6);
   });
 
   it('reports a damaged pair as damaged, with no run', () => {
@@ -506,5 +512,112 @@ describe('the quota', () => {
     expect(putWithRoom(storage, 'pd-save', 'v'.repeat(900))).toBe(true);
     expect(storage.getItem('pd-gore:a:b:1')).toBeNull();
     expect(putWithRoom(storage, 'pd-save2', 'w'.repeat(5000))).toBe(false);
+  });
+});
+
+describe('the mirror', () => {
+  const withMirror = async <T>(body: (mirror: ReturnType<typeof memoryMirror>) => Promise<T> | T): Promise<T> => {
+    const mirror = memoryMirror();
+    setMirror(mirror);
+    try {
+      return await body(mirror);
+    } finally {
+      setMirror(null);
+    }
+  };
+
+  it('is given every write of a slot, the snapshots and the journals, and forgets with it', async () => {
+    await withMirror((mirror) => {
+      const storage = new MemStorage();
+      const keeper = new SlotKeeper(storage, KEY);
+      const world = newWorld(21);
+      keeper.snapshot(world, null);
+      keeper.note(play(world)!, world, null);
+      keeper.note(play(world)!, world, null);
+      for (const key of [twinKey(KEY), journalKey(KEY), journalKey2(KEY)]) expect(mirror.data.get(key)).toBe(storage.getItem(key));
+      keeper.drop();
+      expect([...mirror.data.keys()]).toEqual([]);
+    });
+  });
+
+  it('keeps a run safe when localStorage is full: the mirror has it', async () => {
+    await withMirror(async (mirror) => {
+      const world = newWorld(22);
+      for (let i = 0; i < 100; i++) play(world);
+      const storage = new MemStorage(5000);
+      const keeper = new SlotKeeper(storage, KEY);
+      expect(keeper.snapshot(world, null)).toBe(true);
+      expect(storage.getItem(twinKey(KEY))).toBeNull();
+      // A start finds it there.
+      const fresh = new MemStorage();
+      expect(await hydrate(fresh, KEY)).toBe('mirror');
+      const read = readSlot(fresh, KEY);
+      expect(read.run && sameWorld(read.run.world, world)).toBe(true);
+      expect(mirror.data.size).toBeGreaterThan(0);
+    });
+  });
+
+  it('is taken when it is further on, in the same run, and not when it is behind or the same', async () => {
+    await withMirror(async (mirror) => {
+      const storage = new MemStorage();
+      const keeper = new SlotKeeper(storage, KEY);
+      const world = newWorld(23);
+      keeper.snapshot(world, null);
+      for (let i = 0; i < 8; i++) keeper.note(play(world)!, world, null);
+      // The same: nothing to do.
+      expect(await hydrate(storage, KEY)).toBe('local');
+      // The browser lost the last writes of localStorage.
+      const behind = storage.cloneAt(storage.ops.length - 5);
+      expect(readSlot(behind, KEY).run!.world.turn).toBeLessThan(world.turn);
+      expect(await hydrate(behind, KEY)).toBe('mirror');
+      expect(readSlot(behind, KEY).run && sameWorld(readSlot(behind, KEY).run!.world, world)).toBe(true);
+      // The mirror is behind (IndexedDB failed for a while): localStorage stands.
+      const stale = new Map(mirror.data);
+      for (let i = 0; i < 6; i++) keeper.note(play(world)!, world, null);
+      mirror.data.clear();
+      for (const [k, v] of stale) mirror.data.set(k, v);
+      expect(await hydrate(storage, KEY)).toBe('local');
+      expect(readSlot(storage, KEY).run!.world.turn).toBe(world.turn);
+    });
+  });
+
+  it('lets the clock decide between two runs: the numbers of a run begun anew start over', async () => {
+    await withMirror(async (mirror) => {
+      // An old run, far on, left in the mirror; the player has since begun another (written later), and localStorage has it.
+      const old = newWorld(24);
+      for (let i = 0; i < 60; i++) play(old);
+      const oldKeeper = new SlotKeeper(new MemStorage(), KEY, 0, () => 1000);
+      for (let i = 0; i < 20; i++) oldKeeper.snapshot(old, null);
+      const fresh = newWorld(25);
+      const storage = new MemStorage();
+      const keeper = new SlotKeeper(storage, KEY, 0, () => 5000);
+      keeper.snapshot(fresh, null);
+      expect(await hydrate(storage, KEY)).toBe('local');
+      // The other way: the new run is in the mirror only (localStorage lost it and shows the old one).
+      const oldStorage = new MemStorage();
+      mirror.data.clear();
+      const k = new SlotKeeper(oldStorage, KEY, 0, () => 1000);
+      k.snapshot(old, null);
+      const mirrorOnly = new Map(mirror.data);
+      mirror.data.clear();
+      const newer = new SlotKeeper(new MemStorage(), KEY, 0, () => 9000);
+      newer.snapshot(fresh, null);
+      expect(mirror.data.size).toBeGreaterThan(0);
+      expect(await hydrate(oldStorage, KEY)).toBe('mirror');
+      expect(readSlot(oldStorage, KEY).run!.world.run.seed).toBe(fresh.run.seed);
+      expect(mirrorOnly.size).toBeGreaterThan(0);
+    });
+  });
+
+  it('answers a mirror that is slow only so long, and never throws', async () => {
+    const stuck = { put: () => undefined, remove: () => undefined, read: () => new Promise<Record<string, string>>(() => undefined) };
+    setMirror(stuck);
+    try {
+      expect(await hydrate(new MemStorage(), KEY, 20)).toBe('local');
+      setMirror({ ...stuck, read: () => Promise.reject(new Error('blocked')) });
+      expect(await hydrate(new MemStorage(), KEY)).toBe('local');
+    } finally {
+      setMirror(null);
+    }
   });
 });

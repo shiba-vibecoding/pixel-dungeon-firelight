@@ -104,7 +104,8 @@ import { rankings, recordRun, runScore } from './rankings';
 import { carriedOn, type CheckOptions, forgetSolo, inspectSolo, loadSolo, type Session, soloSession, staleSolo } from './session';
 import { planStart } from './startplan';
 import { onLeave } from './leave';
-import { BUDGET_CHARS, setEvictContext, slotOfKey, trimToBudget, usage } from './savestore';
+import { BUDGET_CHARS, hydrate, setEvictContext, setMirror, slotOfKey, trimToBudget, usage } from './savestore';
+import { idbMirror } from './mirror';
 import { closeSuperseded, showSuperseded, supersededShown } from './supersededui';
 import { type BoardKind, type CircleBoardView, type Profile, type RunApi, type RunMeta, type RunSlot, runApi, type SyncAnswer, unreachable } from './checked';
 import { loadAssets } from './sprites';
@@ -197,6 +198,9 @@ try {
 } catch {
   // No storage: it lasts the visit.
 }
+// Every turn of a run is also given to IndexedDB (mirror.ts): localStorage's writes reach the disk up to a minute later, and an app killed
+// in between loses them; IndexedDB's do not. The start looks at both below.
+setMirror(idbMirror());
 // (Written after the run itself, on every way of leaving: leave.ts.)
 onLeave(() => gore.flush(), true);
 // The save always wins the storage (savestore.ts): the bodies and blood of the depth being played are the last to go. Over about 3 MB at
@@ -4198,6 +4202,13 @@ addEventListener('pd-superseded', (event) => {
   const kind = (event as CustomEvent<'window' | 'device'>).detail;
   showSuperseded(kind, () => session?.takeBack?.());
 });
+
+// A run whose last turns the browser had not yet written to localStorage when the app was killed is found in the mirror (savestore.ts hydrate).
+try {
+  await Promise.all([hydrate(localStorage, SOLO_SLOT), hydrate(localStorage, dailySlot())]);
+} catch {
+  // No storage: no run to find.
+}
 
 if (launchedForDaily()) {
   // Opened from a shared daily result: straight into today's dungeon.

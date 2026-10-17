@@ -1,6 +1,7 @@
 import { act, type Action, fingerprint, RULES_VERSION, type World } from '@pd/core';
 import type { RunMeta } from './checked';
 import { GORE_PREFIX, goreKeyInfo } from './gore';
+import type { Mirror } from './mirror';
 
 /*
  * How a run is kept on the device so that it survives any way of leaving the game: the Mini App closed or swiped away, the
@@ -16,7 +17,9 @@ import { GORE_PREFIX, goreKeyInfo } from './gore';
  *    on the snapshot (the core is deterministic: the server does the same) and must come to its fingerprint; else the one before
  *    it, or the snapshot alone, stands, and the player is told that a few moves were lost.
  *  - Loading validates: the text parses, its checksum and length agree, SAVE_VERSION fits (older ones are migrated or reported
- *    as too old), and a journal is only played when it belongs to that snapshot's generation and to these RULES. A damaged
+ *    as too old), and a journal is only played when it belongs to that snapshot's generation and comes to the fingerprint it was
+ *    written with (the rules each was written under are kept, `rules`/`r`, and a run is never thrown away for being of other rules:
+ *    the server's 409 sends a checked run to its own copy, and a replay that the new rules change fails the fingerprint). A damaged
  *    snapshot falls back to the other one; a damaged pair is reported (`damaged`), so that the caller can ask the server.
  *  - The save always wins the quota: a write that fails drops what is not the run, in a fixed order (evict), and tries again.
  *
@@ -27,6 +30,16 @@ import { GORE_PREFIX, goreKeyInfo } from './gore';
  */
 
 export const SAVE_VERSION = 40;
+
+let mirror: Mirror | null = null;
+/**
+ * Where a second copy of everything written is given (mirror.ts: IndexedDB, which survives the app being killed where
+ * localStorage's pending writes do not); null: none.
+ */
+export function setMirror(next: Mirror | null): void {
+  mirror = next;
+}
+export const getMirror = (): Mirror | null => mirror;
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -140,6 +153,8 @@ interface Journal {
   i?: string;
   /** Which write of the session this is: of two journals with the same turn (the server took moves since), the later wins. */
   w?: number;
+  /** When it was written (ms). */
+  at?: number;
 }
 
 const encodeJournal = (journal: Journal): string => {
@@ -178,6 +193,8 @@ export interface SlotRead {
   gen: number;
   /** Actions played from the journal. */
   replayed: number;
+  /** When the newest snapshot or journal of the run was written (ms; 0 for a save of an older build, which has no time). */
+  at: number;
 }
 
 function read(s: StorageLike, key: string): string | null {
@@ -196,10 +213,10 @@ function upgrade(save: SoloSave): number {
 }
 
 export function readSlot(s: StorageLike, key: string): SlotRead {
-  const out: SlotRead = { run: null, recovered: null, damaged: false, stale: null, gen: 0, replayed: 0 };
+  const out: SlotRead = { run: null, recovered: null, damaged: false, stale: null, gen: 0, replayed: 0, at: 0 };
   const raws = [read(s, key), read(s, twinKey(key))];
   const journalRaws = [read(s, journalKey(key)), read(s, journalKey2(key))].filter((raw): raw is string => raw !== null);
-  const usable: Array<{ save: SoloSave; gen: number; raw: string }> = [];
+  const usable: Array<{ save: SoloSave; gen: number; raw: string; at: number }> = [];
   let invalid = 0;
   for (const raw of raws) {
     if (raw === null) continue;
@@ -217,7 +234,7 @@ export function readSlot(s: StorageLike, key: string): SlotRead {
       if (hero && !decoded.save.world.over && version < SAVE_VERSION && !out.stale) out.stale = { depth: hero.depth, heroClass: hero.heroClass };
       continue;
     }
-    usable.push({ save: decoded.save, gen: decoded.gen, raw });
+    usable.push({ save: decoded.save, gen: decoded.gen, raw, at: decoded.at });
   }
   const decodedJournals = journalRaws.map(decodeJournal);
   const journals = decodedJournals
@@ -234,6 +251,7 @@ export function readSlot(s: StorageLike, key: string): SlotRead {
   }
   let world = best.save.world;
   let check: SavedCheck | null = best.save.check ?? null;
+  out.at = best.at;
   /*
    * A snapshot is followed at once by a journal of its generation (empty until a move is made), so the journal names the newest
    * snapshot that was ever whole: a newer one than the best is a loss (it cannot be read now), the same is the best that stands,
@@ -261,6 +279,7 @@ export function readSlot(s: StorageLike, key: string): SlotRead {
           world = again.world;
           check = played.check;
           out.replayed = candidate.a.length;
+          out.at = Math.max(out.at, candidate.at ?? 0);
           break;
         }
         used = null;
@@ -283,7 +302,8 @@ export function readSlot(s: StorageLike, key: string): SlotRead {
 
 /** Plays the journal on the snapshot's world, in place; null if anything does not agree (the world is then not to be used). */
 function replay(snapshot: SoloSave, journal: Journal): { check: SavedCheck | null } | null {
-  if (journal.r !== RULES_VERSION) return null;
+  // (Rules of another version are not a reason to drop the moves: the game was updated while they waited. They are played all the same,
+  // and must come to the fingerprint they were written with; if the update changed what they do, they do not, and the snapshot stands.)
   const check = snapshot.check ?? null;
   if (journal.i !== undefined && check?.meta.id !== journal.i) return null;
   const world = snapshot.world;
@@ -412,6 +432,59 @@ export function putWithRoom(s: StorageLike, key: string, value: string): boolean
   return false;
 }
 
+/* ----- the mirror at start-up ----- */
+
+/** A storage that is a record in memory (a mirror's copy, read like the device's). */
+function recordStorage(record: Readonly<Record<string, string>>): StorageLike {
+  const data = new Map(Object.entries(record));
+  return {
+    getItem: (key) => data.get(key) ?? null,
+    setItem: (key, value) => void data.set(key, value),
+    removeItem: (key) => void data.delete(key),
+    get length() {
+      return data.size;
+    },
+    key: (index) => [...data.keys()][index] ?? null,
+  };
+}
+
+/** Which run a read is of: the seed, and the server's id for it. */
+const identity = (found: SlotRead): string => `${found.run!.world.run.seed}:${found.run!.check?.meta.id ?? ''}`;
+
+/**
+ * Whether the mirror's copy is further on than the device's. Of one run, by the newest snapshot (or journal) generation, then the turn;
+ * of two runs (one begun anew since: its numbers start over), by when each was last written.
+ */
+function furtherOn(mirrored: SlotRead, device: SlotRead): boolean {
+  if (!mirrored.run) return false;
+  if (!device.run) return true;
+  if (identity(mirrored) !== identity(device)) return mirrored.at > device.at;
+  return mirrored.gen !== device.gen ? mirrored.gen > device.gen : mirrored.run.world.turn > device.run.world.turn;
+}
+
+/**
+ * At start-up, before a slot is read: the mirror's copy is compared with the device's and, if it is further on (the app was killed
+ * before the browser wrote its last turns to localStorage), put into local storage, where everything else reads it. Resolves to
+ * which was the newer. Never throws, never waits longer than `timeoutMs` for a mirror that does not answer.
+ */
+export async function hydrate(s: StorageLike, key: string, timeoutMs = 2500): Promise<'mirror' | 'local'> {
+  if (!mirror) return 'local';
+  try {
+    const names = runKeys(key);
+    const copy = await Promise.race([mirror.read(names), new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs))]);
+    if (!copy || Object.keys(copy).length === 0) return 'local';
+    if (!furtherOn(readSlot(recordStorage(copy), key), readSlot(s, key))) return 'local';
+    // (Every key the mirror has: the twin snapshots and the journals sort themselves out by generation when read.)
+    for (const name of names) {
+      const value = copy[name];
+      if (value !== undefined) putWithRoom(s, name, value);
+    }
+    return 'mirror';
+  } catch {
+    return 'local';
+  }
+}
+
 /* ----- writing ----- */
 
 /** The most actions the journal holds before the next snapshot. */
@@ -433,7 +506,10 @@ export class SlotKeeper {
   /** Turns to wait before a snapshot is tried again after storage refused one outright (it would only fail again, slowly, every turn). */
   private stuck = 0;
 
-  constructor(private readonly s: StorageLike, readonly key: string, gen = 0) {
+  /** The mirror this keeper was made with (the one set at the time: a keeper keeps to its own). */
+  private readonly mirror: Mirror | null = mirror;
+
+  constructor(private readonly s: StorageLike, readonly key: string, gen = 0, private readonly now: () => number = Date.now) {
     this.gen = gen;
   }
 
@@ -443,7 +519,7 @@ export class SlotKeeper {
   }
 
   /** Writes the whole run as a new snapshot, to the twin that does not hold the last one. False if it could not be kept at all. */
-  snapshot(world: World, check: SavedCheck | null, now = Date.now()): boolean {
+  snapshot(world: World, check: SavedCheck | null, now = this.now()): boolean {
     const started = typeof performance !== 'undefined' ? performance.now() : 0;
     const gen = this.gen + 1;
     // A snapshot's check is a copy: the log goes on growing in the session.
@@ -451,6 +527,7 @@ export class SlotKeeper {
     const text = encodeSnapshot(world, copy, gen, now);
     const target = gen % 2 === 0 ? this.key : twinKey(this.key);
     let ok = this.write(target, text);
+    const kept = this.mirrored(target, text);
     if (!ok) {
       // The last resort: the older snapshot's own place is freed (the newest stays whole), then the write is tried again.
       try {
@@ -460,7 +537,7 @@ export class SlotKeeper {
       }
       ok = this.write(target, text);
     }
-    if (!ok) {
+    if (!ok && !kept) {
       this.stuck = 20;
       return false;
     }
@@ -480,6 +557,13 @@ export class SlotKeeper {
   private write(target: string, text: string): boolean {
     if (!putWithRoom(this.s, target, text)) return false;
     return read(this.s, target) === text;
+  }
+
+  /** Gives the mirror a copy of what was just written (or tried): the run is safe there even when this storage is full. */
+  private mirrored(name: string, text: string): boolean {
+    if (!this.mirror) return false;
+    this.mirror.put(name, text);
+    return true;
   }
 
   /** The world took an action: it goes to the journal (a few hundred bytes), or to a new snapshot when the journal is full. */
@@ -511,23 +595,27 @@ export class SlotKeeper {
       g: this.gen, r: RULES_VERSION, a: this.actions, t: this.lastTurn, f: this.lastFp,
       ...(check ? { s: check.meta.seq, i: check.meta.id } : {}),
       w: this.journals,
+      at: this.now(),
     };
     const text = encodeJournal(journal);
     this.lastBytes = text.length;
     // Alternately in the two keys, each a whole journal: a write that is cut short leaves the one before it.
-    return putWithRoom(this.s, this.journals++ % 2 === 0 ? journalKey(this.key) : journalKey2(this.key), text);
+    const name = this.journals++ % 2 === 0 ? journalKey(this.key) : journalKey2(this.key);
+    const kept = this.mirrored(name, text);
+    return putWithRoom(this.s, name, text) || kept;
   }
 
   /** The run is over (or thrown away): nothing of it stays. */
   drop(): void {
-    forgetSlot(this.s, this.key);
+    forgetSlot(this.s, this.key, this.mirror);
     this.actions = [];
     this.based = false;
   }
 }
 
-/** Removes a slot's saves (not its lease). */
-export function forgetSlot(s: StorageLike, key: string): void {
+/** Removes a slot's saves (not its lease), and the mirror's copy. */
+export function forgetSlot(s: StorageLike, key: string, from: Mirror | null = mirror): void {
+  from?.remove(runKeys(key));
   for (const k of runKeys(key)) {
     try {
       s.removeItem(k);

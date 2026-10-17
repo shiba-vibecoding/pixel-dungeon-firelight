@@ -116,7 +116,7 @@ function deviceStorage(): StorageLike | null {
 /** What a slot holds: the run to carry on, and what was found wrong with it (savestore.ts). */
 export function inspectSolo(key: string): SlotRead {
   const storage = deviceStorage();
-  return storage ? readSlot(storage, key) : { run: null, recovered: null, damaged: false, stale: null, gen: 0, replayed: 0 };
+  return storage ? readSlot(storage, key) : { run: null, recovered: null, damaged: false, stale: null, gen: 0, replayed: 0, at: 0 };
 }
 
 /** A run is worth carrying on while it is under way, or over but with moves the server has not heard (its end is told to it first). */

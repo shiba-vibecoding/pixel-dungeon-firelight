@@ -2,6 +2,8 @@ import { act, type Action, fingerprint, heroById, type World } from '@pd/core';
 import { setMaxListeners } from 'node:events';
 import { vi } from 'vitest';
 import type { DeviceTag, RunApi, RunMeta, SyncAnswer } from '../src/checked';
+import { type Mirror } from '../src/mirror';
+import { hydrate, setMirror } from '../src/savestore';
 import { type Session, soloSession, type CheckOptions } from '../src/session';
 import { carriedOn, inspectSolo, loadCheck, loadSolo } from '../src/session';
 import { planStart } from '../src/startplan';
@@ -32,6 +34,8 @@ export class FakeServer {
   readonly logic = new PlayerLogic(emptyProfile('T'));
   /** The hero of every run it hands out is made sturdy (a scripted game is about saving, not survival). */
   sturdy = true;
+  /** Changes the world of each new run before it is handed out (the server's copy too: both start the same). */
+  prepare: ((world: World) => void) | null = null;
   /** 'ok' answers; 'offline' is a network that is down (the request never arrives); 'lost-reply' lets the server take the request and drops the answer. */
   mode: 'ok' | 'offline' | 'lost-reply' = 'ok';
   now = 1000;
@@ -56,6 +60,7 @@ export class FakeServer {
         });
         server.calls.push({ op: 'start' });
         if (server.sturdy) Object.assign(heroById(run.world, ME)!, { attackSkill: 600, defenseSkill: 80, ht: 5000, hp: 5000, str: 22 });
+        server.prepare?.(run.world);
         return { run: { id: run.id, slot: run.slot, seq: run.seq, ranked: run.ranked }, world: structuredClone(run.world) };
       },
       get: async (slot) => {
@@ -126,10 +131,20 @@ export function installGlobals(): EventTarget {
  * a new one. `server` null: a page with no way to the server (played on the device alone).
  */
 export async function openPage(
-  storage: MemStorage, server: FakeServer | null, options: { copy?: string; seed?: number; fresh?: boolean; unreachable?: boolean } = {},
+  storage: MemStorage, server: FakeServer | null,
+  options: { copy?: string; seed?: number; fresh?: boolean; unreachable?: boolean; mirror?: Mirror & { data: Map<string, string> } } = {},
 ): Promise<Page> {
   vi.stubGlobal('localStorage', storage);
   const page = { storage, dead: false, copy: options.copy ?? `page-${counter++}`, plan: '' } as Page;
+  // The mirror (IndexedDB) is the browser's, not the page's: what a killed page gave it stays, and it gives nothing more once it is dead.
+  const shared = options.mirror;
+  setMirror(shared ? {
+    put: (key, value) => { if (!storage.dead) shared.put(key, value); },
+    remove: (keys) => { if (!storage.dead) shared.remove(keys); },
+    read: (keys) => shared.read(keys),
+  } : null);
+  // As main.ts does at start: a run the browser had not written out when the app was killed is found in the mirror.
+  if (shared && !options.fresh) await hydrate(storage, KEY);
   const api = server ? server.api(page) : null;
   const newSeed = (): number => options.seed ?? 4242;
   const read = options.fresh ? null : inspectSolo(KEY);
@@ -177,7 +192,10 @@ export function turn(page: Page): boolean {
 export function kill(page: Page): void {
   page.dead = true;
   page.storage.dead = true;
+  // (Clearing the timers resets the fake clock; the clock of the world does not stop for a page that died.)
+  const now = Date.now();
   vi.clearAllTimers();
+  vi.setSystemTime(now);
 }
 
 /** A reloaded page sees what the dead one stored, on a storage of its own. */

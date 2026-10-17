@@ -16,6 +16,8 @@ export class MemStorage implements StorageLike {
   capacity: number;
   /** Counts every setItem call (failed ones too). */
   writes = 0;
+  /** Every change that landed, in order (null: removed): a browser that lost its last writes to a killed process is this storage as it was some changes ago (cloneAt). */
+  readonly ops: Array<[string, string | null]> = [];
   /** Called before each write; may throw (Killed) or return 'torn' (the text is cut short and stored, then the page dies) or 'drop' (the page dies before the write). */
   fault: ((key: string, value: string, nth: number) => void | 'torn' | 'drop' | 'after' | 'quota') | null = null;
   /** The page that wrote here was killed: it reads nothing, writes nothing, and removes nothing from now on. */
@@ -50,8 +52,8 @@ export class MemStorage implements StorageLike {
     const nth = this.writes++;
     const verdict = this.fault?.(key, value, nth);
     if (verdict === 'drop' || verdict === 'torn' || verdict === 'after') {
-      if (verdict === 'torn') this.data.set(key, value.slice(0, Math.floor(value.length / 2)));
-      if (verdict === 'after') this.data.set(key, value);
+      if (verdict === 'torn') this.set(key, value.slice(0, Math.floor(value.length / 2)));
+      if (verdict === 'after') this.set(key, value);
       if (this.quiet) {
         this.dead = true;
         return;
@@ -65,17 +67,38 @@ export class MemStorage implements StorageLike {
       error.name = 'QuotaExceededError';
       throw error;
     }
+    this.set(key, value);
+  }
+
+  private set(key: string, value: string): void {
     this.data.set(key, value);
+    this.ops.push([key, value]);
   }
 
   removeItem(key: string): void {
-    if (!this.dead) this.data.delete(key);
+    if (this.dead) return;
+    if (this.data.delete(key)) this.ops.push([key, null]);
+  }
+
+  /** The storage as it was after its first `count` changes. */
+  cloneAt(count: number): MemStorage {
+    const copy = new MemStorage(this.capacity);
+    for (const [k, v] of this.ops.slice(0, count)) {
+      if (v === null) copy.data.delete(k);
+      else copy.data.set(k, v);
+    }
+    // (What the clone holds is its past: it starts its own history from there.)
+    for (const [k, v] of copy.data) copy.ops.push([k, v]);
+    return copy;
   }
 
   /** A copy of what is stored now: what a reloaded page finds. */
   clone(): MemStorage {
     const copy = new MemStorage(this.capacity);
-    for (const [k, v] of this.data) copy.data.set(k, v);
+    for (const [k, v] of this.data) {
+      copy.data.set(k, v);
+      copy.ops.push([k, v]);
+    }
     return copy;
   }
 }
