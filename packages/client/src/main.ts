@@ -97,7 +97,7 @@ import { type BoardKind, type CircleBoardView, type Profile, type RunMeta, type 
 import { loadAssets } from './sprites';
 import { CoopMarks } from './coop-marks';
 import {
-  backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
+  backButton, guardRun, haptic, initData, initTelegram, inTelegram, invitedCircle, launchedForBoards, launchedForDaily, launchedForGuide, launchedFromGroup, launchedForLeague, shareCircle, onLayoutChange, platform,
   shareDaily, telegramName, appLink, canShareMessage, canShareStory, shareMessage, shareStory, requestWriteAccess,
   homeScreenStatus, addToHomeScreen, invitedGift, inviteStart, launchedByInvite,
 } from './telegram';
@@ -3792,6 +3792,9 @@ if (launchedForDaily()) {
   toTitle();
   // Without the server there is no profile to ask: the news are judged by this device alone.
   if (!api) maybeNews(null);
+  // Opened from a guide article the bot sent to a chat (`startapp=guide_<id>`): the guide at that article, a step back to the title.
+  const guideEntry = launchedForGuide();
+  if (guideEntry) showGuide(toTitle, guideEntry);
   // Opened from the bot's «you were passed on the board» message: the day's board.
   if (api && launchedForBoards()) openBoards('daily');
   if (api && launchedForLeague()) openLeague();

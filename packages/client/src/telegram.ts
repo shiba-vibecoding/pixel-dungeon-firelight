@@ -245,6 +245,19 @@ export function launchedForBoards(): boolean {
   return webApp?.initDataUnsafe.start_param === 'boards' || new URLSearchParams(location.search).has('boards');
 }
 
+/**
+ * The guide article a launch names: `startapp=guide_<id>` in Telegram (a link the bot's inline answers and /guide carry) or `?guide=<id>` in a
+ * browser. Only the shape is checked here (the guide itself ignores an id it does not have); null for a launch from anywhere else.
+ */
+export function guideFromStart(start: string | undefined, search: string): string | null {
+  const param = start?.startsWith('guide_') ? start.slice('guide_'.length) : new URLSearchParams(search).get('guide');
+  return param && /^[a-z]{2,16}$/.test(param) ? param : null;
+}
+
+export function launchedForGuide(): string | null {
+  return guideFromStart(webApp?.initDataUnsafe.start_param, location.search);
+}
+
 /** True when the app was opened from the bot's league message: the league's window comes up (`startapp=league`). */
 export function launchedForLeague(): boolean {
   return webApp?.initDataUnsafe.start_param === 'league' || new URLSearchParams(location.search).has('league');

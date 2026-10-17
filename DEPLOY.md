@@ -80,6 +80,14 @@ node packages/server/scripts/set-webhook.mjs https://pd-coop.<поддомен>.
 боту что угодно — он ответит фразой и кнопкой «Играть». Старый Worker после
 этого можно удалить в панели Cloudflare.
 
+### Памятка в любом чате (inline)
+
+`@бот голод` в любом чате и команды `/guide`, `/памятка` отвечают статьями Памятки. Нужны два шага
+вручную: (1) в @BotFather `/setinline` → бот → подсказка `тема: голод, анкх…` (иначе Telegram не
+присылает inline-запросы); (2) повторить `set-webhook.mjs ... --new-secret` — в `allowed_updates`
+добавились `inline_query` и `callback_query`. В группе `/памятка` по-русски видна боту, только если
+режим приватности выключен (`/setprivacy` → Disable); `/guide` работает всегда.
+
 ## 3. Клиент (GitHub Pages)
 
 1. На GitHub: **Settings → Secrets and variables → Actions → Variables** —
