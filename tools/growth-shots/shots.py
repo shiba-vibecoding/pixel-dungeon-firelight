@@ -24,6 +24,9 @@ SETUP = """() => {
 }"""
 
 
+_shot = shot
+
+
 def effects(page, list_js):
     page.evaluate("(() => { const w = __pd.session.world; const h = w.heroes[0]; __pd.takeEffects(%s); })()" % list_js)
 
@@ -47,8 +50,12 @@ def close_all(page):
 
 
 def run(names):
+    reduced = 'reduced' in names
+    names = names - {'reduced'}
+    out = OUT + '/reduced' if reduced else OUT
+    shot = lambda page, name: _shot(page, name, out)  # noqa: E731
     with sync_playwright() as p:
-        browser, page = launch(p)
+        browser, page = launch(p, reduced=reduced)
         page.evaluate(SETUP)
         wait_quiet(page)
         want = lambda n: not names or n in names  # noqa: E731
@@ -145,6 +152,49 @@ def run(names):
             settle(page, 400)
             shot(page, '14b-mechanic-traps.png')
             close_all(page)
+
+        if want('truth'):
+            # enchant: the rune is drawn on the mark
+            open_bag(page)
+            page.evaluate("(() => { const h = __pd.session.world.heroes[0]; h.items[14].enchant = 'shock'; })()")
+            effects(page, "[{type:'imbued', hero:'me', item: h.items[14]}]")
+            shot(page, '16-moment-enchant.png')
+            close_all(page)
+            # uncurse: a curse known and lifted
+            page.evaluate("(() => { const h = __pd.session.world.heroes[0]; delete h.items[13].curseUnknown; })()")
+            open_bag(page)
+            page.evaluate("(() => { const h = __pd.session.world.heroes[0]; h.items[13].cursed = false; })()")
+            effects(page, "[{type:'scroll', hero:'me', kind:'removeCurse', count: 1}]")
+            shot(page, '17-moment-uncurse.png')
+            close_all(page)
+            # identify: a scroll of identify read on the axe (the card turns its face over)
+            open_bag(page)
+            grid = page.locator('.pd-bag-grid .pd-slot')
+            grid.nth(9).click()
+            settle(page, 300)
+            page.locator('.pd-pick-actions button').first.click()
+            settle(page, 400)
+            grid = page.locator('.pd-bag-grid .pd-slot')
+            grid.nth(0).click()
+            settle(page, 300)
+            shot(page, '18-identify-pick.png')
+            for label in ('Да', 'Использовать', 'Читать'):
+                try:
+                    page.get_by_role('button', name=label).first.click(timeout=800)
+                    break
+                except Exception:
+                    pass
+            shot(page, '18b-identify-moment.png')
+            close_all(page)
+
+        if want('end'):
+            page.evaluate("(() => { const w = __pd.session.world; const h = w.heroes[0]; h.hp = 0; h.killedBy = 'rat'; w.over = true; })()")
+            for _ in range(4):
+                settle(page, 2000)
+                time.sleep(1.5)
+            page.evaluate("document.querySelector('.pd-runend .pd-scroll').scrollTo(0, 400)")
+            settle(page, 300)
+            shot(page, '19-end.png')
 
         browser.close()
 

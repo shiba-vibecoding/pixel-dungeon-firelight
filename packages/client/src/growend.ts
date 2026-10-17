@@ -66,3 +66,9 @@ export function growthCard(o: GrowthCardOptions): HTMLElement {
     h('p', 'pd-info-head', G.end.best), best,
     h('p', 'pd-info-head', G.end.finds), list);
 }
+
+/** The growth in one line, for a picture to share: «level 1 → 13 · health 20 → 80 · strength 11 → 16». */
+export function growthLine(hero: Hero, start: { ht: number; str: number }): string {
+  const p = passportOf(hero, start);
+  return `${G.end.level} ${p.lvl[0]} → ${p.lvl[1]} · ${G.end.health} ${p.ht[0]} → ${p.ht[1]} · ${G.end.strength} ${p.str[0]} → ${p.str[1]}`;
+}

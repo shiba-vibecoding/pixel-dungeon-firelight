@@ -61,7 +61,7 @@ import { tx } from './compete-ui';
 import { heroCard, myLook } from './herocard';
 import { growArrive, growEffects, growSight, setGrowHooks } from './growflow';
 import { passportNode } from './growhero';
-import { growthCard } from './growend';
+import { growthCard, growthLine } from './growend';
 import { sigilFlash } from './r3d/growth3d';
 import { grow, GrowStore } from './growmem';
 import { chatPicture, circlePicture, savePicture } from './sharecards';
@@ -4083,6 +4083,7 @@ function tick(now: number): void {
         hero: {
           name: me.name || playerName || telegramName() || t.heroLabel, look: myLook(me.heroClass, armorTier(me), me.weapon?.kind), heroClass: me.heroClass,
           place: dailyRun ? (reply?.places?.daily ?? null) : null, depth: deepestNow, streak: profile?.streak.count ?? 0,
+          growth: growthLine(me, core.HERO_CLASSES[me.heroClass]),
           ...(profile?.league && profile.league.best > 0 ? { tier: profile.league.tier } : {}),
         },
       };

@@ -27,6 +27,8 @@ export interface HeroPicture {
   streak: number;
   /** The league's step key, when the player has a league. */
   tier?: string;
+  /** How the hero grew, in a line («level 1 → 13 · health 20 → 80 · strength 11 → 16»: growend.ts growthLine). */
+  growth?: string;
 }
 
 const FONTS = { big: 'Galmuri11', small: 'Galmuri9' } as const;
@@ -138,12 +140,13 @@ export async function storyPicture(d: HeroPicture): Promise<Blob | null> {
   }
   text(g, d.name, W / 2, y, place ? 80 : 110, '#ffeba4', { align: 'center', max: W - 100 });
   text(g, detailLine(d, true), W / 2, y + 80, 44, '#e8e2c8', { align: 'center', small: true, max: W - 80 });
+  if (d.growth) text(g, d.growth, W / 2, y + 136, 36, '#ffcc66', { align: 'center', small: true, max: W - 80 });
   // The league he plays in: its badge and name.
   const tier = tierOf(d.tier);
   const badge = d.tier && tier ? await image(tier.badge) : null;
   if (tier && badge) {
-    g.drawImage(badge, W / 2 - 40, y + 120, 80, 80);
-    text(g, tx('leagueOf', { t: tier.name[lang] }), W / 2, y + 250, 40, tier.color, { align: 'center', max: W - 80 });
+    g.drawImage(badge, W / 2 - 40, y + (d.growth ? 170 : 120), 80, 80);
+    text(g, tx('leagueOf', { t: tier.name[lang] }), W / 2, y + (d.growth ? 300 : 250), 40, tier.color, { align: 'center', max: W - 80 });
   }
   text(g, tx('deeperQ'), W / 2, H - 120, 56, '#ff9a3a', { align: 'center', max: W - 80 });
   text(g, '@pixel_dungeon_gamebot', W / 2, H - 56, 36, '#b0b5a3', { align: 'center', small: true });
@@ -186,6 +189,10 @@ export async function chatPicture(d: HeroPicture): Promise<Blob | null> {
   text(g, d.name, x, y, 52, '#ffeba4', { max: W - x - 40 });
   y += 52;
   text(g, detailLine(d, false), x, y, 32, '#e8e2c8', { small: true, max: W - x - 40 });
+  if (d.growth) {
+    y += 44;
+    text(g, d.growth, x, y, 28, '#ffcc66', { small: true, max: W - x - 40 });
+  }
   if (d.streak > 0) {
     y += 44;
     text(g, txn('streak', d.streak), x, y, 32, '#ff9a3a', { small: true, max: W - x - 40 });

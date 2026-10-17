@@ -4,7 +4,7 @@
  * assets/ui/growth/growth-icons.png (8, 12 and 16 px icons) and growth-fx.png (the 3D effects). Every moment lasts 400 ms at most,
  * moves in steps (pixel art never eases), never holds the turn, and keeps still under reduced motion (the end state, a highlight).
  *
- * The variants (A, B, C) of each piece are modifier classes on one markup; the chosen one stays, the others are removed.
+ * The owner chose the designer's recommended variants (see docs/design/system/firelight-growth.md): the others are removed from here.
  */
 
 :root {
@@ -53,29 +53,7 @@
 .pd-slot.cursed.fl-known { background: var(--cursed-bg); }
 .pd-slot.fl-new > .fl-mark { animation: fl-twinkle 1.2s steps(2, jump-none) 3; }
 
-/* B «Frames»: the marks on the slot's frame — violet for a curse, a stripe of the rune's colour for magic, a gold corner for new,
-   a red floor for too heavy; the corner digits stay as they are. */
-.fl-slots-b .pd-slot.cursed { box-shadow: inset 0 0 0 var(--u) var(--grow-curse), inset var(--u) var(--u) 0 calc(2 * var(--u)) var(--grow-curse-lo); }
-.fl-slots-b .pd-slot.fl-ench::after { content: ""; position: absolute; left: calc(4 * var(--u)); right: calc(4 * var(--u)); bottom: var(--u); height: var(--u); background: rgb(var(--ench, 255, 255, 255)); box-shadow: 0 calc(-1 * var(--u)) 0 rgb(var(--ench, 255, 255, 255) / .35); }
-.fl-slots-b .pd-slot.fl-glyph::after { content: ""; position: absolute; top: calc(4 * var(--u)); bottom: calc(4 * var(--u)); right: var(--u); width: var(--u); background: rgb(var(--grow-glyph)); }
-.fl-slots-b .pd-slot.fl-new::before { content: ""; position: absolute; left: 0; top: 0; width: calc(5 * var(--u)); height: calc(5 * var(--u)); background: var(--fire-gold); clip-path: polygon(0 0, 100% 0, 0 100%); z-index: 2; }
-.fl-slots-b .pd-slot.fl-heavy { background: linear-gradient(to top, rgba(178, 42, 42, .38) 0 calc(4 * var(--u)), var(--stone-800) calc(4 * var(--u))); }
-.fl-slots-b .pd-slot.fl-unknown .pd-item { filter: saturate(.55); }
-.fl-slots-b .pd-slot > .fl-mark { display: none; }
-
-/* C «Tags»: a strip of small marks under each slot, the slot a little taller; nothing on the picture itself. */
-.fl-slots-c .pd-bagrow, .fl-slots-c .pd-grid { row-gap: var(--space-1); }
-.fl-slots-c .pd-slot { height: calc(var(--slot, 52px) + 16px); grid-template-rows: var(--slot, 52px) 16px; align-items: center; }
-.fl-slots-c .pd-slot > .pd-item { grid-row: 1; }
-.fl-slots-c .pd-slot > .fl-mark { display: none; }
-.fl-slots-c .pd-slot .fl-tagrow {
-  grid-row: 2; align-self: stretch; justify-self: stretch; display: flex; align-items: center; justify-content: center; gap: 5px;
-  background: var(--stone-900); box-shadow: inset 0 var(--u) 0 var(--void);
-  font: var(--text-digits, 400 15px/15px var(--font-small)); color: var(--ink-muted);
-}
-.fl-slots-c .pd-slot .fl-tagrow .up { color: var(--good); } .fl-slots-c .pd-slot .fl-tagrow .str { color: var(--ink); } .fl-slots-c .pd-slot .fl-tagrow .down, .fl-slots-c .pd-slot .fl-tagrow .bad { color: var(--bad); }
-.fl-slots-c .pd-slot .pd-lvl, .fl-slots-c .pd-slot .pd-tag { display: none; }
-.fl-slots-c .pd-slot .pd-qty { bottom: 19px; }
+  
 
 /* ---------- 2. Filters and order of the pack ---------- */
 /* A «Chips»: one row that scrolls sideways; a chip a group with its count; «new» and «unknown» first. */
@@ -91,22 +69,6 @@
 .fl-chip.hot b { color: var(--fire-gold); }
 .fl-sort { flex: none; margin-left: auto; }
 
-/* B «Rail»: the groups as a column of icons by the grid (wide) or as a row of tabs over it (phone). */
-.fl-rail { display: flex; flex-direction: column; gap: 2px; padding-right: var(--space-2); border-right: var(--u) solid var(--stone-600); }
-.fl-rail-tab { position: relative; width: 44px; height: 40px; display: grid; place-items: center; background: transparent; }
-.fl-rail-tab[aria-selected="true"] { background: var(--stone-700); box-shadow: inset calc(2 * var(--u)) 0 0 var(--fire-gold); }
-.fl-rail-tab .fl-count { position: absolute; right: 1px; bottom: 0; font: var(--text-digits); color: var(--ink-muted); text-shadow: var(--text-outline); }
-.fl-rail.row { flex-direction: row; border-right: 0; border-bottom: var(--u) solid var(--stone-600); padding: 0 0 2px; overflow-x: auto; scrollbar-width: none; }
-.fl-rail.row .fl-rail-tab { width: 40px; flex: none; }
-.fl-rail.row .fl-rail-tab[aria-selected="true"] { box-shadow: inset 0 calc(-2 * var(--u)) 0 var(--fire-gold); }
-
-/* C «Lenses»: the whole pack stays in its groups; a lens dims what it is not about (new, unknown, too heavy, fits now). */
-.fl-lenses { display: flex; gap: var(--space-1); flex-wrap: wrap; }
-.fl-lens { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 8px; font: var(--text-caption); color: var(--ink-muted); border: var(--u) solid var(--stone-500); clip-path: var(--notch); }
-.fl-lens[aria-pressed="true"] { color: var(--fire-light); border-color: var(--fire-gold); background: var(--glow-2); }
-.fl-lensed .pd-slot:not(.fl-lit) { opacity: .28; filter: grayscale(.8); }
-.fl-lensed .pd-slot.fl-lit { box-shadow: inset 0 0 0 2px var(--fire-gold), inset 0 0 0 4px var(--void); }
-
 /* ---------- 1. Experience and the level ---------- */
 /* A «Spark»: the thin bar notched every five points (a pip: maxExp = 5 + 5 × level), the level a coal that pops. */
 .pd-bar.xp.fl-pips::after {
@@ -115,26 +77,6 @@
 }
 .pd-bar.xp.fl-flash::before { animation: fl-xp-flash var(--m-reveal) steps(4, jump-none) both; }
 .pd-hero-lvl.fl-pop { animation: fl-pop var(--m-reveal) steps(4, jump-none) both; }
-
-/* B «Hearth»: no bar; the level's coal fills with ember from below as the experience grows, and bursts at a new level. */
-.fl-xp-hearth .pd-bar-pair:has(.pd-bar.xp) { display: none; }
-.fl-xp-hearth .pd-bars-small { grid-template-columns: 1fr; }
-.pd-hero-lvl.fl-coal { overflow: hidden; isolation: isolate; }
-.pd-hero-lvl.fl-coal::before {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--v, 0) * 100%); z-index: -1;
-  background: linear-gradient(to top, var(--fire-ember) 0 calc(2 * var(--u)), var(--fire-coal) calc(2 * var(--u)));
-}
-.fl-coal-sparks { position: absolute; left: 30px; top: 10px; width: 48px; height: 48px; pointer-events: none; z-index: 3; }
-.fl-coal-sparks i { position: absolute; width: var(--u); height: var(--u); background: var(--fire-spark); box-shadow: 0 0 0 var(--u) var(--fire-gold); animation: fl-rise var(--m-max) steps(5, jump-none) both; }
-
-/* C «Chronicle»: the experience as pips (five points each) under the bars; a level is a line of the log, nothing over the map. */
-.fl-xp-pips { display: grid; grid-template-columns: repeat(var(--pips, 12), 1fr); gap: var(--u); height: calc(4 * var(--u)); }
-.fl-xp-pips i { background: var(--stone-700); box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--void); }
-.fl-xp-pips i.full { background: var(--fire-gold); box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--fire-ember); }
-.fl-xp-pips i.part { background: linear-gradient(to right, var(--fire-gold) calc(var(--p) * 100%), var(--stone-700) 0); }
-.fl-xp-pips.fl-collapse i { animation: fl-pip var(--m-reveal) steps(4, jump-none) both; animation-delay: calc(var(--k) * 16ms); }
-.pd-log-line.fl-lvl { color: var(--fire-gold); display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
-.pd-log-line.fl-lvl .fl-gi { --gs: 1.5px; }
 
 /* The card of a new level (A: a toast under the HUD, B: a bubble from the coal) */
 .fl-lvlcard {
@@ -148,14 +90,6 @@
 .fl-gain b { font-weight: 400; color: var(--good); }
 .fl-gain .to { color: var(--ink-muted); }
 .pd-toast.fl-lvl-toast { top: calc(var(--safe-t) + 124px); animation: fl-drop var(--m-reveal) steps(4, jump-none) both; }
-.fl-lvl-bubble {
-  position: absolute; left: 8px; top: 84px; z-index: var(--z-toast, 30); max-width: 300px;
-  border: calc(5 * var(--u)) solid transparent; border-image: var(--spr-toast) 5 fill / calc(5 * var(--u)) stretch;
-  animation: fl-pop var(--m-reveal) steps(4, jump-none) both; transform-origin: 24px 0;
-}
-.fl-lvl-bubble::before { content: ""; position: absolute; left: 34px; top: calc(-5 * var(--u) - 6px); width: 8px; height: 8px; background: var(--lit-mid); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
-.fl-lvl-bubble .fl-lvlcard { grid-template-columns: auto auto; }
-.fl-lvl-bubble .fl-lvl-num { font: var(--text-title); }
 
 /* ---------- 1. Strength ---------- */
 .fl-str-toast { flex-direction: column; align-items: stretch; gap: var(--space-1); }
@@ -167,23 +101,7 @@
 .fl-str-items .pd-slot .pd-item { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
 .fl-str-flip { animation: fl-flip-tag var(--m-reveal) steps(3, jump-none) both; animation-delay: calc(var(--k, 0) * var(--m-stagger, 40ms)); }
 
-/* B «Ladder»: the strength from 10 to 18 as a ruler; the things carried above the strength they want, the hero's flame on it. */
-.fl-ladder { position: relative; padding: 52px 8px 26px; }
-.fl-ladder-rule { position: relative; height: calc(4 * var(--u)); background: var(--stone-700); box-shadow: 0 var(--u) 0 var(--void); }
-.fl-ladder-rule .fl-reach { position: absolute; left: 0; top: 0; bottom: 0; width: var(--reach); background: linear-gradient(to bottom, var(--fire-gold) 0 50%, var(--fire-ember) 50%); }
-.fl-ladder-tick { position: absolute; top: calc(6 * var(--u)); transform: translateX(-50%); font: var(--text-digits); color: var(--ink-muted); }
-.fl-ladder-tick::before { content: ""; position: absolute; left: 50%; top: -9px; width: var(--u); height: 6px; background: var(--stone-400); }
-.fl-ladder-tick.me { color: var(--fire-light); }
-.fl-ladder-item { position: absolute; bottom: calc(100% + 4px); transform: translateX(-50%); display: grid; justify-items: center; }
-.fl-ladder-item.heavy .pd-item { filter: grayscale(.7) brightness(.7); }
-.fl-ladder-item.heavy::after { content: ""; width: var(--u); height: 8px; background: var(--bad); }
-.fl-ladder-item:not(.heavy)::after { content: ""; width: var(--u); height: 8px; background: var(--fire-gold); }
-.fl-ladder-me { position: absolute; top: -18px; transform: translateX(-50%); }
-
-/* C «Weight»: what too heavy costs, in the rules' own factors, «with a point more» beside it. */
-.fl-cost { display: grid; grid-template-columns: auto 1fr auto auto; gap: 4px var(--space-2); align-items: center; font: var(--text-caption); }
-.fl-cost .now { color: var(--bad); text-align: right; } .fl-cost .then { color: var(--good); text-align: right; }
-.fl-cost .arrow { color: var(--ink-muted); }
+ 
 
 /* ---------- 1. The hero's passport ---------- */
 .fl-pass { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -207,32 +125,10 @@
 .fl-equip-name .lvl { color: var(--good); }
 .fl-equip-num { font: var(--text-caption); color: var(--fire-gold); white-space: nowrap; }
 
-/* B «Paper doll»: the hero large in the middle, his things round him, the numbers in two columns beside. */
-.fl-doll { display: grid; grid-template-columns: 52px 1fr 52px; grid-template-rows: auto auto auto; gap: var(--space-2); align-items: center; justify-items: center; }
-.fl-doll-hero { grid-column: 2; grid-row: 1 / 3; width: 100%; height: 150px; position: relative; background:
-  radial-gradient(closest-side, var(--glow-1), transparent) center 85% / 80% 30% no-repeat, var(--stone-900); clip-path: var(--notch); }
-.fl-doll-hero canvas, .fl-doll-hero img { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); image-rendering: pixelated; }
-.fl-doll-rings { grid-column: 1 / -1; display: flex; gap: var(--space-2); }
-.fl-doll-stats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1) var(--space-3); }
-.fl-doll-stat { display: grid; grid-template-columns: auto 1fr auto; gap: 4px; align-items: center; font: var(--text-caption); }
-.fl-doll-stat .v { color: var(--fire-light); }
-.fl-doll-stat .bar { grid-column: 1 / -1; height: calc(2 * var(--u)); background: var(--stone-700); position: relative; }
-.fl-doll-stat .bar::before { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--was) * 100%); background: var(--grow-was); }
-.fl-doll-stat .bar::after { content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--was) * 100%); width: calc((var(--is) - var(--was)) * 100%); background: var(--grow-is); }
-
-/* C «By depth»: the run as a chart, a column a depth; level, health and strength as stepped lines, bosses marked. */
-.fl-chart { position: relative; height: 150px; background: var(--stone-900); box-shadow: inset var(--u) var(--u) 0 var(--void); }
-.fl-chart svg { position: absolute; inset: 6px 6px 18px 22px; width: calc(100% - 28px); height: calc(100% - 24px); overflow: visible; shape-rendering: crispEdges; }
-.fl-chart .lvl { stroke: var(--fire-gold); } .fl-chart .ht { stroke: var(--hp-hi); } .fl-chart .str { stroke: var(--ally); }
-.fl-chart-legend { display: flex; gap: var(--space-3); flex-wrap: wrap; font: var(--text-caption); color: var(--ink-muted); }
-.fl-chart-legend i { display: inline-block; width: 10px; height: var(--u); vertical-align: middle; margin-right: 4px; }
+  
 
 /* ---------- 1. Ceremonies: mastery (after Tengu) and the class armour (after the King) ---------- */
-.fl-seal { text-align: center; align-items: center; }
-.fl-seal-sigil { position: relative; width: 96px; height: 96px; display: grid; place-items: center; background: radial-gradient(closest-side, var(--glow-1), var(--glow-3) 70%, transparent); }
-.fl-seal-sigil .fl-gi { animation: fl-stamp var(--m-max) steps(5, jump-none) both; }
-.fl-seal-title { font: var(--text-display); color: var(--fire-light); text-shadow: 0 var(--u) 0 var(--fire-coal-deep), 0 calc(2 * var(--u)) 0 var(--fire-ash); }
-.fl-seal-line { font: var(--text-body); color: var(--ink); max-width: 30ch; }
+
 .fl-banner {
   position: absolute; left: 0; right: 0; top: 30%; z-index: var(--z-toast, 30); text-align: center; pointer-events: none;
   padding: var(--space-3) var(--space-4); background: linear-gradient(to bottom, transparent, var(--fx-band) 25% 75%, transparent);
@@ -241,9 +137,6 @@
 .fl-banner .big { display: block; font: var(--text-display); color: var(--fire-light); letter-spacing: .06em; text-transform: uppercase; text-shadow: 0 3px 0 var(--fire-ash); }
 .fl-banner .small { display: block; font: var(--text-body); color: var(--fire-gold); }
 .pd-avatar-wrap .fl-sigil-badge { position: absolute; left: -2px; top: 40px; z-index: 3; }
-.fl-chapter { display: flex; align-items: center; gap: var(--space-2); font: var(--text-label); color: var(--fire-gold); }
-.fl-chapter::before, .fl-chapter::after { content: ""; flex: 1; height: var(--u); background: linear-gradient(to right, transparent, var(--lit-mid)); }
-.fl-chapter::after { background: linear-gradient(to left, transparent, var(--lit-mid)); }
 
 /* ---------- 2. The item card: comparing, knowing, notes ---------- */
 .fl-cmp { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); background: var(--stone-800); box-shadow: inset var(--u) var(--u) 0 var(--void); }
@@ -255,13 +148,9 @@
 .fl-range i { position: absolute; top: 0; bottom: 0; left: calc(var(--lo) * 100%); width: calc((var(--hi) - var(--lo)) * 100%); background: var(--grow-was); }
 .fl-cmp-row.this .fl-range i { background: linear-gradient(to bottom, var(--fire-gold) 0 50%, var(--fire-ember) 50%); }
 .fl-cmp-row.this.unknown .fl-range i { background: repeating-linear-gradient(to right, var(--fire-gold) 0 calc(2 * var(--u)), transparent calc(2 * var(--u)) calc(4 * var(--u))); }
-.fl-verdict { display: flex; flex-wrap: wrap; gap: 4px; }
-.fl-verdict .pd-chip { display: inline-flex; align-items: center; gap: 4px; }
-.fl-verdict .up { color: var(--good); } .fl-verdict .down { color: var(--bad); } .fl-verdict .same { color: var(--ink-muted); }
-.fl-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: var(--space-2); align-items: start; }
-.fl-pair-col { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; font: var(--text-caption); }
-.fl-pair-col .pd-slot { --slot: 52px; }
-.fl-pair-mid { display: flex; flex-direction: column; gap: 4px; padding-top: 58px; font: var(--text-caption); text-align: center; }
+
+  
+
 .fl-know { display: flex; flex-direction: column; gap: 4px; }
 .fl-know-head { display: flex; align-items: center; gap: 6px; font: var(--text-caption); color: var(--ink); }
 .fl-know-head .of { margin-left: auto; color: var(--fire-gold); }
@@ -300,13 +189,7 @@
 .fl-shelf-cell .nm { max-width: 100%; overflow-wrap: anywhere; line-height: 16px; }
 .fl-count-line { display: flex; align-items: center; gap: var(--space-2); font: var(--text-caption); color: var(--ink-muted); }
 .fl-count-line b { font-weight: 400; color: var(--fire-gold); }
-.fl-booklist { display: flex; flex-direction: column; }
-.fl-bookrow { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-2); align-items: center; padding: var(--space-1) 0; border-bottom: var(--u) solid var(--stone-700); }
-.fl-bookrow .look { font: var(--text-caption); color: var(--ink-muted); }
-.fl-bookrow .what { font: var(--text-body); color: var(--fire-light); }
-.fl-bookrow .what.guess { color: var(--fire-gold); font-style: italic; }
-.fl-bookrow .what.none { color: var(--stone-300); }
-.fl-bookrow .meta { font: var(--text-digits); color: var(--ink-muted); text-align: right; }
+
 .fl-elim { display: grid; grid-template-columns: 40px repeat(var(--cols, 8), 1fr); gap: 2px; align-items: center; font: var(--text-digits); }
 .fl-elim .colhead { writing-mode: vertical-rl; transform: rotate(180deg); color: var(--ink-muted); height: 112px; overflow: hidden; text-align: left; white-space: nowrap; justify-self: center; }
 .fl-elim .cell { height: 26px; background: var(--stone-800); display: grid; place-items: center; clip-path: var(--notch); color: var(--ink-muted); }
@@ -333,37 +216,23 @@
 .fl-rib.depth { color: var(--ink-muted); }
 .fl-rib.boss { color: var(--fire-gold); }
 .fl-rib.dead { color: var(--bad); }
-.fl-descent { display: grid; grid-template-columns: 38px 1fr; gap: 0 var(--space-2); }
-.fl-descent .d { height: 26px; display: grid; place-items: center; font: var(--text-digits); color: var(--ink); background: var(--reg, var(--stone-700)); box-shadow: inset 0 calc(-1 * var(--u)) 0 rgba(0, 0, 0, .4); }
-.fl-descent .d.boss { color: var(--fire-light); box-shadow: inset 0 0 0 var(--u) var(--fire-coal); }
-.fl-descent .d.unreached { opacity: .25; }
-.fl-descent .ev { display: flex; align-items: center; gap: 4px; min-height: 26px; font: var(--text-caption); color: var(--ink); overflow: hidden; white-space: nowrap; }
-.fl-page { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background:
-  linear-gradient(to right, rgba(0, 0, 0, .25), transparent 10%, transparent 90%, rgba(0, 0, 0, .25)), #2a2218; box-shadow: inset 0 0 0 var(--u) var(--lit-dark); }
-.fl-page h3 { margin: 0; font: var(--text-title); color: var(--fire-light); }
-.fl-page p { margin: 0; font: var(--text-body); color: var(--ink); }
-.fl-page .finds { display: flex; gap: var(--space-1); flex-wrap: wrap; }
 
 /* ---------- 4. «How it works» (the hunger card is the model: icon, state, a bar with its marks, the numbers, one tip) ---------- */
 .fl-mech-head { display: flex; align-items: center; gap: var(--space-3); }
 .fl-mech-head .fl-gi { --gs: 3px; }
 .fl-mech-head .pd-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .fl-mech-state { font: var(--text-title); color: var(--ink); }
-.fl-mech-pic { display: block; width: 100%; image-rendering: pixelated; background: var(--stone-900); box-shadow: inset var(--u) var(--u) 0 var(--void); }
-.fl-steps { counter-reset: s; display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-.fl-steps li { counter-increment: s; display: grid; grid-template-columns: 22px 1fr; gap: var(--space-2); font: var(--text-caption); color: var(--ink); }
-.fl-steps li::before { content: counter(s); display: grid; place-items: center; width: 20px; height: 20px; background: var(--fire-coal-deep); color: var(--fire-light); box-shadow: inset 0 0 0 var(--u) var(--fire-ember); font: var(--text-digits); }
-.fl-steps li b { color: var(--fire-gold); font-weight: 400; }
+
 .fl-table { width: 100%; border-collapse: collapse; font: var(--text-caption); }
 .fl-table th { text-align: left; color: var(--ink-muted); font-weight: 400; padding: 2px 4px; border-bottom: var(--u) solid var(--stone-600); }
 .fl-table td { padding: 3px 4px; color: var(--ink); border-bottom: var(--u) solid var(--stone-800); vertical-align: middle; }
 .fl-table td.n { color: var(--fire-gold); text-align: right; white-space: nowrap; }
-.fl-swatch { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 6px; box-shadow: 0 0 0 var(--u) var(--void); }
+
 .fl-tip { display: flex; gap: var(--space-2); align-items: flex-start; font: var(--text-caption); color: var(--ink-muted); }
 .fl-tip .fl-gi { margin-top: 2px; }
 
 /* ---------- 5. The end of the run ---------- */
-.fl-endcard, .fl-scroll { text-align: left; }
+
 .fl-endcard { position: relative; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: radial-gradient(120% 60% at 50% 110%, rgba(255, 154, 58, .22), transparent 60%), var(--fire-ash); box-shadow: inset 0 0 0 var(--u) var(--lit-lo), inset 0 0 0 calc(2 * var(--u)) var(--void); }
 .fl-end-hero { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); align-items: center; }
 .fl-end-name { font: var(--text-title); color: var(--fire-light); }
@@ -376,11 +245,6 @@
 .fl-finds .pd-slot { --slot: 40px; }
 .fl-finds .pd-slot .pd-item { width: calc(16 * var(--u) * .75); height: calc(16 * var(--u) * .75); background-size: calc(128 * var(--u) * .75) calc(256 * var(--u) * .75); background-position: calc(var(--ix, 0) * -12 * var(--u)) calc(var(--iy, 0) * -12 * var(--u)); }
 .fl-end-foot { display: flex; justify-content: space-between; align-items: center; font: var(--text-caption); color: var(--ink-muted); }
-.fl-scroll { position: relative; padding: var(--space-3) var(--space-3); background: linear-gradient(to right, #20180f, #2b2117 15%, #2b2117 85%, #20180f); box-shadow: inset 0 calc(3 * var(--u)) 0 var(--lit-lo), inset 0 calc(-3 * var(--u)) 0 var(--lit-lo); }
-.fl-spread { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
-.fl-spread > div { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); background: var(--stone-900); }
-.fl-spread h4 { margin: 0; font: var(--text-label); color: var(--ink-muted); }
-.fl-spread > div.is h4 { color: var(--fire-gold); }
 
 /* ---------- In the game: what the real markup needs besides the designer's mock ---------- */
 /* The toasts of a level and of strength sit just under the HUD (main.ts --hud-bottom), a tap on the level's opens the passport. */
@@ -463,10 +327,9 @@
 @keyframes fl-drop { 0% { opacity: 0; translate: 0 -12px; } 100% { opacity: 1; translate: 0 0; } }
 @keyframes fl-xp-flash { 0% { filter: brightness(1); } 33% { filter: brightness(2.2); } 66% { filter: brightness(1.5); } 100% { filter: brightness(1); } }
 @keyframes fl-twinkle { 50% { opacity: .35; } }
-@keyframes fl-rise { 0% { opacity: 1; translate: 0 0; } 100% { opacity: 0; translate: var(--dx, 0) -36px; } }
-@keyframes fl-pip { 0% { background: var(--fire-light); } 60% { background: var(--fire-spark); scale: 1 1.6; } }
+
 @keyframes fl-flip-tag { 0% { color: var(--bad); scale: 1; } 50% { color: var(--fire-spark); scale: 1.3; } 100% { color: var(--fire-light); scale: 1; } }
-@keyframes fl-stamp { 0% { scale: 2.2; opacity: 0; } 40% { scale: .9; opacity: 1; } 70% { scale: 1.08; } 100% { scale: 1; } }
+
 @keyframes fl-band { 0% { opacity: 0; clip-path: inset(48% 0 48% 0); } 50% { opacity: 1; clip-path: inset(10% 0 10% 0); } 100% { opacity: 1; clip-path: inset(0 0 0 0); } }
 @keyframes fl-flip { 0% { scale: 1 1; } 50% { scale: 0 1; } 100% { scale: 1 1; } }
 @keyframes fl-face-out { 0%, 49% { visibility: visible; } 50%, 100% { visibility: hidden; } }
@@ -479,9 +342,9 @@
 
 /* Reduced motion: no movement; the end state at once, held still so it is seen. */
 @media (prefers-reduced-motion: reduce) {
-  .pd-bar.xp.fl-flash::before, .pd-hero-lvl.fl-pop, .fl-lvl-bubble, .pd-toast.fl-lvl-toast, .fl-xp-pips.fl-collapse i, .fl-str-flip,
-  .fl-seal-sigil .fl-gi, .fl-banner, .fl-reveal, .fl-tickup, .fl-face-was, .fl-face-is, .fl-runedraw, .pd-slot.fl-new > .fl-mark { animation: none; }
-  .fl-coal-sparks, .fl-shatter, .fl-sparks, .fl-flashcell::after, .fl-face-was { display: none; }
+  .pd-bar.xp.fl-flash::before, .pd-hero-lvl.fl-pop, .pd-toast.fl-lvl-toast, .fl-str-flip,
+  .fl-banner, .fl-reveal, .fl-tickup, .fl-face-was, .fl-face-is, .fl-runedraw, .pd-slot.fl-new > .fl-mark { animation: none; }
+  .fl-shatter, .fl-sparks, .fl-flashcell::after, .fl-face-was { display: none; }
   .fl-str-flip, .fl-tickup { color: var(--fire-light); }
   .pd-slot.fl-moment { box-shadow: inset 0 0 0 2px var(--fire-gold), inset 0 0 0 4px var(--void); }
 }

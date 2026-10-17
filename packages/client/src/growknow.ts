@@ -247,6 +247,15 @@ export interface ChronicleLine {
 
 const itemKindIcon = (world: World, kind: ItemKind): HTMLElement => spriteNode(itemSprite(createItem(kind), world.run.labels));
 
+/** What an enchantment or a glyph is called, in a word: «flaming», «of bounce»; a key it does not know stays as it is. */
+export function enchantWord(value: string): string {
+  const enchant = t.enchantInfo as Record<string, string>;
+  const glyph = t.glyphInfo as Record<string, string>;
+  if (value in enchant) return t.enchantName('', value as never, 'weapon.sword').trim().toLowerCase();
+  if (value in glyph) return t.glyphName('', value as never).trim();
+  return value;
+}
+
 export function chronicleLine(world: World, e: ChronicleEntry): ChronicleLine | null {
   const value = e.value;
   const base = { turn: e.turn, depth: e.depth };
@@ -257,7 +266,7 @@ export function chronicleLine(world: World, e: ChronicleEntry): ChronicleLine | 
     case 'strength': return { ...base, text: G.chronicle.strength, icon: gi('str', 12, 2), big: false, cls: '' };
     case 'firstUpgrade': return { ...base, text: G.chronicle.firstUpgrade(kindLabel(world, kind())), icon: itemKindIcon(world, kind()), big: true, cls: '' };
     case 'upgrade': return { ...base, text: G.chronicle.upgrade(kindLabel(world, kind())), icon: itemKindIcon(world, kind()), big: false, cls: '' };
-    case 'enchant': return { ...base, text: G.chronicle.enchant(String(value)), icon: gi('enchant', 8, 2), big: true, cls: '' };
+    case 'enchant': return { ...base, text: G.chronicle.enchant(enchantWord(String(value))), icon: gi('enchant', 8, 2), big: true, cls: '' };
     case 'boss': return { ...base, text: G.chronicle.boss(capitalize(t.mobs[value as MobKind] ?? String(value))), icon: gi('boss', 16, 1.5), big: true, cls: 'boss' };
     case 'mastery': return { ...base, text: G.chronicle.mastery(t.subclasses[value as keyof typeof t.subclasses] ?? String(value)), icon: gi('sigil', 16, 1.5), big: true, cls: '' };
     case 'classArmor': return { ...base, text: G.chronicle.classArmor, icon: gi('sigil', 16, 1.5), big: true, cls: '' };

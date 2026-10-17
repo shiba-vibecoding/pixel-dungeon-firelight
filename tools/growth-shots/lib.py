@@ -11,10 +11,11 @@ BASE = 'http://127.0.0.1:%s/pixel-dungeon-firelight/' % PORT
 OUT = os.path.join(os.path.dirname(__file__), '..', '..', 'docs', 'growth')
 
 
-def launch(p, width=375, height=812, dpr=2, query='lang=ru', gpu=False):
+def launch(p, width=375, height=812, dpr=2, query='lang=ru', gpu=False, reduced=False):
     args = ['--use-angle=d3d11', '--ignore-gpu-blocklist'] if gpu else ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
     browser = p.chromium.launch(args=args)
-    page = browser.new_page(viewport={'width': width, 'height': height}, device_scale_factor=dpr)
+    context = browser.new_context(viewport={'width': width, 'height': height}, device_scale_factor=dpr, reduced_motion='reduce' if reduced else 'no-preference')
+    page = context.new_page()
     # No hints, no tutorial: they would stand in front of the screens.
     page.add_init_script("localStorage.setItem('pd-hints', 'off'); localStorage.setItem('pd-coach-done', '1'); localStorage.setItem('pd-moved', '1'); localStorage.setItem('pd-fx', 'full');")
     page.logs = []
