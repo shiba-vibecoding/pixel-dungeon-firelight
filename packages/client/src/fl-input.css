@@ -18,4 +18,13 @@
 /* The route's tag: over the target marker while the route waits for its second tap (main.ts placeRouteTag). It never takes a touch. */
 .fl-route-tag { position: fixed; z-index: var(--z-hud, 10); transform: translate(-50%, -100%); pointer-events: none; white-space: nowrap;
   padding: 2px 8px; font: var(--text-caption); color: var(--gold); background: rgba(26, 10, 6, .86); border: 2px solid var(--fire-gold, #ffcc66); }
-.fl-route-tag[hidden] { display: none; }
+/* The touch loupe (loupeui.ts): the magnified cells round the finger, above it, and what lifting would do. */
+.fl-loupe { position: fixed; z-index: calc(var(--z-overlay, 50) + 5); transform: translateX(-50%); pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.fl-loupe[hidden], .fl-hover-label[hidden], .fl-route-tag[hidden] { display: none; }
+.fl-loupe-lens { position: relative; padding: 3px; background: var(--fire-ash, #1a0a06); border: 3px solid var(--fire-gold, #ffcc66); box-shadow: 0 4px 0 rgba(0, 0, 0, .5); }
+.fl-loupe-glass { display: block; image-rendering: pixelated; background: #0b0b09; }
+.fl-loupe-frame { position: absolute; left: calc(3px + (100% - 6px) / 3); top: calc(3px + (100% - 6px) / 3); width: calc((100% - 6px) / 3); height: calc((100% - 6px) / 3); box-sizing: border-box; border: 2px solid var(--fire-spark, #fffad6); box-shadow: 0 0 0 1px var(--fire-ash, #1a0a06), inset 0 0 0 1px var(--fire-ash, #1a0a06); }
+.fl-loupe-label, .fl-hover-label { max-width: 260px; white-space: nowrap; padding: 3px 10px; font: var(--text-label); text-align: center; color: var(--gold); background: rgba(26, 10, 6, .92); border: 2px solid var(--fire-gold, #ffcc66); }
+.fl-loupe.muted .fl-loupe-lens { border-color: var(--stone-300); filter: saturate(.4) brightness(.8); }
+.fl-loupe.muted .fl-loupe-label { color: var(--ink-muted); border-color: var(--stone-300); }
+.fl-hover-label { position: fixed; z-index: var(--z-overlay, 50); pointer-events: none; white-space: nowrap; font: var(--text-caption); }

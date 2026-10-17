@@ -14,6 +14,7 @@ import { hints } from './hints';
 import { confirmDanger } from './mistap';
 import { confirmRisky } from './riskyuse';
 import { touchGuardSetting } from './touchguard';
+import { loupeSetting } from './loupe';
 import { CONFIRM_MODES, pathConfirm } from './pathpreview';
 
 /*
@@ -223,6 +224,7 @@ export function showSettings(options: SettingsOptions): void {
       segments(CONFIRM_MODES.map((m) => [m, t.input.settings.pathModes[m]] as const), pathConfirm.mode, (mode) => pathConfirm.set(mode)),
       info(t.input.settings.pathConfirmNote, 'pd-note'),
     ),
+    switchRow(t.input.settings.loupe, t.input.settings.loupeNote, loupeSetting.on, (on) => loupeSetting.set(on)),
     switchRow(t.input.settings.touchGuard, t.input.settings.touchGuardNote, touchGuardSetting.on, (on) => touchGuardSetting.set(on)),
     switchRow(t.meta.hints, t.meta.hintsNote, hints.enabled, (on) => hints.setEnabled(on)),
     options.reminders ? switchRow(t.ranked.remindersSwitch, t.ranked.remindersNote, options.reminders.on, (on) => options.reminders!.set(on)) : null,

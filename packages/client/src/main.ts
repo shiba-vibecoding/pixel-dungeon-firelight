@@ -68,6 +68,8 @@ import { type Screen, TouchGuard, touchGuardSetting } from './touchguard';
 import { conditionsOf, type HurtEntry, HurtLog } from './hurtlog';
 import { type Conditions, type Source, sourcesOf } from './hurtsrc';
 import { showFeed } from './feedui';
+import { actionable, describeTap, HOLD_MS, LoupeGesture, loupeSetting, type Tapped, type TapContext } from './loupe';
+import { HoverLabel, LoupeGlass, tapLabel } from './loupeui';
 import { needsConfirm, pathConfirm, PathPreview, planRoute, stopForTap, verdict, underway } from './pathpreview';
 import { reloadForUpdate } from './update';
 import { type Camp, type CampDress, campClasses } from './camp';
@@ -2082,11 +2084,7 @@ function tapCell(cell: number, quiet = false): void {
   // The way goes round monsters in sight, known traps (findPath) and clouds of gas in sight, where another way exists.
   // In a fight (a hostile in sight) it also keeps off the items on the floor, where an equally short way exists (pathpreview.ts).
   const occupied = occupiedCells(world, me.depth);
-  const hostile = seenEnemies(world, me).length > 0;
-  walk.queue = planRoute(level, me.pos, cell, {
-    occupied, gas: gasCells(world, me.depth), explored, floating, combat: hostile,
-    heaps: hostile ? new Set((world.floors[me.depth]?.heaps ?? []).filter((h) => h.kind === 'heap').map((h) => h.pos)) : new Set(),
-  });
+  walk.queue = routeFor(world, me, level, cell);
   if (walk.queue.length === 0) {
     // No way around a known trap: walk up to it and say so; a tap on the trap itself steps onto it.
     const risky = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating, true);
@@ -2133,6 +2131,15 @@ function tapCell(cell: number, quiet = false): void {
   else if (cell === level.entrance && (me.depth > 1 || hasAmulet(me))) walk.stairs = 'ascend';
 }
 
+/** The way a tap on `cell` walks (pathpreview.ts planRoute): round monsters, known traps and gas; in a fight, round items too where that costs nothing. */
+function routeFor(world: World, me: Hero, level: Level, cell: number): number[] {
+  const hostile = seenEnemies(world, me).length > 0;
+  return planRoute(level, me.pos, cell, {
+    occupied: occupiedCells(world, me.depth), gas: gasCells(world, me.depth), explored: exploredCells(world, me.depth), floating: (me.levitating ?? 0) > 0, combat: hostile,
+    heaps: hostile ? new Set((world.floors[me.depth]?.heaps ?? []).filter((h) => h.kind === 'heap').map((h) => h.pos)) : new Set(),
+  });
+}
+
 /** The route on show, waiting for the second tap on its cell (pathpreview.ts). */
 const preview = new PathPreview();
 /**
@@ -2144,7 +2151,7 @@ routeTag.hidden = true;
 document.body.append(routeTag);
 let routeTagFor = '';
 function placeRouteTag(): void {
-  if (!preview.active) {
+  if (!preview.active || loupe.active) {
     routeTag.hidden = true;
     routeTagFor = '';
     return;
@@ -2165,7 +2172,8 @@ function placeRouteTag(): void {
  * (the setting; never for a neighbour; not during the first walk's lesson) and is not the second tap on the cell already on show.
  */
 function confirmFirst(world: World, me: Hero, cell: number, route: readonly number[], planned: number, quiet: boolean, now: number): boolean {
-  if (!byPointer || quiet || !coached) return false;
+  // A confirmed hold (the loupe, loupe.ts) is the confirmation: no second tap.
+  if (!byPointer || quiet || !coached || confirmedHold) return false;
   const needs = needsConfirm(pathConfirm.mode, seenEnemies(world, me).length > 0, route.length);
   if (verdict(planned, cell, needs) === 'walk') return false;
   preview.show(cell, route, me.pos, me.depth, now);
@@ -2342,6 +2350,113 @@ const toDevice = (clientX: number, clientY: number): { x: number; y: number } =>
   return { x: (clientX - rect.left) * sx, y: ((clientY - rect.top) * sy) / ground() };
 };
 
+/* The touch loupe (loupe.ts, loupeui.ts): a hold raises a magnified bubble over the finger, naming what lifting would do. */
+const loupe = new LoupeGesture();
+const glass = new LoupeGlass();
+const hoverLabel = new HoverLabel();
+let loupeTimer = 0;
+/** Where the finger is (client pixels) and the cell the loupe last aimed at. */
+const loupePoint = { x: 0, y: 0 };
+
+/** What a tap on `cell` would come to, as the loupe words it; null when no game is on. */
+function describeAt(cell: number): Tapped | null {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me || !isAlive(me)) return null;
+  const level = levelAt(world, me.depth);
+  const context: TapContext = {
+    world, me, level, visible: seenCells(world, me.depth), explored: exploredCells(world, me.depth), floating: (me.levitating ?? 0) > 0,
+    aim: aim && (aim.kind === 'throw' || aim.kind === 'zap' || aim.kind === 'special') ? aim.kind : null,
+    front: (wall) => wallFront(world, me, level, wall, exploredCells(world, me.depth), (me.levitating ?? 0) > 0),
+    route: (to) => routeFor(world, me, level, to),
+  };
+  return describeTap(context, cell);
+}
+
+/** A finger came down: if it stays still for HOLD_MS (and is still a tap, not a drag or a pinch) the loupe comes up. */
+function armLoupe(event: PointerEvent): void {
+  clearTimeout(loupeTimer);
+  if (!loupeSetting.on) return;
+  loupePoint.x = event.clientX;
+  loupePoint.y = event.clientY;
+  const started = cam.tapping;
+  const id = event.pointerId;
+  loupe.down(id);
+  if (!started || loupe.id !== id) {
+    // A second finger: the loupe is gone, and so is the glass.
+    endLoupe();
+    return;
+  }
+  loupeTimer = window.setTimeout(() => {
+    if (!session?.world || overlayOpen() || !loupe.fire(id, cam.tapping === started)) return;
+    // The touch is the loupe's now: its moves retarget it, and lifting is not a tap for the camera.
+    cam.spend();
+    retarget(loupePoint.x, loupePoint.y);
+  }, HOLD_MS);
+}
+
+/** The loupe follows the finger: the cell under it, the words for it, the route (shown on the floor), the glass above. */
+function retarget(clientX: number, clientY: number): void {
+  const world = session?.world;
+  const me = world && heroById(world, session!.myId);
+  if (!world || !me) return;
+  const device = toDevice(clientX, clientY);
+  // Off the map: over a HUD element or out of the canvas.
+  const over = document.elementFromPoint(clientX, clientY);
+  const cell = tapCellAt(device.x, device.y);
+  const outside = over !== canvas || cell < 0;
+  loupe.move(loupe.id, cell, outside);
+  const tapped = !outside ? describeAt(cell) : null;
+  preview.clear();
+  if (tapped && (tapped.kind === 'walk' || tapped.kind === 'pickup' || tapped.kind === 'descend' || tapped.kind === 'ascend' || tapped.kind === 'open') && tapped.steps > 0) {
+    const route = routeFor(world, me, levelAt(world, me.depth), tapped.cell);
+    preview.show(tapped.cell, tapped.kind === 'open' ? route.slice(0, -1) : route, me.pos, me.depth, fx.now);
+  }
+  glass.show(tapped ? tapLabel(world, tapped) : t.input.loupe.cancel, !tapped || (!actionable(tapped.kind) && tapped.kind !== 'examine'), clientX, clientY, ground());
+  drawPace.force();
+}
+
+/** The loupe is over (the finger lifted, a window opened, a second finger came, the ping took the hold): the glass and the route go. */
+function endLoupe(): void {
+  clearTimeout(loupeTimer);
+  loupe.cancel();
+  glass.hide();
+  preview.clear();
+}
+
+/** The finger lifted on `cell` in a hold: the action the bubble named. A far route needs no second tap: this was the confirmation. */
+function holdAction(cell: number): void {
+  const tapped = describeAt(cell);
+  if (!tapped) return;
+  if (tapped.kind === 'examine') {
+    examineCell(cell);
+    return;
+  }
+  stopWalking();
+  byPointer = true;
+  confirmedHold = true;
+  try {
+    tapCell(cell);
+  } finally {
+    byPointer = false;
+    confirmedHold = false;
+  }
+}
+
+/** Copies the cells round the loupe's target into the glass, in the task that drew the frame (the 3D scene keeps no picture of it). */
+function paintGlass(): void {
+  if (!glass.visible || loupe.lastCell < 0) return;
+  const cell = loupe.lastCell;
+  const cx = ((cell % WIDTH) * TILE + TILE / 2 - camera.x) * camera.zoom;
+  const cy = (Math.floor(cell / WIDTH) * TILE + TILE / 2 - camera.y) * camera.zoom * ground();
+  const sw = 3 * TILE * camera.zoom;
+  const sh = sw * ground();
+  const sources: Array<{ image: CanvasImageSource; scale: number }> = [];
+  if (mode3d && canvas3d) sources.push({ image: canvas3d, scale: canvas3d.width / canvas.width });
+  sources.push({ image: canvas, scale: 1 });
+  glass.paint(sources, cx - sw / 2, cy - sh / 2, sw, sh);
+}
+
 /* The guard against accidental touches (touchguard.ts): a palm, a grip on the edge, the touch that wakes the app, a tap with a second finger. */
 const touchGuard = new TouchGuard();
 const guardProbe = document.createElement('div');
@@ -2377,7 +2492,9 @@ canvas.addEventListener('pointerdown', (event) => {
   }
   const at = toDevice(event.clientX, event.clientY);
   cam.pointerDown(event.pointerId, at.x, at.y, event.timeStamp, event.button);
-  if (event.button === 0) armPing(at);
+  const finger = event.pointerType !== 'mouse';
+  if (event.button === 0) armPing(at, finger && loupeSetting.on);
+  if (event.button === 0 && finger) armLoupe(event);
 });
 canvas.addEventListener('mousedown', (event) => {
   if (event.button === 1) event.preventDefault();
@@ -2386,11 +2503,21 @@ canvas.addEventListener('mousedown', (event) => {
 canvas.addEventListener('pointermove', (event) => {
   const at = toDevice(event.clientX, event.clientY);
   cam.pointerMove(event.pointerId, at.x, at.y, event.timeStamp);
+  loupePoint.x = event.clientX;
+  loupePoint.y = event.clientY;
+  if (loupe.active && event.pointerId === loupe.id) retarget(event.clientX, event.clientY);
 });
 
 const lift = (event: PointerEvent): void => {
   const at = toDevice(event.clientX, event.clientY);
   const tapped = touchGuard.release(event.pointerId);
+  // A hold with the loupe up: lifting on the cell does what the bubble said; anywhere else, or a cancelled pointer, does nothing.
+  const lifted = event.type === 'pointerup' ? loupe.up(event.pointerId) : (loupe.id === event.pointerId && loupe.cancel(), 'none');
+  if (lifted !== 'none') {
+    const cell = loupe.lastCell;
+    endLoupe();
+    if (lifted === 'act' && cell >= 0) holdAction(cell);
+  }
   if (event.type !== 'pointerup') {
     cam.pointerCancel(event.pointerId);
     return;
@@ -2405,23 +2532,29 @@ canvas.addEventListener('pointercancel', lift);
 /* Co-op signals (coop-marks.ts): a long press on the map pings that cell for the party. */
 const coop = new CoopMarks(hud.root);
 const LONG_PRESS_MS = 450;
+/** The ping's hold when the loupe is on: it comes up at HOLD_MS, so the ping waits for a hold that is clearly meant. */
+const LOUPE_PING_MS = 800;
 let pressTimer = 0;
 
 /** Called as a finger comes down: held still long enough, the touch becomes a ping instead of a tap. */
-function armPing(at: { x: number; y: number }): void {
+function armPing(at: { x: number; y: number }, loupeOn = false): void {
   clearTimeout(pressTimer);
   const started = cam.tapping;
   if (session?.mode !== 'online' || !started) return;
+  // With the loupe on, a hold first shows the loupe (a quarter of a second); the ping is the longer hold, after it.
   pressTimer = window.setTimeout(() => {
-    // A drag or a pinch, a lifted finger or a new touch each replace the gesture: then it was not a hold.
-    if (cam.tapping !== started || !session?.world || overlayOpen()) return;
+    // A drag or a pinch, a lifted finger or a new touch each replace the gesture: then it was not a hold. (The loupe having come up
+    // spent the touch for the camera, but the finger is still the same one: a long hold turns the loupe into the ping.)
+    const holding = loupe.active ? true : cam.tapping === started;
+    if (!holding || !session?.world || overlayOpen()) return;
+    if (loupe.active) endLoupe();
     const x = Math.floor((camera.x + at.x / camera.zoom) / TILE);
     const y = Math.floor((camera.y + at.y / camera.zoom) / TILE);
     if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
     // The touch is spent: lifting the finger walks nowhere.
     cam.spend();
     if (coop.ping(session, view.depth, x + y * WIDTH)) haptic('hit');
-  }, LONG_PRESS_MS);
+  }, loupeOn ? LOUPE_PING_MS : LONG_PRESS_MS);
 }
 
 /** The mouse wheel (and a touchpad's pinch) zooms by steps, round the cursor. */
@@ -2549,6 +2682,7 @@ const cellClient = (cell: number): { x: number; y: number } => {
   };
 };
 function hideHover(): void {
+  hoverLabel.hide();
   hover.cell = -1;
   hover.frame.style.display = 'none';
 }
@@ -2565,10 +2699,18 @@ function hoverKind(cell: number): 'foe' | 'cell' | null {
 canvas.addEventListener('pointermove', (event) => {
   if (event.pointerType !== 'mouse' || event.buttons !== 0 || !session?.world || overlayOpen()) return;
   const cell = cellUnder(event.clientX, event.clientY);
-  if (cell === hover.cell) return;
+  if (cell === hover.cell) {
+    if (hoverLabel.root.hidden === false) hoverLabel.show(hoverLabel.root.textContent ?? '', event.clientX, event.clientY);
+    return;
+  }
   hideHover();
   hover.cell = cell;
   if (cell < 0) return;
+  // The mouse's loupe: what a click here would do, in words by the cursor.
+  if (loupeSetting.on) {
+    const tapped = describeAt(cell);
+    if (tapped && session.world) hoverLabel.show(tapLabel(session.world, tapped), event.clientX, event.clientY);
+  }
   const kind = hoverKind(cell);
   hover.frame.className = `pd-hover${kind === 'foe' ? ' foe' : ''}`;
   // No frame follows the mouse (the owner's wish): the cell is still tracked for the right button, not drawn.
@@ -2581,6 +2723,8 @@ canvas.addEventListener('pointerdown', hideHover);
 canvas.addEventListener('contextmenu', (event) => {
   event.preventDefault();
   hideHover();
+  // A long press on a phone raises this event too: with the loupe on, the hold is the loupe's («Examine» is one of its words), not a second examine.
+  if (loupeSetting.on && ((event as PointerEvent).pointerType === 'touch' || (event as PointerEvent).pointerType === 'pen' || loupe.active)) return;
   const cell = cellUnder(event.clientX, event.clientY);
   if (cell >= 0 && session?.world && !overlayOpen()) examineCell(cell);
 });
@@ -2604,12 +2748,9 @@ function tapAt(px: number, py: number): void {
   // Any tap on the map stops the walk at once, whatever it then asks for (and even when something else takes it: a double tap on the
   // hero, the examine tool, the whole-level view).
   stopWalking();
-  const wx = camera.x + px / camera.zoom;
-  const wy = camera.y + py / camera.zoom;
-  // In 3D a figure stands up off its cell, drawn over the cells north of it: a tap on its body is a tap on its cell.
-  const figure = figureCellAt(wx, wy);
-  const x = figure >= 0 ? figure % WIDTH : Math.floor(wx / TILE);
-  const y = figure >= 0 ? Math.floor(figure / WIDTH) : Math.floor(wy / TILE);
+  const under = tapCellAt(px, py);
+  const x = under >= 0 ? under % WIDTH : -1;
+  const y = under >= 0 ? Math.floor(under / WIDTH) : -1;
   // The whole level is on: a tap on the map walks there (below) and takes the view back to the normal zoom, eased.
   if (cam.overview) cam.exitOverview(true);
   if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
@@ -2631,6 +2772,16 @@ function tapAt(px: number, py: number): void {
   }
 }
 
+/** The cell a point of the map (device pixels) stands for, or -1: in 3D a figure stands up off its cell, drawn over the cells north of it, and a tap on its body is a tap on its cell. */
+function tapCellAt(px: number, py: number): number {
+  const wx = camera.x + px / camera.zoom;
+  const wy = camera.y + py / camera.zoom;
+  const figure = figureCellAt(wx, wy);
+  const x = figure >= 0 ? figure % WIDTH : Math.floor(wx / TILE);
+  const y = figure >= 0 ? Math.floor(figure / WIDTH) : Math.floor(wy / TILE);
+  return x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT ? -1 : x + y * WIDTH;
+}
+
 /** Stops what the hero is doing over several turns: a walk, a chase, a rest, a key held; under live turns the plan already sent too. */
 function stopWalking(): void {
   stopForTap(walk, held);
@@ -2640,6 +2791,8 @@ function stopWalking(): void {
 
 /** Whether the tapCell under way came from the pointer (tapAt), not a key or a walk: only a finger or a click on a wall means the floor by it. */
 let byPointer = false;
+/** The tapCell under way is a hold that was confirmed by lifting the finger (the loupe): a far route needs no second tap. */
+let confirmedHold = false;
 
 /**
  * The floor beside a wall cell a tap on it stands for: of its four sides' explored, walkable cells, the one the shortest way from the
@@ -3296,7 +3449,8 @@ function tick(now: number): void {
   }
 
   // The route on show belongs to where the hero stood: a step, a new floor, a window, an aim or the examine tool put it away.
-  if (preview.active && (preview.stale(me.pos, me.depth) || aim || examining || overlayOpen() || !isAlive(me))) preview.clear();
+  if (preview.active && !loupe.active && (preview.stale(me.pos, me.depth) || aim || examining || overlayOpen() || !isAlive(me))) preview.clear();
+  if (loupe.active && (overlayOpen() || !isAlive(me))) endLoupe();
 
   // Low on health, the edges of the view pulse red like a heartbeat, quicker the nearer death.
   if (session.world) {
@@ -3613,6 +3767,7 @@ function tick(now: number): void {
       render(ctx, scene, view, session.myId, assets, camera, vnow);
       coop.frame(ctx, { session, world, view, camera, free, now: vnow });
     }
+    paintGlass();
     if (forShot && shotWanted) {
       const done = shotWanted;
       shotWanted = null;
