@@ -50,9 +50,9 @@ describe('growth in 3D: the designer\'s numbers', () => {
 });
 
 describe('growth in 3D: sparks by step', () => {
-  it('shows 1, 2, 3, 4 sparks by step, none for nothing, and half (rounded up) in the light mode', () => {
-    expect([0, 1, 2, 3, 4].map((t) => sparkCount(t, false))).toEqual([0, 1, 2, 3, 4]);
-    expect([0, 1, 2, 3, 4].map((t) => sparkCount(t, true))).toEqual([0, 1, 1, 2, 2]);
+  it('shows sparks only from the second step, two at most, and half (rounded up) in the light mode', () => {
+    expect([0, 1, 2, 3, 4].map((t) => sparkCount(t, false))).toEqual([0, 0, 2, 2, 2]);
+    expect([0, 1, 2, 3, 4].map((t) => sparkCount(t, true))).toEqual([0, 0, 1, 1, 1]);
   });
 
   it('twinkles once a period for steps 1 to 3 and keeps turning for step 4', () => {

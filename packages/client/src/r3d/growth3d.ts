@@ -195,21 +195,8 @@ export class Growth3D {
         const w = this.warm;
         glow.flat(tx, ground + 0.02, tz, 1.2 * scale, 0.75 * scale, 0, this.dot[0], this.dot[1], this.dot[2], this.dot[3], w[0]! * s, w[1]! * s, w[2]! * s, 0.9);
       }
-      // The enchantment's rune by the blade, drawn in, held, dimmed.
-      if (aura.enchant) {
-        const c = this.enchantColour(aura.enchant);
-        if (c) {
-          const l = runeLook(now, still, this.look);
-          const m = 1.3 * l.light * alpha;
-          this.put(glow, FX_ROW.rune, l.frame, hx + out * 0.12 * scale, by, bz, hu + 0.55 * scale, RUNE_SIZE * scale, c[0]! * m, c[1]! * m, c[2]! * m, 1);
-        }
-      }
-      // The glyph: a small rune on the chest that beats softly.
-      if (aura.glyph) {
-        const m = glyphLight(now, still) * alpha;
-        const g = this.glyph;
-        this.put(glow, FX_ROW.rune, 3, tx + 0.03 * out, by, bz, torso, GLYPH_RUNE_SIZE * scale, g[0]! * m, g[1]! * m, g[2]! * m, 1);
-      }
+      // (No runes by the blade or on the chest: the owner found the floating symbols by the hero puzzling. The enchantment and the glyph
+      // show in the item's card and slot, not as signs in the air.)
       // A curse known: two violet wisps about him, blended (not added), 180 ms a picture.
       if (aura.cursed) {
         const step = still ? 0 : Math.floor(now / WISP_MS);
