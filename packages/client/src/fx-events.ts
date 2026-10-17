@@ -8,6 +8,7 @@ import { duration, levelRegion } from './sprites';
 import { fxp } from './fxplayer';
 import { eventKey } from './fxsheet';
 import { showBossCard } from './bosscard';
+import { bossFx } from './bossfx';
 import { addFxLights } from './fxdraw2d';
 import { regionIndex } from './worldsheets';
 import { minedFx } from './questfx';
@@ -326,6 +327,8 @@ export function effectFx(effect: Effect, view: View, world: World, myId: string,
   env.depth = view.depth;
   env.myId = myId;
   env.labels = world.run.labels;
+  // The boss fights' own looks (bossfx.ts) go over whatever the effect shows below.
+  bossFx.effect(effect, view, world, myId, now);
   switch (effect.type) {
     case 'attack': {
       if (!here(effect.depth)) return;

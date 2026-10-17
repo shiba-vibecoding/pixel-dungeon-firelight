@@ -1,0 +1,55 @@
+/* The boss fights (bossfx.ts, bossbar.ts): the health bar with its ghost, the boss's lines, the red pulse, the white-out and the Amulet. */
+
+/* ---------- The health bar: the designer's (fl-p13.css) with its place under the HUD, the trace driven by the game, and the fight's states ---------- */
+.fl-bossbar { position: fixed; z-index: var(--z-hud, 10);
+  top: max(calc(var(--safe-t, 0px) + var(--space-2, 8px)), calc(var(--hud-bottom, 0px) + var(--space-2, 8px))); }
+.fl-bossbar[hidden] { display: none; }
+.fl-bossbar .trace { transition: none; }
+/* One line for the name, and the epithet only where there is room for it. */
+.fl-bossbar .name { flex-wrap: nowrap; min-width: 0; }
+.fl-bossbar .name .who { white-space: nowrap; }
+.fl-bossbar .name small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@media (max-width: 480px) { .fl-bossbar .name small { display: none; } }
+.fl-bossbar .name .note { margin-left: auto; font: var(--text-caption, 400 13px/16px var(--font-small)); font-style: normal; color: #ffe9a0; animation: fl-bossbar-note .5s steps(2, jump-none) infinite alternate; }
+.fl-bossbar .name .note:empty { display: none; }
+.fl-bossbar.hit .fill { filter: brightness(1.7) saturate(.7); }
+.fl-bossbar.heal .fill { background: linear-gradient(to bottom, #b6f07a 0 34%, #7ad05a 34% 70%, #3a7a2a 70%); }
+.fl-bossbar.rage .track { animation: fl-bossbar-rage 1s steps(2, jump-none) infinite alternate; }
+.fl-bossbar.dead .fill, .fl-bossbar.dead .trace { filter: grayscale(1) brightness(.6); }
+.fl-bossbar.dead .name { text-decoration: line-through; opacity: .7; }
+@keyframes fl-bossbar-note { from { opacity: 1; } to { opacity: .55; } }
+@keyframes fl-bossbar-rage { from { box-shadow: 0 0 0 0 transparent; } to { box-shadow: 0 0 6px 0 #ff5a3a; } }
+@media (prefers-reduced-motion: reduce) { .fl-bossbar .name .note, .fl-bossbar.rage .track { animation: none; } }
+
+/* ---------- The boss's lines ---------- */
+.fl-bossline { --boss: #ff6a4a; position: absolute; left: 0; top: 0; z-index: var(--z-hud, 10); max-width: min(78vw, 300px); pointer-events: none; will-change: transform; }
+.fl-bossline[hidden] { display: none; }
+.fl-bossline-body { position: relative; padding: 6px 10px 7px; background: rgba(18, 9, 9, .94); border: 2px solid var(--boss); color: #fff3df;
+  font: var(--text-body, 400 17px/22px var(--font-ui)); text-wrap: balance; clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px)); }
+.fl-bossline-who { display: block; font: var(--text-caption, 400 13px/15px var(--font-small)); color: var(--boss); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 2px; }
+.fl-bossline::after { content: ""; position: absolute; left: var(--tail, 24px); top: 100%; width: 0; height: 0; margin-left: -7px; border: 7px solid transparent; border-top-color: var(--boss); border-bottom: 0; }
+.fl-bossline.under::after { top: auto; bottom: 100%; border: 7px solid transparent; border-bottom-color: var(--boss); border-top: 0; }
+.fl-bossline.pop .fl-bossline-body { animation: fl-bossline-pop .16s steps(3) both; }
+.fl-bossline.out { opacity: 0; transition: opacity .22s linear; }
+.fl-bossline.last .fl-bossline-body { background: rgba(40, 10, 8, .96); }
+@keyframes fl-bossline-pop { from { transform: scale(.7); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fl-bossline.pop .fl-bossline-body { animation: none; } }
+
+/* ---------- The red pulse of the finale and the white-out ---------- */
+.fl-boss-pulse { position: fixed; inset: 0; z-index: calc(var(--z-toast, 30) - 1); pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(150, 0, 0, 0) 38%, rgba(190, 8, 8, .82) 100%); }
+.fl-boss-pulse.beat { animation: fl-boss-beat 1.15s cubic-bezier(.2, .6, .3, 1) both; }
+.fl-boss-pulse.soft { animation-duration: 1.8s; }
+@keyframes fl-boss-beat { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .fl-boss-pulse.beat { animation: fl-boss-beat-calm 2.2s linear both; } }
+@keyframes fl-boss-beat-calm { 0% { opacity: 0; } 30% { opacity: .5; } 100% { opacity: 0; } }
+.fl-boss-veil { position: fixed; inset: 0; z-index: calc(var(--z-toast, 30) + 5); pointer-events: none; opacity: 0; background: #fffdf2; }
+
+/* ---------- The Amulet's words in the white (its picture is the designer's effect in the scene) ---------- */
+.fl-amulet { position: fixed; left: 0; right: 0; top: 30%; z-index: calc(var(--z-toast, 30) + 6); pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0; }
+.fl-amulet.on { animation: fl-amulet-in 4.6s linear both; }
+.fl-amulet-text { font: 400 24px/30px var(--font-ui, Galmuri11); color: #5a3a08; text-align: center; max-width: 86vw; text-wrap: balance; text-shadow: 0 1px 0 rgba(255, 255, 255, .6); }
+.fl-amulet-sub { font: var(--text-body, 400 17px/22px var(--font-ui)); color: #6b4a1a; text-align: center; max-width: 80vw; text-wrap: balance; }
+@keyframes fl-amulet-in { 0% { opacity: 0; transform: translateY(-14px); } 14% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .fl-amulet.on { animation: fl-amulet-calm 4.6s linear both; } }
+@keyframes fl-amulet-calm { 0% { opacity: 0; } 14% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }

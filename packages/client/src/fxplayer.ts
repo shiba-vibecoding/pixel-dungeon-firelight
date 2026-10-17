@@ -74,6 +74,8 @@ class Inst {
   /** The light: what it is and how long it burns (ms). */
   light: FxLight | null = null;
   lightMs = 0;
+  /** A height of its own, or none. */
+  lift: number | undefined = undefined;
   sub0: FxDef | null = null;
   sub1: FxDef | null = null;
 }
@@ -111,6 +113,10 @@ export interface PlayOpts {
   tint?: boolean;
   /** Where what follows the effect (its `then`) is played, when that is not where it is (a vein's nugget lies on the floor in front of the wall). */
   thenAt?: { x: number; z: number };
+  /** How high its middle (or its foot, for one standing at the feet) is over the floor, cells: in place of the def's own (a loop that stands on the floor, or over a body). */
+  lift?: number;
+  /** A drop's fall, cells, and its time, ms (the pieces of a burst). */
+  fall?: number;
 }
 
 /**
@@ -229,6 +235,11 @@ export class FxPlayer {
     return this.kicks.length > 0;
   }
 
+  /** Puts away what plays of an effect (one that follows `follow`, if it is named): a loop whose cause has gone. */
+  stop(id: string, follow?: string): void {
+    for (const i of this.pool) if (i.alive && i.def.id === id && (follow === undefined || i.follow === follow)) i.alive = false;
+  }
+
   /** Whether an effect has an id in the data. */
   has(id: string): boolean {
     return this.lib !== null && this.lib.fx[id] !== undefined;
@@ -269,6 +280,7 @@ export class FxPlayer {
     i.volume = o.volume ?? 0;
     i.seed = Math.floor(Math.random() * 1e6);
     i.follow = o.follow ?? null;
+    i.lift = o.lift;
     i.returns = false;
     i.rings = 1;
     i.specks = 0;
@@ -339,6 +351,12 @@ export class FxPlayer {
         return inst !== null;
       }
       case 'wave': return this.wave(d, x, z, now, o);
+      case 'drop': {
+        // A piece thrown out of a burst: it falls where it is put (the row is the caller's pick: rowAdd).
+        const inst = this.begin(KIND.drop, d, x, z, now, o, o.ms ?? d.ms ?? 900);
+        if (inst) inst.arc = o.fall ?? d.fall ?? 1.2;
+        return inst !== null;
+      }
       default: {
         const dur = d.loop ? (o.ms ?? d.hold ?? playMs(d)) : playMs(d) + (d.hold ?? 0);
         const inst = this.begin(KIND.flash, d, x, z, now, o, dur);
@@ -764,7 +782,8 @@ export class FxPlayer {
       case 'head': lift = 0.95; break;
       default: break;
     }
-    if (i.kind === KIND.hang) {
+    if (i.lift !== undefined) lift = i.lift;
+    else if (i.kind === KIND.hang) {
       // What is anchored at the feet or on the floor stays there (rising by its `rise`); the rest hangs over the head, drifting up a little.
       const drift = (d.rise ?? 0) * (t / i.dur);
       lift = d.anchor === 'feet' ? drift : d.anchor === 'floor' || d.anchor === 'feet-floor' ? lift + drift : 0.95 + drift;
@@ -779,7 +798,8 @@ export class FxPlayer {
       it.alpha = left < 1000 / d.fps ? Math.max(0.15, left / (1000 / d.fps)) : 1;
     } else if (i.kind === KIND.hang) {
       const k = t / i.dur;
-      it.alpha = Math.min(1, k * 8, (1 - k) * 5);
+      // A loop that stands where it is put comes in and goes out over a quarter of a second; one over a head, in an eighth of its time.
+      it.alpha = i.lift !== undefined ? Math.min(1, t / 250, (i.dur - t) / 250) : Math.min(1, k * 8, (1 - k) * 5);
     }
   }
 

@@ -577,6 +577,16 @@ function frequency(midi: number): number {
   return 440 * 2 ** ((midi - 69) / 12);
 }
 
+/**
+ * How a boss fight's intensity (bosslook.ts bossIntensity, 0 to 1: the phase of the fight) changes the mix of the layers that play in a
+ * fight: the drums and bass push, the second pulse comes up, the flute gives way, and the whole opens a little brighter. A multiple of
+ * each voice's level, and of the tune's tone.
+ */
+export function intensityMix(k: number): Record<Inst | 'tone', number> {
+  const x = k < 0 ? 0 : k > 1 ? 1 : k;
+  return { lead: 1 + 0.15 * x, harm: 1 + 0.45 * x, bass: 1 + 0.4 * x, drum: 1 + 0.6 * x, pad: 1 + 0.3 * x, flute: 1 - 0.3 * x, pluck: 1 + 0.2 * x, tone: 1 + 0.3 * x };
+}
+
 /** Calm music sits a little under the others: the fight is the louder. */
 const TRIM: Record<Layer, number> = { calm: 0.7, danger: 1, boss: 1 };
 
@@ -606,6 +616,11 @@ export class MusicPlayer {
   /** Until when (audio clock) each layer's notes are still scheduled: a layer faded out is let go after its fade. */
   private readonly until: Record<Layer, number> = { calm: 0, danger: 0, boss: 0 };
   private readonly cursor: StepCursor;
+  /** Each voice's own level, the tune's tone and the filter that holds it, and the boss fight's intensity now (setIntensity). */
+  private readonly levels: Record<Inst, number>;
+  private readonly tone: BiquadFilterNode;
+  private readonly toneHz: number;
+  private intensity = 0;
   private timer = 0;
   private done = false;
   private endAt = 0;
@@ -642,7 +657,9 @@ export class MusicPlayer {
     // Everything meets in a gentle low-pass: the pulses' edge is kept, their glare is not.
     // The level matches the sewers' tune from its file, so no region is louder than another.
     const mix = gain(MIX);
-    mix.connect(filter('lowpass', data.tone)).connect(out);
+    this.tone = filter('lowpass', data.tone);
+    this.toneHz = data.tone;
+    mix.connect(this.tone).connect(out);
 
     // The room: every layer sends some of itself to one reverb, without its lows.
     const reverb = data.reverb ?? 0.15;
@@ -668,6 +685,7 @@ export class MusicPlayer {
       lead: levels.lead, harm: levels.harm, bass: levels.bass, drum: levels.drums,
       pad: levels.pad ?? 0.08, flute: levels.flute ?? 0.15, pluck: levels.pluck ?? 0.08,
     };
+    this.levels = level;
     for (const layer of this.song.layers) {
       const layerGain = gain(0);
       layerGain.connect(mix);
@@ -696,6 +714,24 @@ export class MusicPlayer {
     }
     this.mode = options.mode ?? 'calm';
     this.apply(this.mode, this.mode, true);
+  }
+
+  /**
+   * How hard a boss fight plays, 0 to 1 (the boss's phase): the layers that sound in a fight mix harder (intensityMix), over a second or
+   * so. Calm music is left alone, and 0 puts the mix back.
+   */
+  setIntensity(k: number): void {
+    const x = k < 0 ? 0 : k > 1 ? 1 : k;
+    if (Math.abs(x - this.intensity) < 0.005) return;
+    this.intensity = x;
+    const now = this.ctx.currentTime;
+    const mix = intensityMix(x);
+    for (const layer of this.song.layers) {
+      if (layer === 'calm') continue;
+      const bus = this.rack[layer]!.bus;
+      for (const inst of Object.keys(this.levels) as Inst[]) bus[inst].gain.setTargetAtTime(this.levels[inst] * mix[inst], now, 0.6);
+    }
+    this.tone.frequency.setTargetAtTime(this.toneHz * mix.tone, now, 0.6);
   }
 
   /** The layer to sound: crossfades to it. */

@@ -239,7 +239,7 @@
 /* ---------- In the game: what the real markup needs besides the designer's mock ---------- */
 /* The toasts of a level and of strength sit just under the HUD (main.ts --hud-bottom), a tap on the level's opens the passport. */
 .pd-toast.fl-lvl-toast, .pd-toast.fl-str-toast {
-  top: max(var(--fl-below, 0px), calc(max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))) + var(--net-strip, 0px)));
+  top: max(var(--fl-below, 0px), calc(max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))) + var(--net-strip, 0px) + var(--boss-strip, 0px)));
   max-width: min(360px, calc(100% - 2 * var(--space-3)));
 }
 .pd-toast.fl-lvl-toast { flex-direction: column; align-items: stretch; gap: 0; pointer-events: auto; cursor: pointer; }

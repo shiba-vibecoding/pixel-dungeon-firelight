@@ -12,6 +12,7 @@ import * as core from '@pd/core';
 import './ui.css';
 import './game.css';
 import './fl-fx.css';
+import './fl-boss.css';
 import './fl-mart.css';
 import './fl-mart-ext.css';
 import './fl-compete.css';
@@ -28,6 +29,8 @@ import { gore, GoreStore } from './gore';
 import { idleFx } from './idlefx';
 import { loadFx, whenFx } from './fxsheet';
 import { hideBossCard } from './bosscard';
+import { bossFx } from './bossfx';
+import { figureShown } from './figuresight';
 import { ambientFx, effectFx, lightsFor, regionFx, stepFx } from './fx-events';
 import { placeSink, placesBatch, placesFrame, updatePlaces } from './placefx';
 import { placeStore } from './places';
@@ -3663,6 +3666,7 @@ function tick(now: number): void {
     }
     seenGeneration = session.generation;
     quipSys.reset();
+    bossFx.reset();
     view.reset(me.depth);
     fx.reset();
     fxp.clear();
@@ -3804,6 +3808,8 @@ function tick(now: number): void {
   }
   fx.update(vnow, dt);
   fxp.update(vnow);
+  // The boss fights' health bars, phases and arena show (bossfx.ts).
+  bossFx.frame(view, world, vnow, dt);
   idleFx.frame(vnow, view, me.id, walk.resting, threats.size > 0, me.hp, level.map[me.pos]! >= T.WATER_TILES && level.map[me.pos]! <= T.WATER);
   ambientFx(view, vnow, dt);
   regionFx(level, visible, vnow, dt);
@@ -3823,7 +3829,7 @@ function tick(now: number): void {
   if (bossFight && (bossFight.session !== session || bossFight.generation !== session.generation || bossFight.depth !== me.depth)) bossFight = null;
   audio.playMusic(REGION_MUSIC[region]!);
   // Enemies awake in sight bring the danger layer in, a boss fight the boss layer.
-  audio.situation(threats.size, !!bossFight);
+  audio.situation(threats.size, !!bossFight, bossFx.intensity);
   audio.muffle(overlayOpen() || !isAlive(me));
   const kick = fx.shakeOffset(vnow);
   // The hero stands in the middle of the band the HUD and the toolbar leave free, not of the screen.
@@ -3855,6 +3861,8 @@ function tick(now: number): void {
   camera.zoom = state.zoom;
   camera.x = state.x + kick.x;
   camera.y = state.y + kick.y;
+  // The finale's slow push toward the boss (bossfx.ts): closer, and a little toward it, and let go again.
+  bossFx.camera(camera, canvas.width, canvas.height * stretch, vnow);
   // What lies hidden (the phantom fish) is not drawn until found.
   const heaps = (world.floors[me.depth]?.heaps ?? []).filter((heap) => heap.kind !== 'hidden').map((heap) => ({
     pos: heap.pos,
@@ -3872,7 +3880,7 @@ function tick(now: number): void {
   });
   // The map is drawn at full pace while something moves, and a few times a second when it only breathes (pace.ts).
   const moving = state.moving || walk.queue.length > 0 || walk.chase !== null || session.busy || held.code !== '' || Boolean(me.plan?.length)
-    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || idleFx.busy(vnow) || stamps.busy(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
+    || view.moving(vnow) || fx.moving(vnow) || fxp.moving(vnow) || bossFx.busy(vnow) || idleFx.busy(vnow) || stamps.busy(vnow) || motion.moving() || (mode3d && Boolean(r3?.fogMoving || r3?.doorsMoving)) || (!isAlive(me) && (fallenAt === 0 || vnow - fallenAt < 1300));
   if (drawPace.due(now, moving, quality.light || mode3d)) {
     const plants = (world.floors[me.depth]?.plants ?? []).map((p) => ({ pos: p.pos, index: PLANT_KINDS.indexOf(p.kind) }));
     // Clouds of gas: green toxic, yellow paralytic.
@@ -3994,6 +4002,22 @@ function tick(now: number): void {
     const unit = camera.zoom / (canvas.width / (canvas.clientWidth || 1)) / (hud.scale || 1);
     const layer = uiLayer.getBoundingClientRect();
     quipSys.frame(now, { x: (at.x + TILE / 2 - camera.x) * unit, y: (mode3d ? headScreenY(at.y) / camera.zoom : at.y - camera.y) * unit, w: layer.width / (hud.scale || 1), h: layer.height / (hud.scale || 1) }, overlayOpen());
+  }
+
+  // The boss's lines: over its head when it is in sight, hanging under its bar when it is not (bossfx.ts).
+  if (bossFx.speaking) {
+    drawPace.effect(now);
+    const unit = camera.zoom / (canvas.width / (canvas.clientWidth || 1)) / (hud.scale || 1);
+    const layer = uiLayer.getBoundingClientRect();
+    bossFx.place(vnow, (id) => {
+      const puppet = view.puppets.get(id);
+      if (!puppet || !figureShown(puppet, visible, me.mindVision > 0)) return null;
+      const where = view.position(puppet, vnow);
+      return {
+        x: (where.x + TILE / 2 - camera.x) * unit, y: (mode3d ? headScreenY(where.y) / camera.zoom : where.y - camera.y) * unit,
+        w: layer.width / (hud.scale || 1), h: layer.height / (hud.scale || 1),
+      };
+    }, overlayOpen(), hud.scale || 1);
   }
 
   // Who the dungeon is waiting for, once my action has been queued for a moment. Under live turns, the
@@ -4329,5 +4353,5 @@ if (import.meta.env.DEV) {
     }
   };
   Object.assign(window, { __release: { news: () => showNews({ release: CURRENT, onClose: () => toTitle(false) }), report: () => api && showReport({ api, run: runFacts, onClose: () => toTitle(false) }), crash: showCrash } });
-  Object.assign(window, { __pd: { openTrade, examineCell, stamps, placeStore, cellClient, preview, touchGuard, hurtLog, cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
+  Object.assign(window, { __pd: { bossFx, openTrade, examineCell, stamps, placeStore, cellClient, preview, touchGuard, hurtLog, cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
 }

@@ -41,8 +41,8 @@ export class Fx3D {
     if (this.packedFor === loaded) return true;
     if (this.failed === loaded) return false;
     const sizes = [...loaded.images].map(([path, image]) => ({ path, w: image.naturalWidth, h: image.naturalHeight }));
-    // The boss card's pictures are in the page, not in the scene.
-    const wanted = sizes.filter((s) => s.w > 0 && !s.path.startsWith('fx/boss/'));
+    // The boss card's pictures (the plate and the portraits) are in the page, not in the scene; the bosses' own effects (part 13) are.
+    const wanted = sizes.filter((s) => s.w > 0 && s.path !== 'fx/boss/plate.png' && !s.path.startsWith('fx/boss/portrait-'));
     const placed = packSheets(wanted, this.atlas.regions);
     if (!placed) {
       this.failed = loaded;

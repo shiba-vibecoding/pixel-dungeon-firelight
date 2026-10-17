@@ -9,7 +9,7 @@
 .pd-coopctl {
   position: absolute; z-index: var(--z-hud, 10);
   left: calc(var(--safe-l) + var(--space-2));
-  top: max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2)));
+  top: calc(max(calc(var(--safe-t) + var(--space-2)), calc(var(--hud-bottom, 0px) + var(--space-2))) + var(--boss-strip, 0px));
   display: flex; align-items: flex-start; gap: 6px;
   pointer-events: auto;
 }
