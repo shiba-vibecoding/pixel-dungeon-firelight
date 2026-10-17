@@ -4,8 +4,8 @@ import type { StorageLike } from './savestore';
 
 /*
  * What the client remembers of a run for the screens of part 11 (the core keeps none of it, and no rule changes): which things
- * are new in the pack, the notes the player wrote, the looks of potions and scrolls (colours, runes, gems, woods) they have met,
- * how often each was used, their own ticks and crosses, the monsters met, the chronicle and the hero's growth by depth.
+ * are new in the pack, the looks of potions and scrolls (colours, runes, gems, woods) they have met,
+ * how often each was used, the monsters met, the chronicle and the hero's growth by depth.
  *
  * Kept per run in local storage under one small key (a few KB): written a moment after a change and when the page is left,
  * never in the way of the saved run — a write that does not fit lets go of the records of other runs and then gives up in silence
@@ -15,7 +15,6 @@ import type { StorageLike } from './savestore';
 
 export const GROW_PREFIX = 'pd-grow:';
 const MAX_CHRONICLE = 400;
-const MAX_NOTE = 80;
 const MAX_RUNS = 2;
 
 export interface Beast {
@@ -33,9 +32,6 @@ export interface DepthSnap {
   str: number;
 }
 
-/** Ticks and crosses of the elimination view: a guess (✓), ruled out (×), a doubt (?). */
-export type Mark = 'tick' | 'x' | 'q';
-
 export interface GrowMem {
   v: 1;
   /** When it was last written (ms): the oldest run's record is the first to go. */
@@ -44,18 +40,16 @@ export interface GrowMem {
   fresh: string[];
   /** Keys (look or kind) of things ever held: stackable things are new once, gear every time. */
   had: string[];
-  notes: Record<string, string>;
   /** Looks met: «potion:7», «scroll:3», «ring:0», «wand:11». */
   looks: string[];
   /** Uses by look (drunk, read, thrown) and by kind for the rest. */
   uses: Record<string, number>;
-  marks: Record<string, Mark>;
   beasts: Partial<Record<MobKind, Beast>>;
   chronicle: ChronicleEntry[];
   depths: DepthSnap[];
 }
 
-export const emptyMem = (): GrowMem => ({ v: 1, at: 0, fresh: [], had: [], notes: {}, looks: [], uses: {}, marks: {}, beasts: {}, chronicle: [], depths: [] });
+export const emptyMem = (): GrowMem => ({ v: 1, at: 0, fresh: [], had: [], looks: [], uses: {}, beasts: {}, chronicle: [], depths: [] });
 
 /* ---------- keys ---------- */
 
@@ -187,24 +181,6 @@ export function arrives(mem: GrowMem, hero: Hero, turn: number): boolean {
   return !!entry || first;
 }
 
-/** Writes a note (an empty text takes it away); returns the text kept. */
-export function writeNote(mem: GrowMem, key: string, text: string): string {
-  const clean = text.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE);
-  if (clean) mem.notes[key] = clean;
-  else delete mem.notes[key];
-  return clean;
-}
-
-/** A tick/cross cycles ∅ → ✓ → × → ? → ∅. */
-export function cycleMark(mem: GrowMem, look: string, kind: ItemKind): Mark | null {
-  const key = `${look}|${kind}`;
-  const order: Array<Mark | undefined> = [undefined, 'tick', 'x', 'q'];
-  const next = order[(order.indexOf(mem.marks[key]) + 1) % order.length];
-  if (next) mem.marks[key] = next;
-  else delete mem.marks[key];
-  return next ?? null;
-}
-
 /* ---------- the store ---------- */
 
 /** The run a record belongs to is the rest of its key: «pd-grow:<seed>:<id>». */
@@ -219,7 +195,9 @@ export class GrowStore {
       if (!raw) return emptyMem();
       const saved = JSON.parse(raw) as Partial<GrowMem>;
       if (saved?.v !== 1) return emptyMem();
-      return { ...emptyMem(), ...saved, v: 1 };
+      // (A record of an earlier build may hold notes and marks the player wrote: they are no more, and are left out.)
+      const { fresh, had, looks, uses, beasts, chronicle, depths, at } = saved;
+      return { ...emptyMem(), ...(fresh ? { fresh } : {}), ...(had ? { had } : {}), ...(looks ? { looks } : {}), ...(uses ? { uses } : {}), ...(beasts ? { beasts } : {}), ...(chronicle ? { chronicle } : {}), ...(depths ? { depths } : {}), at: at ?? 0 };
     } catch {
       return emptyMem();
     }
@@ -363,16 +341,6 @@ export class Grow {
 
   isFresh(world: World, item: Item): boolean {
     return this.mem.fresh.includes(itemKey(world, item));
-  }
-
-  noteOf(world: World, item: Item): string | undefined {
-    return this.mem.notes[itemKey(world, item)];
-  }
-
-  setNote(key: string, text: string): string {
-    const kept = writeNote(this.mem, key, text);
-    this.touch();
-    return kept;
   }
 
   /** Things a point of strength just made light enough (a feather by their strength until the first look): this session only. */

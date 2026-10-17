@@ -11,9 +11,9 @@ core's own effects, so every figure is what the game computes.
 | `04-passport` | the hero's passport: was → is since the start, «with what you wear» (unidentified ring left out), the worn things |
 | `05-mastery` | the banner of the way chosen (the sigil by the level on the HUD, and over the hero in 3D) |
 | `06-backpack-new`, `06b-…-unknown-filter` | the slot corners (level or «?», strength, one mark), new things, the chips and their counts |
-| `07-item-card-unknown-axe`, `08-item-card-plate` | the item card: was / will be (dashed and «?» while the level is hidden), the identifying segments, the note |
+| `07-item-card-unknown-axe`, `08-item-card-plate` | the item card: was / will be (dashed and «?» while the level is hidden), the identifying segments |
 | `09-moment-upgrade`, `16-…enchant`, `17-…uncurse`, `18-identify-*` | the moments of truth in the slot (≤ 400 ms) |
-| `10`–`14b` | the journal: collection (showcase, scrolls, elimination), bestiary, chronicle, the guide with the nine «how it works» cards and the traps card |
+| `10`–`14b` | the journal: collection (showcase, potions and scrolls), bestiary, chronicle, the guide with the nine «how it works» cards and the traps card |
 | `19-end` | the end of the run: the growth card (was → is, the best worn, the finds) |
 | `reduced/` | the same under reduced motion: the end state at once, the highlight held |
 | `3d/` | the gleam on the hero in the 3D scene: +1, +4 with fire, +7 armour with a glyph, +10, a known curse, both orbits |

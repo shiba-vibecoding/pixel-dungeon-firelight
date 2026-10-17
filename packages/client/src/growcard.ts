@@ -1,14 +1,13 @@
-import { type Hero, type Item, itemDef, type World } from '@pd/core';
+import type { Hero, Item } from '@pd/core';
 import { type Compare, compare, segments } from './growth';
-import { h, hb, vars } from './growdom';
+import { h, vars } from './growdom';
 import { gi } from './growicons';
-import { grow, itemKey } from './growmem';
 import { locale } from './i18n';
 import { G } from './i18n-grow';
 
 /*
  * The item card of part 11 (variant A, «was / will be»): a thing from the pack set beside what is worn, the progress toward knowing it
- * in segments, and the player's own note. Every figure is the game's own (growth.ts) and only what the player may know: while an
+ * in segments. Every figure is the game's own (growth.ts) and only what the player may know: while an
  * item's level is hidden, its bar is dashed and marked «?» and the figures are those of a plain one (the same the card's first line
  * gives), never the real ones.
  */
@@ -59,41 +58,4 @@ export function segsBar(done: number, of: number): HTMLElement {
   bar.setAttribute('aria-valuemax', String(of));
   bar.setAttribute('aria-valuenow', String(done));
   return bar;
-}
-
-/** The player's note on an item (or on its kind or look, kept as growmem.ts does): a line that opens into an editor on a tap. */
-export function noteBlock(world: World, item: Item): HTMLElement {
-  const key = itemKey(world, item);
-  const text = (): string | undefined => grow.data.notes[key];
-  const box = h('div', 'fl-note-box');
-  const kindWide = ['potion', 'scroll', 'ring', 'wand'].includes(itemDef(item.kind).category);
-  const draw = (): void => {
-    const note = text();
-    const line = hb(`fl-note${note ? '' : ' empty'}`, G.card.noteTitle, edit, gi('note', 8, 2), h('span', '', note ?? G.card.noteEmpty));
-    box.replaceChildren(line);
-  };
-  function edit(): void {
-    const input = h('input', 'fl-note-input');
-    input.type = 'text';
-    input.maxLength = 80;
-    input.value = text() ?? '';
-    input.placeholder = G.card.notePlaceholder;
-    input.enterKeyHint = 'done';
-    const save = (): void => {
-      grow.setNote(key, input.value);
-      draw();
-    };
-    input.onkeydown = (event) => {
-      if (event.key === 'Enter') save();
-      if (event.key === 'Escape') draw();
-    };
-    box.replaceChildren(
-      h('div', 'fl-note editing', gi('note', 8, 2), input),
-      h('div', 'fl-note-actions', hb('pd-button small', G.card.noteSave, save, G.card.noteSave), text() ? hb('pd-button small quiet', G.card.noteClear, () => { input.value = ''; save(); }, G.card.noteClear) : null),
-      ...(kindWide ? [h('p', 'pd-note', G.card.noteKindHint)] : []),
-    );
-    input.focus();
-  }
-  draw();
-  return box;
 }

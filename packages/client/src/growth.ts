@@ -108,7 +108,7 @@ export function gear(hero: Hero): Item[] {
 /* ---------- 3. The marks of a bag slot ---------- */
 
 /** The corner mark at the bottom left, one at a time, in this order: a curse matters most, then what is new, then the magic. */
-export const MARK_ORDER = ['cursed', 'new', 'enchant', 'glyph', 'note'] as const;
+export const MARK_ORDER = ['cursed', 'new', 'enchant', 'glyph'] as const;
 export type Mark = (typeof MARK_ORDER)[number];
 
 export interface SlotMarks {
@@ -126,8 +126,6 @@ export interface SlotMarks {
 export interface SlotContext {
   /** Kinds or items the player has not looked at since they were picked up (the client keeps this: newness.ts). */
   fresh?: boolean;
-  /** The player wrote a note on it, or on its kind (notes.ts). */
-  noted?: boolean;
   /** The strength just went up and this thing is among nowLight(hero). */
   light?: boolean;
 }
@@ -146,7 +144,6 @@ export function slotMarks(world: World, hero: Hero, item: Item, ctx: SlotContext
   if (ctx.fresh) marks.push('new');
   if (item.enchant && kindKnown(world, item)) marks.push('enchant');
   if (item.glyph) marks.push('glyph');
-  if (ctx.noted) marks.push('note');
   marks.sort((a, b) => MARK_ORDER.indexOf(a) - MARK_ORDER.indexOf(b));
   return {
     level,
@@ -249,14 +246,6 @@ export function catalog(world: World, category: KnowCategory, kinds: readonly It
     known: world.known.includes(kind),
   }));
   return { entries, known: entries.filter((e) => e.known).length };
-}
-
-/**
- * The kinds a look may still be (variant C's elimination grid): every kind of the category not yet known; the player's
- * crosses (ruled out) and ticks (a guess) are the client's own, kept with the notes.
- */
-export function stillPossible(world: World, category: KnowCategory, kinds: readonly ItemKind[]): ItemKind[] {
-  return kinds.filter((kind) => itemDef(kind).category === category && !world.known.includes(kind));
 }
 
 /* ---------- 7. The chronicle of the run ---------- */

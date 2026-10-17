@@ -1,7 +1,7 @@
 import { addHero, createItem, createWorld, type Effect, floorAt, type Hero, heroById, levelAt, type World } from '@pd/core';
 import { describe, expect, it } from 'vitest';
 import {
-  arrives, cycleMark, emptyMem, GROW_PREFIX, Grow, GrowStore, itemKey, lookKey, remember, remembersHit, seeLook, sees, writeNote,
+  arrives, emptyMem, GROW_PREFIX, Grow, GrowStore, itemKey, lookKey, remember, remembersHit, seeLook, sees,
 } from '../src/growmem';
 import { evictable, putWithRoom, setEvictContext } from '../src/savestore';
 import { MemStorage } from './savekit';
@@ -91,15 +91,6 @@ describe('growmem: what the effects leave in the memory', () => {
     expect(mem.beasts.rat?.first).toBe(1);
     expect(mem.looks).toEqual([lookKey(world, 'potion.frost')]);   // what lies in a closed chest is not seen
   });
-
-  it('keeps notes short and takes a cleared one away; ticks cycle through their marks', () => {
-    const mem = emptyMem();
-    expect(writeNote(mem, 'potion:3', '  healing?   maybe  ')).toBe('healing? maybe');
-    expect(writeNote(mem, 'potion:3', 'x'.repeat(200))).toHaveLength(80);
-    writeNote(mem, 'potion:3', '   ');
-    expect(mem.notes['potion:3']).toBeUndefined();
-    expect([1, 2, 3, 4].map(() => cycleMark(mem, 'potion:3', 'potion.healing'))).toEqual(['tick', 'x', 'q', null]);
-  });
 });
 
 describe('growmem: the store', () => {
@@ -107,15 +98,24 @@ describe('growmem: the store', () => {
     const storage = new MemStorage();
     const store = new GrowStore(storage);
     const mem = emptyMem();
-    mem.notes['potion:1'] = 'a';
+    mem.looks.push('potion:1');
     expect(store.save('1:a', mem)).toBe(true);
-    expect(store.load('1:a').notes).toEqual({ 'potion:1': 'a' });
-    expect(store.load('9:z').notes).toEqual({});
+    expect(store.load('1:a').looks).toEqual(['potion:1']);
+    expect(store.load('9:z').looks).toEqual([]);
     storage.setItem(`${GROW_PREFIX}2:b`, JSON.stringify({ ...emptyMem(), at: 5 }));
     storage.setItem(`${GROW_PREFIX}3:c`, JSON.stringify({ ...emptyMem(), at: 6 }));
     store.prune('3:c');
     expect([...storage.data.keys()].sort()).toEqual([`${GROW_PREFIX}1:a`, `${GROW_PREFIX}3:c`].sort().filter((k) => storage.data.has(k)));
     expect(storage.data.size).toBe(2);
+  });
+
+  it('reads an old record that holds notes and marks and leaves them out', () => {
+    const storage = new MemStorage();
+    storage.setItem(`${GROW_PREFIX}1:a`, JSON.stringify({ ...emptyMem(), looks: ['potion:4'], notes: { 'potion:4': 'healing?' }, marks: { 'potion:4|potion.healing': 'tick' } }));
+    const mem = new GrowStore(storage).load('1:a');
+    expect(mem.looks).toEqual(['potion:4']);
+    expect(Object.keys(mem)).not.toContain('notes');
+    expect(Object.keys(mem)).not.toContain('marks');
   });
 
   it('survives a storage that is full or broken: it gives up in silence, and a corrupt record reads as empty', () => {
@@ -135,7 +135,7 @@ describe('growmem: the store', () => {
     storage.setItem(mine, 'm'.repeat(1500));
     setEvictContext(() => ({ run: '2:now', depth: 3 }));
     expect(evictable(storage)).toEqual([other, mine]);
-    // A saved run that needs room: the other run's note goes, then (only if it must) this one's.
+    // A saved run that needs room: the other run's record goes, then (only if it must) this one's.
     expect(putWithRoom(storage, 'pd-solo', 's'.repeat(4000))).toBe(true);
     expect(storage.data.has(other)).toBe(false);
     expect(storage.data.get('pd-solo')).toHaveLength(4000);
@@ -148,17 +148,18 @@ describe('growmem: the store', () => {
     const storage = new MemStorage();
     const store = new GrowStore(storage);
     const stale = emptyMem();
-    stale.notes.x = 'stale';
+    stale.looks.push('potion:9');
     store.save('1:a', stale);
     const grow = new Grow();
     grow.setStore(store);
     grow.bind('1:a', true);
-    expect(grow.data.notes).toEqual({});
-    grow.setNote('potion:2', 'maybe');
+    expect(grow.data.looks).toEqual([]);
+    grow.data.looks.push('potion:2');
+    grow.touch();
     grow.flush();
     const again = new Grow();
     again.setStore(store);
     again.bind('1:a', false);
-    expect(again.data.notes).toEqual({ 'potion:2': 'maybe' });
+    expect(again.data.looks).toEqual(['potion:2']);
   });
 });

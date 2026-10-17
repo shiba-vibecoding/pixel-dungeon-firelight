@@ -18,7 +18,7 @@ import { gi, enchantRgb, glyphRgb } from './growicons';
 import { grow } from './growmem';
 import { G } from './i18n-grow';
 import { CHIPS, chipOf, type ChipId, chipCounts, chipsRow, type SortId, sortFresh } from './growchips';
-import { compareBlock, noteBlock } from './growcard';
+import { compareBlock } from './growcard';
 import { chargesOf, isKnown, itemInfo, itemName, plainName, strengthOf, wearOf } from './itemtext';
 import { mart } from './mart';
 import { labelWords } from './labels';
@@ -295,7 +295,7 @@ export function slot(world: World, item: Item | undefined, options: SlotOptions 
   }
   // Part 11, corners: the level («?» while hidden), the strength, one mark at the bottom left (growth.ts slotMarks).
   const marks = options.hero
-    ? slotMarks(world, options.hero, item, { fresh: grow.isFresh(world, item), noted: grow.noteOf(world, item) !== undefined, light: grow.isLight(item) })
+    ? slotMarks(world, options.hero, item, { fresh: grow.isFresh(world, item), light: grow.isLight(item) })
     : null;
   if (marks) {
     if (marks.level) node.append(el('span', { className: `pd-lvl ${marks.level.tone}`, textContent: marks.level.text }));
@@ -370,14 +370,12 @@ export function markWear(node: HTMLElement): void {
 /** An item's description, its curse and weight set apart as warnings, and how worn it is under its numbers. */
 function describedItem(world: World, hero: Hero, item: Item): HTMLElement[] {
   // How near a thing carried is to being known (a count, nothing hidden), and what a meal would waste (infolines.ts).
-  // Part 11: gear from the pack is set beside what is worn (was / will be), and the player's own note stays on it.
-  const mine = inPack(hero, item) || hero.weapon === item || hero.armor === item || hero.rings.includes(item);
+  // Part 11: gear from the pack is set beside what is worn (was / will be).
   const compared = inPack(hero, item) ? compareBlock(hero, item) : null;
   const extra = [knowLine(world, hero, item), compared, itemDef(item.kind).category === 'food' && inPack(hero, item) ? wasteLine(hero, item) : null].filter((n): n is HTMLElement => n !== null);
-  const noted = mine && !['gold', 'key', 'quest'].includes(itemDef(item.kind).category) ? noteBlock(world, item) : null;
   const base = described(itemInfo(world, hero, item));
   // Right after the first paragraph, so that it is in view without scrolling the panel.
-  const nodes = [...base.slice(0, 1), ...extra, ...base.slice(1), ...(noted ? [noted] : [])];
+  const nodes = [...base.slice(0, 1), ...extra, ...base.slice(1)];
   const wear = wearOf(world, item);
   if (!wear) return nodes;
   const line = el('div', { className: `pd-durability${wear.left > 0 && wear.left / wear.max <= 0.25 ? ' low' : ''}` },

@@ -41,7 +41,7 @@
 
 /* ---------- 2. The marks of a slot (growth.ts slotMarks) ---------- */
 /* A «Corners»: top left the level or «?», top right the strength (red when heavy, a feather when just made light), bottom right the
-   count, bottom left ONE mark in the order curse, new, enchantment, glyph, note. */
+   count, bottom left ONE mark in the order curse, new, enchantment, glyph. */
 .pd-lvl.unknown { color: var(--ink-muted); }
 .pd-slot > .fl-mark { position: absolute; left: 2px; bottom: 2px; z-index: 1; pointer-events: none; }
 .pd-tag.light { color: var(--fire-light); }
@@ -138,7 +138,7 @@
 .fl-banner .small { display: block; font: var(--text-body); color: var(--fire-gold); }
 .pd-avatar-wrap .fl-sigil-badge { position: absolute; left: -2px; top: 40px; z-index: 3; }
 
-/* ---------- 2. The item card: comparing, knowing, notes ---------- */
+/* ---------- 2. The item card: comparing and knowing ---------- */
 .fl-cmp { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); background: var(--stone-800); box-shadow: inset var(--u) var(--u) 0 var(--void); }
 .fl-cmp-row { display: grid; grid-template-columns: 7ch 1fr auto; gap: var(--space-2); align-items: center; font: var(--text-caption); }
 .fl-cmp-row .who { color: var(--ink-muted); }
@@ -158,9 +158,6 @@
 .fl-segs i { background: var(--stone-700); box-shadow: inset 0 calc(-1 * var(--u)) 0 var(--void); }
 .fl-segs i.full { background: var(--ally); box-shadow: inset 0 calc(-1 * var(--u)) 0 #2e7c78; }
 .fl-segs i.next { background: linear-gradient(to right, var(--ally) 50%, var(--stone-700) 50%); }
-.fl-note { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-1) var(--space-2); font: var(--text-caption); color: var(--fire-light);
-  background: repeating-linear-gradient(to bottom, transparent 0 19px, rgba(224, 184, 120, .12) 19px 20px), var(--stone-900); border-left: calc(2 * var(--u)) solid var(--lit-mid); }
-.fl-note.empty { color: var(--ink-muted); }
 
 /* ---------- 2. Moments of truth (≤ 400 ms; the sound is growth.json's) ---------- */
 .fl-reveal { animation: fl-flip var(--m-reveal) steps(6, jump-none) both; transform-style: preserve-3d; }
@@ -183,19 +180,12 @@
 .fl-shelf-cell .pd-slot { --slot: 52px; }
 .fl-shelf-cell.known .pd-slot { box-shadow: inset 0 0 0 var(--u) var(--lit-mid), inset 0 calc(-2 * var(--u)) 0 var(--glow-1); }
 .fl-shelf-cell.known .nm { color: var(--fire-light); }
-.fl-shelf-cell.guess .nm { color: var(--fire-gold); font-style: italic; }
 .fl-shelf-cell.unseen .pd-item { filter: brightness(0) opacity(.35); }
 .fl-shelf-cell.unseen .nm { color: var(--stone-400); }
 .fl-shelf-cell .nm { max-width: 100%; overflow-wrap: anywhere; line-height: 16px; }
 .fl-count-line { display: flex; align-items: center; gap: var(--space-2); font: var(--text-caption); color: var(--ink-muted); }
 .fl-count-line b { font-weight: 400; color: var(--fire-gold); }
 
-.fl-elim { display: grid; grid-template-columns: 40px repeat(var(--cols, 8), 1fr); gap: 2px; align-items: center; font: var(--text-digits); }
-.fl-elim .colhead { writing-mode: vertical-rl; transform: rotate(180deg); color: var(--ink-muted); height: 112px; overflow: hidden; text-align: left; white-space: nowrap; justify-self: center; }
-.fl-elim .cell { height: 26px; background: var(--stone-800); display: grid; place-items: center; clip-path: var(--notch); color: var(--ink-muted); }
-.fl-elim .cell.x { color: var(--stone-400); background: var(--stone-900); }
-.fl-elim .cell.tick { color: var(--fire-ash); background: var(--fire-gold); }
-.fl-elim .cell.q { color: var(--fire-gold); box-shadow: inset 0 0 0 var(--u) var(--lit-mid); }
 .fl-beast-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: var(--space-2); }
 .fl-beast { display: grid; justify-items: center; gap: 2px; padding: var(--space-1); background: var(--stone-800); clip-path: var(--notch); font: var(--text-digits); color: var(--ink-muted); text-align: center; }
 .fl-beast canvas { image-rendering: pixelated; }
@@ -279,12 +269,6 @@
 .fl-cmp-heavy .fl-gi, .fl-tip .fl-gi { margin-top: 2px; }
 .fl-cmp-row.unknown .num { color: var(--ink-muted); }
 .fl-know { display: flex; flex-direction: column; gap: 4px; }
-.fl-note-box { display: flex; flex-direction: column; gap: var(--space-1); }
-.fl-note { width: 100%; text-align: left; cursor: pointer; }
-.fl-note.editing { cursor: default; }
-.fl-note-input { flex: 1; min-width: 0; font: var(--text-caption); color: var(--fire-light); background: transparent; border: 0; border-bottom: var(--u) solid var(--lit-mid); padding: 2px 0; }
-.fl-note-input:focus { outline: none; border-bottom-color: var(--fire-gold); }
-.fl-note-actions { display: flex; gap: var(--space-1); }
 /* The passport. */
 .fl-pass-head .pd-portrait { grid-row: 1 / 4; }
 .fl-tip { margin: 0; }
@@ -294,14 +278,9 @@
 .pd-tabs.fl-journal-tabs .pd-tab { flex: 1 1 auto; padding: 0 3px; white-space: nowrap; font: 400 13px/20px var(--font-small); min-width: 0; }
 /* The collection */
 .fl-collection { display: flex; flex-direction: column; gap: var(--space-2); }
-.fl-modes { display: flex; gap: var(--space-1); }
 .fl-shelf-cell .use { font: var(--text-digits); color: var(--ink-muted); text-align: center; }
 .fl-shelf-cell[role="button"] { cursor: pointer; }
 .fl-shelf-cell .pd-slot { position: relative; }
-.pd-slot.mini { --slot: 40px; width: 40px; height: 40px; }
-.fl-elim .cell { cursor: pointer; border: 0; padding: 0; }
-.fl-elim .cell.q { color: var(--fire-gold); }
-.fl-elim .colhead { writing-mode: vertical-rl; height: 150px; }
 /* The bestiary */
 .fl-bestiary { display: flex; flex-direction: column; gap: var(--space-2); }
 .fl-beast { cursor: pointer; border: 0; }

@@ -4,7 +4,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   auraOf, catalog, chronicleOf, compare, descent, expPips, heft, knownHero, levelGain, MARK_ORDER, nowLight, passport, segments, shineTier,
-  slotMarks, stillPossible, strengthEffects, strengthWanted,
+  slotMarks, strengthEffects, strengthWanted,
 } from '../src/growth';
 
 /*
@@ -139,10 +139,10 @@ describe('growth: the marks of a slot', () => {
     expect(marks.mark).toBe('new');                  // the curse is not known yet: nothing gives it away
     delete sword.levelUnknown;
     delete sword.curseUnknown;
-    marks = slotMarks(world, hero, sword, { fresh: true, noted: true });
+    marks = slotMarks(world, hero, sword, { fresh: true });
     expect(marks.level).toEqual({ text: '−2', tone: 'down' });
     expect(marks.mark).toBe('cursed');
-    expect(marks.marks).toEqual(['cursed', 'new', 'note']);
+    expect(marks.marks).toEqual(['cursed', 'new']);
     expect([...marks.marks].sort((a, b) => MARK_ORDER.indexOf(a) - MARK_ORDER.indexOf(b))).toEqual(marks.marks);
     expect(slotMarks(world, hero, createItem('potion.healing', 3)).level).toBeNull();
   });
@@ -198,7 +198,6 @@ describe('growth: knowledge', () => {
     expect(book.entries).toHaveLength(12);
     expect(book.known).toBe(world.known.filter((k) => k.startsWith('potion.')).length);   // a warrior sets out knowing strength
     expect(book.entries.find((e) => e.kind === 'potion.healing')).toMatchObject({ known: true });
-    expect(stillPossible(world, 'potion', KINDS_POTION)).not.toContain('potion.healing');
   });
 });
 

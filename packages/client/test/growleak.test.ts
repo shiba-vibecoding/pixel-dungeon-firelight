@@ -44,7 +44,7 @@ function drawGear(w: World, hero: Hero): string {
   const out: string[] = [];
   for (const item of items) {
     out.push(asText(slot(w, item, { hero }) as unknown as FakeEl));
-    out.push(JSON.stringify(slotMarks(w, hero, item, { fresh: true, noted: true })));
+    out.push(JSON.stringify(slotMarks(w, hero, item, { fresh: true })));
     out.push(JSON.stringify([strengthWanted(item), heft(hero, item), compare(hero, item)]));
     const card = compareBlock(hero, item);
     if (card) out.push(asText(card as unknown as FakeEl));
@@ -153,7 +153,7 @@ describe('part 11 shows nothing of the kind under a look', () => {
     };
     const view = (w: World, mem: ReturnType<typeof emptyMem>): string => {
       const model = shelfModel(w, mem, 'potion');
-      const html = collectionView({ world: w, category: 'potion', mode: 'shelf', onCategory: () => undefined, onMode: () => undefined, onKind: () => undefined, redraw: () => undefined });
+      const html = collectionView({ world: w, category: 'potion', onCategory: () => undefined, onKind: () => undefined, });
       return `${JSON.stringify(model)}\n${say(html as unknown as FakeEl)}`;
     };
     // (collectionView reads the live memory of the run: bind it by the same module the screens use.)

@@ -531,7 +531,7 @@ export interface JournalOptions {
 export type JournalTab = 'notes' | 'catalog' | 'beasts' | 'chronicle' | 'guide';
 
 /** What the books remember of how they were left (the collection's view, the bestiary's pick): for the visit. */
-const book: { mode: 'shelf' | 'elim'; beast: MobKind | null } = { mode: 'shelf', beast: null };
+const book: { beast: MobKind | null } = { beast: null };
 
 /** The journal's tabs: the notes, the collection, the bestiary, the chronicle of the run, and the guide (with «how it works»). */
 export function showJournal(options: JournalOptions, tab: JournalTab = 'notes', category = 0, entry?: string): void {
@@ -577,12 +577,9 @@ function collectionBody(options: JournalOptions, category: number, reopen: (tab:
   return collectionView({
     world,
     category: current,
-    mode: book.mode,
     onCategory: (next) => reopen('catalog', COLLECTION.indexOf(next)),
-    onMode: (mode) => { book.mode = mode; reopen('catalog', category); },
     // A tap on an identified kind reads its page, and comes back here.
     onKind: (kind) => showItemText(options, { kind, qty: 1, level: 0 } as Item, () => showJournal(options, 'catalog', category)),
-    redraw: () => reopen('catalog', category),
   });
 }
 

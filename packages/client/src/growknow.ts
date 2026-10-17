@@ -2,8 +2,8 @@ import { createItem, itemDef, type ItemKind, ITEMS, itemSprite, type MobKind, MO
 import { audio } from './audio';
 import { type GChild, h, hb, spriteNode, vars } from './growdom';
 import { gi } from './growicons';
-import { type ChronicleEntry, catalog, type KnowCategory, stillPossible } from './growth';
-import { type Beast, cycleMark, grow, type GrowMem, hidesKind, isBeast, lookKey } from './growmem';
+import { type ChronicleEntry, catalog, type KnowCategory } from './growth';
+import { type Beast, grow, type GrowMem, hidesKind, isBeast, lookKey } from './growmem';
 import { capitalize, t } from './i18n';
 import { G } from './i18n-grow';
 import { mobDescription } from './examine';
@@ -15,7 +15,7 @@ import { portrait } from './screens';
  *  - an identified kind stands in the collection by its own name, in the order of the game's list;
  *  - a look met but not yet identified (a colour, a rune, a gem, a wood) stands apart, in the order it was first seen, by its look alone;
  *    it is never set at the place of the kind it hides, which would give the kind away by position;
- *  - the rest is only counted. The elimination view (C) puts the player's own ticks and crosses against the kinds still unknown.
+ *  - the rest is only counted.
  */
 
 const CATEGORIES: readonly KnowCategory[] = ['potion', 'scroll', 'ring', 'wand'];
@@ -53,7 +53,7 @@ export interface ShelfModel {
   /** Kinds the party has identified, in the game's order. */
   known: Array<{ kind: ItemKind; sprite: number; name: string; uses: number }>;
   /** Looks met whose kind is not yet identified, in the order they were first seen. */
-  met: Array<{ look: string; label: number; sprite: number; name: string; note?: string; uses: number }>;
+  met: Array<{ look: string; label: number; sprite: number; name: string; uses: number }>;
   /** How many kinds of this category have not been met (a number, nothing more). */
   unseen: number;
   total: number;
@@ -80,7 +80,7 @@ export function shelfModel(world: World, mem: GrowMem, category: KnowCategory): 
     .map((look) => ({ look, label: Number(look.slice(category.length + 1)) }))
     .filter(({ label }) => !knownLabels.has(label))
     .map(({ look, label }) => ({
-      look, label, sprite: lookSprite(world, category, label), name: lookName(category, label), note: mem.notes[look], uses: mem.uses[look] ?? 0,
+      look, label, sprite: lookSprite(world, category, label), name: lookName(category, label), uses: mem.uses[look] ?? 0,
     }));
   return { category, known, met, unseen: Math.max(0, entries.length - known.length - met.length), total: entries.length };
 }
@@ -95,13 +95,9 @@ const usesText = (category: KnowCategory, n: number): string => (n <= 0 ? '' : c
 export interface CollectionOptions {
   world: World;
   category: KnowCategory;
-  mode: 'shelf' | 'elim';
   onCategory(category: KnowCategory): void;
-  onMode(mode: 'shelf' | 'elim'): void;
   /** A tap on an identified kind: its page. */
   onKind(kind: ItemKind): void;
-  /** Draws the book again (a tick was made). */
-  redraw(): void;
 }
 
 function bookTabs(o: CollectionOptions): HTMLElement {
@@ -121,18 +117,12 @@ function bookTabs(o: CollectionOptions): HTMLElement {
 /** Labels for a tab's picture: a plain look of the category (never the look of a kind of this run). */
 const SILHOUETTE_LABELS = (world: World, category: KnowCategory): Record<string, number> => ({ ...world.run.labels, [TAB_KIND[category]]: 0 });
 
-/** The collection (A «Showcase», and C «Elimination» as the second view). */
+/** The collection (A, the showcase). */
 export function collectionView(o: CollectionOptions): HTMLElement {
   const model = shelfModel(o.world, grow.data, o.category);
   const count = h('p', 'fl-count-line', gi('catalog', 16, 2), h('span', '', G.know.known, ' ', h('b', '', `${model.known.length} / ${model.total}`)), '·', h('span', '', G.know.met, ' ', h('b', '', model.known.length + model.met.length)));
-  const modes = h('div', 'fl-modes');
-  for (const [id, label] of [['shelf', G.know.modeShelf], ['elim', G.know.modeElim]] as const) {
-    const b = hb('fl-chip', label, () => (audio.play('click'), o.onMode(id)), label);
-    b.setAttribute('aria-pressed', String(o.mode === id));
-    modes.append(b);
-  }
-  const body = o.mode === 'elim' ? eliminationView(o, model) : shelfView(o, model);
-  return h('div', 'fl-collection', bookTabs(o), count, modes, body);
+  const body = shelfView(o, model);
+  return h('div', 'fl-collection', bookTabs(o), count, body);
 }
 
 function shelfView(o: CollectionOptions, model: ShelfModel): HTMLElement {
@@ -147,36 +137,13 @@ function shelfView(o: CollectionOptions, model: ShelfModel): HTMLElement {
     shelf.append(cell);
   }
   for (const m of model.met) {
-    const cell = shelfCell(m.note ? 'guess' : '', m.sprite, m.note ?? m.name, ...(m.note ? [gi('note', 8, 2)] : []));
-    cell.setAttribute('aria-label', m.name);
+    const cell = shelfCell('', m.sprite, m.name);
     const u = usesText(model.category, m.uses);
-    cell.append(h('span', 'use', [m.note ? m.name : '', u].filter(Boolean).join(' · ')));
+    if (u) cell.append(h('span', 'use', u));
     shelf.append(cell);
   }
   for (let i = 0; i < model.unseen; i++) shelf.append(shelfCell('unseen', SILHOUETTE[model.category], G.know.unseenName));
   return shelf;
-}
-
-/** C: the looks met and not yet identified, against the kinds still unknown: the player's own ticks (✓), crosses (×) and doubts (?). */
-function eliminationView(o: CollectionOptions, model: ShelfModel): HTMLElement {
-  const kinds = stillPossible(o.world, o.category, KNOW_KINDS);
-  if (model.met.length === 0) return h('p', 'pd-note', G.know.elimEmpty);
-  const grid = vars(h('div', 'fl-elim'), { '--cols': kinds.length });
-  grid.append(h('span'), ...kinds.map((kind) => h('span', 'colhead', shortName(kind))));
-  for (const m of model.met) {
-    grid.append(h('div', 'pd-slot mini', spriteNode(m.sprite)));
-    for (const kind of kinds) {
-      const mark = grow.data.marks[`${m.look}|${kind}`];
-      const cell = hb(`cell ${mark ?? ''}`, `${m.name} / ${shortName(kind)}`, () => {
-        audio.play('click');
-        cycleMark(grow.data, m.look, kind);
-        grow.touch();
-        o.redraw();
-      }, mark === 'x' ? '×' : mark === 'tick' ? '✓' : mark === 'q' ? '?' : '');
-      grid.append(cell);
-    }
-  }
-  return h('div', '', grid, h('p', 'fl-tip', gi('note', 8, 2), G.know.elimHelp));
 }
 
 /* ---------- the bestiary ---------- */
