@@ -277,8 +277,8 @@
 .fl-reveal { animation: fl-flip var(--m-reveal) steps(6, jump-none) both; transform-style: preserve-3d; }
 /* The card's two faces in one place: the «?» face until the card is edge-on, then what it is. */
 .fl-faces { display: grid; } .fl-faces > * { grid-area: 1 / 1; }
-.fl-face-was { animation: fl-face-out var(--m-reveal) steps(1, end) both; }
-.fl-face-is { animation: fl-face-in var(--m-reveal) steps(1, end) both; }
+.fl-face-was { animation: fl-face-out var(--m-reveal) steps(1, end) both; animation-delay: calc(var(--age, 0) * -1ms); }
+.fl-face-is { animation: fl-face-in var(--m-reveal) steps(1, end) both; animation-delay: calc(var(--age, 0) * -1ms); }
 .fl-tickup { display: inline-block; animation: fl-tick var(--m-reveal) steps(4, jump-none) both; }
 .fl-flashcell::after { content: ""; position: absolute; inset: 0; background: var(--fire-spark); animation: fl-flash var(--m-reveal) steps(3, jump-none) both; pointer-events: none; z-index: 3; }
 .fl-runedraw { animation: fl-rune var(--m-max) steps(4, jump-none) both; }
@@ -400,7 +400,7 @@
 .fl-sparks, .fl-shatter { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: visible; }
 .fl-shatter i { background: var(--grow-curse); box-shadow: 0 0 0 var(--u) var(--grow-curse-lo); }
 .fl-sparks i, .fl-shatter i { animation-delay: calc(var(--age, 0) * -1ms); }
-.pd-slot.fl-reveal { animation: fl-flip var(--m-reveal) steps(6, jump-none) both; animation-delay: calc(var(--age, 0) * -1ms); }
+.fl-faces.fl-reveal, .pd-slot.fl-reveal { animation: fl-flip var(--m-reveal) steps(6, jump-none) both; animation-delay: calc(var(--age, 0) * -1ms); }
 .fl-tickup, .fl-runedraw { animation-delay: calc(var(--age, 0) * -1ms); }
 .pd-slot.fl-moment .fl-tickup { animation-delay: calc(var(--age, 0) * -1ms); }
 /* The pack's chips: a row that scrolls sideways under the title. */

@@ -1247,6 +1247,8 @@ interface BagFx {
   /** A moment that belongs to every thing of a kind (a kind learned), and, for an uncurse, the things that were cursed before it. */
   kindOf?: string;
   cursed?: readonly Item[];
+  /** For a reveal: what the thing was called before (its «?» face). */
+  was?: string;
   /** For a used item that is gone: its sprite and where its slot was among the loose ones. */
   sprite?: number;
   pos?: number;
@@ -1267,12 +1269,16 @@ const addFx = (fx: Omit<BagFx, 'at'>): void => {
 /** The things drawn as known-cursed the last time the pack was drawn (an uncurse shatters what has stopped being one). */
 let lastCursed: Item[] = [];
 
+/** What an item was called just before an action done in the pack (a scroll of identify read on it), for the face that turns over. */
+const wasNames = new Map<Item, string>();
+
 /**
  * A moment of truth for the pack (part 11): the item (or every item of a kind) and what happened to it. Shown on the slot when the pack
  * is open; when it is not, it is gone with its 400 ms. The open pack is drawn again at once to show it.
  */
 export function bagMoment(kind: 'upgrade' | 'reveal' | 'enchant' | 'uncurse', item: Item | null, kindOf?: string): void {
-  addFx({ kind, ...(item ? { item } : {}), ...(kindOf ? { kindOf } : {}), ...(kind === 'uncurse' ? { cursed: lastCursed } : {}) });
+  const was = item ? wasNames.get(item) : undefined;
+  addFx({ kind, ...(item ? { item } : {}), ...(kindOf ? { kindOf } : {}), ...(was ? { was } : {}), ...(kind === 'uncurse' ? { cursed: lastCursed } : {}) });
   if (openBag && backpackOpen()) refreshBackpack(openBag.options.world, openBag.options.hero);
 }
 
@@ -1318,6 +1324,10 @@ function keepOpen(options: BackpackOptions, action: Action, follow?: Item | null
   // A scroll read before (its kind learned by reading) and now used on what was chosen: the scroll is spoken of by the hero's pending one.
   const pending = action.type === 'scrollTarget' ? hero.pendingScroll : undefined;
   const target = action.type === 'use' && action.on !== undefined ? itemAt(hero, action.on) : action.type === 'scrollTarget' ? itemAt(hero, action.on) : undefined;
+  if (target) {
+    wasNames.set(target, itemName(world, target));
+    window.setTimeout(() => wasNames.delete(target), 2000);
+  }
   options.onAction(action);
   // A use the core refused changed nothing: nothing to celebrate.
   const spent = used !== undefined && (!hero.items.includes(used) || used.qty < qty);
@@ -1999,10 +2009,20 @@ function itemDetail(options: ItemOptions): HTMLElement {
   drop?.classList.add('pd-pick-dropbtn');
   // Opening the card is looking at the thing: it is new no more.
   grow.seenItem(world, item);
+  // A thing just identified turns its face over on the card (part 11, «the card», B): the «?» face goes edge-on, the real one comes.
+  const turning = bagFx.find((fx) => fx.kind === 'reveal' && fx.was && (fx.item === item || fx.kindOf === item.kind) && performance.now() - fx.at < (quality.reducedMotion ? 1200 : FX_MS));
+  let headRow: HTMLElement = el('div', { className: 'pd-pick-head' }, slot(world, item, { hero, equipped: index === null }), title, drop);
+  if (turning) {
+    const was = el('div', { className: 'pd-pick-head fl-face-was' }, el('div', { className: 'pd-slot' }, gi('unknown', 8, 3)), el('div', { className: 'pd-titles' }, el('h3', { className: 'pd-heading', textContent: capitalize(turning.was ?? '') })));
+    headRow.classList.add('fl-face-is');
+    const age = Math.round(performance.now() - turning.at);
+    headRow = el('div', { className: 'fl-faces fl-reveal' }, was, headRow);
+    headRow.style.setProperty('--age', String(age));
+  }
   const box = el(
     'div',
     { className: 'pd-pick' },
-    el('div', { className: 'pd-pick-head' }, slot(world, item, { hero, equipped: index === null }), title, drop),
+    headRow,
     ...describedItem(world, hero, item),
     all.length > 0 && el('div', { className: 'pd-pick-actions' }, ...all),
   );

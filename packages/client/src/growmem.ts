@@ -42,7 +42,7 @@ export interface GrowMem {
   at: number;
   /** Item keys not yet looked at since they were picked up. */
   fresh: string[];
-  /** Kinds of things ever held (stackable things are new once; gear every time). */
+  /** Keys (look or kind) of things ever held: stackable things are new once, gear every time. */
   had: string[];
   notes: Record<string, string>;
   /** Looks met: «potion:7», «scroll:3», «ring:0», «wand:11». */
@@ -107,8 +107,9 @@ export function remember(mem: GrowMem, world: World, effect: Effect, me: string,
       if (effect.hero !== me || effect.item.kind === 'gold') break;
       const kind = effect.item.kind;
       seeLook(mem, world, kind);
-      if (!stacks(kind) || !mem.had.includes(kind)) add(mem.fresh, itemKey(world, effect.item));
-      add(mem.had, kind);
+      const key = itemKey(world, effect.item);
+      if (!stacks(kind) || !mem.had.includes(key)) add(mem.fresh, key);
+      add(mem.had, key);
       break;
     }
     case 'used':
