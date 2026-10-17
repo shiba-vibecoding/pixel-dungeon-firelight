@@ -8,6 +8,7 @@ import { Color, PointLight, type Scene } from 'three';
 import { HEIGHT, LENGTH, T, WIDTH } from '@pd/core';
 import { type Kit, type Lights, type RegionKit, hex } from './kit';
 import { isDoorTile, isStairsUp, K_WALL, K_WATER, type LevelGeom } from './levelgeom';
+import { hexOf, lookOf, type Spot } from '../places';
 
 /** A source of light in the level, from which the nearest are lit. */
 export interface Source {
@@ -156,6 +157,16 @@ export class LightRig {
       light.shadow.bias = -0.0008;
       light.shadow.normalBias = 0.03;
     }
+    this.shadowsStale = true;
+  }
+
+  /** The level's sources are now these (a place has gone, or come): the lights are picked again at the next assign. */
+  replaceSources(sources: Source[]): void {
+    this.sources = sources;
+    this.d2 = new Float64Array(sources.length);
+    this.near = new Int32Array(sources.length);
+    this.nearCount = 0;
+    this.slots.fill(-1);
     this.shadowsStale = true;
   }
 
@@ -401,6 +412,24 @@ export function doorGlow(terrain: Uint8Array): Source[] {
     out.push({
       x: (cell % WIDTH) + 0.5, y: 0.8, z: Math.trunc(cell / WIDTH) + 0.5, cell, color: t === T.LOCKED_DOOR ? 0x9ab4e8 : 0xffa860, intensity: 0.6,
       distance: 3, decay: 1, hz: 0, amp: 0, torch: false,
+    });
+  }
+  return out;
+}
+
+/**
+ * The light of the special places (a well in its water's colour, the altar's fire, the alchemy pot, a prize on its pedestal): a source each,
+ * of the colour and reach of its look (places.ts), flickering as it does. Sources of the nearest few are the scene's own lights; all of them
+ * lay their pool on the floor round them (bakePools). A place that has gone (a well run dry, the fire out) is no longer in the list.
+ */
+export function placeSources(spots: readonly Spot[]): Source[] {
+  const out: Source[] = [];
+  for (const spot of spots) {
+    const look = lookOf(spot);
+    if (!look || look.light <= 0) continue;
+    out.push({
+      x: (spot.cell % WIDTH) + 0.5, y: 0.75, z: Math.trunc(spot.cell / WIDTH) + 0.5, cell: spot.cell, color: hexOf(look.rgb), intensity: look.light,
+      distance: look.reach, decay: 1.4, hz: look.hz, amp: look.amp, torch: false,
     });
   }
   return out;

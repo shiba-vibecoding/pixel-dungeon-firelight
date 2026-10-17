@@ -887,3 +887,7 @@ body.pd-3d canvas#game { position: relative; z-index: 1; }
   padding-left: 6px;
   padding-right: 6px;
 }
+
+/* The ring of haggler, known: the price without it, struck through, beside the price asked. */
+.pd-price-was { display: inline-flex; align-items: center; color: var(--ink-muted, #9a9a8c); text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: var(--bad, #d84a4a); margin-right: 8px; opacity: 0.9; }
+.pd-haggle { color: var(--good, #6ade7a); }

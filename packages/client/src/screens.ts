@@ -10,6 +10,7 @@ import { chooseQuickslot, quickItem, quickUse } from './quickslot';
 import { BADGES, type BadgeId, badgeText, earnedBadges, markBadgesSeen, unseenBadges } from './badges';
 import { BUFF_ICONS, type BuffName } from './hud';
 import { capitalize, locale, t } from './i18n';
+import { WORDS } from './placetext';
 import { I } from './i18n-info';
 import { P } from './i18n-photo';
 import { knowLine, wasteLine } from './infolines';
@@ -575,6 +576,8 @@ export interface TradeOptions {
   hero: Hero;
   item: Item;
   price: number;
+  /** The price without the ring of haggler, when the ring is known: shown struck through beside the price asked. */
+  was?: number;
   onBuy(): void;
   onClose(): void;
 }
@@ -593,10 +596,14 @@ export function showTrade(options: TradeOptions): void {
     // A long description scrolls; the price and «Buy» stay in reach.
     el('div', { className: 'pd-scroll pd-stack' }, ...describedItem(world, hero, item)),
     actions([buy], []),
+    options.was !== undefined && options.was > price ? info(WORDS.haggled(Math.round((1 - price / options.was) * 100)), 'pd-note center pd-haggle') : null,
     info(t.yourGold(hero.gold), 'pd-note center'),
   );
   titleFor(world, item, head);
-  head.querySelector('.pd-titles')!.append(el('span', { className: `pd-price${short ? ' short' : ''}`, textContent: String(price) }));
+  const titles = head.querySelector('.pd-titles')!;
+  // The ring of haggler, known: what the ware would cost without it, struck through, and then what it costs.
+  if (options.was !== undefined && options.was > price) titles.append(el('span', { className: 'pd-price-was', textContent: String(options.was) }));
+  titles.append(el('span', { className: `pd-price${short ? ' short' : ''}`, textContent: String(price) }));
   show(head, options.onClose);
 }
 

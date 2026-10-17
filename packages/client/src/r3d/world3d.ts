@@ -37,7 +37,8 @@ import { Fog, makeAir, withFog } from './fogofwar';
 import { type Kit, type MistKit, atmosphere, hex, lights, materialOf, regionKit } from './kit';
 import { type Buffers, doorLeafBuffers, FRONT_WALL_H, type GeomKit, K_WALL, K_WATER, LevelGeom, PROP_BASE } from './levelgeom';
 import { DoorSwing, writeLeafMatrix } from './doorswing';
-import { bakePools, doorGlow, LightRig, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
+import { bakePools, doorGlow, LightRig, placeSources, type Source, type Strongest, sourcesOf, stairGlow } from './lightrig';
+import { lookOf, placeStore } from '../places';
 import { TIERS, type Tier } from './governor';
 import { heapDrawn } from '../heapsight';
 import { figureShown } from '../figuresight';
@@ -102,6 +103,13 @@ const CORPSE_FADE_MS = 3000;
 const MAX_BLENDED = 48;
 /** How many cells past the screen's edge a hero's growth is still drawn (its sparks reach a cell or so from him). */
 const GROWTH_MARGIN = 2;
+/** How long a woken statue shakes, ms, and how long a creature takes to pop or shimmer in. */
+const WAKE_SHAKE_MS = 620;
+const POP_MS = 420;
+const SHIMMER_MS = 650;
+/** The glows of slowness and of poison round a creature (linear). */
+const SLOWED_GLOW = new Float32Array([1.0, 0.66, 0.1]);
+const POISON_GLOW = new Float32Array([0.14, 0.9, 0.1]);
 /** The cold glow round a ghost. */
 const COLD = new Float32Array([0.45, 0.66, 0.95]);
 
@@ -725,7 +733,9 @@ export class World3D {
     this.air.uFogColor.value.setHex(hex(a.fog.color));
     this.air.uBg.value.setHex(hex(a.fog.color)).multiplyScalar(0.28);
     this.renderer.setClearColor(this.air.uBg.value, 1);
-    this.fires = sourcesOf(this.kit, a.region, this.geom, true);
+    this.baseFires = sourcesOf(this.kit, a.region, this.geom, true);
+    this.placeSig = placeStore.spots.filter((spot) => lookOf(spot) !== null).map((spot) => spot.cell * 10 + spot.kind).join(',');
+    this.fires = [...this.baseFires, ...placeSources(placeStore.spots)];
     this.rig.configure(L, this.fires, this.tier.shadowLights);
     this.fog.setPools(bakePools([...this.fires, ...doorGlow(this.geom.terrain), ...stairGlow(this.geom.terrain)], this.geom.kinds));
     this.lightBase = { ambient: L.ambient.intensity, hemi: L.hemi.intensity };
@@ -745,6 +755,26 @@ export class World3D {
     this.waterScroll = a.region.water.scroll;
     worldSheet('ambient1');
     this.warmUp();
+  }
+
+  /** The level's torches and glowing tiles, without the places (which come and go: a well drunk dry, the altar's fire out). */
+  private baseFires: Source[] = [];
+  private placeSig = '';
+
+  /**
+   * The special places of the floor have changed (placefx.ts → updatePlaces): their light is put right, which is a handful of sources and
+   * one baking of the pools, once, when it happens.
+   */
+  refreshPlaces(): void {
+    const geom = this.geom;
+    if (!geom) return;
+    const sig = placeStore.spots.filter((spot) => lookOf(spot) !== null).map((spot) => spot.cell * 10 + spot.kind).join(',');
+    if (sig === this.placeSig) return;
+    this.placeSig = sig;
+    this.fires = [...this.baseFires, ...placeSources(placeStore.spots)];
+    this.rig.replaceSources(this.fires);
+    this.heroCell = -1;
+    this.fog.setPools(bakePools([...this.fires, ...doorGlow(geom.terrain), ...stairGlow(geom.terrain)], geom.kinds));
   }
 
   private accentBase = 0;
@@ -1387,13 +1417,39 @@ export class World3D {
     // Which view of it to draw (dirs.ts: side, front or back by its last step or blow; the same layout, so the frame is the same).
     const fig = figureOf(puppet, now);
     const anim = puppet.anim === 'idle' && puppet.pumped ? 'pump' : puppet.anim;
-    const frame = frameAt(anims[anim], now - puppet.animStart);
+    // A slowed creature moves in slow motion, its whole stride at half speed.
+    const frame = frameAt(anims[anim], (now - puppet.animStart) * (puppet.slowed && puppet.alive ? 0.5 : 1));
     const sx = (frame % sheet.cols) * sheet.w;
     const sy = (Math.floor(frame / sheet.cols) + puppet.row) * sheet.h;
     const lunge = puppet.lungeStart !== undefined && now - puppet.lungeStart < LUNGE_MS ? Math.sin((Math.PI * (now - puppet.lungeStart)) / LUNGE_MS) : 0;
     const knock = knockback(puppet, now);
     // The 2D renderer's cell corner is the walker's own: the feet stand a little north of the cell's middle.
-    const px = pos.x + TILE / 2 + lunge * (puppet.lungeX ?? 0) + knock * (puppet.knockX ?? 0);
+    // A statue that has been woken shakes on its feet for a moment before it moves, harder as the stone gives way.
+    let shake = 0;
+    if (puppet.shakeAt !== undefined) {
+      const k = (now - puppet.shakeAt) / WAKE_SHAKE_MS;
+      if (k >= 1) puppet.shakeAt = undefined;
+      else if (k >= 0 && !quality.reducedMotion) shake = Math.sin(now * 0.11) * 1.3 * (0.3 + 0.7 * Math.min(1, k * 1.6)) * (k > 0.85 ? (1 - k) / 0.15 : 1);
+    }
+    // A creature just come into being pops in (a swell past its size and back, a hop) or shimmers in (flickering up to its strength).
+    let popScale = 1;
+    let popHop = 0;
+    let popTint = 1;
+    if (puppet.pop) {
+      const how = puppet.pop.how;
+      const k = (now - puppet.pop.start) / (how === 'pop' ? POP_MS : SHIMMER_MS);
+      if (k >= 1) puppet.pop = undefined;
+      else if (k >= 0) {
+        if (how === 'pop') {
+          const u = k - 1;
+          popScale = Math.max(0.05, 1 + 2.7 * u * u * u + 1.7 * u * u);
+          popHop = 0.3 * Math.sin(Math.PI * k) * (quality.reducedMotion ? 0 : 1);
+        } else {
+          popTint = Math.min(1, k * 1.5) * (quality.reducedMotion ? 1 : 0.62 + 0.38 * Math.sin(k * 46));
+        }
+      }
+    }
+    const px = pos.x + TILE / 2 + shake + lunge * (puppet.lungeX ?? 0) + knock * (puppet.knockX ?? 0);
     const py = pos.y + FEET_PX + lunge * (puppet.lungeY ?? 0) + knock * (puppet.knockY ?? 0);
     const sk = this.kit.sprites;
     const flyer = FLYERS.has(puppet.kind) && puppet.alive;
@@ -1412,6 +1468,7 @@ export class World3D {
     let hop = 0;
     if (!flyer && leaping && stepK >= 0 && stepK < 1) hop = LEAP_HOP * Math.sin(Math.PI * stepK);
     if (!flyer && knock > 0) hop = Math.max(hop, KNOCK_HOP * knock);
+    hop += popHop;
     const landed = leaping && stepK >= 1 ? now - puppet.moveStart - dur : puppet.knockStart !== undefined ? now - puppet.knockStart - KNOCK_MS : -1;
     const squash = !flyer && landed >= 0 && landed < LAND_MS ? Math.sin((Math.PI * landed) / LAND_MS) : 0;
     const lift = ground + hop + (flyer ? sk.fly.hover + sk.fly.bobAmp * Math.sin((now / 1000) * sk.fly.bobHz * Math.PI * 2 + puppet.to * 0.7)
@@ -1422,9 +1479,9 @@ export class World3D {
     const feetCell = Math.floor(px / TILE) + Math.floor(py / TILE) * WIDTH;
     const standing = !flyer && !spectral && hover === 0 && !blend && puppet.alive && puppet.fallStart === undefined;
     const wading = standing && !this.lava && geom.kinds[feetCell] === K_WATER;
-    let tint = 1;
-    let scale = 1;
-    if (puppet.invisible) tint = 0.45;
+    let tint = popTint;
+    let scale = popScale;
+    if (puppet.invisible) tint *= 0.45;
     if (puppet.fallStart !== undefined) {
       const k = Math.min(1, Math.max(0, (now - puppet.fallStart) / FALL_MS));
       scale = 1 - k;
@@ -1479,6 +1536,9 @@ export class World3D {
     this.sprite(fig.image, sx, sy, sheet.w, sheet.h, fig.flip, tx, by, bz, (sheet.w / TILE) * scale * fw, (sheet.h / TILE) * scale * fh, tint, LEANED, 0, fig.glow, blend);
     this.toDead = false;
     if (spectral) this.effects.halo(tx, 0.55 + lift, tz, COLD, 1.7, 0.2 + 0.05 * Math.sin(now / 520 + puppet.to));
+    // What a wand has done to it, readable at a glance: a warm amber glow, heavy and slow, on the slowed; a sickly green one, quicker, on the poisoned.
+    if (puppet.alive && puppet.slowed) this.effects.halo(tx, 0.42 + lift, tz, SLOWED_GLOW, 1.35, 0.26 + 0.05 * Math.sin(now / 700 + puppet.to));
+    if (puppet.alive && puppet.poisoned) this.effects.halo(tx, 0.4 + lift, tz, POISON_GLOW, 1.25, 0.24 + 0.08 * Math.sin(now / 240 + puppet.to));
     if (look && fig.glow && !blend) this.glowLast(look.pulse.min + (look.pulse.max - look.pulse.min) * (0.5 + 0.5 * Math.sin((now / 1000) * look.pulse.hz * Math.PI * 2)));
     // The rim of the strongest light on the silhouette (not on the dead: they lie flat), and the shade slipping away from that light.
     const lit = puppet.alive && !blend && this.rimLast(tx, tz, fig.flip);
