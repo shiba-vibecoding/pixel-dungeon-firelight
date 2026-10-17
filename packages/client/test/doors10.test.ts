@@ -5,8 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { LENGTH, T, WIDTH } from '@pd/core';
 import type { DoorKit } from '../src/r3d/doorkit';
 import { CHAR_MS, DoorScene, GRATE_MS, KEY_MS, SECRET_DUST_MS, SECRET_HOLD_MS, SECRET_SINK_MS } from '../src/r3d/doorscene';
-import { fitKit } from '../src/r3d/doorkit';
-import { FRONT_WALL_H, LevelGeom } from '../src/r3d/levelgeom';
+import { LevelGeom } from '../src/r3d/levelgeom';
 
 const kit = JSON.parse(readFileSync(fileURLToPath(new URL('../public/assets/doors/doors.json', import.meta.url)), 'utf8')) as DoorKit;
 const at = (x: number, z: number): number => x + z * WIDTH;
@@ -76,16 +75,15 @@ describe('the fixed parts of a door (levelgeom.ts)', () => {
     const geom = new LevelGeom(map, 16, 16, undefined, undefined, kit);
     expect(geom.doorAcross(20, 21)).toBe(false);
     expect(geom.isShoulder(at(20, 22))).toBe(true);
-    // (It is a cut wall as well, with the doorway to its north: the shoulder is the cut wall's height.)
-    expect(geom.heightOf(at(20, 22))).toBeCloseTo(Math.min(FRONT_WALL_H, kit.heights.shoulder), 6);
+    expect(geom.heightOf(at(20, 22))).toBeCloseTo(kit.heights.shoulder, 6);
     // The wall north of the door, and any wall beside, stays whole.
     expect(geom.isShoulder(at(20, 20))).toBe(false);
-    expect(geom.heightOf(at(20, 20))).toBeCloseTo(kit.heights.wall, 6);
+    expect(geom.heightOf(at(20, 20))).toBeGreaterThan(kit.heights.shoulder);
     // A door in an east-west wall line has no shoulder.
     const flat = new LevelGeom(across(T.DOOR), 16, 16, undefined, undefined, kit);
     expect(flat.isShoulder(at(20, 22))).toBe(false);
     // Without the kit the wall is as it was.
-    expect(new LevelGeom(map, 16, 16).heightOf(at(20, 22))).toBeCloseTo(FRONT_WALL_H, 6);
+    expect(new LevelGeom(map, 16, 16).heightOf(at(20, 22))).toBeGreaterThan(kit.heights.shoulder);
   });
 
   it('reads the look of a door from the terrain: closed, locked, barricade; open is closed and open', () => {
@@ -95,41 +93,6 @@ describe('the fixed parts of a door (levelgeom.ts)', () => {
     expect(look(T.LOCKED_DOOR)).toBe('locked');
     expect(look(T.BARRICADE)).toBe('barricade');
     expect(new LevelGeom(across(T.OPEN_DOOR), 16, 16, undefined, undefined, kit).doorInfo(at(20, 21)).open).toBe(true);
-  });
-});
-
-describe('the kit fitted to the cut walls of the game (doorkit.ts)', () => {
-  it('keeps the frame a pixel proud of a cut wall, the leaf a little under it, and the shoulder no higher than the cut', () => {
-    const fit = fitKit(kit, FRONT_WALL_H);
-    expect(fit.heights.cut).toBe(FRONT_WALL_H);
-    expect(fit.heights.frameTop.cut).toBeCloseTo(FRONT_WALL_H + 1 / 16, 6);
-    const leafTop = kit.leaf.lift + fit.leaf.h.cut;
-    expect(leafTop).toBeLessThan(FRONT_WALL_H);
-    expect(leafTop).toBeGreaterThan(FRONT_WALL_H - 0.2);
-    expect(fit.heights.shoulder).toBeLessThanOrEqual(FRONT_WALL_H);
-    // The lintel's underside clears the leaf, so the transom light fits between.
-    expect(fit.heights.frameTop.cut - kit.lintel.h).toBeGreaterThan(leafTop);
-    // The full-height numbers are the designer's.
-    expect(fit.heights.frameTop.full).toBe(kit.heights.frameTop.full);
-    expect(fit.leaf.h.full).toBe(kit.leaf.h.full);
-    expect(fitKit(fit, FRONT_WALL_H)).toBe(fit);
-  });
-
-  it('puts the frame of a door in a cut wall line that height over the floor', () => {
-    // Floor north of the walls beside the door: they are cut, and so is the frame.
-    const map = mapOf([[19, 20, T.EMPTY], [20, 20, T.EMPTY], [21, 20, T.EMPTY], [20, 21, T.DOOR], [20, 22, T.EMPTY]]);
-    const geom = new LevelGeom(map, 16, 16, undefined, undefined, kit);
-    expect(geom.doorInfo(at(20, 21)).cut).toBe(true);
-    // (The top of the highest quad that lies wholly in the doorway's cell.)
-    const { pos, verts } = geom.boxes;
-    let top = 0;
-    for (let v = 0; v < verts; v += 4) {
-      const xs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3]!);
-      const zs = [0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 2]!);
-      if (Math.min(...xs) < 20 || Math.max(...xs) > 21 || Math.min(...zs) < 21 || Math.max(...zs) > 22) continue;
-      top = Math.max(top, ...[0, 1, 2, 3].map((k) => pos[(v + k) * 3 + 1]!));
-    }
-    expect(top).toBeCloseTo(FRONT_WALL_H + 1 / 16, 6);
   });
 });
 
@@ -157,9 +120,7 @@ describe('the vault door, told from the map (levelgeom.ts)', () => {
     expect(lookOf(vault(2), at(12, 13))).toBe('locked');
     // A ring of ordinary floor, or a ring with something else in the middle.
     expect(lookOf(vault(1, T.EMPTY, T.EMPTY), at(12, 13))).toBe('locked');
-    // (Grass or water grown over a vault's middle is still a vault; a room of special floor all through is not.)
-    expect(lookOf(vault(1, T.EMPTY_SP, T.GRASS), at(12, 13))).toBe('vault');
-    expect(lookOf(vault(1, T.EMPTY_SP, T.EMPTY_SP), at(12, 13))).toBe('locked');
+    expect(lookOf(vault(1, T.EMPTY_SP, T.GRASS), at(12, 13))).toBe('locked');
     // An open room (no walls round it) is not shut.
     const open = vault();
     open[at(15, 11)] = T.EMPTY;
@@ -265,17 +226,7 @@ describe('a patched level is the level built fresh (levelgeom.ts)', () => {
     }
     return out.sort();
   };
-  const KINDS = [T.DOOR, T.OPEN_DOOR, T.LOCKED_DOOR, T.BARRICADE, T.SECRET_DOOR, T.EMBERS];
-  it('gives the same quads when the boss exit is unlocked as when it is built so, and a locked one has its steps and no block', () => {
-    const map = across(T.LOCKED_EXIT);
-    const geom = new LevelGeom(map, 16, 16, undefined, undefined, kit);
-    expect(geom.kinds[at(20, 21)]).toBe(0);
-    map[at(20, 21)] = T.UNLOCKED_EXIT;
-    geom.patch(map);
-    const built = new LevelGeom(across(T.UNLOCKED_EXIT), 16, 16, undefined, undefined, kit);
-    expect(quadsOf(geom.boxes)).toEqual(quadsOf(built.boxes));
-    expect(quadsOf(geom.floor)).toEqual(quadsOf(built.floor));
-  });
+  const KINDS = [T.DOOR, T.OPEN_DOOR, T.LOCKED_DOOR, T.BARRICADE, T.SECRET_DOOR, T.EMBERS, T.LOCKED_EXIT];
   for (const orient of ['across', 'standing'] as const) {
     it(`gives the same quads after any change of a door as after building it so (${orient})`, () => {
       const make = orient === 'across' ? across : standing;

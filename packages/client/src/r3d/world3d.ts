@@ -729,7 +729,7 @@ export class World3D {
     this.lastLevel = level;
     this.doors?.dispose();
     this.doors = new DoorScene(
-      this.scene, this.geom.doorKit!,
+      this.scene, kitState!.doors,
       { leaf: this.leafMaterial!, solid: this.terrainMaterial!, add: this.lightMaterial!, fxAdd: this.fxAddMaterial!, fxAlpha: this.fxAlphaMaterial! },
       this.options.reduced === true,
     );

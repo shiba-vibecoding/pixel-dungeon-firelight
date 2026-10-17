@@ -244,21 +244,6 @@ export function shoulderHeight(kit: DoorKit, height: number, doorNorthRunsNorthS
   return doorNorthRunsNorthSouth ? Math.min(height, kit.heights.shoulder) : height;
 }
 
-/**
- * The kit fitted to a level whose cut walls (every wall with floor or a doorway to its north) stand FRONT_WALL_H high: the designer drew them
- * 0.95, the game has them lower (levelgeom.ts FRONT_WALL_H), and the doors follow in proportion. The frame is still a pixel proud of the
- * wall, the leaf still a little under it (a door in a gap, not a wall), the shoulder no higher than the cut wall beside it.
- */
-export function fitKit(kit: DoorKit, cut: number): DoorKit {
-  if (Math.abs(kit.heights.cut - cut) < 1e-6) return kit;
-  const leafTop = cut - 1.5 / 16;
-  return {
-    ...kit,
-    heights: { ...kit.heights, cut, frameTop: { ...kit.heights.frameTop, cut: cut + 1 / 16 }, shoulder: Math.min(kit.heights.shoulder, cut) },
-    leaf: { ...kit.leaf, h: { ...kit.leaf.h, cut: Math.max(2 / 16, leafTop - kit.leaf.lift) } },
-  };
-}
-
 /** The uv rect of a picture in a sheet of `w` x `h` pixels (0 to 1, v up, as three.js has it), mirrored as the quad says. */
 export function uvOf(kit: DoorKit, q: DoorQuad, w: number, h: number, part?: { v0: number; v1: number }): [number, number, number, number] {
   const [x, y, pw, ph] = kit.atlas[q.pic]!;
