@@ -31,3 +31,9 @@ Parameters: `cls` = warrior | mage | rogue | ranger, `tier` 0-6, `look` (a part 
 the frames of the walk (the viewer served on 8765, `PORT` to change it).
 Stage 2: `kind` = rat | albino | fetidRat | gnoll | shaman | skeleton | thief | bandit | bee | sheep | spinner | bat stands or walks that monster
 instead of the hero (its sheets from `assets/dirs/`, its PD run frames; `MOBF` in `viewer.js`), e.g. `?r=0&close=1&dirs=walk&kind=gnoll`.
+
+Part 9 (the weapon in the hand): `dirs=held&cls=<class>&w=<weapon>.<weapon>...` stands the hero with each weapon in the three views
+(a row a view: side, front, back; a column a weapon), `dirs=strike&cls=<class>&w=<weapon>` makes him strike in the three views at once
+(idle, then PD's attack frames 13-15 at 15 fps; `window.__frame(ms)`, 900 ms a loop). `tier`, `look`, `hat`, `f` (the frame for `held`),
+`anim=attack|hold`, `ox`/`oz` (the group moved off the hero's cell). The weapon is drawn from `assets/weapons/held/held.json` as the game
+draws it: behind the body, the body, the hat, in front. Weapons are named as in held.json (`sword`, `warHammer`, `boomerang`, ...).

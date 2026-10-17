@@ -558,6 +558,84 @@ if (DIRS) {
   }
 }
 
+/* ---------- part 9: the weapon in the hand. ?dirs=held&cls=<class>&w=<weapon>,<weapon>,... a row a view (side, front, back), a column a
+   weapon (on a phone a row a weapon) | dirs=strike&cls=<class>&w=<weapon> the three views striking, window.__frame(ms) | &tier &look &hat &f
+   &anim=attack|zap. The weapon is drawn as the game draws it (assets/weapons/held/held.json): behind the body, the body, the hat, in front. */
+let HELD = null;
+const imgCache = {};
+const img_ = (src) => imgCache[src] || (imgCache[src] = loadImg(src));
+const HM = 9;
+async function heldCanvas(cls, facing, tier, frame, kind, anim, look, hatK) {
+  HELD = HELD || await (await fetch('assets/weapons/held/held.json')).json();
+  const c = document.createElement('canvas'); c.width = 12 + 2 * HM; c.height = 15 + 2 * HM; const g = c.getContext('2d');
+  const body = await img_(`assets/${FACE.sheet(cls, facing, look)}.png`);
+  const wp = kind && HELD.weapons[kind];
+  const pose = wp ? HELD.poses[wp.style][facing][anim === 'attack' ? 'attack' : 'hold'][frame] : null;
+  const hand = wp ? HELD.hands[cls][facing][tier][frame] : null; const wimg = wp ? await img_('assets/' + wp.sheet) : null;
+  const weapon = (layer) => {
+    if (!pose || !hand || pose.l !== layer) return;
+    const col = HELD.angles.indexOf(pose.a), x = HM + hand[0] + pose.dx - 8, y = HM + hand[1] + pose.dy - 8;
+    g.drawImage(wimg, col * 17, 0, 17, 17, x, y, 17, 17);
+    if (pose.trail) { const tc = ['side', 'front', 'back'].indexOf(facing); g.drawImage(wimg, tc * 17, 17, 17, 17, x, y, 17, 17); }
+  };
+  weapon('back');
+  g.drawImage(body, frame * 12, tier * 15, 12, 15, HM, HM, 12, 15);
+  if (hatK) { const hs = await img_(`assets/${FACE.hat(cls, hatK, facing)}.png`); g.drawImage(hs, frame * 16, tier * 22, 16, 22, HM - 2, HM - 7, 16, 22); }
+  weapon('front');
+  return c;
+}
+function heldSprite(canvas, at, flip) {
+  // as charSprite, from a canvas: the frame with its margin, the hero's feet (HM pixels above the bottom) where a figure's feet stand
+  const tex = nearest(new THREE.CanvasTexture(canvas)); const fw = canvas.width, fh = canvas.height;
+  const w = fw / 16, h = fh / 16 * (RULES ? STRETCH : 1), drop = HM / 16 * (RULES ? STRETCH : 1);
+  const g = new THREE.PlaneGeometry(w, h); g.translate(0, h / 2 - drop, 0);
+  const m = new THREE.Mesh(g, rimMaterial(tex, fw, fh));
+  m.rotation.x = RULES ? -LEAN : -pitch * 0.85; m.position.set(at[0] + 0.5, 0.02, at[1] + 0.5 + SP.feet);
+  if (flip) m.scale.x = -1;
+  m.castShadow = !!SP.castShadow; m.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.5 });
+  scene.add(m);
+  const sw = 12 / 16 * SP.shadow.width;
+  const s = new THREE.Mesh(new THREE.CircleGeometry(sw / 2, 20), new THREE.MeshBasicMaterial({ map: blobTex, color: 0, transparent: true, opacity: SP.shadow.opacity, depthWrite: false }));
+  s.rotation.x = -Math.PI / 2; s.scale.y = SP.shadow.squash; s.position.set(at[0] + 0.5, 0.012, at[1] + 0.5 + SP.feet + 0.02); scene.add(s);
+  figures.push({ m, s, at: new THREE.Vector3(at[0] + 0.5, 15 / 16 * 0.5, at[1] + 0.5 + SP.feet), mat: m.material });
+  m.userData.shadow = s; return m;
+}
+if (DIRS === 'held' || DIRS === 'strike') {
+  const cls = Q.get('cls') || 'warrior', tier = +(Q.get('tier') ?? 1), look = Q.get('look'), hatK = Q.get('hat'), F0 = +(Q.get('f') ?? 0);
+  const ws = (Q.get('w') || 'sword').split(/[,.]/), anim = Q.get('anim') || 'attack', tall = vw / vh < 0.8;
+  const hx_ = hero[0] + +(Q.get('ox') || 0), hz_ = hero[1] + +(Q.get('oz') || 0);   // &ox &oz: the group moved off the hero's cell
+  const VIEWS = [['side', false], ['front', false], ['back', false]];
+  if (DIRS === 'held') {
+    // a column a weapon, a row a view (side, front, back); a phone sees the same room narrower and taller
+    const n = ws.length, dx = tall ? Math.min(1.3, 6.4 / n) : Math.min(1.5, 8 / n), dz = tall ? 1.55 : 1.45;
+    for (let i = 0; i < n; i++) for (let j = 0; j < 3; j++) {
+      const x = hx_ + (i - (n - 1) / 2) * dx, z = hz_ + (j - 1) * dz + (tall ? 0.5 : 0.2);
+      heldSprite(await heldCanvas(cls, VIEWS[j][0], tier, F0, ws[i], anim, look, hatK), [x, z], VIEWS[j][1]);
+    }
+  } else {
+    // idle, then the blow (PD's attack: frames 13, 14, 15 at 15 fps), then idle: 900 ms a loop
+    const at = tall ? [[-0.8, -0.7], [0.8, -0.7], [0, 0.9]] : [[-1.5, 0], [0, 0], [1.5, 0]];
+    const cache = {}; let shown = [];
+    const frameAt = (ms) => { const t = ms % 900; return t < 500 ? (t < 250 ? 0 : 1) : t < 567 ? 13 : t < 633 ? 14 : t < 700 ? 15 : 0; };
+    window.__frame = async (ms) => {
+      for (const o of shown) { o.visible = false; o.userData.shadow.visible = false; } shown = [];
+      const f = frameAt(ms), a = f >= 13 && f <= 15 ? anim : 'idle';
+      for (let j = 0; j < 3; j++) {
+        const key = `${j}-${f}-${a}`; const x = hx_ + at[j][0], z = hz_ + at[j][1] + (tall ? 0.4 : 0.2);
+        const o = cache[key] || (cache[key] = heldSprite(await heldCanvas(cls, VIEWS[j][0], tier, f, ws[0], a, look, hatK), [x, z], VIEWS[j][1]));
+        o.visible = true; o.userData.shadow.visible = true; shown.push(o);
+      }
+      composer.render();
+    };
+    // every frame made once now, so a picture taken at any moment is ready
+    for (const f of [0, 1, 13, 14, 15]) for (let j = 0; j < 3; j++) {
+      const a = f >= 13 ? anim : 'idle', key = `${j}-${f}-${a}`; const x = hx_ + at[j][0], z = hz_ + at[j][1] + (tall ? 0.4 : 0.2);
+      const o = cache[key] = heldSprite(await heldCanvas(cls, VIEWS[j][0], tier, f, ws[0], a, look, hatK), [x, z], VIEWS[j][1]);
+      o.visible = f === 0; o.userData.shadow.visible = f === 0; if (f === 0) shown.push(o);
+    }
+  }
+}
+
 /* ---------- the rim of the strongest light on each figure ---------- */
 if (RULES && SP.rim.on && !Q.has('norim')) {
   const lights = []; scene.traverse((o) => { if (o.isPointLight || o.isSpotLight) lights.push(o); });
