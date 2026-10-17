@@ -68,6 +68,7 @@ import { type Screen, TouchGuard, touchGuardSetting } from './touchguard';
 import { conditionsOf, type HurtEntry, HurtLog } from './hurtlog';
 import { type Conditions, type Source, sourcesOf } from './hurtsrc';
 import { showFeed } from './feedui';
+import { needsConfirm, pathConfirm, PathPreview, planRoute, stopForTap, verdict, underway } from './pathpreview';
 import { reloadForUpdate } from './update';
 import { type Camp, type CampDress, campClasses } from './camp';
 import { type DailyRulesView, showCamp } from './campui';
@@ -1598,6 +1599,8 @@ function step(world: World, now: number, visible: readonly boolean[]): void {
     }
     return;
   }
+  // A finger on the map holds the walk where it is: if the touch is a tap, the walk ends there (tapAt); if it is a look around, it goes on.
+  if (cam.touching && underway(walk)) return;
   const me = heroById(world, session!.myId);
   // Resting turns are not paced like steps: there is nothing to animate.
   const pace = walk.resting ? 0 : STEP_MS;
@@ -1971,6 +1974,9 @@ function tapCell(cell: number, quiet = false): void {
   const visible = seenCells(world, me.depth);
   const explored = exploredCells(world, me.depth);
   walk.reset();
+  // The route that was on show, if any, waits for a second tap on its cell (pathpreview.ts); any other tap puts it away.
+  const planned = preview.cell;
+  preview.clear();
   const vnow = fx.now;
   feedback.clear();
   // Aiming a shot, the tapped cell flashes for a blink: the tap was taken.
@@ -2020,6 +2026,8 @@ function tapCell(cell: number, quiet = false): void {
     }
     const way = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating);
     if (way && way.length > 1) {
+      // A far chest shows its way first, as any far cell does.
+      if (confirmFirst(world, me, cell, way.slice(0, -1), planned, quiet, vnow)) return;
       walk.queue = way.slice(0, -1);
       walk.open = cell;
       if (!quiet) feedback.aim(cell, false, vnow);
@@ -2072,9 +2080,13 @@ function tapCell(cell: number, quiet = false): void {
   // The alchemy pot: what it is for, then walk up to it as usual.
   if (level.map[cell] === T.ALCHEMY) view.say(t.alchemyPot, '#ffff44');
   // The way goes round monsters in sight, known traps (findPath) and clouds of gas in sight, where another way exists.
+  // In a fight (a hostile in sight) it also keeps off the items on the floor, where an equally short way exists (pathpreview.ts).
   const occupied = occupiedCells(world, me.depth);
-  const clouds = new Set([...occupied, ...gasCells(world, me.depth)]);
-  walk.queue = findPath(level, me.pos, cell, clouds, explored, floating) ?? findPath(level, me.pos, cell, occupied, explored, floating) ?? [];
+  const hostile = seenEnemies(world, me).length > 0;
+  walk.queue = planRoute(level, me.pos, cell, {
+    occupied, gas: gasCells(world, me.depth), explored, floating, combat: hostile,
+    heaps: hostile ? new Set((world.floors[me.depth]?.heaps ?? []).filter((h) => h.kind === 'heap').map((h) => h.pos)) : new Set(),
+  });
   if (walk.queue.length === 0) {
     // No way around a known trap: walk up to it and say so; a tap on the trap itself steps onto it.
     const risky = findPath(level, me.pos, cell, occupiedCells(world, me.depth), explored, floating, true);
@@ -2088,6 +2100,11 @@ function tapCell(cell: number, quiet = false): void {
       // No way there: say so where the finger was.
       feedback.refuse(cell, vnow);
     }
+    return;
+  }
+  // A far route, or any in a fight, is shown first; the second tap on its cell walks it (pathpreview.ts).
+  if (confirmFirst(world, me, cell, walk.queue, planned, quiet, vnow)) {
+    walk.queue = [];
     return;
   }
   // Mis-tap protection (mistap.ts): a step into a cloud in sight is asked about first; with a walk ahead of it, the hero
@@ -2114,6 +2131,45 @@ function tapCell(cell: number, quiet = false): void {
   walk.pickup = heapAt(world, me.depth, cell);
   if (cell === level.exit) walk.stairs = 'descend';
   else if (cell === level.entrance && (me.depth > 1 || hasAmulet(me))) walk.stairs = 'ascend';
+}
+
+/** The route on show, waiting for the second tap on its cell (pathpreview.ts). */
+const preview = new PathPreview();
+/**
+ * What it says, as a small tag over the target (a page element: the status line would change the free band of the screen, and the map
+ * would slide under the finger between the two taps).
+ */
+const routeTag = Object.assign(document.createElement('div'), { className: 'fl-route-tag' });
+routeTag.hidden = true;
+document.body.append(routeTag);
+let routeTagFor = '';
+function placeRouteTag(): void {
+  if (!preview.active) {
+    routeTag.hidden = true;
+    routeTagFor = '';
+    return;
+  }
+  const text = t.input.path.tag(preview.path.length);
+  if (routeTagFor !== text) {
+    routeTagFor = text;
+    routeTag.textContent = text;
+  }
+  routeTag.hidden = false;
+  const at = cellClient(preview.cell);
+  routeTag.style.left = `${Math.round(at.x)}px`;
+  routeTag.style.top = `${Math.round(at.y - 22)}px`;
+}
+
+/**
+ * Whether the tap on `cell` (a pointer's, not a key's or the «go on» button's) only shows its route for now: it asks to be confirmed
+ * (the setting; never for a neighbour; not during the first walk's lesson) and is not the second tap on the cell already on show.
+ */
+function confirmFirst(world: World, me: Hero, cell: number, route: readonly number[], planned: number, quiet: boolean, now: number): boolean {
+  if (!byPointer || quiet || !coached) return false;
+  const needs = needsConfirm(pathConfirm.mode, seenEnemies(world, me).length > 0, route.length);
+  if (verdict(planned, cell, needs) === 'walk') return false;
+  preview.show(cell, route, me.pos, me.depth, now);
+  return true;
 }
 
 /** What the game refused to do and said so lately (refusal.ts). */
@@ -2483,6 +2539,15 @@ function cellUnder(clientX: number, clientY: number): number {
   return x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT ? -1 : x + y * WIDTH;
 }
 
+/** Where a cell is on the page (client pixels), the way a tap on it is read back (the dev hooks and the screenshots use it). */
+const cellClient = (cell: number): { x: number; y: number } => {
+  const rect = canvas.getBoundingClientRect();
+  const k = rect.width / canvas.width;
+  return {
+    x: rect.left + ((cell % WIDTH) * TILE + TILE / 2 - camera.x) * camera.zoom * k,
+    y: rect.top + (Math.trunc(cell / WIDTH) * TILE + TILE / 2 - camera.y) * camera.zoom * ground() * k,
+  };
+};
 function hideHover(): void {
   hover.cell = -1;
   hover.frame.style.display = 'none';
@@ -2536,6 +2601,9 @@ function tapAt(px: number, py: number): void {
   if (!session?.world || overlayOpen()) return;
   // A region's intro is read first: the tap that skips it does nothing else.
   if (view.skipIntro(fx.now)) return;
+  // Any tap on the map stops the walk at once, whatever it then asks for (and even when something else takes it: a double tap on the
+  // hero, the examine tool, the whole-level view).
+  stopWalking();
   const wx = camera.x + px / camera.zoom;
   const wy = camera.y + py / camera.zoom;
   // In 3D a figure stands up off its cell, drawn over the cells north of it: a tap on its body is a tap on its cell.
@@ -2561,6 +2629,13 @@ function tapAt(px: number, py: number): void {
   } finally {
     byPointer = false;
   }
+}
+
+/** Stops what the hero is doing over several turns: a walk, a chase, a rest, a key held; under live turns the plan already sent too. */
+function stopWalking(): void {
+  stopForTap(walk, held);
+  const me = session?.world && heroById(session.world, session.myId);
+  if (me && session!.beatMs !== null && me.plan?.length) send({ type: 'plan', steps: [] }, performance.now());
 }
 
 /** Whether the tapCell under way came from the pointer (tapAt), not a key or a walk: only a finger or a click on a wall means the floor by it. */
@@ -3220,6 +3295,9 @@ function tick(now: number): void {
     return;
   }
 
+  // The route on show belongs to where the hero stood: a step, a new floor, a window, an aim or the examine tool put it away.
+  if (preview.active && (preview.stale(me.pos, me.depth) || aim || examining || overlayOpen() || !isAlive(me))) preview.clear();
+
   // Low on health, the edges of the view pulse red like a heartbeat, quicker the nearer death.
   if (session.world) {
     const self = heroById(session.world, session.myId);
@@ -3485,6 +3563,9 @@ function tick(now: number): void {
           );
         }
       },
+      plan: (c: CanvasRenderingContext2D) => {
+        if (!forShot && preview.active) feedback.drawPlan(c, preview.path, preview.cell, preview.since, vnow);
+      },
       mourning: isAlive(me) ? 0 : Math.min(1, (vnow - (fallenAt ||= vnow)) / 1200),
       overview: cam.overviewShown,
       middle,
@@ -3548,6 +3629,7 @@ function tick(now: number): void {
   if (walk.goal === me.pos) walk.goal = null;
   const foe = isAlive(me) ? attackTarget(world, me) : null;
   placeHover();
+  placeRouteTag();
   hints.pump();
   if (overlayOpen() && hover.cell >= 0) hideHover();
   mapControls.indicators(
@@ -3862,5 +3944,5 @@ if (import.meta.env.DEV) {
     }
   };
   Object.assign(window, { __release: { news: () => showNews({ release: CURRENT, onClose: () => toTitle(false) }), report: () => api && showReport({ api, run: runFacts, onClose: () => toTitle(false) }), crash: showCrash } });
-  Object.assign(window, { __pd: { cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
+  Object.assign(window, { __pd: { cellClient, preview, touchGuard, hurtLog, cam, pace: drawPace, get session() { return session; }, get r3() { return r3; }, get governor() { return governor; }, quipSys, camera, view, motion, walk, advance, play, resize, core, fx, fxp, gore, startSolo, audio, tick, held, tapCell, takeEffects: (list: Effect[]) => { if (session?.world) takeEffects(list, session.world, heroById(session.world, session.myId)!, performance.now(), fx.now); } } });
 }

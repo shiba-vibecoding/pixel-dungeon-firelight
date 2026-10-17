@@ -5,8 +5,15 @@
 
 export const INPUT_EN = {
   settings: {
+    pathConfirm: 'Confirm the route',
+    pathConfirmNote: 'A tap on a far cell shows the way first; a second tap on it walks',
+    pathModes: { always: 'Always', combat: 'In a fight and when far', never: 'Never' },
     touchGuard: 'Accidental-touch guard',
     touchGuardNote: 'Ignores a palm, a touch at the very edge of the screen, the first touch after coming back to the game, and a tap with a second finger down',
+  },
+  path: {
+    /** The tag over the target while a route waits for its second tap. */
+    tag: (steps: number): string => `${steps} ${steps === 1 ? 'step' : 'steps'} · tap again`,
   },
   /** «What was»: the last wounds, with what dealt each. */
   feed: {

@@ -377,6 +377,8 @@ export interface Scene {
   under?: (ctx: CanvasRenderingContext2D) => void;
   /** Drawn over what lies on the floor, under the characters: glints, coins in the air (motion.ts). */
   over?: (ctx: CanvasRenderingContext2D) => void;
+  /** Drawn flat on the floor over everything of the ground, in 2D and in 3D alike: the route waiting for its second tap (pathpreview.ts). */
+  plan?: (ctx: CanvasRenderingContext2D) => void;
   /** The whole-level view is showing, 0..1 (camcontrol.ts): the map is read from afar, so the hero and the foes are marked. */
   overview?: number;
 }
@@ -457,6 +459,7 @@ export function render(
     ctx.restore();
   }
   scene.over?.(ctx);
+  scene.plan?.(ctx);
 
   // The sacrificial fire: a flickering blue flame on its pedestal (SacrificialParticle).
   const ambient = sheet(`ambient${levelRegion(level)}`);
@@ -697,6 +700,7 @@ export function renderOverlay3D(
   const visible = scene.visible;
   ctx.setTransform(zoom, 0, 0, zoom * ys, -Math.round(camera.x * zoom), -Math.round(camera.y * zoom * ys));
   fx.draw(ctx, now, (x, y) => visible[Math.trunc(y / TILE) * WIDTH + Math.trunc(x / TILE)] === true);
+  scene.plan?.(ctx);
   // Marks in screen art pixels: the transform only scales.
   ctx.setTransform(zoom, 0, 0, zoom, 0, 0);
   for (let i = 0; i < count; i++) {
