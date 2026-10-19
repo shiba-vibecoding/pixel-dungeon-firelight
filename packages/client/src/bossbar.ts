@@ -140,6 +140,16 @@ export class BossBar {
     return this.on;
   }
 
+  /** Where the bar is on the page (px). */
+  rect(): DOMRect {
+    return this.root.getBoundingClientRect();
+  }
+
+  /** The boss or the hero under the bar: it all but fades, so what it covers shows through (fl-boss.css `.veiled`). */
+  setVeiled(on: boolean): void {
+    if (this.root.classList.contains('veiled') !== on) this.root.classList.toggle('veiled', on);
+  }
+
   /** Where the bar ends on the page (px), for what hangs from it. */
   bottom(): number {
     return this.root.getBoundingClientRect().bottom;

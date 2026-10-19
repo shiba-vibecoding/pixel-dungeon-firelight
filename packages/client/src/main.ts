@@ -4028,6 +4028,21 @@ function tick(now: number): void {
     }, overlayOpen(), hud.scale || 1);
   }
 
+  // The boss's bar fades while the boss or the hero stands under it (bossfx.ts veil): it must not hide the fight.
+  if (bossFx.barUp) {
+    const unit = camera.zoom / (canvas.width / (canvas.clientWidth || 1));
+    const box = canvas.getBoundingClientRect();
+    const figure = (id: string): { left: number; right: number; top: number; bottom: number } | null => {
+      const puppet = view.puppets.get(id);
+      if (!puppet || !figureShown(puppet, visible, me.mindVision > 0)) return null;
+      const where = view.position(puppet, vnow);
+      const x = box.left + (where.x - camera.x) * unit;
+      const head = box.top + (mode3d ? headScreenY(where.y) / camera.zoom : where.y - camera.y) * unit;
+      return { left: x, right: x + TILE * unit, top: head, bottom: head + TILE * unit * 1.2 };
+    };
+    bossFx.veil([figure(bossFx.bossId), figure(me.id)]);
+  }
+
   // Who the dungeon is waiting for, once my action has been queued for a moment. Under live turns, the
   // companions a fight waits for once I have made my move (and none while it waits for mine).
   const live = session.beatMs !== null;

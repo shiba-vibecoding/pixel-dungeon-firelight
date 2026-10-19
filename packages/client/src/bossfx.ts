@@ -1101,6 +1101,28 @@ class BossFx {
   }
 
   /** The bubble is up (or waiting): the frame is drawn at full pace meanwhile. */
+  /** The bar is on screen, and whose it is (the boss it follows). */
+  get barUp(): boolean {
+    return this.bar?.visible === true;
+  }
+
+  get bossId(): string {
+    return this.primary;
+  }
+
+  /**
+   * Once a frame while the bar is up: when a figure stands under it (the boss, the hero: their boxes on the page, px), the bar all but
+   * fades, so it never hides the fight; it comes back once they step out from under it.
+   */
+  veil(figures: ReadonlyArray<{ left: number; right: number; top: number; bottom: number } | null>): void {
+    const bar = this.bar;
+    if (!bar?.visible) return;
+    const r = bar.rect();
+    let under = false;
+    for (const f of figures) if (f && f.right > r.left && f.left < r.right && f.bottom > r.top && f.top < r.bottom) under = true;
+    bar.setVeiled(under);
+  }
+
   get speaking(): boolean {
     return this.shown !== null || this.queue.length > 0;
   }

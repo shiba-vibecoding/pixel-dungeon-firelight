@@ -53,3 +53,8 @@
 @keyframes fl-amulet-in { 0% { opacity: 0; transform: translateY(-14px); } 14% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .fl-amulet.on { animation: fl-amulet-calm 4.6s linear both; } }
 @keyframes fl-amulet-calm { 0% { opacity: 0; } 14% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* The boss or the hero under the bar: it all but fades, so the fight shows through (bossfx.ts veil). A filter, since the drop-in
+   animation holds the bar's opacity. */
+.fl-bossbar { transition: filter .18s steps(3, jump-none); }
+.fl-bossbar.veiled { filter: opacity(.18); }
