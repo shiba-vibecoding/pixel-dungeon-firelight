@@ -3230,12 +3230,20 @@ function resize(): void {
 
 /** Toasts appear just under the HUD, however tall it has grown (buffs, companions, a notice). */
 let hudBottom = -1;
+let hudColumn = -1;
 
 function placeToasts(): void {
   const bottom = Math.round(hud.height());
-  if (bottom === hudBottom) return;
-  hudBottom = bottom;
-  document.documentElement.style.setProperty('--hud-bottom', `${bottom}px`);
+  if (bottom !== hudBottom) {
+    hudBottom = bottom;
+    document.documentElement.style.setProperty('--hud-bottom', `${bottom}px`);
+  }
+  // Wide, the hero's panel stands in a column at the top left: the quest chip goes under it, not over it.
+  const column = Math.round(hud.columnBottom());
+  if (column !== hudColumn) {
+    hudColumn = column;
+    document.documentElement.style.setProperty('--hud-column-bottom', `${column}px`);
+  }
 }
 addEventListener('resize', resize);
 onLayoutChange(() => requestAnimationFrame(resize));

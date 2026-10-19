@@ -147,6 +147,9 @@ export const DUST_PER = 4;
 /** A glint runs over the spines of a shelf once every so many ms. */
 export const SHELF_EVERY: readonly [number, number] = [4000, 7000];
 
+/** How far south of the pot's middle the brew's loop stands, cells (see scanAmbient): kept inside the cell, which is what sight is asked of. */
+export const POT_DZ = 0.45;
+
 /** The effect of each water's well (fx.json ambient.terrain.WELL). */
 export const WELL_FX: readonly string[] = ['place.well.health', 'place.well.awareness', 'place.well.transmutation'];
 
@@ -192,7 +195,10 @@ export function scanAmbient(world: World, depth: number): AmbientEntry[] {
         break;
       }
       case T.ALCHEMY:
-        out.push(entry('place.pot.amber', AMBIENT_LOOP, cell, 0, 0, NaN, 2));
+        // The designer's loop is a brew and its steam standing up (16 x 32, the brew 7 px over its foot); the pot lies on the floor, seen
+        // from above: stood at the cell's middle, the brew floated most of a cell over the rim. Its foot goes south by POT_DZ, so the
+        // brew lies in the pot and only the steam rises over it.
+        out.push(entry('place.pot.amber', AMBIENT_LOOP, cell, 0, POT_DZ, NaN, 2));
         break;
       case T.BOOKSHELF:
         out.push(entry('place.shelf', AMBIENT_CADENCE, cell, 0, 0.05, 0.55, 3, SHELF_EVERY));

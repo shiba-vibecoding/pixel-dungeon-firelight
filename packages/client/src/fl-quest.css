@@ -46,6 +46,8 @@
 /* The designer's portrait bobs a pixel for 1.2 s; while the giver talks it goes on (the class is set for as long as the words come). */
 .fl-dialog .fl-portrait.speaks::after { animation: fl-q-speak .5s steps(2, jump-none) infinite; }
 .fl-dialog .fl-portrait { margin-bottom: 2px; }
+/* The designer's frame is thicker than a window's border: the close cross stood 8 px past it and the window scrolled sideways. */
+.pd-window.fl-dialog { overflow-x: hidden; }
 .fl-dialog .fl-reward-slot .pd-item { pointer-events: none; }
 .fl-talk-window .pd-window-head .pd-note { color: var(--q-sub, var(--ink-muted)); font-style: normal; }
 .fl-talk-window.ghost { --q-sub: #a6cbe0; }
@@ -153,3 +155,5 @@
 @keyframes fl-qchip-pop { from { transform: scale(0.85); filter: brightness(1.8); } }
 @media (prefers-reduced-motion: reduce) { .fl-qchip.pop, .fl-qtag.ready { animation: none; } }
 .pd-ui .fl-qchip { left: var(--gap); }
+/* Wide, the hero's panel is a column at the top left: the chip stands just under it (main.ts keeps its bottom in --hud-column-bottom). */
+.pd-ui .fl-qchip { top: calc(var(--hud-column-bottom, 0px) + var(--space-1)); }

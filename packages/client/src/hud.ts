@@ -466,6 +466,7 @@ export class Hud {
   /** The measured band (freeZone), when, at what window height, and whether the HUD has changed since. */
   private readonly zone = { top: 0, bottom: 0 };
   private bandBottom = 0;
+  private colBottom = 0;
   private zoneAt = -1e9;
   private zoneHeight = -1;
   private zoneStale = true;
@@ -661,6 +662,12 @@ export class Hud {
     return this.bandBottom;
   }
 
+  /** Wide, the bottom of the hero's column (top left): what sits under the hero's panel there (the quest chip) goes below it. 0 on a phone. */
+  columnBottom(): number {
+    this.measure();
+    return this.colBottom;
+  }
+
   private measure(): void {
     const now = performance.now();
     if (!this.zoneStale && now - this.zoneAt < ZONE_MS && this.zoneHeight === innerHeight) return;
@@ -671,12 +678,15 @@ export class Hud {
       this.zone.top = 0;
       this.zone.bottom = innerHeight;
       this.bandBottom = 0;
+      this.colBottom = 0;
     } else if (this.wide) {
       // Wide, the column and the islands sit at the sides: the map has the whole height.
       this.zone.top = 0;
       this.zone.bottom = this.islandLeft.getBoundingClientRect().top;
       this.bandBottom = 0;
+      this.colBottom = this.column.getBoundingClientRect().bottom;
     } else {
+      this.colBottom = 0;
       this.bandBottom = this.band.getBoundingClientRect().bottom;
       this.zone.top = this.bandBottom;
       this.zone.bottom = this.toolbar.getBoundingClientRect().top;
