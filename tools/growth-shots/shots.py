@@ -89,7 +89,7 @@ def run(names):
             effects(page, "[{type:'mastered', hero:'me', subclass:'gladiator'}]")
             settle(page, 500)
             shot(page, '05-mastery.png')
-            page.evaluate("document.querySelectorAll('.fl-banner').forEach((n) => n.remove())")
+            page.evaluate("document.querySelectorAll('.fl-ceremony').forEach((n) => n.remove())")
 
         if want('chips'):
             effects(page, "h.items.map((item) => ({type: 'pickedUp', hero: 'me', item}))")

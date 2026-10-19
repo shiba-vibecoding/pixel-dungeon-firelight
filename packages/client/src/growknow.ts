@@ -126,7 +126,7 @@ export function collectionView(o: CollectionOptions): HTMLElement {
 }
 
 function shelfView(o: CollectionOptions, model: ShelfModel): HTMLElement {
-  const shelf = h('div', 'fl-shelf');
+  const shelf = h('div', 'fl-know-shelf');
   for (const k of model.known) {
     const cell = shelfCell('known', k.sprite, k.name);
     cell.setAttribute('role', 'button');
@@ -177,7 +177,7 @@ function facts(entry: BeastEntry): HTMLElement {
     h('dt', '', G.beast.exp), h('dd', '', G.beast.expLine(stats.exp, stats.maxLvl)),
   ];
   if (entry.beast.hit > 0) rows.push(h('dt', '', G.beast.hitYou), h('dd', '', G.beast.hitLine(entry.beast.hit)));
-  return h('dl', 'fl-facts', ...rows);
+  return h('dl', 'fl-know-facts', ...rows);
 }
 
 export function bestiaryView(mem: GrowMem, picked: MobKind | null, onPick: (kind: MobKind) => void): HTMLElement {

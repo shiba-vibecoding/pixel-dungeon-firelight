@@ -66,7 +66,7 @@ export function showLevelUp(hero: Hero, onPassport: () => void, pop: () => void)
   levelToast = drop(levelToast);
   const root = ui();
   if (!root) return;
-  const node = h('div', 'pd-toast fl-lvl-toast', levelCard(hero), h('span', 'fl-hint', G.hero.tapPassport));
+  const node = h('div', 'pd-toast fl-lvl-toast', levelCard(hero), h('span', 'fl-lvl-hint', G.hero.tapPassport));
   node.setAttribute('role', 'status');
   node.onclick = () => {
     audio.play('click');
@@ -109,7 +109,7 @@ export function showStrength(hero: Hero, slotOf: (item: Item) => HTMLElement, na
 export function showBanner(title: string, small: string): void {
   const root = ui();
   if (!root) return;
-  const node = h('div', 'fl-banner', h('span', 'big', title), h('span', 'small', small));
+  const node = h('div', 'fl-ceremony', h('span', 'big', title), h('span', 'small', small));
   node.setAttribute('role', 'status');
   root.append(node);
   window.setTimeout(() => node.remove(), quality.reducedMotion ? 2600 : 2200);

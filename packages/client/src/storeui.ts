@@ -714,7 +714,7 @@ function build(options: StoreOptions): void {
     }
     buyRow.append(claim('free'), claim('paid'));
     if (import.meta.env.DEV && cosmetics.open) buyRow.append(button(S.passDevXp, () => { cosmetics.devAddXp(500); render(); }, 'small quiet'));
-    const track = el('div', { className: 'fl-track' }, el('div', { className: 'fl-track-label', textContent: T('level') }), el('div', { className: 'fl-track-label', textContent: S.passFree }), el('div', { className: 'fl-track-label paid', textContent: S.passPaid }));
+    const track = el('div', { className: 'fl-track' }, el('div', { className: 'fl-track-label', textContent: L === 'ru' ? 'Ур.' : 'Lv.', title: T('level') }), el('div', { className: 'fl-track-label', textContent: S.passFree }), el('div', { className: 'fl-track-label paid', textContent: S.passPaid }));
     for (let level = 1; level <= PASS_LEVELS; level++) {
       track.append(
         el('div', { className: `fl-lvl${level <= reached ? ' done' : level === reached + 1 ? ' now' : ''}`, textContent: String(level) }),
@@ -722,7 +722,7 @@ function build(options: StoreOptions): void {
         rewardCell(level, 'paid', reached, pass.claimed.paid, pass.paid),
       );
     }
-    return [seasonCard(true), buyRow, section(`${S.passFree} · ${S.passPaid}`, null, track), info(data?.season.how[L] ?? S.passHow, 'fl-hint'), info(S.passHow, 'fl-hint'), ...(cosmetics.open ? [] : [info(S.closedNote, 'fl-hint')])];
+    return [seasonCard(true), buyRow, section(`${S.passFree} · ${S.passPaid}`, null, track), info(data?.season.how[L] ?? S.passHow, 'fl-hint'), ...(cosmetics.open ? [] : [info(S.closedNote, 'fl-hint')])];
   };
 
   const profileScreen = (): HTMLElement[] => {

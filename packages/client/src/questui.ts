@@ -193,7 +193,7 @@ function rewardCards(options: TalkOptions): HTMLElement | null {
     const cell = podium ? el('div', { className: `fl-reward-slot ${podium}`, ariaLabel: capitalize(itemName(world, item)) }, itemIcon(world, item)) : slot(world, item, { hero });
     const node = el(
       'div',
-      { className: 'pd-reward fl-reveal' },
+      { className: 'pd-reward fl-qreveal' },
       cell,
       el('div', { className: 'pd-reward-name', textContent: capitalize(itemName(world, item)) }),
       el('div', { className: 'pd-reward-desc', textContent: itemInfo(world, hero, item).join(' ') }),
